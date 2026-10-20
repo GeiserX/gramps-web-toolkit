@@ -1,9 +1,9 @@
 'use strict';
 /*
-gwt-poller: watch Spanish civil-registry requests (sede.mjusticia «Estado de mis expedientes») and the
+gwt-spanish-poller: watch Spanish civil-registry requests (sede.mjusticia «Estado de mis expedientes») and the
 DEHú inbox for one or more people, each logging in with their own client certificate.
 
-  gwt-poller [--config FILE] [--only ID] [--dump DIR]
+  gwt-spanish-poller [--config FILE] [--only ID] [--dump DIR]
 
 Per person it snapshots the case list and the DEHú notifications and communications, diffs them against
 the previous snapshot, writes <state_dir>/<id>.json and <state_dir>/<id>.txt, and prints the summary.
@@ -201,7 +201,7 @@ function describe(e) {
 }
 
 function summarize(id, snap, events, errors) {
-  const L = [`gwt-poller ${id} ${snap.polled_at}`];
+  const L = [`gwt-spanish-poller ${id} ${snap.polled_at}`];
   if (snap.sede) {
     const n = Object.values(snap.sede.cases);
     const by = {};
@@ -246,7 +246,7 @@ async function hideHeadless(context, page) {
 // Every poll starts from an empty browser profile: logins are cheap, and cookies left by an earlier
 // session made DEHú answer with empty responses.
 function freshProfile() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'gwt-poller-'));
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'gwt-spanish-poller-'));
 }
 
 async function openPkcs12(auth) {
@@ -608,7 +608,7 @@ async function pollPerson(cfg, person, dumpDir) {
   process.once('SIGTERM', onSignal);
   process.once('SIGINT', onSignal);
   const budget = setTimeout(() => {
-    console.error(`gwt-poller ${person.id}: over ${cfg.timeout_minutes} minutes, giving up`);
+    console.error(`gwt-spanish-poller ${person.id}: over ${cfg.timeout_minutes} minutes, giving up`);
     onSignal();
   }, cfg.timeout_minutes * 60000);
   try {
@@ -650,7 +650,7 @@ async function pollPerson(cfg, person, dumpDir) {
 }
 
 function parseArgs(argv) {
-  const a = { config: process.env.GWT_POLLER_CONFIG, only: null, dump: null };
+  const a = { config: process.env.GWT_SPANISH_POLLER_CONFIG, only: null, dump: null };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     if (k === '--config') a.config = argv[++i];
@@ -666,7 +666,7 @@ async function main(argv) {
   let args;
   try { args = parseArgs(argv); } catch (e) { console.error(e.message); return EXIT_ERROR; }
   if (args.help || !args.config) {
-    console.error('usage: gwt-poller --config FILE [--only ID] [--dump DIR]   (or set GWT_POLLER_CONFIG)');
+    console.error('usage: gwt-spanish-poller --config FILE [--only ID] [--dump DIR]   (or set GWT_SPANISH_POLLER_CONFIG)');
     return args.help ? EXIT_SAME : EXIT_ERROR;
   }
   const cfg = loadConfig(expandHome(args.config));
@@ -679,7 +679,7 @@ async function main(argv) {
       changed = changed || r.changed;
       failed = failed || r.failed;
     } catch (e) {
-      console.error(`gwt-poller ${p.id}: ${e.stack || e}`);
+      console.error(`gwt-spanish-poller ${p.id}: ${e.stack || e}`);
       failed = true;
     }
   }

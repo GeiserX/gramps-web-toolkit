@@ -6,7 +6,8 @@ Instructions for coding agents working in this repository. `CLAUDE.md` imports t
 
 Command-line tools for running AI research agents against a Gramps Web family tree. Each folder is one
 tool with its own tests; `docs/` has one page per tool, plus `pipeline.md` (how the pieces fit) and
-`hard-won.md` (the failures behind them).
+`hard-won.md` (the failures behind them). The toolkit is for any country; Spain-specific code says so in its name
+(`spanish-poller`) or in its docs (the Spanish sources in `gwt-fetch`).
 
 | Folder | Tool | Runtime |
 |---|---|---|
@@ -15,7 +16,7 @@ tool with its own tests; `docs/` has one page per tool, plus `pipeline.md` (how 
 | `ledger/` | `gwt-ledger`, shared search ledger | Python standard library |
 | `fscache/` | `gwt-fscache`, HTTP cache | Python standard library |
 | `rawstore/` | `gwt-rawstore`, images in S3, manifest in git | Python standard library |
-| `poller/` | `gwt-poller`, sede and DEHú watcher | Node 18+, Playwright |
+| `spanish-poller/` | `gwt-spanish-poller`, Spain-only sede and DEHú watcher | Node 18+, Playwright |
 | `ocr-bench/` | OCR, HTR and LLM reading benchmark | Python, one venv per engine |
 
 ## Repository rules
@@ -36,7 +37,7 @@ cd fetch && python3 -m pytest -q
 cd ledger && python3 -m unittest test_gwt_ledger
 cd fscache && python3 -m unittest test_gwt_fscache
 cd rawstore && python3 -m unittest test_gwt_rawstore
-cd poller && node --test
+cd spanish-poller && node --test
 ```
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
