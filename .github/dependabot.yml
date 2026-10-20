@@ -24,7 +24,7 @@ updates:
         applies-to: security-updates
         patterns: ["*"]
   - package-ecosystem: npm
-    directory: /poller
+    directory: /spanish-poller
     schedule:
       interval: weekly
     labels: ["dependencies", "automated"]
