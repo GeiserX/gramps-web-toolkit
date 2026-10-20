@@ -4,6 +4,8 @@ A research agent that opens a browser to save a register page is slow and leaves
 
 Python 3.11 or newer with `requests`. Run it as [`fetch/gwt-fetch`](../fetch/gwt-fetch), symlinked onto your `PATH` if you like, or `pip install ./fetch` for a `gwt-fetch` command. The code is in [`fetch/gwt_fetch/`](../fetch/gwt_fetch/). Tests: `cd fetch && python3 -m pytest`.
 
+`iiif` works with any IIIF archive in any country. `digibib`, `gazeta` and `geo` cover Spanish sources only, and `europeana` filters to the Spanish aggregator unless you pass `--provider any`.
+
 ```
 gwt-fetch iiif URL [--pages 1-5,9] [--labels REGEX] [--out DIR] [--list]
 gwt-fetch digibib URL [--pages ...] [--out DIR] [--list]

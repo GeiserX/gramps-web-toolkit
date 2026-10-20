@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { parseCases, parseDehuRows, diff, senderAllowed, isoDate, summarize } = require('../gwt_poller.js');
+const { parseCases, parseDehuRows, diff, senderAllowed, isoDate, summarize } = require('../gwt_spanish_poller.js');
 
 const CASE = (id, status, created = '19-10-2026') => ({ id, procedure: 'Certificado de nacimiento (general)', status, created, applicant: 'A', subject: 'B' });
 

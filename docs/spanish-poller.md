@@ -1,13 +1,13 @@
-# gwt-poller: watch civil-registry requests and the DEHú inbox
+# gwt-spanish-poller: watch Spanish civil-registry requests and the DEHú inbox
 
 Certificates requested from Spanish civil registries through the Ministerio de Justicia sede come back slowly, and sometimes only through DEHú (Dirección Electrónica Habilitada única). The mail notice just says «Nueva comunicación electrónica», and «Estado de mis expedientes» drops a refused case without a word. Checking all of that by hand gets skipped, and a reply can sit unseen for days.
 
-`gwt-poller` logs in as each configured person with their client certificate, takes a snapshot of their sede cases and their DEHú inbox, and compares it with the previous snapshot. It prints what changed and tells you through the exit code.
+`gwt-spanish-poller` logs in as each configured person with their client certificate, takes a snapshot of their sede cases and their DEHú inbox, and compares it with the previous snapshot. It prints what changed and tells you through the exit code.
 
-Node 18 or newer with Playwright (`npm install` in `poller/`, or point `NODE_PATH` at an existing `node_modules` that has `playwright`). Run it as [`poller/gwt-poller`](../poller/gwt-poller). The code is in [`poller/gwt_poller.js`](../poller/gwt_poller.js). Tests: `cd poller && node --test`.
+Node 18 or newer with Playwright (`npm install` in `spanish-poller/`, or point `NODE_PATH` at an existing `node_modules` that has `playwright`). Run it as [`spanish-poller/gwt-spanish-poller`](../spanish-poller/gwt-spanish-poller). The code is in [`spanish-poller/gwt_spanish_poller.js`](../spanish-poller/gwt_spanish_poller.js). Tests: `cd spanish-poller && node --test`.
 
 ```
-gwt-poller --config FILE [--only ID] [--dump DIR]    # or set GWT_POLLER_CONFIG
+gwt-spanish-poller --config FILE [--only ID] [--dump DIR]    # or set GWT_SPANISH_POLLER_CONFIG
 ```
 
 ## It only reads
@@ -84,7 +84,7 @@ Add the same entry for `pasarela-ident.clave.gob.es`, `se-pasarela.clave.gob.es`
 Run it once a day and act on exit status 10. With cron:
 
 ```
-30 8 * * * NODE_PATH=/path/to/node_modules /path/to/poller/gwt-poller --config ~/poller.json >> ~/poller.log 2>&1
+30 8 * * * NODE_PATH=/path/to/node_modules /path/to/spanish-poller/gwt-spanish-poller --config ~/poller.json >> ~/poller.log 2>&1
 ```
 
 On macOS use a LaunchAgent with `StartCalendarInterval` instead: `chrome` mode needs the logged-in user's keychain, which a LaunchAgent has and a LaunchDaemon does not.

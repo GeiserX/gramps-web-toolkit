@@ -28,12 +28,12 @@ jobs:
       - name: rawstore
         run: cd rawstore && python -m unittest -v test_gwt_rawstore
 
-  poller:
+  spanish-poller:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-      - name: poller
-        run: cd poller && node --test
+      - name: spanish-poller
+        run: cd spanish-poller && node --test

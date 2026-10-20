@@ -20,15 +20,15 @@ reviews:
     - "ledger/gwt-ledger"
     - "fscache/gwt-fscache"
     - "rawstore/gwt-rawstore"
-    - "poller/gwt-poller"
+    - "spanish-poller/gwt-spanish-poller"
   path_instructions:
     - path: "apply/**"
       instructions: >-
         gwt-apply reads the tree before every write and stays dry-run unless --apply is passed.
         Every reference is resolved to a handle before a write; a Gramps ID never goes into a body.
-    - path: "poller/**"
+    - path: "spanish-poller/**"
       instructions: >-
-        The poller only reads: it never accepts or rejects a DEHú notification and never submits
+        The Spanish poller only reads: it never accepts or rejects a DEHú notification and never submits
         anything to the sede. Certificate passwords and personal data never reach a log line.
     - path: "**/test*/**"
       instructions: >-
