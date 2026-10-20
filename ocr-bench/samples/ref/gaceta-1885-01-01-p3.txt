@@ -1,0 +1,10 @@
+# image: pages/gaceta-1885-01-01-p3.png
+# type: print-gazette
+# scope: partial, one edict (bottom of the third column) of a full three-column page
+# source: Gaceta de Madrid n.º 1, 1 January 1885, p. 3, BOE-A-1885-10, https://www.boe.es/datos/pdfs/BOE//1885/001/A00003-00003.pdf; transcribed for this bench
+# names: Gregorio Vieito y Hoyos; Antonia Hernández Berrocal; Peñanalba; Salamanca; Juan Joaquín Jiménez; Madrid
+MADRID—LATINA
+D. Gregorio Vieito y Hoyos, Juez de instrucción del distrito de la Latina de esta capital.
+Por la presente requisitoria se llama, cita y emplaza á Antonia Hernández Berrocal, de estado soltera, de 24 años de edad, de oficio vendedora, natural de Peñanalba, en la provincia de Salamanca, y vecina de esta capital, cuyo actual domicilio se ignora, para que dentro del término de 10 días se presente en la audiencia de este Juzgado ó en la cárcel de mujeres á responder de los cargos que le resultan en la causa que contra la misma se instruye por lesiones; bajo apercibimiento de que en otro caso será declarada rebelde.
+Asimismo por la presente exhorto á todas las Autoridades, tanto civiles como militares, para que procedan á la busca y detención de la referida procesada Antonia Hernández Berrocal, conduciéndola caso de ser habida en tal clase á la cárcel de mujeres á mi disposición.
+Dada en Madrid á 10 de Diciembre de 1884.=Gregorio Vieito.=Por mandado de S. S., Juan Joaquín Jiménez.

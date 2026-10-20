@@ -1,0 +1,35 @@
+language: en
+reviews:
+  profile: assertive
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - "**/*.py"
+    - "**/*.js"
+    - "**/*.sh"
+    - "**/*.md"
+    - "**/*.toml"
+    - "**/*.json"
+    - ".github/**"
+    - "fetch/gwt-fetch"
+    - "ledger/gwt-ledger"
+    - "fscache/gwt-fscache"
+    - "rawstore/gwt-rawstore"
+    - "poller/gwt-poller"
+  path_instructions:
+    - path: "apply/**"
+      instructions: >-
+        gwt-apply reads the tree before every write and stays dry-run unless --apply is passed.
+        Every reference is resolved to a handle before a write; a Gramps ID never goes into a body.
+    - path: "poller/**"
+      instructions: >-
+        The poller only reads: it never accepts or rejects a DEHú notification and never submits
+        anything to the sede. Certificate passwords and personal data never reach a log line.
+    - path: "**/test*/**"
+      instructions: >-
+        Test data is invented: no real names, case numbers, tree ids, hosts or accounts.

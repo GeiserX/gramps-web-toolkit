@@ -1,0 +1,10 @@
+{
+  "name": "gwt-poller",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Read-only poller for sede.mjusticia «Estado de mis expedientes» and the DEHú inbox",
+  "license": "GPL-3.0-or-later",
+  "bin": { "gwt-poller": "gwt-poller" },
+  "scripts": { "test": "node --test" },
+  "dependencies": { "playwright": "^1.50.0" }
+}

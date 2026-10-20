@@ -1,0 +1,3 @@
+#!/bin/sh
+# Refuse staged binaries over GWT_RAWSTORE_MAX_KB (default 256) outside the globs in .rawstore-allow.
+exec "$(dirname "$(realpath "$0")")/gwt-rawstore" check-staged

@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+*.p12
+*.pem
+cache/
+out/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
+.beads/issues.jsonl
+.beads/interactions.jsonl
+.beads/events.jsonl

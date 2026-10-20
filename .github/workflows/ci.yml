@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install requests pytest
+      - name: apply
+        run: cd apply && python -m pytest -q
+      - name: fetch
+        run: cd fetch && python -m pytest -q
+      - name: ledger
+        run: cd ledger && python -m unittest -v test_gwt_ledger
+      - name: fscache
+        run: cd fscache && python -m unittest -v test_gwt_fscache
+      - name: rawstore
+        run: cd rawstore && python -m unittest -v test_gwt_rawstore
+
+  poller:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: poller
+        run: cd poller && node --test
