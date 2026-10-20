@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/banner.svg" alt="gramps-web-toolkit banner" width="100%">
+</p>
+
 <h1 align="center">gramps-web-toolkit</h1>
 
 <p align="center">
