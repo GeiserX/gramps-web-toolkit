@@ -106,7 +106,7 @@ The dry-run prints one block per op:
 
 ## Speed
 
-An op costs a few requests, and on a real server the writes dominate: 100 to 150 ms for a `POST` or `PUT` on a LAN, while a single read takes about 20 ms. Two things keep the count down.
+An op costs a few requests, and on a real server the writes dominate: 100 to 150 ms for a `POST` or `PUT` on a LAN, while a single read takes about 20 ms. Two things help.
 
 - **Lookups are read once per run.** Gramps ID to handle, "does this handle exist", and the whole-class lists the checks need (sources by title, places by name, media by checksum) are each one `GET` per class for the whole run, with the run's own writes added on top. They stay right because the [lock](#safety-rules) keeps other appliers out. The object an op changes is still read fresh, and read again right before its `PUT`.
 - **Run it near the server.** Every request pays the round trip. A client behind a VPN that sends the server's traffic the long way round can take 250 ms a request where the LAN takes 70 ms; for a long list, run `gwt-apply` from a machine on the server's network.
