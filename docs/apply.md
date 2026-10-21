@@ -23,7 +23,9 @@ Settings come from the environment, or from a `KEY=VALUE` file passed with `--co
 
 On a multi-tree server, the tree comes from the user: the login (`POST /api/token/`) returns a token whose `tree` claim names that user's tree. `gwt-apply` refuses to go on if that claim is not `GWT_TREE`, so a wrong account cannot write into the wrong tree.
 
-Other flags: `--log PATH` (default `gwt-apply-<time>.jsonl`), `--retries N` (default 5), `--retry-wait SECONDS` (default 30).
+Other flags: `--log PATH`, `--retries N` (default 5), `--retry-wait SECONDS` (default 30), `--break-lock` (below).
+
+Every run gets a run id, `<date>-<time>-<6 hex>`, printed on the first line. The log goes to `PATH` with the run id before the extension (`--log apply.jsonl` writes `apply.20261021-101500-a1b2c3.jsonl`), or to `gwt-apply-<run id>.jsonl`. The file is created with `O_EXCL`: a run never appends to or overwrites another run's log, so rerunning the same command after a crash leaves both logs.
 
 Exit codes: `0` every op done or skipped; `1` a conflict or an error stopped the run; `2` the change list or the settings are invalid (nothing was read or written).
 
@@ -95,6 +97,7 @@ The dry-run prints one block per op:
 - **Read before every write, skip what exists.** The same event type and date on that person or family; the same page on that source; a media object with the same MD5; a note with the same text on a target; a family with the same parents; a place with the same name, type and parent; a source with the same title; a link that is already there.
 - **No silent namesakes.** A new person whose first name and surname already exist in the tree stops the run until the change list either uses the existing ID or says `allow_namesake`, with the reason and the IDs it compared. The reason goes into the plan and the log.
 - **One birth and one death.** If the person already has a `Birth` (or `Death`) in role `Primary` with another date, the op is a conflict. Correct the existing event with `update_event` instead of adding a second one.
+- **One apply per tree.** `--apply` takes a lock before its first write and holds it to the end: a private note with a fixed handle and Gramps ID `GWTLOCK`, inside the tree, so it works whichever machine the apply runs on. Creating it is the test: the server refuses a second object with the same handle. The note says which run, host and process hold it and until when; the holder moves that time 15 minutes ahead while it works and deletes the note when it stops, also on Ctrl-C, `SIGTERM` or `SIGHUP`. A second `--apply` on the tree stops before writing and names the holder. A lock whose holder died (power cut, `kill -9`) expires after 15 minutes and the next apply takes it over and says so; `--break-lock` takes it at once, for when you know the holder is dead. A holder that finds its lock gone stops. A dry run takes no lock, and says so when an apply holds the tree. While the lock is held, an export of the tree includes the lock note.
 - **Stop at the first conflict or error.** Later ops are not run, because they may depend on this one.
 - **Writes are narrow.** No op deletes anything. Objects are created with `POST /api/objects/`. Changes to an existing object are a `GET` followed by a `PUT` of the same object with only the named field changed. Right before the `PUT` the object is read again; if it changed since the op read it, the op starts over, so a concurrent edit is not overwritten.
 - **Busy server.** On "database is locked", any 5xx, or an object that changed since it was read, the op waits `--retry-wait` seconds and starts over from fresh reads. A login answered 429 (the server rate-limits logins) waits and tries again.

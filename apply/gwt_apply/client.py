@@ -62,7 +62,8 @@ class Client:
         self.token: str | None = None
         self.tree: str | None = None
         self.pending: dict[tuple[str, str], dict] = {}
-        self._log = open(log_path, "a", encoding="utf-8") if log_path else None
+        # "x": a log file is never appended to or overwritten; each run writes its own
+        self._log = open(log_path, "x", encoding="utf-8") if log_path else None
         self.context: dict = {}  # op key and ruling, stamped on every log line
         self._last_login = 0.0
 
@@ -221,6 +222,14 @@ class Client:
         r = self._request("PUT", f"/{NAMESPACE[cls]}/{obj['handle']}", write=True, json=body)
         if r.status_code != 200:
             raise ApiError(f"update {cls}: HTTP {r.status_code} {r.text[:300]}", r.status_code)
+
+    def delete(self, cls: str, handle: str) -> None:
+        """DELETE one object. Used only for the lock note."""
+        if self.dry_run:
+            raise ApiError("delete in a dry run")
+        r = self._request("DELETE", f"/{NAMESPACE[cls]}/{handle}", write=True)
+        if r.status_code not in (200, 404):
+            raise ApiError(f"delete {cls} {handle}: HTTP {r.status_code} {r.text[:300]}", r.status_code)
 
     def upload_missing_file(self, handle: str, data: bytes, mime: str) -> str:
         """Store the file of a media object created by `create`. Returns what happened."""

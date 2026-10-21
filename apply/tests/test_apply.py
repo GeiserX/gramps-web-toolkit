@@ -337,3 +337,58 @@ def test_place_and_namesake_matching_ignore_case_and_accents(fake):
     res = run(fake, ops)
     assert res[0].status == "skip"
     assert res[1].status == "conflict" and "I0001" in res[1].actions[-1]
+
+
+def test_one_apply_per_tree(fake, monkeypatch):
+    from gwt_apply import lock as lockmod
+    from gwt_apply.lock import LOCK_HANDLE, LockHeld, TreeLock, read_lock
+    c = Client("https://gw.example", "u", "pw", dry_run=False, session=fake)
+    other = TreeLock(c, "run-other", retry_wait=0)
+    fake.busy = 2  # "database is locked" twice: the lock waits and tries again
+    other.acquire()
+    mine = TreeLock(c, "run-mine")
+    with pytest.raises(LockHeld, match="run-other"):
+        mine.acquire()
+    # an apply that holds the lock keeps it fresh; one that lost it stops
+    clock = [lockmod._now()]
+    monkeypatch.setattr(lockmod, "_now", lambda: clock[0])
+    clock[0] += 600
+    other.refresh()
+    assert read_lock(c)["expires_ts"] == clock[0] + 900
+    # a dead holder's lock expires and is taken over; --break-lock takes it at once
+    clock[0] += 1000
+    assert "took over the lock of run run-other" in mine.acquire()
+    with pytest.raises(LockHeld, match="lost the lock"):
+        clock[0] += 500
+        other.refresh()
+    TreeLock(c, "run-third").acquire(break_lock=True)
+    mine.release()  # not ours any more: left alone
+    assert read_lock(c)["run"] == "run-third"
+    TreeLock(c, "run-third").release()
+    assert LOCK_HANDLE not in fake.store["notes"]
+
+
+def test_cli_takes_the_lock_releases_it_and_never_reuses_a_log(fake, tmp_path, monkeypatch, capsys):
+    import gwt_apply.client as clientmod
+    from gwt_apply.lock import LOCK_HANDLE, TreeLock
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: fake)
+    for k, v in {"GWT_URL": "https://gw.example", "GWT_USERNAME": "u", "GWT_PASSWORD": "pw", "GWT_TREE": "tree-test"}.items():
+        monkeypatch.setenv(k, v)
+    p = tmp_path / "changes.jsonl"
+    p.write_text(json.dumps({"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}) + "\n")
+    log = tmp_path / "apply.jsonl"
+    log.write_text("an older run\n")
+    assert main([str(p), "--apply", "--log", str(log)]) == 0
+    assert main([str(p), "--apply", "--log", str(log)]) == 0
+    assert log.read_text() == "an older run\n"  # never touched
+    runs = sorted(tmp_path.glob("apply.*.jsonl"))
+    assert len(runs) == 2 and all(r.read_text() for r in runs)
+    assert LOCK_HANDLE not in fake.store["notes"]  # released after each run
+    assert any(c == ("POST", "/api/objects/") for c in fake.calls)
+    # while another apply holds the tree, an apply writes nothing
+    TreeLock(Client("https://gw.example", "u", "pw", dry_run=False, session=fake), "run-busy").acquire()
+    before = len(fake.writes())
+    p.write_text(json.dumps({"op": "add_note", "key": "n2", "ruling": R, "text": "y", "attach": [{"person": "I0001"}]}) + "\n")
+    assert main([str(p), "--apply", "--log", str(log)]) == 1
+    assert "another apply holds this tree: run run-busy" in capsys.readouterr().err
+    assert fake.writes()[before:] == []
