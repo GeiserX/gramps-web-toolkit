@@ -184,6 +184,28 @@ def test_dump_refuses_a_short_type_and_a_wrong_tree():
         client.login()
 
 
+def test_baseline_makes_the_findings_it_already_had_known(tmp_path, capsys):
+    old = selftest.clean_tree()
+    selftest.p_orphan_note(old)
+    old_dump = _write(tmp_path, "old.json", old)
+    new = copy.deepcopy(old)
+    selftest.p_surname_marker(new)
+    new_dump = _write(tmp_path, "new.json", new)
+    assert main(["check", new_dump]) == 1
+    capsys.readouterr()
+    report = str(tmp_path / "r.json")
+    assert main(["check", new_dump, "--baseline", old_dump, "--json", report]) == 1
+    data = json.load(open(report))
+    assert [(f["check"], f["key"]) for f in data["new"]] == [("surname-marker", "I0007 Vidal [¿?]")]
+    assert any(f["check"] == "orphan-note" and f["known"] for f in data["findings"])
+    assert main(["check", old_dump, "--baseline", old_dump]) == 0
+    # with --known as well, its reasons still show
+    known = _write(tmp_path, "known.json", [{"check": "orphan-note", "key": "N0099", "reason": "kept on purpose"}])
+    capsys.readouterr()
+    assert main(["check", old_dump, "--baseline", old_dump, "--known", known]) == 0
+    assert "known N0099: kept on purpose" in capsys.readouterr().out
+
+
 def test_a_father_and_son_with_one_name_are_not_duplicates():
     from gwt_check.tree import Tree
 
