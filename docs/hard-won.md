@@ -329,3 +329,14 @@ Format: what happened, why, and the rule.
 **Why.** `gwt-apply` had no merge op, so a merge meant leaving it and writing to the API directly, where every reference to move is one more write that can be forgotten.
 
 **Rule.** `merge_person` and `merge_family` call Gramps' own merge on the server, which moves every reference itself. The dry run lists what moves, which families are repointed or merged, and what is deleted. The winner gets a note naming the loser, the ruling and the reason, written before the merge, so a rerun knows the merge is done.
+
+### 50. A shortened handle, a tag with no handle, and the note an event leaves behind
+
+**What happened.** Three things on one Gramps Web 26.10.1 server while applying fixes with hand-written calls.
+(1) A `DELETE` on an event with its handle cut to 14 characters answered `404 Not Found`, though the event existed; a `PUT` with the same cut handle answered 400 or 404 with no hint.
+(2) A `DELETE` on an event answered 200 and cleared the reference in the person, but a note that belonged to the event stayed in the tree with nothing pointing at it; `gwt-check` went from 33 orphan notes to 36 after three deletes.
+(3) A `POST /api/tags/` with a name and a color answered with JSON that had no `handle` and no error; a later `PUT` of an event with `tag_list` `[""]` answered 400 "Error while updating object".
+
+**Why.** (1) The API wants the full handle and does not say that a prefix is the problem. (2) Gramps removes an event's references, not the objects the event carried. (3) The tag was never created, so the handle the caller put in `tag_list` was empty. We have not found out whether the 7-character color (`#1a7f37`) is why the create was dropped; Gramps stores colors as 12 hex digits, which is what `gwt-apply` writes.
+
+**Rule.** Resolve a Gramps ID to its full handle by reading it (`/api/events/?gramps_id=...`), never type or cut a handle. When one event replaces another, use `merge_event`: it moves the loser's notes, citations and media to the winner, so nothing is left behind. Make a tag through `gwt-apply`, which gives it its own handle, and which stops with an error if the server does not have the tag when it reads it back.
