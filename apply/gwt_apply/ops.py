@@ -41,7 +41,7 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "add_citation": ({"source", "page", "attach"}, {"confidence", "date", "gramps_id"}),
     "add_media": ({"file", "path", "attach"}, {"desc", "mime", "gramps_id"}),
     "add_note": ({"text", "attach"}, {"type", "gramps_id"}),
-    "add_transcription": ({"text", "margin_reading", "attach"}, {"language", "gramps_id"}),
+    "add_transcription": ({"text", "margin_reading", "attach"}, {"gramps_id"}),
     "attach_existing": ({"object", "attach"}, set()),
     "dedupe_list": ({"target", "list"}, set()),
     "set_attribute": ({"target", "type", "value"}, set()),
@@ -867,8 +867,7 @@ class Applier:
         margin is how a legitimate-looking entry ends up with the wrong person.
         """
         reading = str(op["margin_reading"]).strip()
-        lang = f" [{op['language']}]" if op.get("language") else ""
-        text = f"{op['text'].rstrip()}\n\nMargin reading{lang}: {reading}"
+        text = f"{op['text'].rstrip()}\n\nMargin reading: {reading}"
         self.add_note(
             {"op": "add_note", "key": op["key"], "ruling": op["ruling"], "type": "Transcript",
              "text": text, "attach": op["attach"], "gramps_id": op.get("gramps_id", "")}
