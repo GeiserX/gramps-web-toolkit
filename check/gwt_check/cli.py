@@ -61,7 +61,7 @@ def load_known(path: str) -> set[tuple[str, str]]:
 
 
 def check(tree: Tree, *, since: Tree | None = None, tag: str | None = None, root: str | None = None,
-          known: set | None = None) -> dict:
+          known: set | None = None, ignore: set | None = None) -> dict:
     """Every check on one tree. Returns the report; report["new"] are the findings not in `known`."""
     if tree.partial:
         raise BadInput(f"{tree.source}: a .gramps backup can be the earlier tree (--since), not the one checked")
@@ -89,10 +89,16 @@ def check(tree: Tree, *, since: Tree | None = None, tag: str | None = None, root
             raise BadInput(f"--root {root}: no such person")
         report["ahnentafel"] = {"numbers": len(a), "people": len(set(a.values()))}
     known = known or set()
+    ignore = ignore or set()
+    unknown = ignore - set(CHECKS)
+    if unknown:
+        raise BadInput(f"--ignore-check: no such check {sorted(unknown)}; the checks are {sorted(CHECKS)}")
     for f in findings:
-        f["known"] = (f["check"], f["key"]) in known
+        f["ignored"] = f["check"] in ignore
+        f["known"] = f["ignored"] or (f["check"], f["key"]) in known
     report["findings"] = findings
     report["new"] = [f for f in findings if not f["known"]]
+    report["ignored"] = {c: sum(1 for f in findings if f["check"] == c) for c in sorted(ignore)}
     return report
 
 
@@ -130,6 +136,8 @@ def print_report(report: dict, limit: int) -> None:
                   f"{a['after']['numbers']} / {a['after']['people']} after, {len(a['new numbers'])} new numbers")
         else:
             print(f"Ahnentafel: {a['numbers']} numbers, {a['people']} people")
+    for name, count in report.get("ignored", {}).items():
+        print(f"ignored {name}: {count} finding(s), not counted (--ignore-check)")
     n = len(report["new"])
     print(f"\n{'FAIL' if n else 'OK'}: {n} new finding(s), {len(report['findings']) - n} known")
 
@@ -153,6 +161,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--tag", help="scope is the objects carrying this tag (a run tag)")
     p.add_argument("--root", help="Gramps ID of the Ahnentafel root; with --since, numbers lost or changed fail")
     p.add_argument("--known", help="earlier --json output (or list of {check, key}) to accept as known")
+    p.add_argument("--ignore-check", action="append", default=[], metavar="NAME",
+                   help="leave a whole check out of the exit code (repeatable); the report still counts it")
     p.add_argument("--json", help="write the full report as JSON to this file (- for stdout)")
     p.add_argument("--save-dump", help="keep the live dump in this file")
     p.add_argument("--limit", type=int, default=30, help="findings printed per check (default 30)")
@@ -179,7 +189,8 @@ def main(argv: list[str] | None = None) -> int:
                 save(data, args.save_dump)
             tree = Tree(data["objects"], source="live tree")
         t1 = time.monotonic()
-        report = check(tree, since=since, tag=args.tag, root=args.root, known=known)
+        report = check(tree, since=since, tag=args.tag, root=args.root, known=known,
+                       ignore=set(args.ignore_check))
         report["seconds"] = {"read": round(t1 - t0, 1), "check": round(time.monotonic() - t1, 1)}
     except BadInput as exc:
         print(f"gwt-check: {exc}", file=sys.stderr)

@@ -182,3 +182,28 @@ def test_dump_refuses_a_short_type_and_a_wrong_tree():
     client = Client("https://gramps.example.org", "u", "pw", tree="other", opener=FakeServer(data))
     with pytest.raises(ApiError, match="expected 'other'"):
         client.login()
+
+
+def test_ignore_check_leaves_a_whole_check_out_of_the_exit_code_but_still_counts_it(tmp_path, capsys):
+    planted = selftest.clean_tree()
+    selftest.p_private(planted)
+    dump = _write(tmp_path, "private.json", planted)
+    assert main(["check", dump]) == 1
+    capsys.readouterr()
+    assert main(["check", dump, "--ignore-check", "private"]) == 0
+    assert "ignored private: 1 finding(s)" in capsys.readouterr().out
+
+    # another problem still fails, and the report keeps the ignored one
+    selftest.p_orphan_note(planted)
+    report = str(tmp_path / "r.json")
+    assert main(["check", _write(tmp_path, "two.json", planted), "--ignore-check", "private", "--json", report]) == 1
+    data = json.load(open(report))
+    assert data["ignored"] == {"private": 1}
+    assert [f["check"] for f in data["new"]] == ["orphan-note"]
+    assert any(f["check"] == "private" and f["ignored"] for f in data["findings"])
+
+
+def test_ignore_check_refuses_a_name_that_is_not_a_check(tmp_path, capsys):
+    dump = _write(tmp_path, "clean.json", selftest.clean_tree())
+    assert main(["check", dump, "--ignore-check", "privat"]) == 2
+    assert "no such check" in capsys.readouterr().err
