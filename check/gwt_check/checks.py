@@ -273,6 +273,17 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None) -> tuple[l
             children |= {person_name(P[c.get("ref")]) for c in f.get("child_ref_list", []) if c.get("ref") in P}
         return parents - {""}, spouses - {""}, children - {""}
 
+    def parent_handles(p: dict) -> set:
+        out_: set = set()
+        for fh in p.get("parent_family_list", []):
+            f = F.get(fh) or {}
+            out_ |= {h for h in (f.get("father_handle"), f.get("mother_handle")) if h in P}
+        return out_
+
+    def parent_and_child(a: str, b: str) -> bool:
+        """A person is never their own parent: a father and a son with one name are two people."""
+        return a in parent_handles(P[b]) or b in parent_handles(P[a])
+
     names: dict[str, list] = defaultdict(list)
     for p in P.values():
         n = person_name(p)
@@ -285,6 +296,8 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None) -> tuple[l
         for i, p in enumerate(group):
             for q in group[i + 1:]:
                 if not (in_scope("people", p["handle"]) or in_scope("people", q["handle"])):
+                    continue
+                if parent_and_child(p["handle"], q["handle"]):
                     continue
                 bp, pp, sp, cp = facts[p["handle"]]
                 bq, pq, sq, cq = facts[q["handle"]]
@@ -342,6 +355,8 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None) -> tuple[l
             if (g, s) == (gc, sc) or not ((g <= gc or gc <= g) and (s <= sc or sc <= s)):
                 continue
             if touched(c) and c < h:  # both in scope: look at the pair once
+                continue
+            if parent_and_child(h, c):
                 continue
             yp, pp, sp, cp = fact(h)
             yq, pq, sq, cq = fact(c)

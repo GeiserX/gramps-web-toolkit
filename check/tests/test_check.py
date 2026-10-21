@@ -182,3 +182,40 @@ def test_dump_refuses_a_short_type_and_a_wrong_tree():
     client = Client("https://gramps.example.org", "u", "pw", tree="other", opener=FakeServer(data))
     with pytest.raises(ApiError, match="expected 'other'"):
         client.login()
+
+
+def test_a_father_and_son_with_one_name_are_not_duplicates():
+    from gwt_check.tree import Tree
+
+    d = selftest.clean_tree()
+    selftest._new_person(d, "I0097", "Mateo", "Ortega Ruiz", birth=(1870, 3, 2), parent_family="hF0097")
+    selftest._new_family(d, "F0097", "hI0002", "", kids=["hI0097"])
+    selftest._get(d, "people", "I0002")["family_list"].append("hF0097")
+    found, _ = checks.run_checks(Tree(d, source="t"))
+    assert [f for f in found if f["check"].startswith("dup-person")] == []
+
+    # the same two people, but not parent and child: still a duplicate pair
+    d2 = selftest.clean_tree()
+    selftest._new_person(d2, "I0097", "Mateo", "Ortega Ruiz", birth=(1870, 3, 2))
+    found, _ = checks.run_checks(Tree(d2, source="t"))
+    assert ("dup-person-birth", "I0002,I0097") in {(f["check"], f["key"]) for f in found}
+
+
+def test_known_reasons_are_shown_and_mark_known_writes_them(tmp_path, capsys):
+    planted = selftest.clean_tree()
+    selftest.p_orphan_note(planted)
+    dump = _write(tmp_path, "p.json", planted)
+    report = str(tmp_path / "r.json")
+    assert main(["check", dump, "--json", report]) == 1
+    known = str(tmp_path / "known.json")
+    assert main(["mark-known", report, "--check", "orphan-note", "--key", "N0099", "--reason", "kept on purpose",
+                 "--out", known]) == 0
+    assert json.load(open(known)) == [{"check": "orphan-note", "key": "N0099", "reason": "kept on purpose"}]
+    capsys.readouterr()
+    assert main(["check", dump, "--known", known]) == 0
+    assert "known N0099: kept on purpose" in capsys.readouterr().out
+    # a second call adds, never duplicates; a key that is not in the report, or no reason, is refused
+    assert main(["mark-known", report, "--check", "orphan-note", "--key", "N0099", "--reason", "again", "--out", known]) == 0
+    assert len(json.load(open(known))) == 1
+    assert main(["mark-known", report, "--check", "orphan-note", "--key", "N0001", "--reason", "x", "--out", known]) == 2
+    assert main(["mark-known", report, "--check", "orphan-note", "--key", "N0099", "--reason", " ", "--out", known]) == 2
