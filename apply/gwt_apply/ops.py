@@ -292,6 +292,7 @@ class Applier:
         if name not in self._tags:
             found = [t["handle"] for t in self.c.list_all("Tag", ["name"]) if t.get("name") == name]
             if found:
+                self.c.get("Tag", found[0])  # read, so a snapshot apply checks it was not renamed since
                 self._tags[name] = found[0]
             else:
                 h = stable_handle("tag:" + name)

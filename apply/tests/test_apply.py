@@ -698,3 +698,14 @@ def test_run_tag_is_checked_against_the_snapshot_and_never_empty(fake, scan, tmp
     assert "1 Tag object(s) added" in capsys.readouterr().err
     from gwt_apply.lock import LOCK_HANDLE
     assert fake.writes()[before:] == [("POST", "/api/objects/"), ("DELETE", f"/api/notes/{LOCK_HANDLE}")]  # the lock only
+
+
+def test_a_tag_renamed_after_the_snapshot_stops_the_apply(fake, scan, tmp_path, env, capsys):
+    fake.add("tags", {"handle": "tag-r12", "name": "r12", "change": fake.tick()})
+    snap = tmp_path / "tree.json.gz"
+    assert main(["--save-snapshot", str(snap)]) == 0
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text("\n".join(json.dumps(op) for op in full_list(scan)))
+    fake.store["tags"]["tag-r12"].update(name="r13", change=fake.tick())
+    assert main([str(changes), "--snapshot", str(snap), "--apply", "--tag", "r12"]) == 1
+    assert "Tag" in capsys.readouterr().err
