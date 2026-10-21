@@ -91,7 +91,9 @@ class TreeLock:
     def _acquire(self, break_lock: bool) -> str | None:
         taken_over = None
         held = read_lock(self.c)
-        if held is not None and held.get("run") != self.run_id:
+        if held is not None and held.get("run") == self.run_id:
+            return None  # an earlier try made it, but its answer was lost
+        if held is not None:
             alive = float(held.get("expires_ts") or 0) > _now()
             who = f"run {held.get('run')} on {held.get('host')} (pid {held.get('pid')}), expires {held.get('expires')}"
             if alive and not break_lock:

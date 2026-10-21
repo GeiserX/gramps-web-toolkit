@@ -301,3 +301,11 @@ Format: what happened, why, and the rule.
 **Why.** Nothing in the tree said an apply was running, and the backup and log names came from the date and the block label, which both copies shared.
 
 **Rule.** `--apply` holds a lock note inside the tree for its whole run and refuses to start while another run holds it. Every run has its own id, and its log is created with `O_EXCL` under a name that carries the id, so no run can write into another run's file. Backup names carry a run id too, and are created the same way.
+
+### 45. One slow answer killed a long apply
+
+**What happened.** About 1,000 ops into a long apply on a test server, one `POST` got no answer for two minutes: the server's cache connection had stalled. The client's read timeout fired, the exception was not one `gwt-apply` retried, and the run stopped there. The create may or may not have reached the database.
+
+**Why.** Only an HTTP answer ("database is locked", a 5xx) counted as "busy, try again". A timeout or a dropped connection has no answer at all, so it crashed the run, and a naive retry of a create whose answer was lost could make the object twice.
+
+**Rule.** A timeout or a lost connection starts the op over from fresh reads, like a busy server. A create that got no answer is looked up by its handle before the op tries it again, so it is linked if the server made it and made once if not.

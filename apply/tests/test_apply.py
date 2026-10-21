@@ -146,15 +146,17 @@ def test_existing_citation_page_and_media_checksum_are_reused(fake, scan):
 
 def test_crash_between_create_and_link_is_finished_by_a_rerun(fake):
     ops = [{"op": "add_event", "key": "e", "ruling": R, "person": "I0001", "type": "Death", "date": "abt 1950"}]
+    # the answer to the create is lost, but the server made the event: the op starts over and only links it
     fake.drop_after = ("POST", "/api/objects/")
-    with pytest.raises(ConnectionError):
-        run(fake, ops)
-    assert len(fake.store["events"]) == 1 and fake.store["people"]["anna"]["event_ref_list"] == []
     res = run(fake, ops)
-    assert res[0].status == "done"
+    assert res[0].status == "done", res[0].actions
     assert len(fake.store["events"]) == 1
     assert fake.store["people"]["anna"]["event_ref_list"][0]["ref"] == stable_handle("e")
     assert fake.store["people"]["anna"]["death_ref_index"] == 0
+    # the same after a real crash: a new run finds the event and links it
+    fake.store["people"]["anna"].update(event_ref_list=[], death_ref_index=-1)
+    assert run(fake, ops)[0].status == "done"
+    assert len(fake.store["events"]) == 1 and fake.store["people"]["anna"]["death_ref_index"] == 0
 
 
 def test_busy_server_is_retried_from_fresh_reads(fake):
@@ -392,3 +394,74 @@ def test_cli_takes_the_lock_releases_it_and_never_reuses_a_log(fake, tmp_path, m
     assert main([str(p), "--apply", "--log", str(log)]) == 1
     assert "another apply holds this tree: run run-busy" in capsys.readouterr().err
     assert fake.writes()[before:] == []
+
+
+def test_lookups_are_read_once_per_run_not_once_per_op(fake):
+    def whole_class_reads(n):
+        f = fake.__class__()
+        f.store = json.loads(json.dumps(fake.store))
+        seen = []
+        request = f.request
+
+        def counting(method, url, params=None, **kw):
+            if method == "GET" and "keys" in (params or {}):
+                seen.append(url)
+            return request(method, url, params=params, **kw)
+
+        f.request = counting
+        ops = [
+            {"op": "add_event", "key": f"r{i}", "ruling": R, "person": "I0001", "type": "Residence", "date": f"{1900 + i}"}
+            for i in range(n)
+        ]
+        assert all(r.status == "done" for r in run(f, ops))
+        return len(seen)
+
+    assert whole_class_reads(5) == whole_class_reads(1)
+
+
+def test_lock_whose_answer_was_lost_is_still_ours(fake, tmp_path, monkeypatch):
+    import gwt_apply.client as clientmod
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: fake)
+    for k, v in {"GWT_URL": "https://gw.example", "GWT_USERNAME": "u", "GWT_PASSWORD": "pw", "GWT_TREE": "tree-test"}.items():
+        monkeypatch.setenv(k, v)
+    changes = tmp_path / "changes.jsonl"
+    op = {"op": "add_event", "key": "e", "ruling": R, "person": "I0001", "type": "Death", "date": "abt 1950"}
+    changes.write_text(json.dumps(op))
+    fake.drop_after = ("POST", "/api/objects/")  # the lock note's create
+    assert main([str(changes), "--apply", "--retry-wait", "0"]) == 0
+    assert len(fake.store["events"]) == 1 and fake.store["notes"] == {}
+
+
+def test_lock_is_kept_fresh_while_one_op_waits_on_a_busy_server(fake, monkeypatch):
+    from gwt_apply import lock as lockmod
+    import gwt_apply.ops as opsmod
+    from gwt_apply.lock import TreeLock, read_lock
+    clock = [lockmod._now()]
+    monkeypatch.setattr(lockmod, "_now", lambda: clock[0])
+    monkeypatch.setattr(opsmod.time, "sleep", lambda s: clock.__setitem__(0, clock[0] + 600))  # a long wait
+    c = Client("https://gw.example", "u", "pw", tree="tree-test", dry_run=False, session=fake)
+    lock = TreeLock(c, "run-mine")
+    lock.acquire()
+    fake.busy = 1
+    op = {"op": "add_event", "key": "e", "ruling": R, "person": "I0001", "type": "Death", "date": "abt 1950"}
+    res = Applier(c, retries=3, retry_wait=1, lock=lock).run([op])
+    assert res[0].status == "done", res[0].actions
+    assert read_lock(c)["expires_ts"] == clock[0] + 900  # refreshed after the wait, before the second try
+
+
+def test_login_that_times_out_is_retried(fake):
+    import requests
+    request, timeouts = fake.request, [1]
+
+    def flaky(method, url, **kw):
+        if url.endswith("/token/") and timeouts[0]:
+            timeouts[0] -= 1
+            raise requests.Timeout("no answer")
+        return request(method, url, **kw)
+
+    fake.request = flaky
+    c = Client("https://gw.example", "u", "pw", tree="tree-test", dry_run=False, session=fake)
+    op = {"op": "add_event", "key": "e", "ruling": R, "person": "I0001", "type": "Death", "date": "abt 1950"}
+    res = Applier(c, retries=2, retry_wait=0).run([op])
+    assert res[0].status == "done", res[0].actions

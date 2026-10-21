@@ -233,7 +233,7 @@ class Result:
 class Applier:
     def __init__(self, client: Client, *, retries: int = 5, retry_wait: float = 30.0, lock=None):
         self.c = client
-        self.lock = lock  # a TreeLock to keep fresh between ops, during --apply
+        self.lock = lock  # a TreeLock to keep fresh before every try, during --apply
         self.retries = retries
         self.retry_wait = retry_wait
         self.keymap: dict[str, str] = {}  # key -> handle of the object it ended up as
@@ -248,7 +248,7 @@ class Applier:
         if ref.startswith("key:"):
             key = ref[4:]
             handle = self.keymap.get(key) or stable_handle(key)
-            if self.c.get(cls, handle) is None:
+            if not self.c.exists(cls, handle):
                 raise Conflict(f"{ref}: no {cls} made by that key")
             return handle
         if not _GRAMPS_ID.match(ref):
@@ -320,11 +320,11 @@ class Applier:
     def run(self, ops: list[dict]) -> list[Result]:
         results = []
         for op in ops:
-            if self.lock is not None:
-                self.lock.refresh()
             res = Result(op["key"], op["op"], op["ruling"])
             self.c.context = {"key": op["key"], "op": op["op"], "ruling": op["ruling"]}
             for attempt in range(1, self.retries + 1):
+                if self.lock is not None:  # every try: a slow server can make one op outlast the lock
+                    self.lock.refresh()
                 self.actions, self.wrote = [], False
                 try:
                     getattr(self, op["op"])(op)
@@ -356,7 +356,7 @@ class Applier:
     def _existing(self, cls: str, op: dict) -> dict | None:
         """The object an earlier run made for this key, if any."""
         handle = stable_handle(op["key"])
-        obj = self.c.get(cls, handle)
+        obj = self.c.get(cls, handle) if self.c.exists(cls, handle) else None
         if obj is not None:
             self.keymap[op["key"]] = handle
             self.actions.append(f"skip: {cls} {self.label(obj)} already made by key {op['key']!r}")
