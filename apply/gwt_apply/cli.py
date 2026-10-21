@@ -31,12 +31,12 @@ def read_config(path: str | None) -> dict:
     return conf
 
 
-def _plan_on_snapshot(ops: list[dict], snap: dict, client: Client) -> list[str]:
+def _plan_on_snapshot(ops: list[dict], snap: dict, client: Client, *, tag: str | None = None) -> list[str]:
     """Plan the whole list on the snapshot, offline; then what stops the plan or changed since the snapshot."""
     planner = Client(client.base[: -len("/api")], "", "", dry_run=True)
     planner.use_snapshot(snap, offline=True)
     problems = preflight(ops, planner)
-    plan = Applier(planner, retries=1, retry_wait=0).run(ops)
+    plan = Applier(planner, retries=1, retry_wait=0, tag=tag).run(ops)
     problems += [f"[{r.status}] {r.key}: {r.actions[-1]}" for r in plan if r.status in ("conflict", "error")]
     if problems:
         return problems + ["the dry run on the snapshot does not go through"]
@@ -71,6 +71,8 @@ def main(argv: list[str] | None = None) -> int:
 
     ops = load_change_list(args.change_list) if args.change_list else []
     errors = validate(ops)
+    if args.tag is not None and not args.tag.strip():
+        errors.append("--tag: a tag is a non-empty name")
     if errors:
         print("\n".join(errors), file=sys.stderr)
         print(f"{len(errors)} problem(s); nothing was read or written", file=sys.stderr)
@@ -142,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
             if snap.get("tree") != client.tree:
                 print(f"the snapshot is of tree {snap.get('tree')!r}, the login is in {client.tree!r}", file=sys.stderr)
                 return 1
-            refused = _plan_on_snapshot(ops, snap, client)
+            refused = _plan_on_snapshot(ops, snap, client, tag=args.tag)
             if refused:
                 print("\n".join(refused) + "; nothing was written", file=sys.stderr)
                 return 1
