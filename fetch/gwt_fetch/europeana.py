@@ -1,4 +1,4 @@
-"""Europeana Search API, filtered to Spanish providers, returning a IIIF manifest per record.
+"""Europeana Search API, optionally filtered to one aggregator, returning a IIIF manifest per record.
 
 Every Europeana record has a Europeana-built IIIF manifest. When the provider has no Image API,
 that manifest points at Europeana's thumbnail proxy; `gwt-fetch iiif` swaps it for the original file.

@@ -283,6 +283,14 @@ def test_europeana_params_and_row():
     assert r["title"] == "Le Ferrol"
 
 
+def test_europeana_default_provider_is_any():
+    from gwt_fetch import cli
+    args = cli.parser().parse_args(["europeana", "Ferrol"])
+    assert args.provider == "any"
+    p = europeana.params("k", "Ferrol", None, None, None, None, None, False, 20)
+    assert not any(v.startswith("PROVIDER:") for k, v in p if k == "qf")
+
+
 def test_europeana_run_prints_tsv(monkeypatch, capsys):
     monkeypatch.setenv("EUROPEANA_KEY", "k")
     body = {"success": True, "totalResults": 1, "items": [{"id": "/1/a", "title": ["T"]}]}

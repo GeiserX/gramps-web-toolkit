@@ -11,12 +11,12 @@
 
 gramps-web-toolkit is a set of command-line tools for running AI research agents against a family tree in [Gramps Web](https://www.grampsweb.org) without letting them write guesses into it. Each tool fixes a failure we hit while running about 30 research rounds over two trees of roughly 10,000 people each. The [pipeline design](docs/pipeline.md) and [every trap it taught us](docs/hard-won.md) sit next to the code.
 
-The toolkit works for genealogy in any country. One module, `spanish-poller`, is Spain-only: it watches the Spanish Ministry of Justice sede and the DEHú notification inbox. In `gwt-fetch`, `iiif` works with any IIIF archive, while `digibib`, `gazeta` and `geo` cover Spanish sources and `europeana` filters to Spanish providers unless you pass `--provider any`.
+The toolkit works for genealogy in any country. One module, `spanish-poller`, is Spain-only: it watches the Spanish Ministry of Justice sede and the DEHú notification inbox. In `gwt-fetch`, `iiif` works with any IIIF archive, while `digibib`, `gazeta` and `geo` cover Spanish sources and `europeana` searches every provider in any country (`--provider Hispana` narrows it to Spain).
 
 ## Features
 
 - `gwt-apply`: applies a JSON Lines change list to a tree, reads before every write, skips what is already there, and stays dry-run until you pass `--apply`
-- `gwt-fetch`: downloads archive images and text without a browser, with one manifest row per file: any IIIF archive, plus Spanish sources (DIGIBIB, the historical Gaceta de Madrid, Europeana's Spanish providers, CartoCiudad geocoding)
+- `gwt-fetch`: downloads archive images and text without a browser, with one manifest row per file: any IIIF archive, Europeana search, plus Spanish sources (DIGIBIB, the historical Gaceta de Madrid, CartoCiudad geocoding)
 - `gwt-ledger`: a shared "already searched" ledger, so parallel agents stop repeating each other's negative searches
 - `gwt-fscache`: an on-disk HTTP cache for rate-limited genealogy APIs that never stores a block or an auth header
 - `gwt-rawstore`: keeps source images in an S3-compatible bucket and only a small manifest in git
