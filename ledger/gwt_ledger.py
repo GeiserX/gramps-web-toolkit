@@ -7,14 +7,16 @@ Agents run `check` before a search and `add` after it, so two lanes never pay fo
   gwt-ledger check --person KEY --source SRC --query "..."   exit 0 and print rows if done, 1 if not
   gwt-ledger add --person KEY --label "..." --source SRC --query "..." --result none [--evidence F] [--agent A]
   gwt-ledger list --person KEY [--source SRC]
+  gwt-ledger due [--on YYYY-MM-DD]                           rows whose next_date has arrived (appeal windows, retries)
   gwt-ledger stats
 
 The ledger path comes from --ledger, else $GWT_LEDGER, else ./buscado.tsv. Standard library only.
 """
 import argparse, collections, datetime, difflib, fcntl, os, re, sys, unicodedata
 
-COLUMNS = ('person_key', 'person_label', 'source', 'query', 'date', 'result', 'evidence', 'agent')
-RESULTS = ('hit', 'none', 'partial', 'blocked')
+COLUMNS = ('person_key', 'person_label', 'source', 'query', 'date', 'result', 'evidence', 'agent', 'next_date')
+LEGACY_COLUMNS = COLUMNS[:-1]  # ledgers written before next_date existed
+RESULTS = ('hit', 'none', 'partial', 'blocked', 'denied', 'blocked_authorization')
 DEFAULT_THRESHOLD = 0.75
 
 
@@ -53,7 +55,7 @@ def read_rows(path):
         for n, line in enumerate(f):
             parts = line.rstrip('\n').split('\t')
             if n == 0 and parts[0] == COLUMNS[0]:
-                continue
+                continue  # header, either the 8-column legacy one or the current one
             if len(parts) < len(COLUMNS):
                 parts += [''] * (len(COLUMNS) - len(parts))
             rows.append(dict(zip(COLUMNS, parts)))
@@ -64,9 +66,19 @@ def add_row(path, row):
     """Append one row under an exclusive lock, writing the header if the file is new or empty."""
     line = '\t'.join(clean(row.get(c)) for c in COLUMNS) + '\n'
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    with open(path, 'a', encoding='utf-8') as f:
+    with open(path, 'a+', encoding='utf-8') as f:
         fcntl.flock(f, fcntl.LOCK_EX)
         try:
+            f.seek(0)
+            head = f.readline().rstrip('\n').split('\t')
+            if head == list(LEGACY_COLUMNS):
+                # an old 8-column ledger: add the next_date column to the header and every row, once
+                f.seek(0)
+                lines = f.read().split('\n')[1:]
+                f.seek(0)
+                f.truncate()
+                f.write('\t'.join(COLUMNS) + '\n')
+                f.write(''.join(l + '\t\n' for l in lines if l))
             f.seek(0, os.SEEK_END)
             if f.tell() == 0:
                 f.write('\t'.join(COLUMNS) + '\n')
@@ -112,6 +124,9 @@ def main(argv=None):
     a.add_argument('--result', required=True, choices=RESULTS)
     a.add_argument('--evidence', default=''); a.add_argument('--agent', default=os.environ.get('GWT_AGENT', ''))
     a.add_argument('--date', default=datetime.date.today().isoformat())
+    a.add_argument('--next-date', default='', help='ISO date to look again, e.g. the end of an appeal window')
+    d = sub.add_parser('due', help='rows whose next_date is on or before a day (default today)')
+    d.add_argument('--on', default=datetime.date.today().isoformat())
     l = sub.add_parser('list', help='rows for one person')
     l.add_argument('--person', required=True); l.add_argument('--source')
     sub.add_parser('stats', help='counts by result, source and agent')
@@ -120,13 +135,19 @@ def main(argv=None):
     if args.cmd == 'add':
         add_row(args.ledger, {'person_key': key(args.person), 'person_label': args.label,
                               'source': key(args.source), 'query': normalize(args.query), 'date': args.date,
-                              'result': args.result, 'evidence': args.evidence, 'agent': args.agent})
+                              'result': args.result, 'evidence': args.evidence, 'agent': args.agent,
+                              'next_date': args.next_date})
         return 0
     rows = read_rows(args.ledger)
     if args.cmd == 'check':
         scored = find(rows, args.person, args.source, args.query, args.threshold)
         print_rows(scored, with_score=True)
         return 0 if scored else 1
+    if args.cmd == 'due':
+        due = [(1.0, r) for r in rows if r['next_date'] and r['next_date'] <= args.on]
+        due.sort(key=lambda x: x[1]['next_date'])
+        print_rows(due)
+        return 0
     if args.cmd == 'list':
         print_rows(find(rows, args.person, args.source))
         return 0

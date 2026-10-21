@@ -15,9 +15,10 @@ One row per search, tab-separated, with a header line:
 | `source` | slug of where: `familysearch`, `gaceta`, `ad33`, `newspapers` |
 | `query` | the search, normalized: lowercase, no accents, no punctuation |
 | `date` | ISO date of the search |
-| `result` | `hit`, `none`, `partial` or `blocked` |
+| `result` | `hit`, `none`, `partial`, `blocked`, `denied` (the office refused the request) or `blocked_authorization` (the office needs an authorization you do not have) |
 | `evidence` | file that holds the result or the negative |
 | `agent` | who searched |
+| `next_date` | optional ISO date to look again, e.g. the last day of an appeal window |
 
 The path comes from `--ledger`, else `$GWT_LEDGER`, else `./buscado.tsv`. The agent name defaults to `$GWT_AGENT`.
 
@@ -37,7 +38,13 @@ gwt-ledger add --person "Ana Peiro Toledo" --label "Ana Peiro Toledo" --source f
 
 gwt-ledger list --person ana-peiro-toledo [--source familysearch]
 gwt-ledger stats
+
+# Refused with an appeal window: log it with the date to look again, then list what is due.
+gwt-ledger add --person ... --source ... --query ... --result denied --next-date 2026-11-14
+gwt-ledger due --on 2026-11-14
 ```
+
+A ledger written with the older 8 columns is upgraded in place the first time you `add` to it.
 
 In a script: `gwt-ledger check ... >/dev/null && echo "already done, skip"`.
 

@@ -116,6 +116,35 @@ class LedgerTest(unittest.TestCase):
         p = subprocess.run([sys.executable, CLI, 'stats'], capture_output=True, text=True, env=env)
         self.assertIn('rows\t1', p.stdout)
 
+    def test_denied_and_blocked_authorization_are_results_and_still_count_as_done(self):
+        for res in ('denied', 'blocked_authorization'):
+            self.add(person='Ana Peiro', query='registro civil birth act ' + res, result=res)
+            code, out = run('--ledger', self.path, 'check', '--person', 'ana-peiro', '--query', 'registro civil birth act ' + res)
+            self.assertEqual(code, 0)
+            self.assertIn(res, out)
+
+    def test_next_date_and_due(self):
+        run('--ledger', self.path, 'add', '--person', 'x', '--source', 's', '--query', 'q one', '--result', 'denied',
+            '--next-date', '2026-11-14')
+        run('--ledger', self.path, 'add', '--person', 'y', '--source', 's', '--query', 'q two', '--result', 'none')
+        self.assertEqual(run('--ledger', self.path, 'due', '--on', '2026-11-13'), (0, ''))
+        code, out = run('--ledger', self.path, 'due', '--on', '2026-11-14')
+        self.assertEqual(code, 0)
+        self.assertIn('q one', out)
+        self.assertNotIn('q two', out)
+
+    def test_legacy_eight_column_ledger_is_upgraded_on_add(self):
+        with open(self.path, 'w', encoding='utf-8') as f:
+            f.write('\t'.join(L.LEGACY_COLUMNS) + '\n')
+            f.write('ana\tAna\tfs\told query here\t2026-01-01\tnone\t\ta1\n')
+        self.assertEqual(len(L.read_rows(self.path)), 1)
+        run('--ledger', self.path, 'add', '--person', 'b', '--source', 's', '--query', 'new q', '--result', 'denied',
+            '--next-date', '2026-12-01')
+        rows = L.read_rows(self.path)
+        self.assertEqual([r['person_key'] for r in rows], ['ana', 'b'])
+        self.assertEqual(rows[1]['next_date'], '2026-12-01')
+        self.assertEqual(open(self.path, encoding='utf-8').readline().rstrip('\n').split('\t'), list(L.COLUMNS))
+
 
 if __name__ == '__main__':
     unittest.main()
