@@ -76,3 +76,17 @@ test('summarize lists pending notifications and says when nothing changed', () =
   assert.match(text, /pending: X · Y/);
   assert.match(text, /no changes/);
 });
+
+test('dump saves error pages without --dump, and nothing else', async () => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+  const { dump, setErrorDumpDir } = require('../gwt_spanish_poller.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'poller-err-'));
+  const page = { content: async () => '<p>x</p>', innerText: async () => 'x', screenshot: async () => {} };
+  setErrorDumpDir(dir);
+  await dump(page, null, 'dehu-0-home');
+  assert.deepStrictEqual(fs.readdirSync(dir), []);
+  await dump(page, null, 'dehu-err-login');
+  assert.deepStrictEqual(fs.readdirSync(dir).sort(), ['dehu-err-login.html', 'dehu-err-login.txt']);
+  setErrorDumpDir(null);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
