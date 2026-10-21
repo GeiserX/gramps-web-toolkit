@@ -102,7 +102,7 @@ Format: what happened, why, and the rule.
 
 **What happened.** 41% of the media objects in our trees (4,564 of 11,067) were transcripts, JSON, TSV, HTML, `.eml` and archives. Gramps Web has no preview for them. The gallery shows a grey document icon, and clicking it opens the same icon full screen. The owner reported the media as "broken".
 
-**Rule.** Only images, PDFs, and public audio or video go in as media, in their original format. Transcripts go in as notes of type *Transcription* on the citation, with the repo path on the first line. Raw captures (JSON, HTML, logs) stay in the repo, and a *Research* note records what was searched and where the file is.
+**Rule.** Only images, PDFs, and public audio or video go in as media, in their original format. Transcripts go in as notes of type *Transcript*, the built-in Gramps type (a note typed *Transcription* becomes a separate custom type), on the citation, with the repo path on the first line. Raw captures (JSON, HTML, logs) stay in the repo, and a *Research* note records what was searched and where the file is.
 
 ### 15. The media route that works for bulk applies
 
