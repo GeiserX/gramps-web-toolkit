@@ -100,9 +100,20 @@ The dry-run prints one block per op:
 - **One apply per tree.** `--apply` takes a lock before its first write and holds it to the end: a private note with a fixed handle and Gramps ID `GWTLOCK`, inside the tree, so it works whichever machine the apply runs on. Creating it is the test: the server refuses a second object with the same handle. The note says which run, host and process hold it and until when; the holder moves that time 15 minutes ahead while it works and deletes the note when it stops, also on Ctrl-C, `SIGTERM` or `SIGHUP`. A second `--apply` on the tree stops before writing and names the holder. A lock whose holder died (power cut, `kill -9`) expires after 15 minutes and the next apply takes it over and says so; `--break-lock` takes it at once, for when you know the holder is dead. A holder that finds its lock gone stops. A dry run takes no lock, and says so when an apply holds the tree. While the lock is held, an export of the tree includes the lock note.
 - **Stop at the first conflict or error.** Later ops are not run, because they may depend on this one.
 - **Writes are narrow.** No op deletes anything. Objects are created with `POST /api/objects/`. Changes to an existing object are a `GET` followed by a `PUT` of the same object with only the named field changed. Right before the `PUT` the object is read again; if it changed since the op read it, the op starts over, so a concurrent edit is not overwritten.
-- **Busy server.** On "database is locked", any 5xx, or an object that changed since it was read, the op waits `--retry-wait` seconds and starts over from fresh reads. A login answered 429 (the server rate-limits logins) waits and tries again.
+- **Busy server.** On "database is locked", any 5xx, a request that timed out or lost its connection, or an object that changed since it was read, the op waits `--retry-wait` seconds and starts over from fresh reads. A create whose answer never came is looked up again before the op tries it a second time, so a timeout cannot make an object twice. A login answered 429 (the server rate-limits logins) waits and tries again.
 - **A log of every call.** One JSONL line per API call with the op's `key` and `ruling`, the method, path, status, and the body of every write. The password and the token are never logged.
 - **Re-running is safe.** After a crash, run the same list again: what was written is skipped, and an object that was created but not yet linked gets linked.
+
+## Speed
+
+An op costs a few requests, and on a real server the writes dominate: about 100 ms for a `POST` or `PUT` on a LAN. Two things keep the count down.
+
+- **Lookups are read once per run.** Gramps ID to handle, "does this handle exist", and the whole-class lists the checks need (sources by title, places by name, media by checksum) are each one `GET` per class for the whole run, with the run's own writes added on top. They stay right because the [lock](#safety-rules) keeps other appliers out. The object an op changes is still read fresh, and read again right before its `PUT`.
+- **Run it near the server.** Every request pays the round trip. A client behind a VPN that sends the server's traffic the long way round can take 250 ms a request where the LAN takes 70 ms; for a long list, run `gwt-apply` from a machine on the server's network.
+
+There is a `POST /api/transactions/` endpoint that takes many changes in one call, and `gwt-apply` does not use it. It wants objects in Gramps' internal form (types as `{"_class": "EventType", "value": 12, "string": ""}`, which no read endpoint returns), it answers "Object has changed" when the old object is sent in the form a `GET` returns, and its own documentation says it does not keep references or the birth and death indexes in step, so it can leave the tree inconsistent.
+
+`apply/bench/` measures this on a throwaway server: `synth.py seed` fills an empty tree with invented people, `synth.py ops` writes an invented change list, and `run.py` runs `gwt-apply` with a timing session and prints the requests by kind.
 
 ## Traps
 

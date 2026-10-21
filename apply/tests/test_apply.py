@@ -394,3 +394,26 @@ def test_cli_takes_the_lock_releases_it_and_never_reuses_a_log(fake, tmp_path, m
     assert main([str(p), "--apply", "--log", str(log)]) == 1
     assert "another apply holds this tree: run run-busy" in capsys.readouterr().err
     assert fake.writes()[before:] == []
+
+
+def test_lookups_are_read_once_per_run_not_once_per_op(fake):
+    def whole_class_reads(n):
+        f = fake.__class__()
+        f.store = json.loads(json.dumps(fake.store))
+        seen = []
+        request = f.request
+
+        def counting(method, url, params=None, **kw):
+            if method == "GET" and "keys" in (params or {}):
+                seen.append(url)
+            return request(method, url, params=params, **kw)
+
+        f.request = counting
+        ops = [
+            {"op": "add_event", "key": f"r{i}", "ruling": R, "person": "I0001", "type": "Residence", "date": f"{1900 + i}"}
+            for i in range(n)
+        ]
+        assert all(r.status == "done" for r in run(f, ops))
+        return len(seen)
+
+    assert whole_class_reads(5) == whole_class_reads(1)
