@@ -41,6 +41,7 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "add_citation": ({"source", "page", "attach"}, {"confidence", "date", "gramps_id"}),
     "add_media": ({"file", "path", "attach"}, {"desc", "mime", "gramps_id"}),
     "add_note": ({"text", "attach"}, {"type", "gramps_id"}),
+    "attach_existing": ({"object", "attach"}, set()),
     "dedupe_list": ({"target", "list"}, set()),
     "set_attribute": ({"target", "type", "value"}, set()),
     "merge_person": ({"winner", "loser"}, {"use_loser", "reason"}),
@@ -53,6 +54,8 @@ MERGE_LISTS = [  # what Gramps' merge carries from the loser to the winner, list
     "child_ref_list",
 ]
 USE_LOSER = {"birth": "birth_ref_index", "death": "death_ref_index"}
+ATTACHABLE = {"citation": ("Citation", "citation_list"), "media": ("Media", "media_list"),  # attach_existing
+              "note": ("Note", "note_list")}
 REF_OWN_LISTS = ("note_list", "citation_list", "attribute_list")  # what a MediaRef carries besides its ref
 PERSON_FIELDS = {"first_name", "surname", "gender"}
 EVENT_FIELDS = {"type", "date", "place", "description"}
@@ -119,6 +122,17 @@ def _parse_target(spec) -> tuple[str, object]:
     return TARGET_KINDS[kind], ref
 
 
+def _parse_object(spec) -> tuple[str, str, str]:
+    """attach_existing's object: {"media": "O0054"} -> ("Media", "O0054", "media_list")."""
+    if not isinstance(spec, dict) or len(spec) != 1:
+        raise ValueError(f"object is one of {sorted(ATTACHABLE)} -> ref, got {spec!r}")
+    (kind, ref), = spec.items()
+    if kind not in ATTACHABLE or not isinstance(ref, str) or not ref:
+        raise ValueError(f"object is a citation, media or note, got {kind}")
+    cls, lst = ATTACHABLE[kind]
+    return cls, ref, lst
+
+
 def _target_refs(spec) -> list:
     if not isinstance(spec, dict) or len(spec) != 1:
         return []
@@ -181,6 +195,8 @@ def validate(ops: list[dict]) -> list[str]:
         refs = [op.get(f) for f in ("person", "family", "father", "mother", "child", "source", "place", "enclosed_by",
                                     "winner", "loser")]
         refs += list(op.get("children") or [])
+        if name == "attach_existing":
+            refs += _target_refs(op.get("object"))
         if name == "add_association":
             refs.append(op.get("target"))
         refs += _ref_list(op.get("namesake_of")) if op.get("namesake_of") else []
@@ -249,11 +265,14 @@ def validate(ops: list[dict]) -> list[str]:
                     raise ValueError("lat and long go together")
                 if "lat" in op and not (-90 <= float(op["lat"]) <= 90 and -180 <= float(op["long"]) <= 180):
                     raise ValueError("lat/long out of range")
+            if name == "attach_existing":
+                lst = _parse_object(op.get("object"))[2]
+            elif op.get("attach"):
+                lst = {"add_citation": "citation_list", "add_media": "media_list", "add_note": "note_list"}[name]
             for spec in op.get("attach") or []:
                 cls, _ = _parse_target(spec)
-                lst = {"add_citation": "citation_list", "add_media": "media_list", "add_note": "note_list"}[name]
                 if cls not in CARRIES[lst]:
-                    raise ValueError(f"a {cls} cannot carry a {name[4:]}")
+                    raise ValueError(f"a {cls} cannot carry a {lst[:-5]}")
             if name == "add_media" and not Path(op.get("file", "")).is_file():
                 raise ValueError(f"file not found: {op.get('file')}")
             if name == "add_media" and Path(op.get("path", "")).is_absolute():
@@ -835,6 +854,15 @@ class Applier:
             )
             self.keymap[op["key"]] = handle
         self.attach(op["attach"], "note_list", handle)
+
+    def attach_existing(self, op):
+        """Link a citation, media object or note the tree already has to more targets.
+
+        For what an import left with no reference at all (orphans) and for a document that belongs
+        to a second person: add_citation, add_media and add_note only make new objects.
+        """
+        cls, ref, lst = _parse_object(op["object"])
+        self.attach(op["attach"], lst, self.resolve(cls, ref))
 
     def dedupe_list(self, op):
         """Keep the first of each repeated reference in one list: the same citation twice on a person."""
