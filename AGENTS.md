@@ -12,6 +12,7 @@ tool with its own tests; `docs/` has one page per tool, plus `pipeline.md` (how 
 | Folder | Tool | Runtime |
 |---|---|---|
 | `apply/` | `gwt-apply`, change-list applier | Python 3.11+, `requests` |
+| `check/` | `gwt-check`, read-only whole-tree checks | Python 3.11+, standard library |
 | `fetch/` | `gwt-fetch`, archive downloads | Python 3.11+, `requests` |
 | `ledger/` | `gwt-ledger`, shared search ledger | Python standard library |
 | `fscache/` | `gwt-fscache`, HTTP cache | Python standard library |
@@ -33,6 +34,7 @@ tool with its own tests; `docs/` has one page per tool, plus `pipeline.md` (how 
 
 ```bash
 cd apply && python3 -m pytest -q
+cd check && python3 -m pytest -q
 cd fetch && python3 -m pytest -q
 cd ledger && python3 -m unittest test_gwt_ledger
 cd fscache && python3 -m unittest test_gwt_fscache
