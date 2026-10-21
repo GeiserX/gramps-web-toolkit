@@ -238,6 +238,18 @@ def test_namesake_is_a_conflict_unless_allowed(fake):
     assert res[0].status == "done" and "kept apart: born forty years later" in res[0].actions[0]
 
 
+def test_person_with_empty_surname(fake):
+    """A DNA match known only as "Ruth" has no surname: "" is a real value, a missing field is not."""
+    ops = [{"op": "add_person", "key": "p-ruth", "ruling": R, "first_name": "Ruth", "surname": "", "gender": "F"}]
+    assert validate(ops) == []
+    res = run(fake, ops)
+    assert res[0].status == "done"
+    person = fake.store["people"][stable_handle("p-ruth")]
+    assert person["primary_name"]["first_name"] == "Ruth"
+    assert person["primary_name"]["surname_list"][0]["surname"] == ""
+    assert any("missing ['surname']" in e for e in validate([{"op": "add_person", "key": "q", "ruling": R, "first_name": "Ruth"}]))
+
+
 def test_strict_change_list():
     errors = "\n".join(validate([
         {"op": "add_person", "key": "a", "ruling": R, "first_name": "X", "surname": "Y", "allow_namesake": True},

@@ -164,6 +164,8 @@ def validate(ops: list[dict]) -> list[str]:
         missing = [f for f in required if op.get(f) in (None, "", [])]
         if name == "add_citation" and op.get("page") == "":
             missing.remove("page")  # an empty page is a real value
+        if name == "add_person" and op.get("surname") == "":
+            missing.remove("surname")  # someone known by one name only has no surname
         if missing:
             errors.append(f"{where}: missing {sorted(missing)}")
         extra = set(op) - allowed
