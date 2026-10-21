@@ -344,6 +344,28 @@ class Client:
         self.written.pop((cls, handle), None)
         self._handles.get(cls, set()).discard(handle)
 
+    def remove(self, cls: str, handle: str) -> None:
+        """DELETE an object the op has already emptied (merge_event). A dry run only marks it as gone."""
+        path = f"/{NAMESPACE[cls]}/{handle}"
+        self.deleted.add((cls, handle))
+        if self.dry_run:
+            self.log(method="DELETE", path=path, status=None)
+            return
+        self.stale.add((cls, handle))
+        try:
+            r = self._request("DELETE", path, write=True)
+        except Retryable:
+            self.deleted.discard((cls, handle))
+            self.unsure.add((cls, handle))  # no answer: it may be gone; the retry asks the server
+            raise
+        if r.status_code not in (200, 404):
+            self.deleted.discard((cls, handle))
+            raise ApiError(f"delete {cls} {handle}: HTTP {r.status_code} {r.text[:300]}", r.status_code)
+        self.unsure.discard((cls, handle))
+        self.written.pop((cls, handle), None)
+        if self._ids.get(cls):
+            self._handles[cls].discard(handle)
+
     def merge(self, cls: str, winner: str, loser: str, body: dict | None = None) -> None:
         """Gramps' own merge: every reference to the loser moves to the winner, then the loser is deleted.
 

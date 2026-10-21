@@ -44,6 +44,7 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "set_attribute": ({"target", "type", "value"}, set()),
     "merge_person": ({"winner", "loser"}, {"use_loser", "reason"}),
     "merge_family": ({"winner", "loser"}, {"reason"}),
+    "merge_event": ({"winner", "loser"}, {"reason"}),
     "add_association": ({"person", "target", "relation"}, set()),
 }
 MERGE_LISTS = [  # what Gramps' merge carries from the loser to the winner, list by list
@@ -944,6 +945,81 @@ class Applier:
         winner.setdefault("_class", "Person")
         self._show_merge(winner, loser)
         self.c.merge("Person", winner["handle"], loser["handle"], {"family_merger": True})
+        self.wrote = True
+
+    def merge_event(self, op):
+        """Two events that are one fact: a death in two citations, a birth entered twice.
+
+        The loser's citations, notes, media and attributes go to the winner, every person and family
+        that listed the loser lists the winner once (a holder that had both just drops the loser), the
+        birth and death pointers follow, and the loser is deleted. Different dates, places or
+        descriptions are a conflict: correct one first with update_event, so a merge never picks a fact.
+        """
+        if self._merge_done("Event", op):
+            return
+        winner, loser = self.obj("Event", op["winner"]), self.obj("Event", op["loser"])
+        for o in (winner, loser):
+            o.setdefault("_class", "Event")
+        if winner.get("type") != loser.get("type"):
+            raise Conflict(f"Event {self.label(winner)} is a {winner.get('type')}, {self.label(loser)} a {loser.get('type')}")
+        for field in ("date", "place", "description"):
+            w, l_ = winner.get(field), loser.get(field)
+            if field == "date":
+                w, l_ = (w or {}).get("dateval"), (l_ or {}).get("dateval")
+                w = w if w and any(w[:3]) else None
+                l_ = l_ if l_ and any(l_[:3]) else None
+            if w and l_ and w != l_:
+                raise Conflict(
+                    f"Event {self.label(winner)} and {self.label(loser)} differ in {field}; "
+                    "correct one with update_event first"
+                )
+        self._merge_note(op, "Event", f"Event {self.label(loser)}")
+        winner = self.obj("Event", op["winner"])
+        winner.setdefault("_class", "Event")
+        before, after = copy.deepcopy(winner), copy.deepcopy(winner)
+        for lst in ("citation_list", "note_list", "media_list", "attribute_list"):
+            have = after.get(lst) or []
+            new = [x for x in loser.get(lst) or [] if x not in have]
+            if new:
+                after[lst] = have + new
+        for field in ("date", "place", "description"):
+            if not after.get(field) and loser.get(field):
+                after[field] = loser[field]
+        holders = []
+        for cls, keys in (("Person", ["event_ref_list", "birth_ref_index", "death_ref_index"]), ("Family", ["event_ref_list"])):
+            for row in self.c.list_all(cls, keys):
+                if any(r.get("ref") == loser["handle"] for r in row.get("event_ref_list") or []):
+                    holders.append((cls, row["handle"]))
+        moved = [f"{lst} +{json.dumps(after[lst][len(before.get(lst) or []):], ensure_ascii=False)}"
+                 for lst in ("citation_list", "note_list", "media_list", "attribute_list")
+                 if after.get(lst) != before.get(lst)]
+        self.actions.append(
+            f"merge Event {self.label(loser)} into {self.label(winner)}: " + "; ".join(moved or ["nothing to move"])
+        )
+        if after != before:
+            self.save(before, after)
+        for cls, handle in holders:
+            holder = self.c.get(cls, handle)
+            holder.setdefault("_class", cls)
+            old = copy.deepcopy(holder)
+            refs, new_refs = old.get("event_ref_list") or [], []
+            for r in refs:
+                if r["ref"] != loser["handle"]:
+                    new_refs.append(r)
+                elif not any(x["ref"] == winner["handle"] and x.get("role") == r.get("role") for x in refs):
+                    new_refs.append({**r, "ref": winner["handle"]})
+                    self.actions.append(f"  {cls} {self.label(holder)}: lists {self.label(winner)} instead of {self.label(loser)}")
+                else:
+                    self.actions.append(f"  {cls} {self.label(holder)}: already lists {self.label(winner)}, drops {self.label(loser)}")
+            holder["event_ref_list"] = new_refs
+            for field in ("birth_ref_index", "death_ref_index"):
+                if old.get(field, -1) >= 0:
+                    target = refs[old[field]]["ref"]
+                    target = winner["handle"] if target == loser["handle"] else target
+                    holder[field] = next((i for i, r in enumerate(new_refs) if r["ref"] == target), -1)
+            self.save(old, holder)
+        self.actions.append(f"delete Event {self.label(loser)}")
+        self.c.remove("Event", loser["handle"])
         self.wrote = True
 
     def merge_family(self, op):

@@ -771,3 +771,69 @@ def test_association_reads_no_whole_class_per_op(fake):
             "relation": "DNA"} for i in range(3)]
     assert all(r.status == "done" for r in run(fake, ops))
     assert len(seen) == 1  # the people index, once
+
+
+def _event_fixture(fake):
+    fake.add("people", {"handle": "anna", "gender": 0, "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    d1 = fake.add("events", {"handle": "d1", "type": "Death", "date": parse_date("1884-05-02"), "citation_list": ["c1"]})   # E0001
+    d2 = fake.add("events", {"handle": "d2", "type": "Death", "date": parse_date("1884-05-02"), "citation_list": ["c2"]})   # E0002
+    anna = fake.store["people"]["anna"]
+    anna["event_ref_list"] = [{"_class": "EventRef", "ref": "d1", "role": "Primary"},
+                              {"_class": "EventRef", "ref": "d2", "role": "Primary"}]
+    anna["death_ref_index"] = 1  # points at the loser
+    return anna
+
+
+def test_merge_event_keeps_both_citations_and_moves_the_death_pointer(tmp_path):
+    fake = FakeGrampsWeb()
+    anna = _event_fixture(fake)
+    op = {"op": "merge_event", "key": "me", "ruling": R, "winner": "E0001", "loser": "E0002", "reason": "one death, two citations"}
+    plan = run(fake, [op], dry_run=True)
+    text = "\n".join(plan[0].actions)
+    assert plan[0].status == "done" and fake.writes() == []
+    assert "merge Event E0002 into E0001: citation_list +[\"c2\"]" in text
+    assert "already lists E0001, drops E0002" in text and "delete Event E0002" in text
+    res = run(fake, [op])
+    assert res[0].status == "done", res[0].actions
+    assert "d2" not in fake.store["events"]
+    assert fake.store["events"]["d1"]["citation_list"] == ["c1", "c2"]
+    anna = fake.store["people"]["anna"]
+    assert [r["ref"] for r in anna["event_ref_list"]] == ["d1"] and anna["death_ref_index"] == 0
+    note = fake.store["notes"][stable_handle("me#merge")]
+    assert "Merged Event E0002" in note["text"]["string"] and note["handle"] in fake.store["events"]["d1"]["note_list"]
+    assert run(fake, [op])[0].status == "skip"  # a rerun finds it done
+
+
+def test_merge_event_refuses_other_facts():
+    fake = FakeGrampsWeb()
+    _event_fixture(fake)
+    fake.store["events"]["d2"]["date"] = parse_date("1884-05-03")
+    op = {"op": "merge_event", "key": "me", "ruling": R, "winner": "E0001", "loser": "E0002"}
+    res = run(fake, [op])
+    assert res[0].status == "conflict" and "differ in date" in res[0].actions[-1]
+    fake.store["events"]["d2"].update(date=parse_date("1884-05-02"), type="Burial")
+    res = run(fake, [dict(op, key="me2")])
+    assert res[0].status == "conflict" and "is a Death" in res[0].actions[-1]
+    assert "d2" in fake.store["events"]
+    assert "winner and loser are the same" in "\n".join(validate([dict(op, loser="E0001")]))
+
+
+def test_merge_event_moves_a_holder_that_only_had_the_loser():
+    fake = FakeGrampsWeb()
+    anna = _event_fixture(fake)
+    anna["event_ref_list"] = [{"_class": "EventRef", "ref": "d2", "role": "Primary"}]
+    anna["death_ref_index"] = 0
+    res = run(fake, [{"op": "merge_event", "key": "me", "ruling": R, "winner": "E0001", "loser": "E0002"}])
+    assert res[0].status == "done", res[0].actions
+    anna = fake.store["people"]["anna"]
+    assert [r["ref"] for r in anna["event_ref_list"]] == ["d1"] and anna["death_ref_index"] == 0
+
+
+def test_merge_event_moves_the_losers_notes_so_none_is_left_orphaned():
+    fake = FakeGrampsWeb()
+    _event_fixture(fake)
+    fake.add("notes", {"handle": "n2", "text": {"string": "[Event import E0002] entry text"}})
+    fake.store["events"]["d2"]["note_list"] = ["n2"]
+    res = run(fake, [{"op": "merge_event", "key": "me", "ruling": R, "winner": "E0001", "loser": "E0002"}])
+    assert res[0].status == "done", res[0].actions
+    assert "n2" in fake.store["events"]["d1"]["note_list"] and "n2" in fake.store["notes"]
