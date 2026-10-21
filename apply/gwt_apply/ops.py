@@ -41,6 +41,7 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "add_citation": ({"source", "page", "attach"}, {"confidence", "date", "gramps_id"}),
     "add_media": ({"file", "path", "attach"}, {"desc", "mime", "gramps_id"}),
     "add_note": ({"text", "attach"}, {"type", "gramps_id"}),
+    "add_transcription": ({"text", "margin_reading", "attach"}, {"language", "gramps_id"}),
     "set_attribute": ({"target", "type", "value"}, set()),
     "merge_person": ({"winner", "loser"}, {"use_loser", "reason"}),
     "merge_family": ({"winner", "loser"}, {"reason"}),
@@ -216,6 +217,8 @@ def validate(ops: list[dict]) -> list[str]:
                 raise ValueError("winner and loser are the same")
             if name == "merge_person" and set(op.get("use_loser") or []) - set(USE_LOSER):
                 raise ValueError(f"use_loser takes {sorted(USE_LOSER)}")
+            if name == "add_transcription" and not str(op.get("margin_reading") or "").strip():
+                raise ValueError("margin_reading is required: what the margins say, or 'none' once you looked")
             if name == "add_event" and bool(op.get("person")) == bool(op.get("family")):
                 raise ValueError("add_event needs exactly one of person or family")
             if name == "add_family" and not (op.get("father") or op.get("mother")):
@@ -243,7 +246,8 @@ def validate(ops: list[dict]) -> list[str]:
                     raise ValueError("lat/long out of range")
             for spec in op.get("attach") or []:
                 cls, _ = _parse_target(spec)
-                lst = {"add_citation": "citation_list", "add_media": "media_list", "add_note": "note_list"}[name]
+                lst = {"add_citation": "citation_list", "add_media": "media_list", "add_note": "note_list",
+                       "add_transcription": "note_list"}[name]
                 if cls not in CARRIES[lst]:
                     raise ValueError(f"a {cls} cannot carry a {name[4:]}")
             if name == "add_media" and not Path(op.get("file", "")).is_file():
@@ -823,6 +827,21 @@ class Applier:
             )
             self.keymap[op["key"]] = handle
         self.attach(op["attach"], "note_list", handle)
+
+    def add_transcription(self, op):
+        """A transcript as a Transcript note, never as media; the margin reading is part of the text.
+
+        `margin_reading` is required: what the margins of the page say (annotations, later notes,
+        corrections), or the word "none" once you have looked. A transcript made without looking at the
+        margin is how a legitimate-looking entry ends up with the wrong person.
+        """
+        reading = str(op["margin_reading"]).strip()
+        lang = f" [{op['language']}]" if op.get("language") else ""
+        text = f"{op['text'].rstrip()}\n\nMargin reading{lang}: {reading}"
+        self.add_note(
+            {"op": "add_note", "key": op["key"], "ruling": op["ruling"], "type": "Transcript",
+             "text": text, "attach": op["attach"], "gramps_id": op.get("gramps_id", "")}
+        )
 
     def set_attribute(self, op):
         cls, ref = _parse_target(op["target"])

@@ -771,3 +771,20 @@ def test_association_reads_no_whole_class_per_op(fake):
             "relation": "DNA"} for i in range(3)]
     assert all(r.status == "done" for r in run(fake, ops))
     assert len(seen) == 1  # the people index, once
+
+
+def test_transcription_is_a_transcript_note_with_a_required_margin_reading(fake):
+    base = {"op": "add_transcription", "key": "t", "ruling": R, "text": "Joseph, son of Anna.",
+            "attach": [{"person": "I0001"}]}
+    assert any("margin_reading" in e for e in validate([base]))
+    assert any("margin_reading" in e for e in validate([dict(base, margin_reading="  ")]))
+    ok = dict(base, margin_reading="none", language="es")
+    assert validate([ok]) == []
+    assert run(fake, [ok])[0].status == "done"
+    note = next(iter(fake.store["notes"].values()))
+    assert note["type"] == "Transcript"
+    assert note["text"]["string"].endswith("Margin reading [es]: none")
+    assert fake.store["people"]["anna"]["note_list"] == [stable_handle("t")]
+    assert run(fake, [dict(ok, key="t2")])[0].status == "skip"  # same text on the same person: reused
+    media = dict(ok, key="m", attach=[{"child_ref": {"family": "F0001", "child": "I0001"}}])
+    assert validate([media]) == []
