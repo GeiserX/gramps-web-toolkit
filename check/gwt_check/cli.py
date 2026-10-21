@@ -220,7 +220,7 @@ def main(argv: list[str] | None = None) -> int:
             if base.partial:
                 raise BadInput(f"{args.baseline}: a .gramps backup has no objects to check; --baseline needs a dump")
             old = check(base)["findings"]
-            known = {(f["check"], f["key"]) for f in old} | (known or set())
+            known = {**{(f["check"], f["key"]): "" for f in old}, **(known or {})}
         since = load(args.since) if args.since else None
         if args.tree:
             tree = load(args.tree)
