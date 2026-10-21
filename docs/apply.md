@@ -39,20 +39,20 @@ References to other objects are either a **Gramps ID** (`I0042`, `P0007`) or **`
 
 | op | Required | Optional | What it does |
 |---|---|---|---|
-| `add_person` | `first_name`, `surname` | `gender` (`M`, `F`, `U`), `gramps_id`, `allow_namesake` | New person. If someone with the same first name and surname exists, the op is a conflict that names them; set `allow_namesake: true` when it really is another person |
+| `add_person` | `first_name`, `surname` | `gender` (`M`, `F`, `U`), `gramps_id`, `allow_namesake` with `namesake_reason` and `namesake_of` | New person. If someone with the same first name and surname exists, the op is a conflict that names them. When it really is another person, set `allow_namesake: true`, say why in `namesake_reason`, and list in `namesake_of` the Gramps ID (or `key:<key>`) of every namesake you compared; one the op does not name is still a conflict |
 | `update_person` | `person`, `set` | | `set` takes only `first_name`, `surname`, `gender` |
 | `add_place` | `name`, `type` | `enclosed_by`, `lat` and `long`, `gramps_id` | New place inside its parent, or the existing one with the same name, type and parent |
 | `add_event` | `type`, and `person` or `family` | `date`, `place`, `description`, `role`, `gramps_id` | New event, linked to the person (role `Primary` by default) or the family (role `Family`) |
 | `update_event` | `event`, `set` | | `set` takes only `type`, `date`, `place`, `description`: the way to correct an event instead of adding a second one |
 | `add_family` | `father` or `mother` | `children`, `type`, `gramps_id` | New family, or the existing one with the same parents |
-| `link_child` | `family`, `child` | `frel`, `mrel` (default `Birth`) | Adds a child to a family |
+| `link_child` | `family`, `child` | `frel`, `mrel` (default `Birth`), `probable: true` with `probable_reason` | Adds a child to a family. With `probable`, the link also gets a `Research` note on its child_ref that reads `[probable] <probable_reason>`; a link that is already there gets the note if it has none starting with `[probable]` |
 | `add_source` | `title` | `author`, `pubinfo`, `abbrev`, `gramps_id` | New source, or the existing one with the same title |
 | `add_citation` | `source`, `page`, `attach` | `confidence` (0-4, default 2), `date`, `gramps_id` | New citation, or the existing one with the same page on that source, attached to each target |
 | `add_media` | `file`, `path`, `attach` | `desc`, `mime`, `gramps_id` | Media object for a local file, or the existing one with the same MD5, attached to each target |
 | `add_note` | `text`, `attach` | `type` (default `General`), `gramps_id` | New note, or a note with the same text already on a target |
 | `set_attribute` | `target`, `type`, `value` | | Sets an attribute; replaces the value of an attribute of the same type |
 
-`attach` and `target` take objects with one key, the kind of object: `{"person": "I0042"}`, `{"event": "key:birth-john"}`. Kinds: `person`, `family`, `event`, `citation`, `source`, `media`, `place`, and `child_ref`, the link between a child and a family, written `{"child_ref": {"family": "F0003", "child": "I0042"}}`. A child_ref carries citations and notes (no media, no attributes); that is where a doubtful parent link gets its source and its "probable" note. The child must already be in that family.
+`attach` and `target` take objects with one key, the kind of object: `{"person": "I0042"}`, `{"event": "key:birth-john"}`. Kinds: `person`, `family`, `event`, `citation`, `source`, `media`, `place`, and `child_ref`, the link between a child and a family, written `{"child_ref": {"family": "F0003", "child": "I0042"}}`. A child_ref carries citations and notes (no media, no attributes); that is where a doubtful parent link gets its source and its "probable" note. Mark the link with `probable` on `link_child` rather than with a separate `add_note`, so the mark cannot be left out. The child must already be in that family.
 
 Place names, place types and person names are compared without case, accents or repeated spaces: `Mónte  Alto` matches `monte alto`.
 
@@ -90,9 +90,10 @@ The dry-run prints one block per op:
 ## Safety rules
 
 - **Dry-run by default.** Without `--apply` nothing is written. Reads run, so the plan reflects the real tree, and objects the plan would create are kept in memory so later ops can refer to them.
-- **The whole list is checked before the first request**: known ops and fields, a `ruling` and a unique `key` on each op, references that are Gramps IDs or keys, dates in the format above, media files that exist.
+- **The whole list is checked before the first request**: known ops and fields, a `ruling` and a unique `key` on each op, references that are Gramps IDs or keys, dates in the format above, media files that exist, a reason and the compared IDs on every `allow_namesake`, a reason on every `probable`, and no two ops that are the same change under different keys (everything but `key` and `ruling` equal).
+- **Duplicates are looked for before the first write.** After login, and before any op runs, every `add_person` is compared with everyone in the tree and with the other people the list makes. It is flagged when someone has the same first name and surname, or the same first given name and first surname and also a birth or baptism year within two years, a parent in common or a spouse in common. Every flag is printed at once and nothing is written; an op clears a flag by naming that person in `namesake_of`, with `allow_namesake` and a `namesake_reason`.
 - **Read before every write, skip what exists.** The same event type and date on that person or family; the same page on that source; a media object with the same MD5; a note with the same text on a target; a family with the same parents; a place with the same name, type and parent; a source with the same title; a link that is already there.
-- **No silent namesakes.** A new person whose first name and surname already exist in the tree stops the run until the change list either uses the existing ID or says `allow_namesake`.
+- **No silent namesakes.** A new person whose first name and surname already exist in the tree stops the run until the change list either uses the existing ID or says `allow_namesake`, with the reason and the IDs it compared. The reason goes into the plan and the log.
 - **One birth and one death.** If the person already has a `Birth` (or `Death`) in role `Primary` with another date, the op is a conflict. Correct the existing event with `update_event` instead of adding a second one.
 - **Stop at the first conflict or error.** Later ops are not run, because they may depend on this one.
 - **Writes are narrow.** No op deletes anything. Objects are created with `POST /api/objects/`. Changes to an existing object are a `GET` followed by a `PUT` of the same object with only the named field changed. Right before the `PUT` the object is read again; if it changed since the op read it, the op starts over, so a concurrent edit is not overwritten.

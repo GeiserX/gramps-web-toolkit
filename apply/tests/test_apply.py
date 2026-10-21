@@ -228,8 +228,72 @@ def test_namesake_is_a_conflict_unless_allowed(fake):
     res = run(fake, ops)
     assert res[0].status == "conflict" and "already exists as I0001" in res[0].actions[-1]
     assert fake.writes() == []
-    ops[0]["allow_namesake"] = True
+    ops[0].update(allow_namesake=True, namesake_reason="born forty years later, other parents", namesake_of="I0099")
+    res = run(fake, ops)
+    assert res[0].status == "conflict" and "namesake_of does not name" in res[0].actions[-1]
+    ops[0]["namesake_of"] = ["I0001"]
+    res = run(fake, ops)
+    assert res[0].status == "done" and "kept apart: born forty years later" in res[0].actions[0]
+
+
+def test_strict_change_list():
+    errors = "\n".join(validate([
+        {"op": "add_person", "key": "a", "ruling": R, "first_name": "X", "surname": "Y", "allow_namesake": True},
+        {"op": "add_person", "key": "b", "ruling": R, "first_name": "X", "surname": "Y", "namesake_reason": "r"},
+        {"op": "link_child", "key": "c", "ruling": R, "family": "F1", "child": "I1", "probable": True},
+        {"op": "add_note", "key": "d1", "ruling": R, "text": "same", "attach": [{"person": "I1"}]},
+        {"op": "add_note", "key": "d2", "ruling": "another-ruling", "text": "same", "attach": [{"person": "I1"}]},
+    ]))
+    assert "allow_namesake needs namesake_reason" in errors
+    assert "go with allow_namesake" in errors
+    assert "probable: true and probable_reason go together" in errors
+    assert "op 5 (add_note 'd2'): the same change as op 4" in errors
+
+
+def test_probable_link_is_marked_on_the_child_ref(fake):
+    kid = fake.add("people", {"handle": "kid", "gender": 1, "primary_name": {"first_name": "Tom", "surname_list": [{"surname": "Example", "primary": True}]}})
+    fam = fake.add("families", {"handle": "fam", "mother_handle": "anna"})
+    ops = [{"op": "link_child", "key": "l", "ruling": R, "family": fam["gramps_id"], "child": kid["gramps_id"],
+            "probable": True, "probable_reason": "parents from the index only"}]
     assert run(fake, ops)[0].status == "done"
+    ref = fake.store["families"]["fam"]["child_ref_list"][0]
+    note = fake.store["notes"][ref["note_list"][0]]
+    assert note["text"]["string"] == "[probable] parents from the index only" and note["type"] == "Research"
+    assert run(fake, ops)[0].status == "skip"
+    # a link made earlier without its mark gets it; an existing mark with other words counts
+    fake.store["families"]["fam"]["child_ref_list"][0]["note_list"] = []
+    assert run(fake, [dict(ops[0], key="l2")])[0].status == "done"
+    assert run(fake, [dict(ops[0], key="l3", probable_reason="other words")])[0].status == "skip"
+
+
+def test_preflight_flags_likely_duplicates_before_any_write(fake):
+    from gwt_apply.dupes import preflight
+    from gwt_apply.client import Client
+    birth = fake.add("events", {"handle": "ab", "type": "Baptism", "date": parse_date("1890-05-01")})
+    fake.store["people"]["anna"]["event_ref_list"] = [{"ref": birth["handle"], "role": "Primary"}]
+    ops = [
+        # Anna Example, born 1891: same first name and first surname as I0001, born a year apart
+        {"op": "add_person", "key": "p1", "ruling": R, "first_name": "Anna", "surname": "Example Other"},
+        {"op": "add_event", "key": "e1", "ruling": R, "person": "key:p1", "type": "Birth", "date": "1891"},
+        # two new people with the same name in one list
+        {"op": "add_person", "key": "p2", "ruling": R, "first_name": "Rose", "surname": "Sample"},
+        {"op": "add_person", "key": "p3", "ruling": R, "first_name": "rose", "surname": "Sámple"},
+        # a namesake born much later, with no shared parent: not flagged
+        {"op": "add_person", "key": "p4", "ruling": R, "first_name": "Anna", "surname": "Example Third"},
+        {"op": "add_event", "key": "e4", "ruling": R, "person": "key:p4", "type": "Birth", "date": "1950"},
+    ]
+    c = Client("https://gw.example", "u", "pw", session=fake)
+    problems = preflight(ops, c)
+    assert len(problems) == 2, problems
+    assert "'p1'" in problems[0] and "I0001" in problems[0] and "born within two years" in problems[0]
+    assert "'p3'" in problems[1] and "key:p2" in problems[1] and "made by another op" in problems[1]
+    ops[0].update(allow_namesake=True, namesake_reason="another baptism book", namesake_of="I0001")
+    ops[3].update(allow_namesake=True, namesake_reason="twins", namesake_of="key:p2")
+    assert preflight(ops, c) == []
+    assert fake.writes() == []
+    # a rerun after the list went in: the people it made are not duplicates of themselves
+    assert [r.status for r in run(fake, ops)] == ["done"] * 6
+    assert preflight(ops, c) == []
 
 
 def test_update_event_fixes_the_existing_event(fake):

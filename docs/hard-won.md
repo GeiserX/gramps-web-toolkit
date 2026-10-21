@@ -275,3 +275,21 @@ Format: what happened, why, and the rule.
 **What happened.** A lane reported done. Main sent it a follow-up, then cleaned up its worktrees. The lane was mid-edit and lost its work twice.
 
 **Rule.** Remove a lane's worktree only after its final report, and only if no follow-up has gone to it since. Or let the lane remove its own.
+
+## Applying change lists
+
+### 42. A namesake flag without a reason let duplicates in
+
+**What happened.** One apply of about 8,800 ops carried 125 `allow_namesake` flags, none with a reason. Several of those people were already in the tree under the same name, and one ruling row went into the list twice under two keys.
+
+**Why.** The flag only said "let it through". Nothing asked which existing person had been compared, and two ops that differ only in their key look like two changes.
+
+**Rule.** `allow_namesake` needs `namesake_reason` and `namesake_of`, the IDs of the people compared; a namesake the op does not name is still a conflict. Two ops that are the same change are refused. Before the first write, every new person is compared with the tree and the rest of the list by name and birth year, parents or spouse, and all likely duplicates are reported at once.
+
+### 43. "Probable" marks on parent links were lost
+
+**What happened.** 218 child links went in without the "probable" mark the rulings gave them.
+
+**Why.** The mark was a separate note op, and `link_child` had nowhere to say it. When the note op was left out, nothing noticed.
+
+**Rule.** `link_child` takes `probable: true` with `probable_reason` and writes the `[probable]` note on the child_ref itself. Rerunning it on an existing link adds a missing mark.
