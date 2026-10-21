@@ -15,8 +15,7 @@ The ledger path comes from --ledger, else $GWT_LEDGER, else ./buscado.tsv. Stand
 import argparse, collections, datetime, difflib, fcntl, os, re, sys, unicodedata
 
 COLUMNS = ('person_key', 'person_label', 'source', 'query', 'date', 'result', 'evidence', 'agent', 'next_date')
-LEGACY_COLUMNS = COLUMNS[:-1]  # ledgers written before next_date existed
-RESULTS = ('hit', 'none', 'partial', 'blocked', 'denied', 'blocked_authorization')
+RESULTS = ('hit', 'none', 'partial', 'blocked', 'denied')
 DEFAULT_THRESHOLD = 0.75
 
 
@@ -55,7 +54,7 @@ def read_rows(path):
         for n, line in enumerate(f):
             parts = line.rstrip('\n').split('\t')
             if n == 0 and parts[0] == COLUMNS[0]:
-                continue  # header, either the 8-column legacy one or the current one
+                continue  # header; a ledger from before next_date has 8 columns and reads the same
             if len(parts) < len(COLUMNS):
                 parts += [''] * (len(COLUMNS) - len(parts))
             rows.append(dict(zip(COLUMNS, parts)))
@@ -66,19 +65,9 @@ def add_row(path, row):
     """Append one row under an exclusive lock, writing the header if the file is new or empty."""
     line = '\t'.join(clean(row.get(c)) for c in COLUMNS) + '\n'
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    with open(path, 'a+', encoding='utf-8') as f:
+    with open(path, 'a', encoding='utf-8') as f:
         fcntl.flock(f, fcntl.LOCK_EX)
         try:
-            f.seek(0)
-            head = f.readline().rstrip('\n').split('\t')
-            if head == list(LEGACY_COLUMNS):
-                # an old 8-column ledger: add the next_date column to the header and every row, once
-                f.seek(0)
-                lines = f.read().split('\n')[1:]
-                f.seek(0)
-                f.truncate()
-                f.write('\t'.join(COLUMNS) + '\n')
-                f.write(''.join(l + '\t\n' for l in lines if l))
             f.seek(0, os.SEEK_END)
             if f.tell() == 0:
                 f.write('\t'.join(COLUMNS) + '\n')
@@ -111,6 +100,11 @@ def print_rows(scored, with_score=False):
         sys.stdout.write(('%.2f\t' % score if with_score else '') + '\t'.join(cells) + '\n')
 
 
+def iso_date(value):
+    """YYYY-MM-DD or empty; anything else is an argparse error, so `due` never compares a typo as text."""
+    return datetime.date.fromisoformat(value).isoformat() if value else ''
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog='gwt-ledger', description=__doc__.split('\n')[0])
     p.add_argument('--ledger', default=os.environ.get('GWT_LEDGER', 'buscado.tsv'))
@@ -124,9 +118,9 @@ def main(argv=None):
     a.add_argument('--result', required=True, choices=RESULTS)
     a.add_argument('--evidence', default=''); a.add_argument('--agent', default=os.environ.get('GWT_AGENT', ''))
     a.add_argument('--date', default=datetime.date.today().isoformat())
-    a.add_argument('--next-date', default='', help='ISO date to look again, e.g. the end of an appeal window')
+    a.add_argument('--next-date', default='', type=iso_date, help='ISO date to look again, e.g. the end of an appeal window')
     d = sub.add_parser('due', help='rows whose next_date is on or before a day (default today)')
-    d.add_argument('--on', default=datetime.date.today().isoformat())
+    d.add_argument('--on', default=datetime.date.today().isoformat(), type=iso_date)
     l = sub.add_parser('list', help='rows for one person')
     l.add_argument('--person', required=True); l.add_argument('--source')
     sub.add_parser('stats', help='counts by result, source and agent')

@@ -1,5 +1,5 @@
 import io, os, subprocess, sys, tempfile, unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gwt_ledger as L
@@ -116,12 +116,11 @@ class LedgerTest(unittest.TestCase):
         p = subprocess.run([sys.executable, CLI, 'stats'], capture_output=True, text=True, env=env)
         self.assertIn('rows\t1', p.stdout)
 
-    def test_denied_and_blocked_authorization_are_results_and_still_count_as_done(self):
-        for res in ('denied', 'blocked_authorization'):
-            self.add(person='Ana Peiro', query='registro civil birth act ' + res, result=res)
-            code, out = run('--ledger', self.path, 'check', '--person', 'ana-peiro', '--query', 'registro civil birth act ' + res)
-            self.assertEqual(code, 0)
-            self.assertIn(res, out)
+    def test_denied_is_a_result_and_still_counts_as_done(self):
+        self.add(person='Ana Peiro', query='registro civil birth act', result='denied')
+        code, out = run('--ledger', self.path, 'check', '--person', 'ana-peiro', '--query', 'registro civil birth act')
+        self.assertEqual(code, 0)
+        self.assertIn('denied', out)
 
     def test_next_date_and_due(self):
         run('--ledger', self.path, 'add', '--person', 'x', '--source', 's', '--query', 'q one', '--result', 'denied',
@@ -133,18 +132,23 @@ class LedgerTest(unittest.TestCase):
         self.assertIn('q one', out)
         self.assertNotIn('q two', out)
 
-    def test_legacy_eight_column_ledger_is_upgraded_on_add(self):
+    def test_bad_dates_are_refused(self):
+        for argv in (('add', '--person', 'x', '--source', 's', '--query', 'q', '--result', 'denied',
+                      '--next-date', '14/11/2026'), ('due', '--on', '2026-13-01')):
+            with self.assertRaises(SystemExit) as e, redirect_stderr(io.StringIO()):
+                run('--ledger', self.path, *argv)
+            self.assertEqual(e.exception.code, 2)
+        self.assertFalse(os.path.exists(self.path))
+
+    def test_eight_column_ledger_reads_and_takes_new_rows_as_is(self):
         with open(self.path, 'w', encoding='utf-8') as f:
-            f.write('\t'.join(L.LEGACY_COLUMNS) + '\n')
+            f.write('\t'.join(L.COLUMNS[:-1]) + '\n')
             f.write('ana\tAna\tfs\told query here\t2026-01-01\tnone\t\ta1\n')
-        self.assertEqual(len(L.read_rows(self.path)), 1)
         run('--ledger', self.path, 'add', '--person', 'b', '--source', 's', '--query', 'new q', '--result', 'denied',
             '--next-date', '2026-12-01')
         rows = L.read_rows(self.path)
-        self.assertEqual([r['person_key'] for r in rows], ['ana', 'b'])
-        self.assertEqual(rows[1]['next_date'], '2026-12-01')
-        self.assertEqual(open(self.path, encoding='utf-8').readline().rstrip('\n').split('\t'), list(L.COLUMNS))
-
+        self.assertEqual([(r['person_key'], r['next_date']) for r in rows], [('ana', ''), ('b', '2026-12-01')])
+        self.assertIn('new q', run('--ledger', self.path, 'due', '--on', '2026-12-01')[1])
 
 if __name__ == '__main__':
     unittest.main()
