@@ -43,6 +43,7 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "add_media": ({"file", "path", "attach"}, {"desc", "mime", "gramps_id"}),
     "add_note": ({"text", "attach"}, {"type", "gramps_id"}),
     "attach_existing": ({"object", "attach"}, set()),
+    "dedupe_list": ({"target", "list"}, set()),
     "set_attribute": ({"target", "type", "value"}, set()),
     "merge_person": ({"winner", "loser"}, {"use_loser", "reason"}),
     "merge_family": ({"winner", "loser"}, {"reason"}),
@@ -55,6 +56,7 @@ MERGE_LISTS = [  # what Gramps' merge carries from the loser to the winner, list
 ]
 USE_LOSER = {"birth": "birth_ref_index", "death": "death_ref_index"}
 ATTACHABLE = {"Citation": "citation_list", "Media": "media_list", "Note": "note_list"}  # attach_existing
+REF_OWN_LISTS = ("note_list", "citation_list", "attribute_list")  # what a MediaRef carries besides its ref
 PERSON_FIELDS = {"first_name", "surname", "gender"}
 EVENT_FIELDS = {"type", "date", "place", "description"}
 GENDER = {"F": 0, "M": 1, "U": 2}
@@ -77,7 +79,7 @@ def fold(text: str) -> str:
     return " ".join(bare.casefold().split())
 
 
-_GRAMPS_ID = re.compile(r"^[A-Za-z]+\d+$")
+_GRAMPS_ID = re.compile(r"^[A-Za-z]+\d+(?:-[A-Za-z0-9]+)?$")  # I0042, or I0042-b: an import may add a suffix
 
 
 class Conflict(Exception):
@@ -221,6 +223,12 @@ def validate(ops: list[dict]) -> list[str]:
                 raise ValueError("winner and loser are the same")
             if name == "merge_person" and set(op.get("use_loser") or []) - set(USE_LOSER):
                 raise ValueError(f"use_loser takes {sorted(USE_LOSER)}")
+            if name == "dedupe_list":
+                cls, _ = _parse_target(op.get("target"))
+                if op.get("list") not in CARRIES:
+                    raise ValueError(f"list is one of {sorted(CARRIES)}")
+                if cls not in CARRIES[op["list"]]:
+                    raise ValueError(f"a {cls} has no {op['list']}")
             if name == "add_event" and bool(op.get("person")) == bool(op.get("family")):
                 raise ValueError("add_event needs exactly one of person or family")
             if name == "add_family" and not (op.get("father") or op.get("mother")):
@@ -334,6 +342,10 @@ class Applier:
                     return h
                 self.c.create({"_class": "Tag", "handle": h, "name": name, "color": "#000000000000", "priority": 0})
                 self.actions.append(f"create Tag {name!r}")
+                if not self.c.dry_run and self.c.get_live("Tag", h) is None:
+                    # a server that answered 201 and kept nothing: the block's objects would carry a tag that no
+                    # list can filter by, and the block could no longer be found or rolled back by its tag
+                    raise ApiError(f"Tag {name!r} was created but is not there when read back")
                 self._tags[name] = h
         return self._tags[name]
 
@@ -844,6 +856,32 @@ class Applier:
         """
         cls, ref = _parse_target(op["object"])
         self.attach(op["attach"], ATTACHABLE[cls], self.resolve(cls, ref))
+
+    def dedupe_list(self, op):
+        """Keep the first of each repeated reference in one list: the same citation twice on a person."""
+        cls, ref = _parse_target(op["target"])
+        target, carrier, label = self.holder(cls, ref)
+        name = op["list"]
+        items = carrier.get(name) or []
+        seen, kept = {}, []
+        for i in items:
+            # the same identity as gwt-check's repeated-ref: a media ref is its media plus its region
+            ident = i if isinstance(i, str) else (i.get("ref"), repr(i.get("rect")))
+            first = seen.get(ident)
+            if first is None:
+                seen[ident] = i
+                kept.append(i)
+                continue
+            for own in REF_OWN_LISTS if isinstance(i, dict) else ():
+                if [x for x in i.get(own) or [] if x not in (first.get(own) or [])]:
+                    raise Conflict(f"{label}: a repeated {name} entry {ident[0]} carries a {own} the first one "
+                                   f"lacks, so dropping it would lose that")
+        if len(kept) == len(items):
+            self.actions.append(f"skip: {label} has no repeated entry in {name}")
+            return
+        before = copy.deepcopy(target)
+        carrier[name] = kept
+        self.save(before, target)
 
     def set_attribute(self, op):
         cls, ref = _parse_target(op["target"])

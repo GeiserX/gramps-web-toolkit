@@ -44,7 +44,7 @@ Every object a run creates gets the Gramps tag named by `--tag` (for example `--
 
 A tag makes a block findable: filter by it in the web UI's lists, or list it through the API with the Gramps filter rule `HasTag`, for example `GET /api/people/?rules={"rules":[{"name":"HasTag","values":["r12"]}]}`, the same for `events`, `families`, `citations`, `notes`, `media`, `places` and `sources`. That is the list to review, or to delete in reverse order (notes, media and citations first, then events and families, then people) if a block has to be rolled back; the changes the block made to existing objects are in its log.
 
-References to other objects are either a **Gramps ID** (`I0042`, `P0007`) or **`key:<key>`** for an object made by an op (in this file or an earlier run). A bare handle is refused.
+References to other objects are either a **Gramps ID** (`I0042`, `P0007`, or with the suffix an import may add, `D051-b`) or **`key:<key>`** for an object made by an op (in this file or an earlier run). A bare handle is refused.
 
 | op | Required | Optional | What it does |
 |---|---|---|---|
@@ -60,6 +60,7 @@ References to other objects are either a **Gramps ID** (`I0042`, `P0007`) or **`
 | `add_media` | `file`, `path`, `attach` | `desc`, `mime`, `gramps_id` | Media object for a local file, or the existing one with the same MD5, attached to each target |
 | `add_note` | `text`, `attach` | `type` (default `General`), `gramps_id` | New note, or a note with the same text already on a target |
 | `attach_existing` | `object`, `attach` | | Links a citation, media object or note the tree already has (`{"media": "O0054"}`) to more targets. For what an import left with no reference (orphans) or a document that belongs to a second person; `add_citation`, `add_media` and `add_note` only make new objects. Targets already carrying it are skipped |
+| `dedupe_list` | `target`, `list` | | Keeps the first of each repeated reference in one `citation_list`, `note_list` or `media_list`: what `gwt-check` reports as `repeated-ref` there, with the same identity: two media refs to one photo with different regions are not a repeat. A conflict when the dropped media ref carries notes, citations or attributes the kept one lacks. Nothing repeated is a skip |
 | `set_attribute` | `target`, `type`, `value` | | Sets an attribute; replaces the value of an attribute of the same type |
 | `add_association` | `person`, `target`, `relation` | | An association (Gramps `PersonRef`) from `person` to `target` with that relation, skipped when the person already has one to the same target with the same relation. Gramps Web's DNA view reads associations with relation `DNA`: put the match's segments in a note attached to the association |
 | `merge_person` | `winner`, `loser` | `use_loser` (`birth`, `death`), `reason` | Gramps' own person merge: everything that points at the loser moves to the winner, the loser's families with the same partner merge, and the loser is deleted. See [Merges](#merges) |
