@@ -23,7 +23,7 @@ Settings come from the environment, or from a `KEY=VALUE` file passed with `--co
 
 On a multi-tree server, the tree comes from the user: the login (`POST /api/token/`) returns a token whose `tree` claim names that user's tree. `gwt-apply` refuses to go on if that claim is not `GWT_TREE`, so a wrong account cannot write into the wrong tree.
 
-Other flags: `--log PATH`, `--retries N` (default 5), `--retry-wait SECONDS` (default 30), `--snapshot FILE` and `--save-snapshot FILE` ([Snapshots](#snapshots)), `--break-lock` (below).
+Other flags: `--log PATH`, `--retries N` (default 5), `--retry-wait SECONDS` (default 30), `--snapshot FILE` and `--save-snapshot FILE` ([Snapshots](#snapshots)), `--tag NAME` ([Tags](#tags)), `--break-lock` (below).
 
 Every run gets a run id, `<date>-<time>-<6 hex>`, printed on the first line. The log goes to `PATH` with the run id before the extension (`--log apply.jsonl` writes `apply.20261021-101500-a1b2c3.jsonl`), or to `gwt-apply-<run id>.jsonl`. The file is created with `O_EXCL`: a run never appends to or overwrites another run's log, so rerunning the same command after a crash leaves both logs.
 
@@ -36,6 +36,13 @@ A JSON array of ops, an object `{"ops": [...]}`, or JSONL with one op per line. 
 - `op`: one of the operations below.
 - `key`: a natural key, unique in the file and stable across runs, such as `birth-john-smith-1890`. The object an op creates gets a handle derived from its key (`gwt` + 25 hex characters of SHA-256), so a second run finds it.
 - `ruling`: the id of the decision the change comes from. An op without one is refused.
+- `tag` (optional, any op): a Gramps tag name for the objects this op creates, such as `r12-weak`.
+
+### Tags
+
+Every object a run creates gets the Gramps tag named by `--tag` (for example `--tag r12`), plus the op's own `tag` if it has one. A tag the tree does not have yet is created the first time it is needed; one it has is reused by name. Objects the run only changes (a person who gets a new event or citation) are not tagged.
+
+A tag makes a block findable: filter by it in the web UI's lists, or list it through the API with the Gramps filter rule `HasTag`, for example `GET /api/people/?rules={"rules":[{"name":"HasTag","values":["r12"]}]}`, the same for `events`, `families`, `citations`, `notes`, `media`, `places` and `sources`. That is the list to review, or to delete in reverse order (notes, media and citations first, then events and families, then people) if a block has to be rolled back; the changes the block made to existing objects are in its log.
 
 References to other objects are either a **Gramps ID** (`I0042`, `P0007`) or **`key:<key>`** for an object made by an op (in this file or an earlier run). A bare handle is refused.
 

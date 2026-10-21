@@ -146,7 +146,9 @@ def validate(ops: list[dict]) -> list[str]:
         else:
             keys.add(key)
         required, optional = SPECS[name]
-        allowed = required | optional | {"op", "key", "ruling"}
+        allowed = required | optional | {"op", "key", "ruling", "tag"}
+        if "tag" in op and not (isinstance(op["tag"], str) and op["tag"].strip()):
+            errors.append(f"{where}: tag is a non-empty name")
         missing = [f for f in required if op.get(f) in (None, "", [])]
         if name == "add_citation" and op.get("page") == "":
             missing.remove("page")  # an empty page is a real value
@@ -244,9 +246,12 @@ class Result:
 
 
 class Applier:
-    def __init__(self, client: Client, *, retries: int = 5, retry_wait: float = 30.0, lock=None):
+    def __init__(self, client: Client, *, retries: int = 5, retry_wait: float = 30.0, lock=None, tag: str | None = None):
         self.c = client
         self.lock = lock  # a TreeLock to keep fresh before every try, during --apply
+        self.run_tag = tag  # every object the run creates gets this tag, plus the op's own `tag`
+        self._tags: dict[str, str] = {}  # tag name -> handle
+        self._op_tags: list[str] = []
         self.retries = retries
         self.retry_wait = retry_wait
         self.keymap: dict[str, str] = {}  # key -> handle of the object it ended up as
@@ -282,7 +287,26 @@ class Applier:
 
     # -- writes, each one recorded as an action ---------------------------
 
+    def tag_handle(self, name: str) -> str:
+        """The handle of the tag with this name, made if the tree has none."""
+        if name not in self._tags:
+            found = [t["handle"] for t in self.c.list_all("Tag", ["name"]) if t.get("name") == name]
+            if found:
+                self.c.get("Tag", found[0])  # read, so a snapshot apply checks it was not renamed since
+                self._tags[name] = found[0]
+            else:
+                h = stable_handle("tag:" + name)
+                if self.c.exists("Tag", h):  # made by a try whose answer was lost
+                    self._tags[name] = h
+                    return h
+                self.c.create({"_class": "Tag", "handle": h, "name": name, "color": "#000000000000", "priority": 0})
+                self.actions.append(f"create Tag {name!r}")
+                self._tags[name] = h
+        return self._tags[name]
+
     def create(self, obj: dict, extra: str = "") -> None:
+        if self._op_tags:
+            obj["tag_list"] = [self.tag_handle(t) for t in self._op_tags]
         self.actions.append(f"create {obj['_class']}{extra}: {json.dumps(obj, ensure_ascii=False)}")
         self.c.create(obj)
         self.wrote = True
@@ -334,6 +358,7 @@ class Applier:
         results = []
         for op in ops:
             res = Result(op["key"], op["op"], op["ruling"])
+            self._op_tags = list(dict.fromkeys(t for t in (self.run_tag, op.get("tag")) if t))
             self.c.context = {"key": op["key"], "op": op["op"], "ruling": op["ruling"]}
             for attempt in range(1, self.retries + 1):
                 if self.lock is not None:  # every try: a slow server can make one op outlast the lock
