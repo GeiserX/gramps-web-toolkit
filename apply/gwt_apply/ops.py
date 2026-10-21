@@ -27,12 +27,15 @@ TARGET_KINDS = {
 
 # op -> (required fields, optional fields), on top of op/key/ruling
 SPECS: dict[str, tuple[set[str], set[str]]] = {
-    "add_person": ({"surname", "first_name"}, {"gender", "gramps_id", "allow_namesake"}),
+    "add_person": (
+        {"surname", "first_name"},
+        {"gender", "gramps_id", "allow_namesake", "namesake_reason", "namesake_of"},
+    ),
     "update_person": ({"person", "set"}, set()),
     "update_event": ({"event", "set"}, set()),
     "add_event": ({"type"}, {"person", "family", "role", "date", "place", "description", "gramps_id"}),
     "add_family": (set(), {"father", "mother", "children", "type", "gramps_id"}),
-    "link_child": ({"family", "child"}, {"frel", "mrel"}),
+    "link_child": ({"family", "child"}, {"frel", "mrel", "probable", "probable_reason"}),
     "add_place": ({"name", "type"}, {"enclosed_by", "lat", "long", "gramps_id"}),
     "add_source": ({"title"}, {"author", "pubinfo", "abbrev", "gramps_id"}),
     "add_citation": ({"source", "page", "attach"}, {"confidence", "date", "gramps_id"}),
@@ -44,6 +47,7 @@ PERSON_FIELDS = {"first_name", "surname", "gender"}
 EVENT_FIELDS = {"type", "date", "place", "description"}
 GENDER = {"F": 0, "M": 1, "U": 2}
 SINGLE_VITAL = {"Birth": "birth_ref_index", "Death": "death_ref_index"}
+PROBABLE = "[probable]"  # how a doubtful parent link is marked: a note on its child_ref starting with this
 # what each target kind can carry
 CARRIES = {
     "citation_list": {"Person", "Family", "Event", "Media", "Place"},
@@ -105,10 +109,15 @@ def _target_refs(spec) -> list:
     return list(value.values()) if isinstance(value, dict) else [value]
 
 
+def _ref_list(value) -> list:
+    return value if isinstance(value, list) else [value]
+
+
 def validate(ops: list[dict]) -> list[str]:
     """Every problem with the change list, found before anything is read or written."""
     errors = []
     keys: set[str] = set()
+    payloads: dict[str, str] = {}  # the op without key and ruling -> where it was first seen
     for i, op in enumerate(ops, 1):
         where = f"op {i}"
         if not isinstance(op, dict):
@@ -138,8 +147,14 @@ def validate(ops: list[dict]) -> list[str]:
         extra = set(op) - allowed
         if extra:
             errors.append(f"{where}: unknown fields {sorted(extra)}")
+        payload = json.dumps({k: v for k, v in op.items() if k not in ("key", "ruling")}, sort_keys=True)
+        if payload in payloads:
+            errors.append(f"{where}: the same change as {payloads[payload]}; one change, one op")
+        else:
+            payloads[payload] = where
         refs = [op.get(f) for f in ("person", "family", "father", "mother", "child", "source", "place", "enclosed_by")]
         refs += list(op.get("children") or [])
+        refs += _ref_list(op.get("namesake_of")) if op.get("namesake_of") else []
         for t in [op.get("target"), *(op.get("attach") or [])]:
             refs += _target_refs(t)
         for ref in refs:
@@ -150,6 +165,21 @@ def validate(ops: list[dict]) -> list[str]:
                 parse_date(op["date"])
             if "gender" in op and op["gender"] not in GENDER:
                 raise ValueError(f"gender is one of {sorted(GENDER)}")
+            if name == "add_person" and op.get("allow_namesake"):
+                if op["allow_namesake"] is not True:
+                    raise ValueError("allow_namesake is true or absent")
+                if not str(op.get("namesake_reason") or "").strip() or not op.get("namesake_of"):
+                    raise ValueError(
+                        "allow_namesake needs namesake_reason (why this is another person) and "
+                        "namesake_of (the Gramps ID or key:<key> of each namesake you compared)"
+                    )
+            elif name == "add_person" and ("namesake_reason" in op or "namesake_of" in op):
+                raise ValueError("namesake_reason and namesake_of go with allow_namesake: true")
+            if name == "link_child":
+                if op.get("probable", True) is not True:
+                    raise ValueError("probable is true or absent")
+                if bool(op.get("probable")) != bool(str(op.get("probable_reason") or "").strip()):
+                    raise ValueError("probable: true and probable_reason go together")
             if name == "add_event" and bool(op.get("person")) == bool(op.get("family")):
                 raise ValueError("add_event needs exactly one of person or family")
             if name == "add_family" and not (op.get("father") or op.get("mother")):
@@ -339,22 +369,36 @@ class Applier:
     def _name_key(first: str, surname: str) -> tuple[str, str]:
         return (fold(first), fold(surname))
 
-    def add_person(self, op):
-        if self._existing("Person", op):
-            return
-        self._check_gramps_id("Person", op)
+    def namesakes(self) -> dict[tuple[str, str], list[str]]:
+        """(first name, surname) -> Gramps IDs (or key:<key> for people this run made)."""
         if self._names is None:
             self._names = {}
             for row in self.c.list_all("Person", ["primary_name", "gramps_id"]):
                 n = row.get("primary_name") or {}
                 surname = " ".join(s.get("surname", "") for s in n.get("surname_list") or [])
-                self._names[self._name_key(n.get("first_name", ""), surname)] = row.get("gramps_id") or row["handle"]
+                name = self._name_key(n.get("first_name", ""), surname)
+                self._names.setdefault(name, []).append(row.get("gramps_id") or row["handle"])
+        return self._names
+
+    def add_person(self, op):
+        if self._existing("Person", op):
+            return
+        self._check_gramps_id("Person", op)
         name = self._name_key(op["first_name"], op["surname"])
-        if name in self._names and not op.get("allow_namesake"):
+        same = self.namesakes().get(name, [])
+        if same and not op.get("allow_namesake"):
             raise Conflict(
-                f"{op['first_name']} {op['surname']} already exists as {self._names[name]}; "
-                "use that ID, or set allow_namesake if this is another person"
+                f"{op['first_name']} {op['surname']} already exists as {', '.join(same)}; "
+                "use that ID, or set allow_namesake with namesake_reason and namesake_of if this is another person"
             )
+        unchecked = [x for x in same if x not in _ref_list(op.get("namesake_of") or [])]
+        if unchecked:
+            raise Conflict(
+                f"{op['first_name']} {op['surname']} also exists as {', '.join(unchecked)}, "
+                "which namesake_of does not name; compare with them too"
+            )
+        if same:
+            self.actions.append(f"namesake of {', '.join(same)}, kept apart: {op['namesake_reason']}")
         h = stable_handle(op["key"])
         self.create(
             {
@@ -373,7 +417,7 @@ class Applier:
             }
         )
         self.keymap[op["key"]] = h
-        self._names[name] = op.get("gramps_id") or h
+        self._names.setdefault(name, []).append(op.get("gramps_id") or f"key:{op['key']}")
 
     def update_person(self, op):
         person = self.obj("Person", op["person"])
@@ -518,6 +562,17 @@ class Applier:
         family = self.resolve("Family", op["family"])
         child = self.resolve("Person", op["child"])
         self._link_child(family, child, op.get("frel", "Birth"), op.get("mrel", "Birth"))
+        if op.get("probable"):
+            # the mark lives on the link itself: a Research note "[probable] <reason>" on the child_ref
+            self.add_note(
+                {
+                    "key": op["key"] + "#probable",
+                    "type": "Research",
+                    "text": f"{PROBABLE} {op['probable_reason'].strip()}",
+                    "attach": [{"child_ref": {"family": op["family"], "child": op["child"]}}],
+                },
+                marker=PROBABLE,
+            )
 
     def add_place(self, op):
         if self._existing("Place", op):
@@ -644,7 +699,8 @@ class Applier:
                 self.wrote = True
         self.attach(op["attach"], "media_list", handle)
 
-    def add_note(self, op):
+    def add_note(self, op, marker: str | None = None):
+        """A note on each target; with `marker`, any note on a target that starts with it counts as this one."""
         text = op["text"]
         note = self._existing("Note", op)
         handle = note["handle"] if note else None
@@ -653,7 +709,8 @@ class Applier:
                 cls, ref = _parse_target(spec)
                 _, carrier, label = self.holder(cls, ref)
                 for n in self.c.get_many("Note", carrier.get("note_list") or []):
-                    if (n.get("text") or {}).get("string") == text:
+                    found = (n.get("text") or {}).get("string") or ""
+                    if found == text or (marker and found.startswith(marker)):
                         handle = n["handle"]
                         self.keymap[op["key"]] = handle
                         self.actions.append(f"skip: {label} already has that text as Note {self.label(n)}")
