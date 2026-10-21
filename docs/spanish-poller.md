@@ -91,7 +91,5 @@ On macOS use a LaunchAgent with `StartCalendarInterval` instead: `chrome` mode n
 
 ## Keep the certificate and the secrets out of the repo
 
-- Never commit a `.p12` or `.pfx` file or its passphrase (`*.p12` and `*.pem` are already in `.gitignore`; add `*.pfx` if you use that extension).
-- Give the passphrase through an environment variable, not a command-line argument or a file in the repo.
-- Do not print request codes or ID numbers in the log.
-
+- Never commit the `.p12` or `.pfx` file or its passphrase. `.gitignore` already covers `*.p12`, `*.pfx` and `*.pem`; keep the certificate outside the repo anyway, as in the `~/certs/` example above.
+- The poller reads the passphrase from one of two places: `auth.passphrase_env`, the name of an environment variable, or `auth.passphrase_file`, a file outside the repo with mode 600 (`chmod 600 ~/certs/ana.pass`). It never takes it on the command line.

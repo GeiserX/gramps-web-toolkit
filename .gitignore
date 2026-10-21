@@ -3,6 +3,7 @@ __pycache__/
 .venv/
 .env
 *.p12
+*.pfx
 *.pem
 cache/
 out/
