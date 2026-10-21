@@ -88,3 +88,10 @@ Run it once a day and act on exit status 10. With cron:
 ```
 
 On macOS use a LaunchAgent with `StartCalendarInterval` instead: `chrome` mode needs the logged-in user's keychain, which a LaunchAgent has and a LaunchDaemon does not.
+
+## Keep the certificate and the secrets out of the repo
+
+- Never commit a `.p12` or `.pfx` file or its passphrase (`*.p12` and `*.pem` are already in `.gitignore`; add `*.pfx` if you use that extension).
+- Give the passphrase through an environment variable, not a command-line argument or a file in the repo.
+- Do not print request codes or ID numbers in the log.
+
