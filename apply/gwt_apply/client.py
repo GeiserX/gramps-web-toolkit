@@ -62,6 +62,12 @@ class Client:
         self.token: str | None = None
         self.tree: str | None = None
         self.pending: dict[tuple[str, str], dict] = {}
+        # Run-wide indexes, each read once. They stay true for the run because the tree's lock keeps other
+        # appliers out and this client adds its own writes to them; a GET still reads every object it changes.
+        self._ids: dict[str, dict[str, str]] = {}  # class -> Gramps ID -> handle
+        self._handles: dict[str, set[str]] = {}  # class -> every handle
+        self._lists: dict[tuple[str, tuple], list[dict]] = {}  # (class, keys) -> rows from the server
+        self.written: dict[tuple[str, str], dict] = {}  # what this run created or changed, for the indexes
         # "x": a log file is never appended to or overwritten; each run writes its own
         self._log = open(log_path, "x", encoding="utf-8") if log_path else None
         self.context: dict = {}  # op key and ruling, stamped on every log line
@@ -146,21 +152,38 @@ class Client:
         obj["_read"] = json.dumps(r.json(), sort_keys=True)
         return obj
 
+    def _index(self, cls: str) -> dict[str, str]:
+        """Gramps ID -> handle for a whole class, from one read the first time it is needed."""
+        if cls not in self._ids:
+            r = self._request("GET", f"/{NAMESPACE[cls]}/", params={"keys": "handle,gramps_id"})
+            if r.status_code != 200:
+                raise ApiError(f"GET {cls} list: HTTP {r.status_code}", r.status_code)
+            rows = r.json()
+            self._ids[cls] = {row["gramps_id"]: row["handle"] for row in rows if row.get("gramps_id")}
+            self._handles[cls] = {row["handle"] for row in rows}
+            for (c, h), obj in self.written.items():
+                if c == cls:
+                    self._remember(cls, h, obj)
+        return self._ids[cls]
+
+    def _remember(self, cls: str, handle: str, obj: dict) -> None:
+        if cls in self._ids:
+            self._handles[cls].add(handle)
+            if obj.get("gramps_id"):
+                self._ids[cls][obj["gramps_id"]] = handle
+
     def handle_for_gramps_id(self, cls: str, gramps_id: str) -> str | None:
         for (c, h), obj in self.pending.items():
             if c == cls and obj.get("gramps_id") == gramps_id:
                 return h
-        r = self._request(
-            "GET",
-            f"/{NAMESPACE[cls]}/",
-            params={"gramps_id": gramps_id, "keys": "handle"},
-        )
-        if r.status_code == 404:
-            return None
-        if r.status_code != 200:
-            raise ApiError(f"lookup {cls} {gramps_id}: HTTP {r.status_code}", r.status_code)
-        rows = r.json()
-        return rows[0]["handle"] if rows else None
+        return self._index(cls).get(gramps_id)
+
+    def exists(self, cls: str, handle: str) -> bool:
+        """Whether the object is there, without reading it."""
+        if (cls, handle) in self.pending:
+            return True
+        self._index(cls)
+        return handle in self._handles[cls]
 
     def get_many(self, cls: str, handles: list[str]) -> list[dict]:
         out = [copy.deepcopy(self.pending[(cls, h)]) for h in handles if (cls, h) in self.pending]
@@ -175,18 +198,18 @@ class Client:
         return out
 
     def list_all(self, cls: str, keys: list[str]) -> list[dict]:
-        r = self._request(
-            "GET", f"/{NAMESPACE[cls]}/", params={"keys": ",".join(["handle", *keys])}
-        )
-        if r.status_code != 200:
-            raise ApiError(f"GET {cls} list: HTTP {r.status_code}", r.status_code)
-        rows = r.json()
-        seen = {row["handle"] for row in rows}
-        rows += [
-            {k: obj.get(k) for k in ["handle", *keys]}
-            for (c, h), obj in self.pending.items()
-            if c == cls and h not in seen
-        ]
+        """Every object of a class with only `keys`, read once per run, with this run's writes on top."""
+        cache = (cls, tuple(keys))
+        if cache not in self._lists:
+            r = self._request(
+                "GET", f"/{NAMESPACE[cls]}/", params={"keys": ",".join(["handle", *keys])}
+            )
+            if r.status_code != 200:
+                raise ApiError(f"GET {cls} list: HTTP {r.status_code}", r.status_code)
+            self._lists[cache] = r.json()
+        mine = {h: obj for (c, h), obj in {**self.written, **self.pending}.items() if c == cls}
+        rows = [row for row in self._lists[cache] if row["handle"] not in mine]
+        rows += [{k: obj.get(k) for k in ["handle", *keys]} for h, obj in mine.items()]
         return rows
 
     # -- writes -----------------------------------------------------------
@@ -201,6 +224,8 @@ class Client:
         r = self._request("POST", "/objects/", write=True, json=[obj])
         if r.status_code != 201:
             raise ApiError(f"create {cls}: HTTP {r.status_code} {r.text[:300]}", r.status_code)
+        self.written[(cls, obj["handle"])] = copy.deepcopy(obj)
+        self._remember(cls, obj["handle"], obj)
 
     def update(self, obj: dict) -> None:
         """PUT the whole object back, if it still is what the op read.
@@ -222,6 +247,7 @@ class Client:
         r = self._request("PUT", f"/{NAMESPACE[cls]}/{obj['handle']}", write=True, json=body)
         if r.status_code != 200:
             raise ApiError(f"update {cls}: HTTP {r.status_code} {r.text[:300]}", r.status_code)
+        self.written[(cls, obj["handle"])] = copy.deepcopy(body)
 
     def delete(self, cls: str, handle: str) -> None:
         """DELETE one object. Used only for the lock note."""
@@ -230,6 +256,8 @@ class Client:
         r = self._request("DELETE", f"/{NAMESPACE[cls]}/{handle}", write=True)
         if r.status_code not in (200, 404):
             raise ApiError(f"delete {cls} {handle}: HTTP {r.status_code} {r.text[:300]}", r.status_code)
+        self.written.pop((cls, handle), None)
+        self._handles.get(cls, set()).discard(handle)
 
     def upload_missing_file(self, handle: str, data: bytes, mime: str) -> str:
         """Store the file of a media object created by `create`. Returns what happened."""

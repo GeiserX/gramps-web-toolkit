@@ -248,7 +248,7 @@ class Applier:
         if ref.startswith("key:"):
             key = ref[4:]
             handle = self.keymap.get(key) or stable_handle(key)
-            if self.c.get(cls, handle) is None:
+            if not self.c.exists(cls, handle):
                 raise Conflict(f"{ref}: no {cls} made by that key")
             return handle
         if not _GRAMPS_ID.match(ref):
@@ -356,7 +356,7 @@ class Applier:
     def _existing(self, cls: str, op: dict) -> dict | None:
         """The object an earlier run made for this key, if any."""
         handle = stable_handle(op["key"])
-        obj = self.c.get(cls, handle)
+        obj = self.c.get(cls, handle) if self.c.exists(cls, handle) else None
         if obj is not None:
             self.keymap[op["key"]] = handle
             self.actions.append(f"skip: {cls} {self.label(obj)} already made by key {op['key']!r}")
