@@ -44,7 +44,7 @@ Every object a run creates gets the Gramps tag named by `--tag` (for example `--
 
 A tag makes a block findable: filter by it in the web UI's lists, or list it through the API with the Gramps filter rule `HasTag`, for example `GET /api/people/?rules={"rules":[{"name":"HasTag","values":["r12"]}]}`, the same for `events`, `families`, `citations`, `notes`, `media`, `places` and `sources`. That is the list to review, or to delete in reverse order (notes, media and citations first, then events and families, then people) if a block has to be rolled back; the changes the block made to existing objects are in its log.
 
-References to other objects are either a **Gramps ID** (`I0042`, `P0007`) or **`key:<key>`** for an object made by an op (in this file or an earlier run). A bare handle is refused.
+References to other objects are either a **Gramps ID** (`I0042`, `P0007`, or with the suffix an import may add, `D051-b`) or **`key:<key>`** for an object made by an op (in this file or an earlier run). A bare handle is refused.
 
 | op | Required | Optional | What it does |
 |---|---|---|---|
