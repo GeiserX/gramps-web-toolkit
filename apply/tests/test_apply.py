@@ -782,3 +782,5 @@ def test_a_gramps_id_may_carry_a_suffix_but_a_handle_is_still_refused():
     fake = FakeGrampsWeb()
     fake.add("people", {"handle": "anna", "gender": 0, "gramps_id": "I0001-b", "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
     assert run(fake, [dict(note, attach=[{"person": "I0001-b"}])])[0].status == "done"
+    fake.add("media", {"handle": "scan", "gramps_id": "D051-b", "path": "scan.jpg", "desc": "scan"})
+    assert run(fake, [dict(note, key="m", attach=[{"media": "D051-b"}])])[0].status == "done"
