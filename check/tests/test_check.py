@@ -122,6 +122,14 @@ def test_tag_scope_limits_duplicates_and_diff(tmp_path):
     assert main(["check", _write(tmp_path, "nt.json", no_tags), "--tag", "run-1"]) == 2
 
 
+def test_fuzzy_names_leave_siblings_alone(tmp_path):
+    """A sibling «Tomás Mateo» next to «Tomás», same parents, no birth year: not a duplicate."""
+    tree = selftest.clean_tree()
+    p = selftest._new_person(tree, "I0090", "Tomás Mateo", "Ortega Sanz", parent_family="hF0001")
+    selftest._get(tree, "families", "F0001")["child_ref_list"].append(selftest._ref(p["handle"], frel="Birth", mrel="Birth"))
+    assert main(["check", _write(tmp_path, "s.json", tree)]) == 0
+
+
 def test_names_fold_accents_bv_iy_and_de():
     assert checks.norm("Benita  de Yuste Bázquez") == checks.norm("venita iuste vazquez")
 
