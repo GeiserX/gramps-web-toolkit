@@ -709,3 +709,53 @@ def test_a_tag_renamed_after_the_snapshot_stops_the_apply(fake, scan, tmp_path, 
     fake.store["tags"]["tag-r12"].update(name="r13", change=fake.tick())
     assert main([str(changes), "--snapshot", str(snap), "--apply", "--tag", "r12"]) == 1
     assert "Tag" in capsys.readouterr().err
+
+
+def test_dna_association_with_its_segment_note_and_citation(fake):
+    segments = "Chromosome,Start Location,End Location,Centimorgans,Matching SNPs\n7,1000,90000,12.5,1500"
+    ops = [
+        {"op": "add_person", "key": "m1", "ruling": R, "first_name": "Match", "surname": "Kit", "tag": ["dna-match", "dna-small"]},
+        {"op": "add_association", "key": "a1", "ruling": R, "person": "I0001", "target": "key:m1", "relation": "DNA"},
+        {"op": "add_note", "key": "n1", "ruling": R, "text": segments,
+         "attach": [{"association": {"person": "I0001", "target": "key:m1"}}]},
+        {"op": "add_citation", "key": "c1", "ruling": R, "source": "S0001", "page": "match list, kit A",
+         "attach": [{"association": {"person": "I0001", "target": "key:m1", "relation": "DNA"}}]},
+    ]
+    res = run(fake, ops)
+    assert all(r.status == "done" for r in res), [r.actions for r in res]
+    ref = fake.store["people"]["anna"]["person_ref_list"]
+    assert len(ref) == 1 and ref[0]["ref"] == stable_handle("m1") and ref[0]["rel"] == "DNA"
+    assert ref[0]["note_list"] == [stable_handle("n1")] and ref[0]["citation_list"] == [stable_handle("c1")]
+    assert fake.store["notes"][stable_handle("n1")]["text"]["string"] == segments  # exactly as given
+    match = fake.store["people"][stable_handle("m1")]
+    assert len(match["tag_list"]) == 2
+    assert all(r.status == "skip" for r in run(fake, ops))  # a rerun changes nothing
+
+
+def test_association_checks():
+    def errs(**kw):
+        return "\n".join(validate([{"op": "add_association", "key": "a", "ruling": R, **kw}]))
+    assert "missing ['relation']" in errs(person="I1", target="I2")
+    assert "the same" in errs(person="I1", target="I1", relation="DNA")
+    assert "never a handle" in errs(person="I1", target="f3a9e1c27b4d", relation="DNA")
+    assert "no attributes" in "\n".join(validate([{"op": "set_attribute", "key": "s", "ruling": R, "type": "X", "value": "y",
+                                                     "target": {"association": {"person": "I1", "target": "I2"}}}]))
+    assert "cannot carry" in "\n".join(validate([{"op": "add_media", "key": "m", "ruling": R, "file": __file__, "path": "x.py",
+                                                    "attach": [{"association": {"person": "I1", "target": "I2"}}]}]))
+
+
+def test_association_reads_no_whole_class_per_op(fake):
+    for i in range(3):
+        fake.add("people", {"handle": f"k{i}", "primary_name": {"first_name": f"K{i}", "surname_list": [{"surname": "Kit"}]}})
+    seen, request = [], fake.request
+
+    def counting(method, url, params=None, **kw):
+        if method == "GET" and "keys" in (params or {}):
+            seen.append(url)
+        return request(method, url, params=params, **kw)
+
+    fake.request = counting
+    ops = [{"op": "add_association", "key": f"a{i}", "ruling": R, "person": "I0001", "target": f"I000{i + 2}",
+            "relation": "DNA"} for i in range(3)]
+    assert all(r.status == "done" for r in run(fake, ops))
+    assert len(seen) == 1  # the people index, once

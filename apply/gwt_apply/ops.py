@@ -44,6 +44,7 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "set_attribute": ({"target", "type", "value"}, set()),
     "merge_person": ({"winner", "loser"}, {"use_loser", "reason"}),
     "merge_family": ({"winner", "loser"}, {"reason"}),
+    "add_association": ({"person", "target", "relation"}, set()),
 }
 MERGE_LISTS = [  # what Gramps' merge carries from the loser to the winner, list by list
     "alternate_names", "event_ref_list", "citation_list", "note_list", "media_list", "attribute_list",
@@ -62,7 +63,8 @@ CARRIES = {
     "media_list": {"Person", "Family", "Event", "Citation", "Source", "Place"},
     "note_list": {"Person", "Family", "Event", "Citation", "Source", "Media", "Place", "ChildRef"},
 }
-CARRIES["citation_list"] = CARRIES["citation_list"] | {"ChildRef"}
+CARRIES["citation_list"] = CARRIES["citation_list"] | {"ChildRef", "PersonRef"}
+CARRIES["note_list"] = CARRIES["note_list"] | {"PersonRef"}
 
 
 def fold(text: str) -> str:
@@ -97,10 +99,15 @@ def load_change_list(path: str) -> list[dict]:
 
 
 def _parse_target(spec) -> tuple[str, object]:
-    """{"person": "I1"} -> ("Person", "I1"); {"child_ref": {"family": F, "child": I}} -> ("ChildRef", (F, I))."""
+    """{"person": "I1"} -> ("Person", "I1"); {"child_ref": {"family": F, "child": I}} -> ("ChildRef", (F, I));
+    {"association": {"person": P, "target": T[, "relation": R]}} -> ("PersonRef", (P, T, R or None))."""
     if not isinstance(spec, dict) or len(spec) != 1:
-        raise ValueError(f"a target is one of {sorted(TARGET_KINDS) + ['child_ref']} -> ref, got {spec!r}")
+        raise ValueError(f"a target is one of {sorted(TARGET_KINDS) + ['association', 'child_ref']} -> ref, got {spec!r}")
     (kind, ref), = spec.items()
+    if kind == "association":
+        if not isinstance(ref, dict) or not {"person", "target"} <= set(ref) <= {"person", "target", "relation"}:
+            raise ValueError(f"an association target is {{\"person\": ..., \"target\": ...[, \"relation\": ...]}}, got {ref!r}")
+        return "PersonRef", (ref["person"], ref["target"], ref.get("relation"))
     if kind == "child_ref":
         if not isinstance(ref, dict) or set(ref) != {"family", "child"}:
             raise ValueError(f"a child_ref target is {{\"family\": ..., \"child\": ...}}, got {ref!r}")
@@ -114,7 +121,12 @@ def _target_refs(spec) -> list:
     if not isinstance(spec, dict) or len(spec) != 1:
         return []
     value = next(iter(spec.values()))
-    return list(value.values()) if isinstance(value, dict) else [value]
+    return [v for k, v in value.items() if k != "relation"] if isinstance(value, dict) else [value]
+
+
+def _tag_names(value) -> list:
+    """A per-op `tag`: one name or a list of names."""
+    return value if isinstance(value, list) else [value]
 
 
 def _ref_list(value) -> list:
@@ -147,8 +159,8 @@ def validate(ops: list[dict]) -> list[str]:
             keys.add(key)
         required, optional = SPECS[name]
         allowed = required | optional | {"op", "key", "ruling", "tag"}
-        if "tag" in op and not (isinstance(op["tag"], str) and op["tag"].strip()):
-            errors.append(f"{where}: tag is a non-empty name")
+        if "tag" in op and not (_tag_names(op["tag"]) and all(isinstance(t, str) and t.strip() for t in _tag_names(op["tag"]))):
+            errors.append(f"{where}: tag is a non-empty name, or a list of them")
         missing = [f for f in required if op.get(f) in (None, "", [])]
         if name == "add_citation" and op.get("page") == "":
             missing.remove("page")  # an empty page is a real value
@@ -165,6 +177,8 @@ def validate(ops: list[dict]) -> list[str]:
         refs = [op.get(f) for f in ("person", "family", "father", "mother", "child", "source", "place", "enclosed_by",
                                     "winner", "loser")]
         refs += list(op.get("children") or [])
+        if name == "add_association":
+            refs.append(op.get("target"))
         refs += _ref_list(op.get("namesake_of")) if op.get("namesake_of") else []
         for t in [op.get("target"), *(op.get("attach") or [])]:
             refs += _target_refs(t)
@@ -191,6 +205,11 @@ def validate(ops: list[dict]) -> list[str]:
                     raise ValueError("probable is true or absent")
                 if bool(op.get("probable")) != bool(str(op.get("probable_reason") or "").strip()):
                     raise ValueError("probable: true and probable_reason go together")
+            if name == "add_association":
+                if op.get("person") == op.get("target"):
+                    raise ValueError("person and target are the same")
+                if not isinstance(op.get("relation"), str) or not op["relation"].strip():
+                    raise ValueError("relation is a non-empty text, e.g. DNA")
             if name.startswith("merge_") and op.get("winner") == op.get("loser"):
                 raise ValueError("winner and loser are the same")
             if name == "merge_person" and set(op.get("use_loser") or []) - set(USE_LOSER):
@@ -213,8 +232,8 @@ def validate(ops: list[dict]) -> list[str]:
                     parse_date(s["date"])
                 if s.get("place") and not (s["place"].startswith("key:") or _GRAMPS_ID.match(s["place"])):
                     raise ValueError(f"{s['place']!r} is neither key:<key> nor a Gramps ID (never a handle)")
-            if name == "set_attribute" and _parse_target(op.get("target"))[0] == "ChildRef":
-                raise ValueError("a child_ref has no attributes")
+            if name == "set_attribute" and _parse_target(op.get("target"))[0] in ("ChildRef", "PersonRef"):
+                raise ValueError("a child_ref or an association has no attributes")
             if name == "add_place":
                 if ("lat" in op) != ("long" in op):
                     raise ValueError("lat and long go together")
@@ -325,7 +344,20 @@ class Applier:
         self.wrote = True
 
     def holder(self, cls: str, ref) -> tuple[dict, dict, str]:
-        """(object to PUT, dict that carries the lists, label). A child_ref lives inside its family."""
+        """(object to PUT, dict that carries the lists, label). A child_ref lives inside its family, an
+        association (PersonRef) inside its person."""
+        if cls == "PersonRef":
+            person = self.obj("Person", ref[0])
+            person.setdefault("_class", "Person")
+            target = self.resolve("Person", ref[1])
+            found = [r for r in person.get("person_ref_list") or []
+                     if r.get("ref") == target and (ref[2] is None or r.get("rel") == ref[2])]
+            what = f"association of Person {self.label(person)} with {ref[1]}" + (f" ({ref[2]})" if ref[2] else "")
+            if not found:
+                raise Conflict(f"no {what}")
+            if len(found) > 1:
+                raise Conflict(f"more than one {what}; say which with relation")
+            return person, found[0], what
         if cls != "ChildRef":
             obj = self.obj(cls, ref)
             obj.setdefault("_class", cls)
@@ -358,7 +390,7 @@ class Applier:
         results = []
         for op in ops:
             res = Result(op["key"], op["op"], op["ruling"])
-            self._op_tags = list(dict.fromkeys(t for t in (self.run_tag, op.get("tag")) if t))
+            self._op_tags = list(dict.fromkeys(t for t in [self.run_tag, *_tag_names(op.get("tag"))] if t))
             self.c.context = {"key": op["key"], "op": op["op"], "ruling": op["ruling"]}
             for attempt in range(1, self.retries + 1):
                 if self.lock is not None:  # every try: a slow server can make one op outlast the lock
@@ -598,6 +630,22 @@ class Applier:
         before = copy.deepcopy(family)
         family["child_ref_list"] = [*refs, {"_class": "ChildRef", "ref": child, "frel": frel, "mrel": mrel}]
         self.save(before, family)
+
+    def add_association(self, op):
+        """A PersonRef from person to target with this relation; Gramps Web's DNA view reads relation "DNA"."""
+        person = self.obj("Person", op["person"])
+        person.setdefault("_class", "Person")
+        target = self.resolve("Person", op["target"])
+        refs = person.get("person_ref_list") or []
+        if any(r.get("ref") == target and r.get("rel") == op["relation"] for r in refs):
+            self.actions.append(f"skip: Person {self.label(person)} already has a {op['relation']} association with {op['target']}")
+            return
+        before = copy.deepcopy(person)
+        person["person_ref_list"] = [
+            *refs,
+            {"_class": "PersonRef", "ref": target, "rel": op["relation"], "citation_list": [], "note_list": [], "private": False},
+        ]
+        self.save(before, person)
 
     def link_child(self, op):
         family = self.resolve("Family", op["family"])

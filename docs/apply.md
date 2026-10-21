@@ -40,7 +40,7 @@ A JSON array of ops, an object `{"ops": [...]}`, or JSONL with one op per line. 
 
 ### Tags
 
-Every object a run creates gets the Gramps tag named by `--tag` (for example `--tag r12`), plus the op's own `tag` if it has one. A tag the tree does not have yet is created the first time it is needed; one it has is reused by name. Objects the run only changes (a person who gets a new event or citation) are not tagged.
+Every object a run creates gets the Gramps tag named by `--tag` (for example `--tag r12`), plus the op's own `tag` if it has one: a name, or a list of names. A tag the tree does not have yet is created the first time it is needed; one it has is reused by name. Objects the run only changes (a person who gets a new event or citation) are not tagged.
 
 A tag makes a block findable: filter by it in the web UI's lists, or list it through the API with the Gramps filter rule `HasTag`, for example `GET /api/people/?rules={"rules":[{"name":"HasTag","values":["r12"]}]}`, the same for `events`, `families`, `citations`, `notes`, `media`, `places` and `sources`. That is the list to review, or to delete in reverse order (notes, media and citations first, then events and families, then people) if a block has to be rolled back; the changes the block made to existing objects are in its log.
 
@@ -60,10 +60,11 @@ References to other objects are either a **Gramps ID** (`I0042`, `P0007`) or **`
 | `add_media` | `file`, `path`, `attach` | `desc`, `mime`, `gramps_id` | Media object for a local file, or the existing one with the same MD5, attached to each target |
 | `add_note` | `text`, `attach` | `type` (default `General`), `gramps_id` | New note, or a note with the same text already on a target |
 | `set_attribute` | `target`, `type`, `value` | | Sets an attribute; replaces the value of an attribute of the same type |
+| `add_association` | `person`, `target`, `relation` | | An association (Gramps `PersonRef`) from `person` to `target` with that relation, skipped when the person already has one to the same target with the same relation. Gramps Web's DNA view reads associations with relation `DNA`: put the match's segments in a note attached to the association |
 | `merge_person` | `winner`, `loser` | `use_loser` (`birth`, `death`), `reason` | Gramps' own person merge: everything that points at the loser moves to the winner, the loser's families with the same partner merge, and the loser is deleted. See [Merges](#merges) |
 | `merge_family` | `winner`, `loser` | `reason` | Gramps' own family merge. Refused when the two families have different fathers or different mothers: merge those people first |
 
-`attach` and `target` take objects with one key, the kind of object: `{"person": "I0042"}`, `{"event": "key:birth-john"}`. Kinds: `person`, `family`, `event`, `citation`, `source`, `media`, `place`, and `child_ref`, the link between a child and a family, written `{"child_ref": {"family": "F0003", "child": "I0042"}}`. A child_ref carries citations and notes (no media, no attributes); that is where a doubtful parent link gets its source and its "probable" note. Mark the link with `probable` on `link_child` rather than with a separate `add_note`, so the mark cannot be left out. The child must already be in that family.
+`attach` and `target` take objects with one key, the kind of object: `{"person": "I0042"}`, `{"event": "key:birth-john"}`. Kinds: `person`, `family`, `event`, `citation`, `source`, `media`, `place`, `association` and `child_ref`, the link between a child and a family, written `{"child_ref": {"family": "F0003", "child": "I0042"}}`. A child_ref carries citations and notes (no media, no attributes); that is where a doubtful parent link gets its source and its "probable" note. Mark the link with `probable` on `link_child` rather than with a separate `add_note`, so the mark cannot be left out. The child must already be in that family. An association is written `{"association": {"person": "I0042", "target": "I0107"}}`, with `"relation": "DNA"` when the person has more than one association with that target; it carries citations and notes (no media, no attributes) and must already exist.
 
 Place names, place types and person names are compared without case, accents or repeated spaces: `Mónte  Alto` matches `monte alto`.
 
@@ -97,6 +98,18 @@ The dry-run prints one block per op:
     skip: Citation C0123 already cites that page
     skip: Event E0456 already has it in citation_list
 ```
+
+### DNA matches
+
+Gramps Web's DNA view shows, for a person, every association with relation `DNA` and parses the notes on that association. The first line of a note is the CSV header and every other line one segment, so the note text goes in exactly as the DNA view expects it; `add_note` stores it as given. A match is three ops (all people invented):
+
+```jsonl
+{"op": "add_person", "key": "m-kit-a17", "ruling": "R-40", "first_name": "Ruth", "surname": "Example", "tag": ["dna-match"]}
+{"op": "add_association", "key": "a-kit-a17", "ruling": "R-40", "person": "I0042", "target": "key:m-kit-a17", "relation": "DNA"}
+{"op": "add_note", "key": "n-kit-a17", "ruling": "R-40", "text": "Chromosome,Start Location,End Location,Centimorgans,Matching SNPs\n7,1000000,9000000,12.5,1500", "attach": [{"association": {"person": "I0042", "target": "key:m-kit-a17"}}]}
+```
+
+An association op reads only the person it changes: one read and one write each, with no whole-class read per op.
 
 ### Merges
 
