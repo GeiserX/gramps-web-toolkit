@@ -88,3 +88,8 @@ Run it once a day and act on exit status 10. With cron:
 ```
 
 On macOS use a LaunchAgent with `StartCalendarInterval` instead: `chrome` mode needs the logged-in user's keychain, which a LaunchAgent has and a LaunchDaemon does not.
+
+## Keep the certificate and the secrets out of the repo
+
+- Never commit the `.p12` or `.pfx` file or its passphrase. `.gitignore` already covers `*.p12`, `*.pfx` and `*.pem`; keep the certificate outside the repo anyway, as in the `~/certs/` example above.
+- The poller reads the passphrase from one of two places: `auth.passphrase_env`, the name of an environment variable, or `auth.passphrase_file`, a file outside the repo with mode 600 (`chmod 600 ~/certs/ana.pass`). It never takes it on the command line.
