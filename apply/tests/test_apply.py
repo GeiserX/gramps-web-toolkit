@@ -783,6 +783,21 @@ def test_dedupe_list_keeps_the_first_of_a_repeated_reference():
     assert fake.store["people"]["anna"]["citation_list"] == ["c1", "c2"]
     assert run(fake, [dict(op, key="d2")])[0].status == "skip"
     assert any("list is one of" in e for e in validate([dict(op, list="event_ref_list")]))
+    assert any("has no media_list" in e for e in validate([dict(op, target={"child_ref": {"family": "F0001", "child": "I0001"}}, list="media_list")]))
+
+
+def test_dedupe_list_keys_a_media_ref_on_its_region_and_keeps_what_a_repeat_carries():
+    fake = FakeGrampsWeb()
+    whole, face = {"ref": "m1", "rect": None}, {"ref": "m1", "rect": [10, 10, 40, 40]}
+    fake.add("people", {"handle": "anna", "gender": 0, "media_list": [whole, face, dict(face)],
+                        "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    op = {"op": "dedupe_list", "key": "d", "ruling": R, "target": {"person": "I0001"}, "list": "media_list"}
+    assert run(fake, [op])[0].status == "done"
+    assert fake.store["people"]["anna"]["media_list"] == [whole, face]  # a second region of one photo stays
+    fake.store["people"]["anna"]["media_list"].append(dict(face, note_list=["n1"]))
+    res = run(fake, [dict(op, key="d2")])
+    assert res[0].status == "conflict" and "note_list" in res[0].actions[-1]
+    assert len(fake.store["people"]["anna"]["media_list"]) == 3
 
 
 def test_a_tag_the_server_says_it_made_but_does_not_have_stops_the_op_loudly(fake):

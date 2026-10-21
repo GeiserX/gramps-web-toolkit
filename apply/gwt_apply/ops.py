@@ -53,7 +53,7 @@ MERGE_LISTS = [  # what Gramps' merge carries from the loser to the winner, list
     "child_ref_list",
 ]
 USE_LOSER = {"birth": "birth_ref_index", "death": "death_ref_index"}
-DEDUPE_LISTS = {"citation_list", "note_list", "media_list"}  # dedupe_list
+REF_OWN_LISTS = ("note_list", "citation_list", "attribute_list")  # what a MediaRef carries besides its ref
 PERSON_FIELDS = {"first_name", "surname", "gender"}
 EVENT_FIELDS = {"type", "date", "place", "description"}
 GENDER = {"F": 0, "M": 1, "U": 2}
@@ -219,9 +219,11 @@ def validate(ops: list[dict]) -> list[str]:
             if name == "merge_person" and set(op.get("use_loser") or []) - set(USE_LOSER):
                 raise ValueError(f"use_loser takes {sorted(USE_LOSER)}")
             if name == "dedupe_list":
-                _parse_target(op.get("target"))
-                if op.get("list") not in DEDUPE_LISTS:
-                    raise ValueError(f"list is one of {sorted(DEDUPE_LISTS)}")
+                cls, _ = _parse_target(op.get("target"))
+                if op.get("list") not in CARRIES:
+                    raise ValueError(f"list is one of {sorted(CARRIES)}")
+                if cls not in CARRIES[op["list"]]:
+                    raise ValueError(f"a {cls} has no {op['list']}")
             if name == "add_event" and bool(op.get("person")) == bool(op.get("family")):
                 raise ValueError("add_event needs exactly one of person or family")
             if name == "add_family" and not (op.get("father") or op.get("mother")):
@@ -840,12 +842,19 @@ class Applier:
         target, carrier, label = self.holder(cls, ref)
         name = op["list"]
         items = carrier.get(name) or []
-        seen, kept = set(), []
+        seen, kept = {}, []
         for i in items:
-            h = i if isinstance(i, str) else i.get("ref")
-            if h not in seen:
-                seen.add(h)
+            # the same identity as gwt-check's repeated-ref: a media ref is its media plus its region
+            ident = i if isinstance(i, str) else (i.get("ref"), repr(i.get("rect")))
+            first = seen.get(ident)
+            if first is None:
+                seen[ident] = i
                 kept.append(i)
+                continue
+            for own in REF_OWN_LISTS if isinstance(i, dict) else ():
+                if [x for x in i.get(own) or [] if x not in (first.get(own) or [])]:
+                    raise Conflict(f"{label}: a repeated {name} entry {ident[0]} carries a {own} the first one "
+                                   f"lacks, so dropping it would lose that")
         if len(kept) == len(items):
             self.actions.append(f"skip: {label} has no repeated entry in {name}")
             return
