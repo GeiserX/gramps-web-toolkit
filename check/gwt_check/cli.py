@@ -46,8 +46,8 @@ def live_dump(args) -> dict:
     return {"tree": client.tree, "dumped_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "objects": data}
 
 
-def load_known(path: str) -> set[tuple[str, str]]:
-    """A previous `--json` output, or a list of {"check", "key"} objects."""
+def load_known(path: str) -> dict[tuple[str, str], str]:
+    """A previous `--json` output, or a list of {"check", "key"} objects, each with an optional "reason"."""
     try:
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
@@ -55,13 +55,13 @@ def load_known(path: str) -> set[tuple[str, str]]:
         raise BadInput(f"--known {path}: {exc}") from exc
     rows = data.get("findings", []) if isinstance(data, dict) else data
     try:
-        return {(r["check"], r["key"]) for r in rows}
+        return {(r["check"], r["key"]): str(r.get("reason") or "") for r in rows}
     except (TypeError, KeyError) as exc:
         raise BadInput(f"--known {path}: every finding needs check and key") from exc
 
 
 def check(tree: Tree, *, since: Tree | None = None, tag: str | None = None, root: str | None = None,
-          known: set | None = None) -> dict:
+          known: dict | set | None = None) -> dict:
     """Every check on one tree. Returns the report; report["new"] are the findings not in `known`."""
     if tree.partial:
         raise BadInput(f"{tree.source}: a .gramps backup can be the earlier tree (--since), not the one checked")
@@ -88,9 +88,11 @@ def check(tree: Tree, *, since: Tree | None = None, tag: str | None = None, root
         if not a:
             raise BadInput(f"--root {root}: no such person")
         report["ahnentafel"] = {"numbers": len(a), "people": len(set(a.values()))}
-    known = known or set()
+    known = dict.fromkeys(known, "") if isinstance(known, set) else (known or {})
     for f in findings:
         f["known"] = (f["check"], f["key"]) in known
+        if f["known"] and known[(f["check"], f["key"])]:
+            f["reason"] = known[(f["check"], f["key"])]
     report["findings"] = findings
     report["new"] = [f for f in findings if not f["known"]]
     return report
@@ -110,6 +112,8 @@ def print_report(report: dict, limit: int) -> None:
         if not fs:
             continue
         print(f"\n{'FAIL' if new else 'known'} {name}: {len(new)} new, {len(fs) - len(new)} known  ({CHECKS[name]})")
+        for f in [f for f in fs if f["known"] and f.get("reason")][:limit]:
+            print(f"  known {f['key']}: {f['reason']}")
         for f in new[:limit]:
             print(f"  {f['key']}" + (f"  [{f['detail']}]" if f["detail"] else ""))
         if len(new) > limit:
@@ -132,6 +136,37 @@ def print_report(report: dict, limit: int) -> None:
             print(f"Ahnentafel: {a['numbers']} numbers, {a['people']} people")
     n = len(report["new"])
     print(f"\n{'FAIL' if n else 'OK'}: {n} new finding(s), {len(report['findings']) - n} known")
+
+
+def mark_known(report_path: str, check_name: str, keys: list[str], reason: str, out: str) -> int:
+    """Add findings of a report to a known file, each with the reason it is accepted."""
+    if not reason.strip():
+        raise BadInput("mark-known needs a --reason: why this is not a problem")
+    try:
+        with open(report_path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError) as exc:
+        raise BadInput(f"{report_path}: {exc}") from exc
+    found = {f["key"] for f in data.get("findings", []) if f["check"] == check_name}
+    missing = [k for k in keys if k not in found]
+    if missing:
+        raise BadInput(f"not in the report as {check_name}: {missing}")
+    rows: list[dict] = []
+    if os.path.exists(out):
+        try:
+            with open(out, encoding="utf-8") as fh:
+                loaded = json.load(fh)
+            rows = loaded.get("findings", []) if isinstance(loaded, dict) else loaded
+            have = {(r["check"], r["key"]) for r in rows}
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            raise BadInput(f"--out {out}: not a known file ({exc})") from exc
+    else:
+        have = set()
+    rows += [{"check": check_name, "key": k, "reason": reason.strip()} for k in keys if (check_name, k) not in have]
+    with open(out, "w", encoding="utf-8") as fh:
+        json.dump(rows, fh, ensure_ascii=False, indent=1)
+    print(f"{out}: {len(rows)} known finding(s)")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -158,6 +193,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--limit", type=int, default=30, help="findings printed per check (default 30)")
     live_opts(p)
 
+    p = sub.add_parser("mark-known", help="accept findings of a report as known, with the reason, in a known file")
+    p.add_argument("report", help="a --json report")
+    p.add_argument("--check", required=True, help="the check the findings belong to")
+    p.add_argument("--key", action="append", required=True, help="the finding key (repeatable)")
+    p.add_argument("--reason", required=True, help="why this is not a problem, e.g. father and son, same name")
+    p.add_argument("--out", required=True, help="the known file to create or add to")
+
     sub.add_parser("selftest", help="plant every error kind in a synthetic tree and prove each check fires")
 
     args = ap.parse_args(argv)
@@ -165,6 +207,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "selftest":
             from .selftest import selftest
             return selftest(verbose=True)
+        if args.cmd == "mark-known":
+            return mark_known(args.report, args.check, args.key, args.reason, args.out)
         if args.cmd == "dump":
             save(live_dump(args), args.out)
             return 0

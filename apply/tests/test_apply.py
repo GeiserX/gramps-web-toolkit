@@ -786,3 +786,16 @@ def test_a_tag_the_server_says_it_made_but_does_not_have_stops_the_op_loudly(fak
     res = run(fake, [op])
     assert res[0].status == "error" and "is not there when read back" in res[0].actions[-1]
     assert fake.store["notes"] == {}  # nothing was tagged with a handle that does not exist
+
+
+def test_a_gramps_id_may_carry_a_suffix_but_a_handle_is_still_refused():
+    note = {"op": "add_note", "key": "n", "ruling": R, "text": "x"}
+    ok = validate([dict(note, attach=[{"person": "I0001-b"}])])
+    assert ok == []
+    bad = validate([dict(note, attach=[{"person": "0123b4e9269542049080d7a4c798"}])])
+    assert any("neither key:<key> nor a Gramps ID" in e for e in bad)
+    fake = FakeGrampsWeb()
+    fake.add("people", {"handle": "anna", "gender": 0, "gramps_id": "I0001-b", "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    assert run(fake, [dict(note, attach=[{"person": "I0001-b"}])])[0].status == "done"
+    fake.add("media", {"handle": "scan", "gramps_id": "D051-b", "path": "scan.jpg", "desc": "scan"})
+    assert run(fake, [dict(note, key="m", attach=[{"media": "D051-b"}])])[0].status == "done"

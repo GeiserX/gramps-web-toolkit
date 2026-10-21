@@ -74,7 +74,7 @@ def fold(text: str) -> str:
     return " ".join(bare.casefold().split())
 
 
-_GRAMPS_ID = re.compile(r"^[A-Za-z]+\d+$")
+_GRAMPS_ID = re.compile(r"^[A-Za-z]+\d+(?:-[A-Za-z0-9]+)?$")  # I0042, or I0042-b: an import may add a suffix
 
 
 class Conflict(Exception):
