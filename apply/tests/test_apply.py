@@ -773,6 +773,21 @@ def test_association_reads_no_whole_class_per_op(fake):
     assert len(seen) == 1  # the people index, once
 
 
+def test_a_tag_the_server_says_it_made_but_does_not_have_stops_the_op_loudly(fake):
+    real = fake._route
+
+    def forgetful(method, path, headers, params, body, data):
+        if method == "POST" and path.endswith("/objects/") and body and body[0].get("_class") == "Tag":
+            return Resp(201, [{"type": "add", "handle": body[0]["handle"]}])  # says yes, keeps nothing
+        return real(method, path, headers, params, body, data)
+
+    fake._route = forgetful
+    op = {"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}], "tag": "batch-a"}
+    res = run(fake, [op])
+    assert res[0].status == "error" and "is not there when read back" in res[0].actions[-1]
+    assert fake.store["notes"] == {}  # nothing was tagged with a handle that does not exist
+
+
 def test_a_gramps_id_may_carry_a_suffix_but_a_handle_is_still_refused():
     note = {"op": "add_note", "key": "n", "ruling": R, "text": "x"}
     ok = validate([dict(note, attach=[{"person": "I0001-b"}])])

@@ -322,6 +322,10 @@ class Applier:
                     return h
                 self.c.create({"_class": "Tag", "handle": h, "name": name, "color": "#000000000000", "priority": 0})
                 self.actions.append(f"create Tag {name!r}")
+                if not self.c.dry_run and self.c.get_live("Tag", h) is None:
+                    # a server that answered 201 and kept nothing: the block's objects would carry a tag that no
+                    # list can filter by, and the block could no longer be found or rolled back by its tag
+                    raise ApiError(f"Tag {name!r} was created but is not there when read back")
                 self._tags[name] = h
         return self._tags[name]
 
