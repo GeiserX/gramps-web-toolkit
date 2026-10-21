@@ -431,3 +431,37 @@ def test_lock_whose_answer_was_lost_is_still_ours(fake, tmp_path, monkeypatch):
     fake.drop_after = ("POST", "/api/objects/")  # the lock note's create
     assert main([str(changes), "--apply", "--retry-wait", "0"]) == 0
     assert len(fake.store["events"]) == 1 and fake.store["notes"] == {}
+
+
+def test_lock_is_kept_fresh_while_one_op_waits_on_a_busy_server(fake, monkeypatch):
+    from gwt_apply import lock as lockmod
+    import gwt_apply.ops as opsmod
+    from gwt_apply.lock import TreeLock, read_lock
+    clock = [lockmod._now()]
+    monkeypatch.setattr(lockmod, "_now", lambda: clock[0])
+    monkeypatch.setattr(opsmod.time, "sleep", lambda s: clock.__setitem__(0, clock[0] + 600))  # a long wait
+    c = Client("https://gw.example", "u", "pw", tree="tree-test", dry_run=False, session=fake)
+    lock = TreeLock(c, "run-mine")
+    lock.acquire()
+    fake.busy = 1
+    op = {"op": "add_event", "key": "e", "ruling": R, "person": "I0001", "type": "Death", "date": "abt 1950"}
+    res = Applier(c, retries=3, retry_wait=1, lock=lock).run([op])
+    assert res[0].status == "done", res[0].actions
+    assert read_lock(c)["expires_ts"] == clock[0] + 900  # refreshed after the wait, before the second try
+
+
+def test_login_that_times_out_is_retried(fake):
+    import requests
+    request, timeouts = fake.request, [1]
+
+    def flaky(method, url, **kw):
+        if url.endswith("/token/") and timeouts[0]:
+            timeouts[0] -= 1
+            raise requests.Timeout("no answer")
+        return request(method, url, **kw)
+
+    fake.request = flaky
+    c = Client("https://gw.example", "u", "pw", tree="tree-test", dry_run=False, session=fake)
+    op = {"op": "add_event", "key": "e", "ruling": R, "person": "I0001", "type": "Death", "date": "abt 1950"}
+    res = Applier(c, retries=2, retry_wait=0).run([op])
+    assert res[0].status == "done", res[0].actions

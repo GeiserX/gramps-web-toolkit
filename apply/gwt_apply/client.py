@@ -95,12 +95,16 @@ class Client:
             if wait > 0:
                 time.sleep(wait)
             self._last_login = time.monotonic()
-            r = self.session.request(
-                "POST",
-                self.base + "/token/",
-                json={"username": self.username, "password": self._password},
-                timeout=60,
-            )
+            try:
+                r = self.session.request(
+                    "POST",
+                    self.base + "/token/",
+                    json={"username": self.username, "password": self._password},
+                    timeout=60,
+                )
+            except (requests.ConnectionError, requests.Timeout) as exc:
+                self.log(method="POST", path="/token/", status=None, error=type(exc).__name__)
+                raise Retryable(f"login: {type(exc).__name__}") from exc
             self.log(method="POST", path="/token/", status=r.status_code)
             if r.status_code != 429:
                 break
