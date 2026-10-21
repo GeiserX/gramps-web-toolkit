@@ -792,6 +792,10 @@ def test_attach_existing_links_an_orphan_and_is_a_skip_the_second_time():
     assert fake.store["people"]["anna"]["note_list"] == ["nt"]
     assert fake.store["citations"]["cit"]["media_list"][0]["ref"] == "med"
     assert [r.status for r in run(fake, [dict(o, key=o["key"] + "b") for o in ops])] == ["skip"] * 3
+    fake.add("media", {"handle": "scan", "gramps_id": "D051-b", "path": "b.jpg"})  # a suffix an import added
+    op = {"op": "attach_existing", "key": "a4", "ruling": R, "object": {"media": "D051-b"}, "attach": [{"person": "I0001"}]}
+    assert validate([op]) == [] and run(fake, [op])[0].status == "done"
+    assert fake.store["people"]["anna"]["media_list"][0]["ref"] == "scan"
 
 
 def test_attach_existing_refuses_what_cannot_be_attached_or_carried():
@@ -800,12 +804,14 @@ def test_attach_existing_refuses_what_cannot_be_attached_or_carried():
         {"op": "attach_existing", "key": "b2", "ruling": R, "object": {"media": "O0001"}, "attach": [{"child_ref": {"family": "F0001", "child": "I0001"}}]},
         {"op": "attach_existing", "key": "b3", "ruling": R, "object": {"media": "0123b4e9269542049080d7a4c798"}, "attach": [{"person": "I0001"}]},
         {"op": "attach_existing", "key": "b4", "ruling": R, "object": {"note": "N0001"}},
+        {"op": "set_attribute", "key": "b5", "ruling": R, "target": {"note": "N0001"}, "type": "x", "value": "y"},
     ]
     errors = "\n".join(validate(bad))
     assert "object is a citation, media or note, got person" in errors
     assert "cannot carry a media" in errors
     assert "neither key:<key> nor a Gramps ID" in errors
     assert "missing ['attach']" in errors
+    assert "bad target {'note': 'N0001'}" in errors  # a note is an object to attach, never a target
     fake = FakeGrampsWeb()
     res = run(fake, [{"op": "attach_existing", "key": "c", "ruling": R, "object": {"note": "N0099"}, "attach": [{"person": "I0099"}]}])
     assert res[0].status == "conflict"
