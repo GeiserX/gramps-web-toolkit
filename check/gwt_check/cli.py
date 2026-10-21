@@ -60,8 +60,14 @@ def load_known(path: str) -> dict[tuple[str, str], str]:
         raise BadInput(f"--known {path}: every finding needs check and key") from exc
 
 
+def check_names(names: set) -> None:
+    unknown = set(names) - set(CHECKS)
+    if unknown:
+        raise BadInput(f"--ignore-check: no such check {sorted(unknown)}; the checks are {sorted(CHECKS)}")
+
+
 def check(tree: Tree, *, since: Tree | None = None, tag: str | None = None, root: str | None = None,
-          known: dict | set | None = None) -> dict:
+          known: dict | set | None = None, ignore: set | None = None) -> dict:
     """Every check on one tree. Returns the report; report["new"] are the findings not in `known`."""
     if tree.partial:
         raise BadInput(f"{tree.source}: a .gramps backup can be the earlier tree (--since), not the one checked")
@@ -89,12 +95,16 @@ def check(tree: Tree, *, since: Tree | None = None, tag: str | None = None, root
             raise BadInput(f"--root {root}: no such person")
         report["ahnentafel"] = {"numbers": len(a), "people": len(set(a.values()))}
     known = dict.fromkeys(known, "") if isinstance(known, set) else (known or {})
+    ignore = ignore or set()
+    check_names(ignore)
     for f in findings:
-        f["known"] = (f["check"], f["key"]) in known
-        if f["known"] and known[(f["check"], f["key"])]:
+        f["ignored"] = f["check"] in ignore
+        f["known"] = f["ignored"] or (f["check"], f["key"]) in known
+        if known.get((f["check"], f["key"])):
             f["reason"] = known[(f["check"], f["key"])]
     report["findings"] = findings
     report["new"] = [f for f in findings if not f["known"]]
+    report["ignored"] = {c: sum(1 for f in findings if f["check"] == c) for c in sorted(ignore)}
     return report
 
 
@@ -134,6 +144,8 @@ def print_report(report: dict, limit: int) -> None:
                   f"{a['after']['numbers']} / {a['after']['people']} after, {len(a['new numbers'])} new numbers")
         else:
             print(f"Ahnentafel: {a['numbers']} numbers, {a['people']} people")
+    for name, count in report.get("ignored", {}).items():
+        print(f"ignored {name}: {count} finding(s), not counted (--ignore-check)")
     n = len(report["new"])
     print(f"\n{'FAIL' if n else 'OK'}: {n} new finding(s), {len(report['findings']) - n} known")
 
@@ -189,6 +201,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--root", help="Gramps ID of the Ahnentafel root; with --since, numbers lost or changed fail")
     p.add_argument("--known", help="earlier --json output (or list of {check, key}) to accept as known")
     p.add_argument("--baseline", help="earlier dump: its own findings count as known, so only what is new since then fails")
+    p.add_argument("--ignore-check", action="append", default=[], metavar="NAME",
+                   help="leave a whole check out of the exit code (repeatable); the report still counts it")
     p.add_argument("--json", help="write the full report as JSON to this file (- for stdout)")
     p.add_argument("--save-dump", help="keep the live dump in this file")
     p.add_argument("--limit", type=int, default=30, help="findings printed per check (default 30)")
@@ -213,6 +227,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "dump":
             save(live_dump(args), args.out)
             return 0
+        check_names(set(args.ignore_check))  # before a dump that can take minutes
         t0 = time.monotonic()
         known = load_known(args.known) if args.known else None
         if args.baseline:
@@ -230,7 +245,8 @@ def main(argv: list[str] | None = None) -> int:
                 save(data, args.save_dump)
             tree = Tree(data["objects"], source="live tree")
         t1 = time.monotonic()
-        report = check(tree, since=since, tag=args.tag, root=args.root, known=known)
+        report = check(tree, since=since, tag=args.tag, root=args.root, known=known,
+                       ignore=set(args.ignore_check))
         report["seconds"] = {"read": round(t1 - t0, 1), "check": round(time.monotonic() - t1, 1)}
     except BadInput as exc:
         print(f"gwt-check: {exc}", file=sys.stderr)

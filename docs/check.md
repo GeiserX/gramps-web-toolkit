@@ -30,6 +30,7 @@ It exits `0` with no new findings and `1` with new findings. It exits `2` on bad
 | `--tag NAME` | Objects carrying this tag become the scope. `gwt-apply --tag` puts the tag only on the objects a run creates, so old objects the run changed are not in it: use `--since` to see those. With `--tag`, the diff counts only tagged objects as changed or new |
 | `--root ID` | Gramps ID of the Ahnentafel root. With `--since`, a number that is lost or now holds another person is a finding |
 | `--known FILE` | Findings to accept: an earlier `--json` report, or a list of `{"check", "key"}` |
+| `--ignore-check NAME` | Leaves a whole check out of the exit code (repeatable). For a check that is noise in your tree, such as `private` after an import that marks every living person private on purpose. The report still counts the findings and prints `ignored NAME: N finding(s)`; a name that is not a check exits 2 |
 | `--baseline OLD` | An earlier dump: the findings it already had count as known, so the exit code reflects only what is new since then. The same as running `check OLD --json` and passing that report to `--known`, in one command. The usual call is `--since OLD --baseline OLD`. It runs the checks twice, so a check takes about twice as long |
 | `--json FILE` | The full report as JSON (`-` prints it instead of the text) |
 | `--save-dump FILE` | Keeps the live dump, to use as `--since` next time |
