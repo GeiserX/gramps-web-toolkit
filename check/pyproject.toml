@@ -1,0 +1,23 @@
+[project]
+name = "gwt-check"
+version = "0.1.0"
+description = "Read-only checks of a whole Gramps Web tree: orphans, dangling links, duplicates, diff, Ahnentafel"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.scripts]
+gwt-check = "gwt_check.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["gwt_check"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -91,7 +91,7 @@ Rules that hold for every block:
 
 ## The independent check
 
-A separate agent, not the applier, verifies:
+A separate agent, not the applier, verifies. [`gwt-check`](check.md) runs the mechanical part of this list as one command; reading a sample against its rulings stays with the agent:
 
 - A full dump of every object type (`GET /api/<type>/?pagesize=100000&backlinks=1`) at the start and at the end. Both must agree, and the last change time must match the last applied item.
 - The expected counts and the Ahnentafel from the change list.
