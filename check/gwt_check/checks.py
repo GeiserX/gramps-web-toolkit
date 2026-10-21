@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import datetime
+import re
 import unicodedata
 from collections import defaultdict
 
@@ -62,6 +64,8 @@ CHECKS = {
     "dup-person-fuzzy": "two people whose names differ by an extra given name or surname, born within 2 years "
                         "or with a parent, spouse or child of the same name",
     "dup-vital-event": "one person or family with two vital events of one type",
+    "living-media-sensitive": "media of a possibly living person whose title, path, description, attributes or "
+                              "notes look like an ID document, passport or home address",
     "private": "object or sub-reference marked private",
     "place-no-coords": "place used by an event without coordinates",
     "surname-marker": "surname with a « [ » marker",
@@ -69,6 +73,27 @@ CHECKS = {
     "ahnentafel-lost": "Ahnentafel number of the earlier tree that is gone",
     "ahnentafel-changed": "Ahnentafel number that now holds another person",
 }
+
+
+# What gives away an identity document or a home address. Metadata only: the check cannot read pixels.
+SENSITIVE_PATTERNS = (
+    ("id number", re.compile(r"\b(?:\d{8}[A-Za-z]|[XYZxyz]\d{7}[A-Za-z])\b")),  # Spanish DNI / NIE
+    ("id or address word", re.compile(
+        r"\b(?:dni|nie|pasaporte|passport|domicilio|empadronamiento|carnet de identidad|"
+        r"identity card|id card|carte d.identite|home address|direccion|calle|c/)\b", re.I)),
+)
+# a person with no death event is taken as living if born less than this many years ago, or never dated
+LIVING_YEARS = 110
+
+
+def sensitive_kind(*texts: str) -> str:
+    """Name the first kind of sensitive text found, never the text itself."""
+    for text in texts:
+        flat = "".join(c for c in unicodedata.normalize("NFD", text or "") if unicodedata.category(c) != "Mn")
+        for kind, rx in SENSITIVE_PATTERNS:
+            if rx.search(flat):
+                return kind
+    return ""
 
 
 def norm(s: str) -> str:
@@ -381,6 +406,29 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None) -> tuple[l
     if scope is not None:
         info["events without place, in scope"] = sorted(
             e["gramps_id"] for e in no_place if in_scope("events", e["handle"]))
+
+    # media of a possibly living person that looks like an ID document or an address
+    this_year = datetime.date.today().year
+    for p in P.values():
+        if not p.get("media_list"):
+            continue
+        events = [E.get(r.get("ref")) for r in p.get("event_ref_list", [])]
+        if any(e and e.get("type") in ("Death", "Burial") for e in events):
+            continue
+        years = [(e.get("date") or {}).get("dateval", [0, 0, 0])[2] for e in events
+                 if e and e.get("type") in ("Birth", "Baptism")]
+        years = [y for y in years if y]
+        if years and min(years) < this_year - LIVING_YEARS:
+            continue
+        for r in p["media_list"]:
+            m = T["media"].get(r.get("ref"))
+            if not m or not (in_scope("people", p["handle"]) or in_scope("media", m["handle"])):
+                continue
+            notes = [(T["notes"].get(h) or {}).get("text", {}).get("string", "") for h in m.get("note_list", [])]
+            attrs = [str(a.get("value", "")) for a in m.get("attribute_list", [])]
+            kind = sensitive_kind(m.get("path", ""), m.get("desc", ""), *attrs, *notes)
+            if kind:
+                out.add("living-media-sensitive", f"{p['gramps_id']} {m['gramps_id']}", kind)
 
     # placeholder markers in surnames
     for p in P.values():

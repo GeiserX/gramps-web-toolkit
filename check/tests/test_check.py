@@ -182,3 +182,25 @@ def test_dump_refuses_a_short_type_and_a_wrong_tree():
     client = Client("https://gramps.example.org", "u", "pw", tree="other", opener=FakeServer(data))
     with pytest.raises(ApiError, match="expected 'other'"):
         client.login()
+
+
+def test_living_media_rule_skips_the_dead_and_the_old_and_never_prints_the_number():
+    from gwt_check.tree import Tree
+
+    def findings(birth, desc, death=False):
+        d = selftest.clean_tree()
+        p = selftest._sensitive_media(d, "O0090", "I0090", birth, desc)
+        if death:
+            ev = copy.deepcopy(selftest._get(d, "events", "E0001"))
+            ev.update(handle="hD90", gramps_id="E9090", type="Death", tag_list=[])
+            d["events"].append(ev)
+            p["event_ref_list"].append(selftest._ref("hD90", role="Primary"))
+        found, _ = checks.run_checks(Tree(d, source="t"))
+        return [f for f in found if f["check"] == "living-media-sensitive"]
+
+    assert findings((2001, 5, 2), "Documento DNI") != []
+    assert findings((2001, 5, 2), "Acta de nacimiento") == []      # nothing sensitive in the metadata
+    assert findings((2001, 5, 2), "DNI", death=True) == []        # died
+    assert findings((1880, 5, 2), "DNI") == []                    # too old to be living
+    hit = findings((2001, 5, 2), "scan 12345678Z")
+    assert hit and "12345678" not in str(hit)
