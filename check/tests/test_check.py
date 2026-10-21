@@ -184,6 +184,56 @@ def test_dump_refuses_a_short_type_and_a_wrong_tree():
         client.login()
 
 
+def test_living_media_rule_skips_the_dead_and_the_old_and_never_prints_the_number():
+    from gwt_check.tree import Tree
+
+    def findings(birth, desc, death=None, private=None):
+        d = selftest.clean_tree()
+        p = selftest._sensitive_media(d, "O0090", "I0090", birth, desc)
+        if death:  # the role this person has in a Burial
+            ev = copy.deepcopy(selftest._get(d, "events", "E0001"))
+            ev.update(handle="hD90", gramps_id="E9090", type="Burial", tag_list=[])
+            d["events"].append(ev)
+            p["event_ref_list"].append(selftest._ref("hD90", role=death))
+        if private == "person":
+            p["private"] = True
+        elif private == "media":
+            selftest._get(d, "media", "O0090")["private"] = True
+        elif private == "ref":
+            p["media_list"][0]["private"] = True
+        found, _ = checks.run_checks(Tree(d, source="t"))
+        return [f for f in found if f["check"] == "living-media-sensitive"]
+
+    assert findings((2001, 5, 2), "Pasaporte") != []
+    assert findings((2001, 5, 2), "Acta de nacimiento") == []      # nothing sensitive in the metadata
+    assert findings((2001, 5, 2), "Pasaporte", death="Primary") == []  # buried
+    assert findings((2001, 5, 2), "Pasaporte", death="Witness") != []  # at someone else's burial
+    assert findings((1880, 5, 2), "Pasaporte") == []              # too old to be living
+    hit = findings((2001, 5, 2), "scan 12345678Z")
+    assert hit and "12345678" not in str(hit)
+    # already private: the person, the media or the reference
+    assert [findings((2001, 5, 2), "Pasaporte", private=w) for w in ("person", "media", "ref")] == [[], [], []]
+
+
+def test_living_media_patterns_need_a_valid_check_letter_and_no_bare_words():
+    for text in ("scan 12345678Z", "dni_12345678Z.jpg", "nie X1234567L", "c/ Mayor 3", "C/Mayor",
+                 "Carnet de identidad"):
+        assert checks.sensitive_kind(text), text
+    for text in ("scan-20230512a.jpg", "12345678A", "Calle de la iglesia", "direccion general", "dni wolne",
+                 "nie wiem", "abc/def.jpg", "fotos/c/x.jpg"):
+        assert not checks.sensitive_kind(text), text
+
+
+def test_living_media_survives_an_empty_dateval():
+    from gwt_check.tree import Tree
+
+    d = selftest.clean_tree()
+    selftest._sensitive_media(d, "O0090", "I0090", (2001, 5, 2), "Pasaporte")
+    selftest._get(d, "events", "EI0090")["date"]["dateval"] = None
+    found, _ = checks.run_checks(Tree(d, source="t"))
+    assert [f["key"] for f in found if f["check"] == "living-media-sensitive"] == ["I0090 O0090"]
+
+
 def test_ignore_check_leaves_a_whole_check_out_of_the_exit_code_but_still_counts_it(tmp_path, capsys):
     planted = selftest.clean_tree()
     selftest.p_private(planted)

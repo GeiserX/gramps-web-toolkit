@@ -64,6 +64,7 @@ It exits `0` with no new findings and `1` with new findings. It exits `2` on bad
 | `dup-person-relative` | Two people with the same name and a parent, spouse or child of the same name, unless their birth years differ |
 | `dup-person-fuzzy` | Two people whose names differ only by an extra given name or surname (every word of the shorter given name is in the longer one, and the same for the surnames), born within 2 years of each other, or with a spouse or child of the same name, or a parent of the same name who is a different person. Siblings share their parents, so the same parent does not count |
 | `dup-vital-event` | One person (role `Primary`) or family (role `Family`) with two Birth, Death, Baptism, Burial or Marriage events |
+| `living-media-sensitive` | Media of a person with no death or burial event of their own (role `Primary`) who was born within 110 years (or has no dated birth), whose path, description or attributes hold an ID number or an ID or address word. Media already private (the person, the media or the reference) is skipped. It reads metadata only, never the image or its notes, and never prints the match. The patterns are Spanish-first: a DNI or NIE counts only with the right check letter, and the words are passport, home-address and ID-card terms in Spanish, English and French, plus `c/` before a street name. Another country adds its ID number to `ID_NUMBERS` and its words to `ID_WORDS` in `check/gwt_check/checks.py`. Accept a false positive with `--known` |
 | `private` | Any object or sub-reference marked private |
 | `place-no-coords` | A place that an event uses, without latitude or longitude |
 | `surname-marker` | A surname containing `[`, such as `Vidal [¿?]` |
@@ -76,7 +77,7 @@ The report also gives, without failing: events without a place (in the whole tre
 
 ## Self-test
 
-`gwt-check selftest` builds an invented three-generation tree, checks that it comes out clean (the positive control), then plants 32 errors, one at a time and then all together, and checks that each comes out as its finding. The test suite also silences each check in turn and requires the self-test to fail, so a check without a planted error cannot slip in.
+`gwt-check selftest` builds an invented three-generation tree, checks that it comes out clean (the positive control), then plants 33 errors, one at a time and then all together, and checks that each comes out as its finding. The test suite also silences each check in turn and requires the self-test to fail, so a check without a planted error cannot slip in.
 
 ## Speed
 
