@@ -88,7 +88,7 @@ def check(tree: Tree, *, since: Tree | None = None, tag: str | None = None, root
         if not a:
             raise BadInput(f"--root {root}: no such person")
         report["ahnentafel"] = {"numbers": len(a), "people": len(set(a.values()))}
-    known = known or {}
+    known = dict.fromkeys(known, "") if isinstance(known, set) else (known or {})
     for f in findings:
         f["known"] = (f["check"], f["key"]) in known
         if f["known"] and known[(f["check"], f["key"])]:
@@ -153,10 +153,15 @@ def mark_known(report_path: str, check_name: str, keys: list[str], reason: str, 
         raise BadInput(f"not in the report as {check_name}: {missing}")
     rows: list[dict] = []
     if os.path.exists(out):
-        with open(out, encoding="utf-8") as fh:
-            loaded = json.load(fh)
-        rows = loaded.get("findings", []) if isinstance(loaded, dict) else loaded
-    have = {(r["check"], r["key"]) for r in rows}
+        try:
+            with open(out, encoding="utf-8") as fh:
+                loaded = json.load(fh)
+            rows = loaded.get("findings", []) if isinstance(loaded, dict) else loaded
+            have = {(r["check"], r["key"]) for r in rows}
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            raise BadInput(f"--out {out}: not a known file ({exc})") from exc
+    else:
+        have = set()
     rows += [{"check": check_name, "key": k, "reason": reason.strip()} for k in keys if (check_name, k) not in have]
     with open(out, "w", encoding="utf-8") as fh:
         json.dump(rows, fh, ensure_ascii=False, indent=1)
