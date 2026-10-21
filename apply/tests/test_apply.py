@@ -417,3 +417,17 @@ def test_lookups_are_read_once_per_run_not_once_per_op(fake):
         return len(seen)
 
     assert whole_class_reads(5) == whole_class_reads(1)
+
+
+def test_lock_whose_answer_was_lost_is_still_ours(fake, tmp_path, monkeypatch):
+    import gwt_apply.client as clientmod
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: fake)
+    for k, v in {"GWT_URL": "https://gw.example", "GWT_USERNAME": "u", "GWT_PASSWORD": "pw", "GWT_TREE": "tree-test"}.items():
+        monkeypatch.setenv(k, v)
+    changes = tmp_path / "changes.jsonl"
+    op = {"op": "add_event", "key": "e", "ruling": R, "person": "I0001", "type": "Death", "date": "abt 1950"}
+    changes.write_text(json.dumps(op))
+    fake.drop_after = ("POST", "/api/objects/")  # the lock note's create
+    assert main([str(changes), "--apply", "--retry-wait", "0"]) == 0
+    assert len(fake.store["events"]) == 1 and fake.store["notes"] == {}

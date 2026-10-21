@@ -49,7 +49,7 @@ class FakeGrampsWeb:
         self.calls: list[tuple[str, str]] = []
         self.busy = 0  # answer the next N writes with "database is locked"
         self.edit_after_read: tuple | None = None  # (handle, fn): another writer edits it once, right after a read
-        self.drop_after: tuple[str, str] | None = None  # (method, path prefix): fail once, after doing it
+        self.drop_after: tuple | None = None  # (method, path prefix[, n to let through]): fail once, after doing it
 
     # -- helpers for tests --------------------------------------------------
 
@@ -106,8 +106,12 @@ class FakeGrampsWeb:
             return Resp(500, "sqlite3.OperationalError: database is locked")
         resp = self._route(method, path, headers or {}, params, json, data)
         if self.drop_after and method == self.drop_after[0] and path.startswith(self.drop_after[1]):
-            self.drop_after = None
-            raise requests.ConnectionError("connection dropped after the server did the work")
+            method_, prefix, *skip = self.drop_after
+            if skip and skip[0]:
+                self.drop_after = (method_, prefix, skip[0] - 1)
+            else:
+                self.drop_after = None
+                raise requests.ConnectionError("connection dropped after the server did the work")
         return resp
 
     def _etag(self, obj):
