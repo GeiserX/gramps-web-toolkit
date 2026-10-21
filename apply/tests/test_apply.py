@@ -771,3 +771,16 @@ def test_association_reads_no_whole_class_per_op(fake):
             "relation": "DNA"} for i in range(3)]
     assert all(r.status == "done" for r in run(fake, ops))
     assert len(seen) == 1  # the people index, once
+
+
+def test_a_gramps_id_may_carry_a_suffix_but_a_handle_is_still_refused():
+    note = {"op": "add_note", "key": "n", "ruling": R, "text": "x"}
+    ok = validate([dict(note, attach=[{"person": "I0001-b"}])])
+    assert ok == []
+    bad = validate([dict(note, attach=[{"person": "0123b4e9269542049080d7a4c798"}])])
+    assert any("neither key:<key> nor a Gramps ID" in e for e in bad)
+    fake = FakeGrampsWeb()
+    fake.add("people", {"handle": "anna", "gender": 0, "gramps_id": "I0001-b", "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    assert run(fake, [dict(note, attach=[{"person": "I0001-b"}])])[0].status == "done"
+    fake.add("media", {"handle": "scan", "gramps_id": "D051-b", "path": "scan.jpg", "desc": "scan"})
+    assert run(fake, [dict(note, key="m", attach=[{"media": "D051-b"}])])[0].status == "done"
