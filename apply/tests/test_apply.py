@@ -146,15 +146,17 @@ def test_existing_citation_page_and_media_checksum_are_reused(fake, scan):
 
 def test_crash_between_create_and_link_is_finished_by_a_rerun(fake):
     ops = [{"op": "add_event", "key": "e", "ruling": R, "person": "I0001", "type": "Death", "date": "abt 1950"}]
+    # the answer to the create is lost, but the server made the event: the op starts over and only links it
     fake.drop_after = ("POST", "/api/objects/")
-    with pytest.raises(ConnectionError):
-        run(fake, ops)
-    assert len(fake.store["events"]) == 1 and fake.store["people"]["anna"]["event_ref_list"] == []
     res = run(fake, ops)
-    assert res[0].status == "done"
+    assert res[0].status == "done", res[0].actions
     assert len(fake.store["events"]) == 1
     assert fake.store["people"]["anna"]["event_ref_list"][0]["ref"] == stable_handle("e")
     assert fake.store["people"]["anna"]["death_ref_index"] == 0
+    # the same after a real crash: a new run finds the event and links it
+    fake.store["people"]["anna"].update(event_ref_list=[], death_ref_index=-1)
+    assert run(fake, ops)[0].status == "done"
+    assert len(fake.store["events"]) == 1 and fake.store["people"]["anna"]["death_ref_index"] == 0
 
 
 def test_busy_server_is_retried_from_fresh_reads(fake):

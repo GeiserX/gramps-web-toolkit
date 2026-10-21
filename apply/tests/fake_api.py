@@ -8,6 +8,8 @@ import hashlib
 import json
 from urllib.parse import urlparse
 
+import requests
+
 NS = {
     "people": ("Person", "I"),
     "families": ("Family", "F"),
@@ -105,7 +107,7 @@ class FakeGrampsWeb:
         resp = self._route(method, path, headers or {}, params, json, data)
         if self.drop_after and method == self.drop_after[0] and path.startswith(self.drop_after[1]):
             self.drop_after = None
-            raise ConnectionError("connection dropped after the server did the work")
+            raise requests.ConnectionError("connection dropped after the server did the work")
         return resp
 
     def _etag(self, obj):

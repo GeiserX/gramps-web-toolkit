@@ -68,6 +68,7 @@ class Client:
         self._handles: dict[str, set[str]] = {}  # class -> every handle
         self._lists: dict[tuple[str, tuple], list[dict]] = {}  # (class, keys) -> rows from the server
         self.written: dict[tuple[str, str], dict] = {}  # what this run created or changed, for the indexes
+        self.unsure: set[tuple[str, str]] = set()  # creates with no answer: the server may have them
         # "x": a log file is never appended to or overwritten; each run writes its own
         self._log = open(log_path, "x", encoding="utf-8") if log_path else None
         self.context: dict = {}  # op key and ruling, stamped on every log line
@@ -119,9 +120,14 @@ class Client:
         for attempt in (1, 2):
             headers = dict(kw.pop("headers", {}) or {})
             headers["Authorization"] = f"Bearer {self.token}"
-            r = self.session.request(
-                method, self.base + path, headers=headers, timeout=120, **kw
-            )
+            try:
+                r = self.session.request(
+                    method, self.base + path, headers=headers, timeout=120, **kw
+                )
+            except (requests.ConnectionError, requests.Timeout) as exc:
+                # the write may or may not have happened: the op starts over from fresh reads
+                self.log(method=method, path=path, status=None, error=f"{type(exc).__name__}: {exc}"[:500])
+                raise Retryable(f"{method} {path}: {type(exc).__name__}") from exc
             kw["headers"] = {k: v for k, v in headers.items() if k != "Authorization"}
             if r.status_code == 401 and attempt == 1:
                 self.login()
@@ -182,6 +188,8 @@ class Client:
         """Whether the object is there, without reading it."""
         if (cls, handle) in self.pending:
             return True
+        if (cls, handle) in self.unsure:
+            return self.get(cls, handle) is not None
         self._index(cls)
         return handle in self._handles[cls]
 
@@ -221,9 +229,11 @@ class Client:
             self.pending[(cls, obj["handle"])] = copy.deepcopy(obj)
             self.log(method="POST", path="/objects/", body=[obj], status=None)
             return
+        self.unsure.add((cls, obj["handle"]))
         r = self._request("POST", "/objects/", write=True, json=[obj])
         if r.status_code != 201:
             raise ApiError(f"create {cls}: HTTP {r.status_code} {r.text[:300]}", r.status_code)
+        self.unsure.discard((cls, obj["handle"]))
         self.written[(cls, obj["handle"])] = copy.deepcopy(obj)
         self._remember(cls, obj["handle"], obj)
 
