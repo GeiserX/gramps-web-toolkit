@@ -239,6 +239,16 @@ def p_dup_person_child(d):
     _new_family(d, "F0094", "hI0094", "", kids=["hI0093"])
 
 
+def p_dup_person_fuzzy_year(d):
+    _new_person(d, "I0092", "Juan Tomás", "Ortega Sanz", birth=(1904, 0, 0))
+
+
+def p_dup_person_fuzzy_spouse(d):
+    _new_person(d, "I0091", "Gil", "Ortega", family="hF0091")
+    _new_family(d, "F0091", "hI0091", "hI0005")
+    _get(d, "people", "I0005")["family_list"].append("hF0091")
+
+
 def p_family_backlink(d):
     _get(d, "people", "I0008")["parent_family_list"] = []
 
@@ -305,6 +315,8 @@ PLANTS = [
     (p_event_no_place, "info:events without place", "E0203", False),
     (p_dup_person_relative, "dup-person-relative", "I0008,I0096", False),
     (p_dup_person_child, "dup-person-relative", "I0002,I0094", False),
+    (p_dup_person_fuzzy_year, "dup-person-fuzzy", "I0008,I0092", False),
+    (p_dup_person_fuzzy_spouse, "dup-person-fuzzy", "I0004,I0091", False),
     (p_family_backlink, "family-backlink", "F0001 child I0008", False),
     (p_empty_family, "empty-family", "F0095", False),
     (p_citation_no_source, "citation-no-source", "C0002", False),

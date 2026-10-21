@@ -40,6 +40,8 @@ REF_IDENTITY = {
 }
 SKIP_KEYS = {"text", "extended", "profile", "backlinks", "date"}
 VITAL = {"Birth", "Death", "Baptism", "Burial", "Marriage"}
+# left out when one name is compared with another (after norm(), so «y» is already «i»)
+PARTICLES = {"de", "del", "la", "las", "los", "i", "e"}
 
 CHECKS = {
     "orphan-event": "event no person or family refers to",
@@ -57,6 +59,8 @@ CHECKS = {
     "dup-couple-names": "two families whose couples have the same two names",
     "dup-person-birth": "two people with the same name and a birth or baptism in the same year",
     "dup-person-relative": "two people with the same name and a parent, spouse or child of the same name",
+    "dup-person-fuzzy": "two people whose names differ by an extra given name or surname, born within 2 years "
+                        "or with a parent, spouse or child of the same name",
     "dup-vital-event": "one person or family with two vital events of one type",
     "private": "object or sub-reference marked private",
     "place-no-coords": "place used by an event without coordinates",
@@ -291,6 +295,67 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None) -> tuple[l
                 if (pp & pq or sp & sq or cp & cq) and not years_differ:
                     why = "same parent" if pp & pq else "same spouse" if sp & sq else "same child"
                     out.add("dup-person-relative", pair, f"{n}, {why}")
+
+    # the same person written with an extra given name or surname: «Vicente» and «Miguel Vicente»
+    def tokens(s: str) -> frozenset:
+        return frozenset(t for t in norm(s).split() if t not in PARTICLES)
+
+    def name_parts(p: dict) -> tuple[frozenset, frozenset]:
+        n = p.get("primary_name") or {}
+        surnames = " ".join(s.get("surname", "") for s in n.get("surname_list", []))
+        return tokens(n.get("first_name", "")), tokens(surnames)
+
+    parts = {h: name_parts(p) for h, p in P.items()}
+    by_surname: dict[str, list] = defaultdict(list)
+    for h, (g, s) in parts.items():
+        if g and s:
+            for t in s:
+                by_surname[t].append(h)
+    facts: dict[str, tuple] = {}
+
+    def fact(h: str) -> tuple:
+        if h not in facts:
+            facts[h] = ({x[0] for x in births(P[h])}, *kin(P[h]))
+        return facts[h]
+
+    def parents_by_name(h: str) -> dict[str, set]:
+        got: dict[str, set] = defaultdict(set)
+        for fh in P[h].get("parent_family_list", []):
+            f = F.get(fh) or {}
+            for x in (f.get("father_handle"), f.get("mother_handle")):
+                if x in P:
+                    got[person_name(P[x])].add(x)
+        return got
+
+    def touched(h: str) -> bool:
+        """In scope, or in a family that is: an old person the run gave a new spouse or parents."""
+        p = P[h]
+        return in_scope("people", h) or any(
+            in_scope("families", fh) for fh in p.get("family_list", []) + p.get("parent_family_list", []))
+
+    for h, (g, s) in parts.items():
+        if not (g and s and touched(h)):
+            continue
+        candidates = {c for t in s for c in by_surname[t]} - {h}
+        for c in candidates:
+            gc, sc = parts[c]
+            if (g, s) == (gc, sc) or not ((g <= gc or gc <= g) and (s <= sc or sc <= s)):
+                continue
+            if touched(c) and c < h:  # both in scope: look at the pair once
+                continue
+            yp, pp, sp, cp = fact(h)
+            yq, pq, sq, cq = fact(c)
+            near = any(abs(a - b) <= 2 for a in yp for b in yq)
+            # siblings share their parents: a parent counts only when each side has its own copy of them
+            if pp & pq:
+                ph, qh = parents_by_name(h), parents_by_name(c)
+                pp = {n for n in pp & pq if ph[n] != qh[n]}
+            kin_shared = pp & pq or sp & sq or cp & cq
+            if near or (kin_shared and not (yp and yq)):
+                why = "birth within 2 years" if near else (
+                    "same parent" if pp & pq else "same spouse" if sp & sq else "same child")
+                pair = ",".join(sorted((P[h]["gramps_id"], P[c]["gramps_id"])))
+                out.add("dup-person-fuzzy", pair, f"{person_name(P[h])} / {person_name(P[c])}, {why}")
 
     # two vital events of one type on one person or family
     for t, role in (("people", "Primary"), ("families", "Family")):
