@@ -27,7 +27,7 @@ It exits `0` with no new findings and `1` with new findings. It exits `2` on bad
 |---|---|
 | `TREE` | A dump file. Without it, the live tree is read |
 | `--since OLD` | An earlier dump, or a `.gramps` backup. Adds the diff, and objects new since `OLD` become the scope |
-| `--tag NAME` | Objects carrying this tag become the scope (a run tag). The diff counts only tagged objects as changed or new |
+| `--tag NAME` | Objects carrying this tag become the scope. `gwt-apply --tag` puts the tag only on the objects a run creates, so old objects the run changed are not in it: use `--since` to see those. With `--tag`, the diff counts only tagged objects as changed or new |
 | `--root ID` | Gramps ID of the Ahnentafel root. With `--since`, a number that is lost or now holds another person is a finding |
 | `--known FILE` | Findings to accept: an earlier `--json` report, or a list of `{"check", "key"}` |
 | `--json FILE` | The full report as JSON (`-` prints it instead of the text) |
