@@ -771,3 +771,102 @@ def test_association_reads_no_whole_class_per_op(fake):
             "relation": "DNA"} for i in range(3)]
     assert all(r.status == "done" for r in run(fake, ops))
     assert len(seen) == 1  # the people index, once
+
+
+def test_attach_existing_links_an_orphan_and_is_a_skip_the_second_time():
+    fake = FakeGrampsWeb()
+    fake.add("people", {"handle": "anna", "gender": 0, "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})  # I0001
+    fake.add("citations", {"handle": "cit", "source_handle": "src1", "page": "p. 1"})                  # C0001
+    fake.add("media", {"handle": "med", "path": "a.jpg"})                                             # O0001
+    fake.add("notes", {"handle": "nt", "text": {"string": "x"}})                                       # N0001
+    ops = [
+        {"op": "attach_existing", "key": "a1", "ruling": R, "object": {"citation": "C0001"}, "attach": [{"person": "I0001"}]},
+        {"op": "attach_existing", "key": "a2", "ruling": R, "object": {"media": "O0001"}, "attach": [{"citation": "C0001"}]},
+        {"op": "attach_existing", "key": "a3", "ruling": R, "object": {"note": "N0001"}, "attach": [{"person": "I0001"}]},
+    ]
+    assert validate(ops) == []
+    plan = run(fake, ops, dry_run=True)
+    assert [r.status for r in plan] == ["done"] * 3 and fake.writes() == []
+    assert [r.status for r in run(fake, ops)] == ["done"] * 3
+    assert fake.store["people"]["anna"]["citation_list"] == ["cit"]
+    assert fake.store["people"]["anna"]["note_list"] == ["nt"]
+    assert fake.store["citations"]["cit"]["media_list"][0]["ref"] == "med"
+    assert [r.status for r in run(fake, [dict(o, key=o["key"] + "b") for o in ops])] == ["skip"] * 3
+    fake.add("media", {"handle": "scan", "gramps_id": "D051-b", "path": "b.jpg"})  # a suffix an import added
+    op = {"op": "attach_existing", "key": "a4", "ruling": R, "object": {"media": "D051-b"}, "attach": [{"person": "I0001"}]}
+    assert validate([op]) == [] and run(fake, [op])[0].status == "done"
+    assert fake.store["people"]["anna"]["media_list"][0]["ref"] == "scan"
+
+
+def test_attach_existing_refuses_what_cannot_be_attached_or_carried():
+    bad = [
+        {"op": "attach_existing", "key": "b1", "ruling": R, "object": {"person": "I0001"}, "attach": [{"person": "I0002"}]},
+        {"op": "attach_existing", "key": "b2", "ruling": R, "object": {"media": "O0001"}, "attach": [{"child_ref": {"family": "F0001", "child": "I0001"}}]},
+        {"op": "attach_existing", "key": "b3", "ruling": R, "object": {"media": "0123b4e9269542049080d7a4c798"}, "attach": [{"person": "I0001"}]},
+        {"op": "attach_existing", "key": "b4", "ruling": R, "object": {"note": "N0001"}},
+        {"op": "set_attribute", "key": "b5", "ruling": R, "target": {"note": "N0001"}, "type": "x", "value": "y"},
+    ]
+    errors = "\n".join(validate(bad))
+    assert "object is a citation, media or note, got person" in errors
+    assert "cannot carry a media" in errors
+    assert "neither key:<key> nor a Gramps ID" in errors
+    assert "missing ['attach']" in errors
+    assert "bad target {'note': 'N0001'}" in errors  # a note is an object to attach, never a target
+    fake = FakeGrampsWeb()
+    res = run(fake, [{"op": "attach_existing", "key": "c", "ruling": R, "object": {"note": "N0099"}, "attach": [{"person": "I0099"}]}])
+    assert res[0].status == "conflict"
+
+
+def test_dedupe_list_keeps_the_first_of_a_repeated_reference():
+    fake = FakeGrampsWeb()
+    fake.add("people", {"handle": "anna", "gender": 0, "citation_list": ["c1", "c2", "c1"], "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    op = {"op": "dedupe_list", "key": "d", "ruling": R, "target": {"person": "I0001"}, "list": "citation_list"}
+    assert validate([op]) == []
+    assert run(fake, [op], dry_run=True)[0].status == "done" and fake.writes() == []
+    assert run(fake, [op])[0].status == "done"
+    assert fake.store["people"]["anna"]["citation_list"] == ["c1", "c2"]
+    assert run(fake, [dict(op, key="d2")])[0].status == "skip"
+    assert any("list is one of" in e for e in validate([dict(op, list="event_ref_list")]))
+    assert any("has no media_list" in e for e in validate([dict(op, target={"child_ref": {"family": "F0001", "child": "I0001"}}, list="media_list")]))
+
+
+def test_dedupe_list_keys_a_media_ref_on_its_region_and_keeps_what_a_repeat_carries():
+    fake = FakeGrampsWeb()
+    whole, face = {"ref": "m1", "rect": None}, {"ref": "m1", "rect": [10, 10, 40, 40]}
+    fake.add("people", {"handle": "anna", "gender": 0, "media_list": [whole, face, dict(face)],
+                        "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    op = {"op": "dedupe_list", "key": "d", "ruling": R, "target": {"person": "I0001"}, "list": "media_list"}
+    assert run(fake, [op])[0].status == "done"
+    assert fake.store["people"]["anna"]["media_list"] == [whole, face]  # a second region of one photo stays
+    fake.store["people"]["anna"]["media_list"].append(dict(face, note_list=["n1"]))
+    res = run(fake, [dict(op, key="d2")])
+    assert res[0].status == "conflict" and "note_list" in res[0].actions[-1]
+    assert len(fake.store["people"]["anna"]["media_list"]) == 3
+
+
+def test_a_tag_the_server_says_it_made_but_does_not_have_stops_the_op_loudly(fake):
+    real = fake._route
+
+    def forgetful(method, path, headers, params, body, data):
+        if method == "POST" and path.endswith("/objects/") and body and body[0].get("_class") == "Tag":
+            return Resp(201, [{"type": "add", "handle": body[0]["handle"]}])  # says yes, keeps nothing
+        return real(method, path, headers, params, body, data)
+
+    fake._route = forgetful
+    op = {"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}], "tag": "batch-a"}
+    res = run(fake, [op])
+    assert res[0].status == "error" and "is not there when read back" in res[0].actions[-1]
+    assert fake.store["notes"] == {}  # nothing was tagged with a handle that does not exist
+
+
+def test_a_gramps_id_may_carry_a_suffix_but_a_handle_is_still_refused():
+    note = {"op": "add_note", "key": "n", "ruling": R, "text": "x"}
+    ok = validate([dict(note, attach=[{"person": "I0001-b"}])])
+    assert ok == []
+    bad = validate([dict(note, attach=[{"person": "0123b4e9269542049080d7a4c798"}])])
+    assert any("neither key:<key> nor a Gramps ID" in e for e in bad)
+    fake = FakeGrampsWeb()
+    fake.add("people", {"handle": "anna", "gender": 0, "gramps_id": "I0001-b", "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    assert run(fake, [dict(note, attach=[{"person": "I0001-b"}])])[0].status == "done"
+    fake.add("media", {"handle": "scan", "gramps_id": "D051-b", "path": "scan.jpg", "desc": "scan"})
+    assert run(fake, [dict(note, key="m", attach=[{"media": "D051-b"}])])[0].status == "done"

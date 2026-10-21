@@ -182,3 +182,171 @@ def test_dump_refuses_a_short_type_and_a_wrong_tree():
     client = Client("https://gramps.example.org", "u", "pw", tree="other", opener=FakeServer(data))
     with pytest.raises(ApiError, match="expected 'other'"):
         client.login()
+
+
+def test_living_media_rule_skips_the_dead_and_the_old_and_never_prints_the_number():
+    from gwt_check.tree import Tree
+
+    def findings(birth, desc, death=None, private=None):
+        d = selftest.clean_tree()
+        p = selftest._sensitive_media(d, "O0090", "I0090", birth, desc)
+        if death:  # the role this person has in a Burial
+            ev = copy.deepcopy(selftest._get(d, "events", "E0001"))
+            ev.update(handle="hD90", gramps_id="E9090", type="Burial", tag_list=[])
+            d["events"].append(ev)
+            p["event_ref_list"].append(selftest._ref("hD90", role=death))
+        if private == "person":
+            p["private"] = True
+        elif private == "media":
+            selftest._get(d, "media", "O0090")["private"] = True
+        elif private == "ref":
+            p["media_list"][0]["private"] = True
+        found, _ = checks.run_checks(Tree(d, source="t"))
+        return [f for f in found if f["check"] == "living-media-sensitive"]
+
+    assert findings((2001, 5, 2), "Pasaporte") != []
+    assert findings((2001, 5, 2), "Acta de nacimiento") == []      # nothing sensitive in the metadata
+    assert findings((2001, 5, 2), "Pasaporte", death="Primary") == []  # buried
+    assert findings((2001, 5, 2), "Pasaporte", death="Witness") != []  # at someone else's burial
+    assert findings((1880, 5, 2), "Pasaporte") == []              # too old to be living
+    hit = findings((2001, 5, 2), "scan 12345678Z")
+    assert hit and "12345678" not in str(hit)
+    # already private: the person, the media or the reference
+    assert [findings((2001, 5, 2), "Pasaporte", private=w) for w in ("person", "media", "ref")] == [[], [], []]
+
+
+def test_living_media_patterns_need_a_valid_check_letter_and_no_bare_words():
+    for text in ("scan 12345678Z", "dni_12345678Z.jpg", "nie X1234567L", "c/ Mayor 3", "C/Mayor",
+                 "Carnet de identidad"):
+        assert checks.sensitive_kind(text), text
+    for text in ("scan-20230512a.jpg", "12345678A", "Calle de la iglesia", "direccion general", "dni wolne",
+                 "nie wiem", "abc/def.jpg", "fotos/c/x.jpg"):
+        assert not checks.sensitive_kind(text), text
+
+
+def test_living_media_survives_an_empty_dateval():
+    from gwt_check.tree import Tree
+
+    d = selftest.clean_tree()
+    selftest._sensitive_media(d, "O0090", "I0090", (2001, 5, 2), "Pasaporte")
+    selftest._get(d, "events", "EI0090")["date"]["dateval"] = None
+    found, _ = checks.run_checks(Tree(d, source="t"))
+    assert [f["key"] for f in found if f["check"] == "living-media-sensitive"] == ["I0090 O0090"]
+
+
+def test_ignore_check_leaves_a_whole_check_out_of_the_exit_code_but_still_counts_it(tmp_path, capsys):
+    planted = selftest.clean_tree()
+    selftest.p_private(planted)
+    dump = _write(tmp_path, "private.json", planted)
+    assert main(["check", dump]) == 1
+    capsys.readouterr()
+    assert main(["check", dump, "--ignore-check", "private"]) == 0
+    assert "ignored private: 1 finding(s)" in capsys.readouterr().out
+
+    # another problem still fails, and the report keeps the ignored one
+    selftest.p_orphan_note(planted)
+    report = str(tmp_path / "r.json")
+    assert main(["check", _write(tmp_path, "two.json", planted), "--ignore-check", "private", "--json", report]) == 1
+    data = json.load(open(report))
+    assert data["ignored"] == {"private": 1}
+    assert [f["check"] for f in data["new"]] == ["orphan-note"]
+    assert any(f["check"] == "private" and f["ignored"] for f in data["findings"])
+
+
+def test_ignore_check_refuses_a_name_that_is_not_a_check(tmp_path, capsys):
+    dump = _write(tmp_path, "clean.json", selftest.clean_tree())
+    assert main(["check", dump, "--ignore-check", "privat"]) == 2
+    assert "no such check" in capsys.readouterr().err
+    # the name is refused before any tree is read
+    assert main(["check", str(tmp_path / "missing.json"), "--ignore-check", "privat"]) == 2
+    assert "no such check" in capsys.readouterr().err
+
+
+def test_baseline_makes_the_findings_it_already_had_known(tmp_path, capsys):
+    old = selftest.clean_tree()
+    selftest.p_orphan_note(old)
+    old_dump = _write(tmp_path, "old.json", old)
+    new = copy.deepcopy(old)
+    selftest.p_surname_marker(new)
+    new_dump = _write(tmp_path, "new.json", new)
+    assert main(["check", new_dump]) == 1
+    capsys.readouterr()
+    report = str(tmp_path / "r.json")
+    assert main(["check", new_dump, "--baseline", old_dump, "--json", report]) == 1
+    data = json.load(open(report))
+    assert [(f["check"], f["key"]) for f in data["new"]] == [("surname-marker", "I0007 Vidal [¿?]")]
+    assert any(f["check"] == "orphan-note" and f["known"] for f in data["findings"])
+    assert main(["check", old_dump, "--baseline", old_dump]) == 0
+    # with --known as well, its reasons still show
+    known = _write(tmp_path, "known.json", [{"check": "orphan-note", "key": "N0099", "reason": "kept on purpose"}])
+    capsys.readouterr()
+    assert main(["check", old_dump, "--baseline", old_dump, "--known", known]) == 0
+    assert "known N0099: kept on purpose" in capsys.readouterr().out
+
+
+def test_a_father_and_son_with_one_name_are_not_duplicates():
+    from gwt_check.tree import Tree
+
+    # three generations of one name, the younger two with no birth date: each pair shares a "relative"
+    d = selftest.clean_tree()
+    selftest._new_person(d, "I0097", "Mateo", "Ortega Ruiz", parent_family="hF0097", family="hF0096")
+    selftest._new_family(d, "F0097", "hI0002", "", kids=["hI0097"])
+    selftest._get(d, "people", "I0002")["family_list"].append("hF0097")
+    selftest._new_person(d, "I0096", "Mateo", "Ortega Ruiz", parent_family="hF0096")
+    selftest._new_family(d, "F0096", "hI0097", "", kids=["hI0096"])
+    found, _ = checks.run_checks(Tree(d, source="t"))
+    assert [f for f in found if f["check"].startswith("dup-person")] == []
+
+    # the same two people, but not parent and child: still a duplicate pair
+    d2 = selftest.clean_tree()
+    selftest._new_person(d2, "I0097", "Mateo", "Ortega Ruiz", birth=(1870, 3, 2))
+    found, _ = checks.run_checks(Tree(d2, source="t"))
+    assert ("dup-person-birth", "I0002,I0097") in {(f["check"], f["key"]) for f in found}
+
+
+def test_a_parent_and_child_with_one_name_and_one_birth_date_are_still_a_duplicate():
+    from gwt_check.tree import Tree
+
+    d = selftest.clean_tree()
+    selftest._new_person(d, "I0097", "Mateo", "Ortega Ruiz", birth=(1870, 3, 2), parent_family="hF0097")
+    selftest._new_family(d, "F0097", "hI0002", "", kids=["hI0097"])
+    selftest._get(d, "people", "I0002")["family_list"].append("hF0097")
+    found, _ = checks.run_checks(Tree(d, source="t"))
+    assert ("dup-person-birth", "I0002,I0097") in {(f["check"], f["key"]) for f in found}
+
+
+def test_known_may_be_a_set_of_check_and_key():
+    from gwt_check.cli import check
+    from gwt_check.tree import Tree
+
+    planted = selftest.clean_tree()
+    selftest.p_orphan_note(planted)
+    report = check(Tree(planted, source="t"), known={("orphan-note", "N0099")})
+    assert [f["key"] for f in report["findings"] if f["check"] == "orphan-note"] == ["N0099"]
+    assert report["new"] == [] and all("reason" not in f for f in report["findings"])
+
+
+def test_known_reasons_are_shown_and_mark_known_writes_them(tmp_path, capsys):
+    planted = selftest.clean_tree()
+    selftest.p_orphan_note(planted)
+    dump = _write(tmp_path, "p.json", planted)
+    report = str(tmp_path / "r.json")
+    assert main(["check", dump, "--json", report]) == 1
+    known = str(tmp_path / "known.json")
+    assert main(["mark-known", report, "--check", "orphan-note", "--key", "N0099", "--reason", "kept on purpose",
+                 "--out", known]) == 0
+    assert json.load(open(known)) == [{"check": "orphan-note", "key": "N0099", "reason": "kept on purpose"}]
+    capsys.readouterr()
+    assert main(["check", dump, "--known", known]) == 0
+    assert "known N0099: kept on purpose" in capsys.readouterr().out
+    # a second call adds, never duplicates; a key that is not in the report, or no reason, is refused
+    assert main(["mark-known", report, "--check", "orphan-note", "--key", "N0099", "--reason", "again", "--out", known]) == 0
+    assert len(json.load(open(known))) == 1
+    assert main(["mark-known", report, "--check", "orphan-note", "--key", "N0001", "--reason", "x", "--out", known]) == 2
+    assert main(["mark-known", report, "--check", "orphan-note", "--key", "N0099", "--reason", " ", "--out", known]) == 2
+    # an --out that is not a known file is refused with exit 2, not a traceback, and left as it was
+    broken = tmp_path / "broken.json"
+    broken.write_text("not json")
+    assert main(["mark-known", report, "--check", "orphan-note", "--key", "N0099", "--reason", "x",
+                 "--out", str(broken)]) == 2
+    assert broken.read_text() == "not json"
