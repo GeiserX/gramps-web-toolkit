@@ -42,7 +42,15 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "add_media": ({"file", "path", "attach"}, {"desc", "mime", "gramps_id"}),
     "add_note": ({"text", "attach"}, {"type", "gramps_id"}),
     "set_attribute": ({"target", "type", "value"}, set()),
+    "merge_person": ({"winner", "loser"}, {"use_loser", "reason"}),
+    "merge_family": ({"winner", "loser"}, {"reason"}),
 }
+MERGE_LISTS = [  # what Gramps' merge carries from the loser to the winner, list by list
+    "alternate_names", "event_ref_list", "citation_list", "note_list", "media_list", "attribute_list",
+    "address_list", "urls", "person_ref_list", "lds_ord_list", "tag_list", "parent_family_list", "family_list",
+    "child_ref_list",
+]
+USE_LOSER = {"birth": "birth_ref_index", "death": "death_ref_index"}
 PERSON_FIELDS = {"first_name", "surname", "gender"}
 EVENT_FIELDS = {"type", "date", "place", "description"}
 GENDER = {"F": 0, "M": 1, "U": 2}
@@ -152,7 +160,8 @@ def validate(ops: list[dict]) -> list[str]:
             errors.append(f"{where}: the same change as {payloads[payload]}; one change, one op")
         else:
             payloads[payload] = where
-        refs = [op.get(f) for f in ("person", "family", "father", "mother", "child", "source", "place", "enclosed_by")]
+        refs = [op.get(f) for f in ("person", "family", "father", "mother", "child", "source", "place", "enclosed_by",
+                                    "winner", "loser")]
         refs += list(op.get("children") or [])
         refs += _ref_list(op.get("namesake_of")) if op.get("namesake_of") else []
         for t in [op.get("target"), *(op.get("attach") or [])]:
@@ -180,6 +189,10 @@ def validate(ops: list[dict]) -> list[str]:
                     raise ValueError("probable is true or absent")
                 if bool(op.get("probable")) != bool(str(op.get("probable_reason") or "").strip()):
                     raise ValueError("probable: true and probable_reason go together")
+            if name.startswith("merge_") and op.get("winner") == op.get("loser"):
+                raise ValueError("winner and loser are the same")
+            if name == "merge_person" and set(op.get("use_loser") or []) - set(USE_LOSER):
+                raise ValueError(f"use_loser takes {sorted(USE_LOSER)}")
             if name == "add_event" and bool(op.get("person")) == bool(op.get("family")):
                 raise ValueError("add_event needs exactly one of person or family")
             if name == "add_family" and not (op.get("father") or op.get("mother")):
@@ -756,3 +769,126 @@ class Applier:
             attrs.append({"_class": attr_cls, "type": op["type"], "value": op["value"]})
         target["attribute_list"] = attrs
         self.save(before, target)
+
+    # -- merges -----------------------------------------------------------
+
+    def _merge_note(self, op, cls: str, loser_label: str):
+        """The note on the winner that says what was merged into it, written before the merge itself."""
+        reason = f" {op['reason'].strip()}" if str(op.get("reason") or "").strip() else ""
+        self.add_note(
+            {
+                "key": op["key"] + "#merge",
+                "type": "Research",
+                "text": f"Merged {loser_label} into this {cls.lower()} (ruling {op['ruling']}).{reason}",
+                "attach": [{cls.lower(): op["winner"]}],
+            }
+        )
+
+    def _show_merge(self, winner: dict, loser: dict) -> None:
+        """The dry-run diff of a merge: what moves to the winner, and every family that points at the loser."""
+        cls = winner["_class"]
+        moved = []
+        for lst in MERGE_LISTS:
+            have = winner.get(lst) or []
+            new = [x for x in loser.get(lst) or [] if x not in have]
+            if new:
+                moved.append(f"{lst} +{json.dumps(new, ensure_ascii=False)}")
+        if cls == "Person":
+            moved.insert(0, f"alternate_names +[{json.dumps(loser.get('primary_name'), ensure_ascii=False)}] (the loser's name)")
+            if loser.get("gramps_id"):
+                moved.append(f'attribute_list +[Merged Gramps ID = {loser["gramps_id"]}]')
+        self.actions.append(f"merge {cls} {self.label(loser)} into {self.label(winner)}: " + "; ".join(moved or ["nothing to move"]))
+        if cls == "Person":
+            for fh in loser.get("family_list") or []:
+                fam = self.c.get("Family", fh) or {}
+                role = "father" if fam.get("father_handle") == loser["handle"] else "mother"
+                self.actions.append(f"  Family {self.label(fam) if fam else fh}: {role} {self.label(loser)} -> {self.label(winner)}")
+            for fh in loser.get("parent_family_list") or []:
+                fam = self.c.get("Family", fh) or {}
+                self.actions.append(f"  Family {self.label(fam) if fam else fh}: child {self.label(loser)} -> {self.label(winner)}")
+            partners = {}
+            for fh in (winner.get("family_list") or []) + (loser.get("family_list") or []):
+                fam = self.c.get("Family", fh) or {}
+                other = {fam.get("father_handle"), fam.get("mother_handle")} - {winner["handle"], loser["handle"], None}
+                key = tuple(sorted(other))
+                if key in partners and partners[key][0] != fh:
+                    self.actions.append(
+                        f"  Family {self.label(fam) if fam else fh} merges into Family {partners[key][1]}: the same partner"
+                    )
+                partners.setdefault(key, (fh, self.label(fam) if fam else fh))
+        else:
+            for ref in loser.get("child_ref_list") or []:
+                kid = self.c.get("Person", ref["ref"])
+                self.actions.append(
+                    f"  Person {self.label(kid) if kid else ref['ref']}: parent family {self.label(loser)} -> {self.label(winner)}"
+                )
+        self.actions.append(f"delete {cls} {self.label(loser)}")
+
+    def _merge_done(self, cls: str, op) -> bool:
+        """A rerun: the loser is gone and the winner carries this op's merge note."""
+        ref = op["loser"]
+        if ref.startswith("key:"):
+            present = self.c.exists(cls, self.keymap.get(ref[4:]) or stable_handle(ref[4:]))
+        else:
+            present = self.c.handle_for_gramps_id(cls, ref) is not None
+        if present:
+            return False
+        note = stable_handle(op["key"] + "#merge")
+        winner = self.obj(cls, op["winner"])
+        if note in (winner.get("note_list") or []):
+            self.actions.append(f"skip: {cls} {op['loser']} is already merged into {self.label(winner)}")
+            return True
+        raise Conflict(f"no {cls} {op['loser']}, and {self.label(winner)} has no note of this merge")
+
+    def merge_person(self, op):
+        if self._merge_done("Person", op):
+            return
+        winner, loser = self.obj("Person", op["winner"]), self.obj("Person", op["loser"])
+        for o in (winner, loser):
+            o.setdefault("_class", "Person")
+        name = loser.get("primary_name") or {}
+        label = f"Person {self.label(loser)} ({name.get('first_name', '')} " + " ".join(
+            s.get("surname", "") for s in name.get("surname_list") or []) + ")"
+        self._merge_note(op, "Person", label)
+        # the loser's vitals go on the winner before the merge, so a rerun after a crash finds them there
+        for vital in op.get("use_loser") or []:
+            idx = loser.get(USE_LOSER[vital], -1)
+            if idx < 0:
+                self.actions.append(f"skip: Person {self.label(loser)} has no {vital} to keep")
+                continue
+            ref = loser["event_ref_list"][idx]
+            before = self.obj("Person", op["winner"])
+            before.setdefault("_class", "Person")
+            after = copy.deepcopy(before)
+            refs = after["event_ref_list"] = list(after.get("event_ref_list") or [])
+            if not any(r["ref"] == ref["ref"] for r in refs):
+                refs.append(ref)
+            after[USE_LOSER[vital]] = next(i for i, r in enumerate(refs) if r["ref"] == ref["ref"])
+            self.save(before, after)
+        winner = self.obj("Person", op["winner"])
+        winner.setdefault("_class", "Person")
+        self._show_merge(winner, loser)
+        self.c.merge("Person", winner["handle"], loser["handle"], {"family_merger": True})
+        self.wrote = True
+
+    def merge_family(self, op):
+        if self._merge_done("Family", op):
+            return
+        winner, loser = self.obj("Family", op["winner"]), self.obj("Family", op["loser"])
+        body = {}
+        for role in ("father", "mother"):
+            w, l_ = winner.get(f"{role}_handle"), loser.get(f"{role}_handle")
+            if w and l_ and w != l_:
+                raise Conflict(
+                    f"Family {self.label(winner)} and {self.label(loser)} have different {role}s; "
+                    "merge those two people first with merge_person"
+                )
+            if l_ and not w:
+                body[f"phoenix_{role}_handle"] = l_  # keep the only one there is
+        self._merge_note(op, "Family", f"Family {self.label(loser)}")
+        winner = self.obj("Family", op["winner"])
+        winner.setdefault("_class", "Family")
+        loser.setdefault("_class", "Family")
+        self._show_merge(winner, loser)
+        self.c.merge("Family", winner["handle"], loser["handle"], body)
+        self.wrote = True

@@ -309,3 +309,11 @@ Format: what happened, why, and the rule.
 **Why.** Only an HTTP answer ("database is locked", a 5xx) counted as "busy, try again". A timeout or a dropped connection has no answer at all, so it crashed the run, and a naive retry of a create whose answer was lost could make the object twice.
 
 **Rule.** A timeout or a lost connection starts the op over from fresh reads, like a busy server. A create that got no answer is looked up by its handle before the op tries it again, so it is linked if the server made it and made once if not.
+
+### 46. Duplicates were merged by hand
+
+**What happened.** During an apply, a person turned out to be an empty duplicate of someone already in the tree. The merge was done by hand: the duplicate's family, citation and note were moved to the other person with separate `PUT`s, and the duplicate was deleted. Nothing showed the whole change before it ran, and nothing on the surviving person said a merge had happened.
+
+**Why.** `gwt-apply` had no merge op, so a merge meant leaving it and writing to the API directly, where every reference to move is one more write that can be forgotten.
+
+**Rule.** `merge_person` and `merge_family` call Gramps' own merge on the server, which moves every reference itself. The dry run lists what moves, which families are repointed or merged, and what is deleted. The winner gets a note naming the loser, the ruling and the reason, written before the merge, so a rerun knows the merge is done.

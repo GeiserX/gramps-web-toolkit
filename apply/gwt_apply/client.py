@@ -79,6 +79,8 @@ class Client:
         self.stale: set[tuple[str, str]] = set()
         self.reads: set[tuple[str, str]] = set()  # every object the run read, for the snapshot check
         self.listed: set[str] = set()  # every class the run searched as a whole
+        self.deleted: set[tuple[str, str]] = set()  # objects a merge removed
+        self.unsnapped: set[str] = set()  # classes a merge changed all over: read from the server from then on
         # "x": a log file is never appended to or overwritten; each run writes its own
         self._log = open(log_path, "x", encoding="utf-8") if log_path else None
         self.context: dict = {}  # op key and ruling, stamped on every log line
@@ -135,7 +137,7 @@ class Client:
             self.tree = data.get("tree")
 
     def _snapped(self, cls: str, handle: str) -> bool:
-        return self.snapshot is not None and (cls, handle) not in self.stale
+        return self.snapshot is not None and cls not in self.unsnapped and (cls, handle) not in self.stale
 
     def _request(self, method: str, path: str, *, write: bool = False, **kw):
         if self.offline:
@@ -172,6 +174,8 @@ class Client:
 
     def get(self, cls: str, handle: str) -> dict | None:
         """The object, or None. `_read` keeps what the server sent, for the check in `update`."""
+        if (cls, handle) in self.deleted:
+            return None
         if (cls, handle) in self.pending:
             return copy.deepcopy(self.pending[(cls, handle)])
         self.reads.add((cls, handle))
@@ -221,12 +225,19 @@ class Client:
         for (c, h), obj in self.pending.items():
             if c == cls and obj.get("gramps_id") == gramps_id:
                 return h
-        return self._index(cls).get(gramps_id)
+        handle = self._index(cls).get(gramps_id)
+        if handle is None or (cls, handle) in self.deleted:
+            return None
+        if (cls, handle) in self.unsure and not self.exists(cls, handle):  # merged away by a lost request
+            return None
+        return handle
 
     def exists(self, cls: str, handle: str) -> bool:
         """Whether the object is there, without reading it."""
         if (cls, handle) in self.pending:
             return True
+        if (cls, handle) in self.deleted:
+            return False
         self.reads.add((cls, handle))
         if (cls, handle) in self.unsure:
             return self.get(cls, handle) is not None
@@ -234,6 +245,7 @@ class Client:
         return handle in self._handles[cls]
 
     def get_many(self, cls: str, handles: list[str]) -> list[dict]:
+        handles = [h for h in handles if (cls, h) not in self.deleted]
         out = [copy.deepcopy(self.pending[(cls, h)]) for h in handles if (cls, h) in self.pending]
         rest = [h for h in handles if (cls, h) not in self.pending]
         self.reads |= {(cls, h) for h in rest}
@@ -264,7 +276,7 @@ class Client:
                 raise ApiError(f"GET {cls} list: HTTP {r.status_code}", r.status_code)
             self._lists[cache] = r.json()
         mine = {h: obj for (c, h), obj in {**self.written, **self.pending}.items() if c == cls}
-        rows = [row for row in self._lists[cache] if row["handle"] not in mine]
+        rows = [row for row in self._lists[cache] if row["handle"] not in mine and (cls, row["handle"]) not in self.deleted]
         rows += [{k: obj.get(k) for k in ["handle", *keys]} for h, obj in mine.items()]
         return rows
 
@@ -330,6 +342,33 @@ class Client:
             raise ApiError(f"delete {cls} {handle}: HTTP {r.status_code} {r.text[:300]}", r.status_code)
         self.written.pop((cls, handle), None)
         self._handles.get(cls, set()).discard(handle)
+
+    def merge(self, cls: str, winner: str, loser: str, body: dict | None = None) -> None:
+        """Gramps' own merge: every reference to the loser moves to the winner, then the loser is deleted.
+
+        A dry run only marks the loser as gone; the op shows what would move.
+        """
+        path = f"/{NAMESPACE[cls]}/{winner}/merge/{loser}"
+        self.deleted.add((cls, loser))
+        if self.dry_run:
+            self.log(method="POST", path=path, body=body or {}, status=None)
+            return
+        # a merge rewrites people, families and notes that pointed at the loser: stop trusting the snapshot for them
+        self.unsnapped |= {"Person", "Family", "Note"}
+        self.stale |= {(cls, winner), (cls, loser)}
+        try:
+            r = self._request("POST", path, write=True, json=body or {})
+        except Retryable:
+            # no answer, or a busy one: the merge may have happened; the retry asks the server
+            self.deleted.discard((cls, loser))
+            self.unsure.add((cls, loser))
+            raise
+        if r.status_code != 200:
+            self.deleted.discard((cls, loser))
+            raise ApiError(f"merge {cls} {loser} into {winner}: HTTP {r.status_code} {r.text[:300]}", r.status_code)
+        self.unsure.discard((cls, loser))
+        if self._ids.get(cls):
+            self._handles[cls].discard(loser)
 
     def upload_missing_file(self, handle: str, data: bytes, mime: str) -> str:
         """Store the file of a media object created by `create`. Returns what happened."""
