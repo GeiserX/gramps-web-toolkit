@@ -120,45 +120,57 @@ Format: what happened, why, and the rule.
 
 **Rule.** Back up before importing into a tree that has data. An import into a populated tree duplicates people.
 
+### 18. A merge brings the loser's events along, and a second run of the list does not skip
+
+**What happened.** A correction merged 66 people who had been created twice (the same baptism from two index rows). Each merge kept both copies of the baptism, or a year-only Birth next to a dated Baptism, so the check after the apply listed 14 repeated vital events. Gramps also merged on its own every family that ended up with the same two spouses (22 of them), so the families named in later rows of the list no longer existed. Re-running the list on the applied tree, expecting every row to come back `skip`, stopped instead with `[conflict] no Family with Gramps ID F0191`.
+
+**Rule.** After a person merge, look at the winner and drop the loser's copy of each vital event: move its citation to the kept event, then delete it once it has no backlinks. A family merge whose spouses only coincide after a person merge goes in a second list, applied after the first; the offline dry run cannot see it, because the dry run only marks the loser deleted. Prove the apply landed with the check and the post-apply snapshot, not by replaying the list.
+
+### 19. A known finding is matched by its whole key
+
+**What happened.** The known file listed `I0830` for a `surname-marker` finding whose key is `I0830 Bron[…]te`. The check reported it as new and exited 1.
+
+**Rule.** Copy the key from the `--json` report of the previous run. The key is the whole string, not the id in it.
+
 ## Sources and images
 
-### 18. A screenshot of a viewer is not a source
+### 20. A screenshot of a viewer is not a source
 
 **What happened.** A wedding record was saved as a 4000×3000 screenshot of the FamilySearch viewer with a side panel open. The panel's overlay dimmed the whole page, and the browser bar, panel and thumbnail strip were inside the image. Grey, unreadable, and full of interface.
 
 **Rule.** Ask where the evidence is. If it is a scanned document in a viewer (parish book, civil register, census, newspaper page), download the image itself: the download button, IIIF at full size (Antenati, Gallica), the portal's PDF or JPG. If the evidence is the page's own text (an indexed record, an archive catalogue entry, a database row), save a clean full-page capture and its text. If both exist, keep both.
 
-### 19. Look at every image before you keep it
+### 21. Look at every image before you keep it
 
 **What happened.** Saved captures included cookie banners, Cloudflare's "One moment..." page, half-loaded pages and tiny thumbnails where a full-size image existed.
 
 **Rule.** The agent opens every image before saving or uploading it, and checks that it shows what the citation says. If not, it captures again. An image you cannot read is not a source.
 
-### 20. The index and the OCR are a lead, the image decides
+### 22. The index and the OCR are a lead, the image decides
 
 **What happened.** Verifiers kept finding machine readings that were wrong: "February" where the scan says "January", a ditto mark (`id.`) read against the wrong line, a number in a sum copied from the line above, an image number taken for an amount.
 
 **Rule.** An index line or OCR text makes a claim *probable* at most. It becomes *verified* when someone has read the image. Every lane's report goes through a verifier that reopens the sources (see [pipeline.md](pipeline.md#corrected-after-verification)).
 
-### 21. Reading scans as images grew agent transcripts to gigabytes
+### 23. Reading scans as images grew agent transcripts to gigabytes
 
 **What happened.** Two sweep agents told to read scanned PDFs page by page with an image tool grew their transcripts to 6.3 GB and 3.7 GB in six hours. They admitted to appending findings without seeing the pages, and then died. They could not be revived, because reloading the transcript would have run the machine out of memory.
 
 **Rule.** `pdftotext -layout` first. Only for pages with no text layer, render one page at a time at low resolution, make a copy no larger than 1600 px on the long side, read it, append the finding to a report file, delete the image, and move on. Never say a page was read unless the image actually came back. Watch transcript sizes during long sweeps.
 
-### 22. High-resolution scan viewers crash remote browsers
+### 24. High-resolution scan viewers crash remote browsers
 
 **What happened.** Scan viewers ran a remote Chrome out of memory seven times in two days.
 
 **Rule.** Download the file instead of opening it in the viewer. It is lighter and it is the better source anyway.
 
-### 23. A remote Chrome can look healthy while every page hangs
+### 25. A remote Chrome can look healthy while every page hangs
 
 **What happened.** A remote Chrome answered `/json/version` and accepted websocket connections, but `Runtime.evaluate` timed out on every target, and Playwright's `connectOverCDP` timed out after 30 seconds. The renderers had wedged after two days of lanes.
 
 **Rule.** Health-check with a real attach and an evaluate, not with `/json/version`. If it hangs, restart the browser container and its CDP proxy, after checking no lane holds the box.
 
-### 24. Negative searches are invisible
+### 26. Negative searches are invisible
 
 **What happened.** Lanes repeated each other's searches across rounds, because a negative result leaves nothing in the tree.
 
@@ -166,37 +178,37 @@ Format: what happened, why, and the rule.
 
 ## Spanish civil registry (DICIREG) and e-notifications
 
-### 25. One request per applicant, person and certificate type, every 7 days, across all offices
+### 27. One request per applicant, person and certificate type, every 7 days, across all offices
 
 **What happened.** A death certificate request to one civil registry office was refused because the same request had gone to a different office the day before. No case file is created on a refusal. Our older notes said 15 days. The online office's message says 7.
 
 **Rule.** When a certificate may need several offices, chain them 7 days apart and put each next date in a calendar.
 
-### 26. Search your own case files before filing
+### 28. Search your own case files before filing
 
 **What happened.** A round's plan said a certificate had "never been requested". It had been, two days earlier.
 
 **Rule.** Before filing, search "my case files" by the person's name and both surnames, with no dates. Searching that way never returns "too many results".
 
-### 27. Beyond second degree, the registry wants proof of kinship
+### 29. Beyond second degree, the registry wants proof of kinship
 
 **What happened.** Twelve requests for great-great-grandparents' records were refused in one day for not proving a legitimate interest (Spain's Ley 20/2011, art. 15.3). Interest is only presumed up to the second degree of kinship.
 
 **Rule.** For anyone further back, attach the chain: the requester's ID, family book, and the birth records linking each generation to the person requested. Plan to collect that chain once per branch.
 
-### 28. The registry sometimes answers only through the e-notification inbox
+### 30. The registry sometimes answers only through the e-notification inbox
 
 **What happened.** A certificate arrived only in the government e-notification inbox (DEHú) on 2026-10-15. The email alert just said "new electronic communication", with no case number. Nobody opened it until 2026-10-20.
 
 **Rule.** Every mail pass also opens the e-notification inbox of each requester, with their certificate. Genealogy items are downloaded into the repo. Anything else (fines, tax) is not opened: report the sender and expiry date to the owner.
 
-### 29. Small form traps on the online office
+### 31. Small form traps on the online office
 
 **What happened.** A semicolon in the free-text "Observations" field failed the form at step 4 with "wrong format". Periods, commas, colons, hyphens and parentheses pass. Some regional offices add a language pop-up with its own send button. Downloading the receipt needed CDP's `Browser.setDownloadBehavior`.
 
 **Rule.** Keep observations to plain punctuation. Read the confirmation screen and save the receipt every time.
 
-### 30. Signing a PDF is not a human step, and `pdfsig` lies about it
+### 32. Signing a PDF is not a human step, and `pdfsig` lies about it
 
 **What happened.** A filing was left "waiting for a signature" when the certificate was already in the machine's keychain. Then poppler's `pdfsig` reported "Signature is Invalid" on a PDF signed with AutoFirma. pyhanko said the same signature was intact, valid, covered the entire file, and trusted.
 
@@ -204,37 +216,37 @@ Format: what happened, why, and the rule.
 
 ## Letters to archives and people
 
-### 31. Never offer to pay or to visit
+### 33. Never offer to pay or to visit
 
 **What happened.** Early drafts said things like "if there is a fee or I need to come in person, let me know". That makes it easy for the archive to answer "come in" or "pay".
 
 **Rule.** Ask for the record, free and by mail. If they set a condition, log it in the costs register and decide later. The default is to wait: most things get digitized.
 
-### 32. Never hand relatives work an agent can do
+### 34. Never hand relatives work an agent can do
 
 **What happened.** An agent sent a relative a long list of parishes to phone. The owner had to tell them to ignore it. A priest asked for a WhatsApp message; email worked fine.
 
 **Rule.** For any archive, parish or registry, find the email or the web form and send it ourselves. Ask relatives only for what nobody else has: memories, papers at home, a call where no written channel exists. Batch those questions into one message, not several small ones.
 
-### 33. Filled request forms arrived garbled
+### 35. Filled request forms arrived garbled
 
 **What happened.** An archive wrote that our filled request sheets "arrive completely misaligned, and what should take one page takes three or four". They had looked fine in our PDF viewer.
 
 **Rule.** Fill the official PDF without changing page size or layout. Flatten the fields into the page content. Render it with two different engines (`pdftoppm` and Chrome, for example), check the page count matches the blank form, and look at every page. If the text does not fit, use more sheets, never smaller text.
 
-### 34. An archive that asks for silence gets silence
+### 36. An archive that asks for silence gets silence
 
 **What happened.** A saturated archive asked us not to write again unless strictly necessary, and said they would contact us.
 
 **Rule.** Log it in the waiting register. Any new or corrected sheet waits for their next message and goes in the reply. Searches that need staff time without an exact date move to the in-person list.
 
-### 35. A sent forum message cannot be taken back
+### 37. A sent forum message cannot be taken back
 
 **What happened.** A Geneanet message went out as one block of text, because the rich-text editor had not loaded and the form was submitted directly. Deleting it only moved the thread to our trash. The recipient kept it, and the corrected copy arrived as a second message.
 
 **Rule.** Wait for the editor (TinyMCE), set the content with one `<p>` per paragraph, screenshot the box, then send. Get the final text approved before the first send.
 
-### 36. Read how a person refers to themselves before writing to them
+### 38. Read how a person refers to themselves before writing to them
 
 **What happened.** A gendered greeting went to someone of the other gender. Separately, a reply in the formal register went to someone who had written informally, which read as cold.
 
@@ -242,7 +254,7 @@ Format: what happened, why, and the rule.
 
 ## The agent harness
 
-### 37. The workflow harness passes the last chat message to every agent as the user's voice
+### 39. The workflow harness passes the last chat message to every agent as the user's voice
 
 **What happened.** An apply was launched right after the owner answered an unrelated question with "Yes, send the message". The read-only stage ran. Every writer stopped with 0 rows applied, saying the user's words did not approve a large write to the live tree.
 
@@ -250,7 +262,7 @@ Format: what happened, why, and the rule.
 
 **Rule.** Get a standing approval for applies of judged rounds written into the project rules, and put that line, verbatim, in every writer's brief, with a note that the relayed message belongs to another conversation. Check the run's journal a few minutes after launch.
 
-### 38. A workflow resume caches only the unchanged prefix of calls
+### 40. A workflow resume caches only the unchanged prefix of calls
 
 **What happened.** A resumed run had new notes on nine dead lanes. A tenth lane that had already finished kept its prompt byte-identical and ran again anyway.
 
@@ -258,19 +270,19 @@ Format: what happened, why, and the rule.
 
 **Rule.** Pass finished lanes' results in the script's arguments (`done`) so the script skips them by state. Check live agents a few minutes after a resume, and stop at once if a finished lane is writing.
 
-### 39. A second resume must carry every earlier note
+### 41. A second resume must carry every earlier note
 
 **What happened.** A second resume passed notes only for the newly dead stages. The cached prompts of earlier stages contained the first resume's notes, so they no longer matched, and finished builders started again.
 
 **Rule.** Before each resume, collect every earlier note for that run and pass them verbatim, plus the new one. Within a minute, confirm the journal's new "started" line names the dead stage, not a finished one.
 
-### 40. The harness restarts limit-killed agents from scratch
+### 42. The harness restarts limit-killed agents from scratch
 
 **What happened.** A usage limit killed seven workflow agents, two of them tree writers. When the limit reset, the harness started a fresh agent for each, with the same prompt and no memory of the work already done. For a writer, that risks writing everything twice.
 
 **Rule.** After a limit, look for a second "started" line with the same label. If it is there, stop the run at once and resume it with a note that hands each agent its dead predecessor's transcript and where it stopped.
 
-### 41. A lane's "done" is not final if you have sent it a follow-up
+### 43. A lane's "done" is not final if you have sent it a follow-up
 
 **What happened.** A lane reported done. Main sent it a follow-up, then cleaned up its worktrees. The lane was mid-edit and lost its work twice.
 
@@ -278,7 +290,7 @@ Format: what happened, why, and the rule.
 
 ## Applying change lists
 
-### 42. A namesake flag without a reason let duplicates in
+### 44. A namesake flag without a reason let duplicates in
 
 **What happened.** One apply of about 8,800 ops carried 125 `allow_namesake` flags, none with a reason. Several of those people were already in the tree under the same name, and one ruling row went into the list twice under two keys.
 
@@ -286,7 +298,7 @@ Format: what happened, why, and the rule.
 
 **Rule.** `allow_namesake` needs `namesake_reason` and `namesake_of`, the IDs of the people compared; a namesake the op does not name is still a conflict. Two ops that are the same change are refused. Before the first write, every new person is compared with the tree and the rest of the list by name and birth year, parents or spouse, and all likely duplicates are reported at once.
 
-### 43. "Probable" marks on parent links were lost
+### 45. "Probable" marks on parent links were lost
 
 **What happened.** 218 child links went in without the "probable" mark the rulings gave them.
 
@@ -294,7 +306,7 @@ Format: what happened, why, and the rule.
 
 **Rule.** `link_child` takes `probable: true` with `probable_reason` and writes the `[probable]` note on the child_ref itself. Rerunning it on an existing link adds a missing mark.
 
-### 44. Two copies of one apply ran on the same tree at once
+### 46. Two copies of one apply ran on the same tree at once
 
 **What happened.** A second copy of an apply was started on a tree while the first was still writing. They interleaved their writes, and the second overwrote the backup file the first had taken after its block.
 
@@ -302,7 +314,7 @@ Format: what happened, why, and the rule.
 
 **Rule.** `--apply` holds a lock note inside the tree for its whole run and refuses to start while another run holds it. Every run has its own id, and its log is created with `O_EXCL` under a name that carries the id, so no run can write into another run's file. Backup names carry a run id too, and are created the same way.
 
-### 45. One slow answer killed a long apply
+### 47. One slow answer killed a long apply
 
 **What happened.** About 1,000 ops into a long apply on a test server, one `POST` got no answer for two minutes: the server's cache connection had stalled. The client's read timeout fired, the exception was not one `gwt-apply` retried, and the run stopped there. The create may or may not have reached the database.
 
@@ -310,7 +322,7 @@ Format: what happened, why, and the rule.
 
 **Rule.** A timeout or a lost connection starts the op over from fresh reads, like a busy server. A create that got no answer is looked up by its handle before the op tries it again, so it is linked if the server made it and made once if not.
 
-### 46. Duplicates were merged by hand
+### 48. Duplicates were merged by hand
 
 **What happened.** During an apply, a person turned out to be an empty duplicate of someone already in the tree. The merge was done by hand: the duplicate's family, citation and note were moved to the other person with separate `PUT`s, and the duplicate was deleted. Nothing showed the whole change before it ran, and nothing on the surviving person said a merge had happened.
 
