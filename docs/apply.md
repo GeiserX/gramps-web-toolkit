@@ -23,7 +23,7 @@ Settings come from the environment, or from a `KEY=VALUE` file passed with `--co
 
 On a multi-tree server, the tree comes from the user: the login (`POST /api/token/`) returns a token whose `tree` claim names that user's tree. `gwt-apply` refuses to go on if that claim is not `GWT_TREE`, so a wrong account cannot write into the wrong tree.
 
-Other flags: `--log PATH`, `--retries N` (default 5), `--retry-wait SECONDS` (default 30), `--break-lock` (below).
+Other flags: `--log PATH`, `--retries N` (default 5), `--retry-wait SECONDS` (default 30), `--snapshot FILE` and `--save-snapshot FILE` ([Snapshots](#snapshots)), `--break-lock` (below).
 
 Every run gets a run id, `<date>-<time>-<6 hex>`, printed on the first line. The log goes to `PATH` with the run id before the extension (`--log apply.jsonl` writes `apply.20261021-101500-a1b2c3.jsonl`), or to `gwt-apply-<run id>.jsonl`. The file is created with `O_EXCL`: a run never appends to or overwrites another run's log, so rerunning the same command after a crash leaves both logs.
 
@@ -88,6 +88,25 @@ The dry-run prints one block per op:
     skip: Citation C0123 already cites that page
     skip: Event E0456 already has it in citation_list
 ```
+
+## Snapshots
+
+A dry run against the server reads the tree op by op, which takes hours for a list of thousands of ops. With a snapshot it reads nothing from the server:
+
+```sh
+gwt-apply --save-snapshot tree-0412.json.gz                     # the whole tree, once; a few minutes
+gwt-apply changes.jsonl --snapshot tree-0412.json.gz            # dry run, offline, needs no settings
+gwt-apply changes.jsonl --snapshot tree-0412.json.gz --apply    # checks the snapshot is current, then writes
+```
+
+`--save-snapshot` pages through every object of every class and writes them, as the API returns them, to a new gzip JSON file; it never overwrites one. The dry run on a snapshot plans exactly as against the server, op by op, and never opens a connection.
+
+`--apply` with a snapshot first plans the whole list on the snapshot, offline. If the plan stops at a conflict, nothing is written. Then it reads the `change` stamp of every object in each class the plan touched, one request per class, and refuses to write if, since the snapshot:
+
+- an object the plan read or would change was changed, deleted or made (a keyed object made by an earlier run counts: after a crash, take a new snapshot), or
+- a class the plan searched as a whole (names for namesakes, places, sources, citation pages, media checksums) gained or lost an object, because the plan's "already there" answers could be wrong.
+
+Then it applies, reading from the snapshot. Before each `PUT` of an object read from the snapshot it reads the object's `change` stamp from the server, and stops with an error if it moved. Objects the run itself wrote, and the people whose family lists the server updated for it, are read from the server from then on.
 
 ## Safety rules
 

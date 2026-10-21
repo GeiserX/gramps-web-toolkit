@@ -50,6 +50,11 @@ class FakeGrampsWeb:
         self.busy = 0  # answer the next N writes with "database is locked"
         self.edit_after_read: tuple | None = None  # (handle, fn): another writer edits it once, right after a read
         self.drop_after: tuple | None = None  # (method, path prefix[, n to let through]): fail once, after doing it
+        self.clock = 1_700_000_000  # the server's `change` stamp, one tick per write
+
+    def tick(self) -> int:
+        self.clock += 1
+        return self.clock
 
     # -- helpers for tests --------------------------------------------------
 
@@ -71,6 +76,7 @@ class FakeGrampsWeb:
             obj.setdefault("child_ref_list", [])
             self._family_refs(None, obj)
         obj.pop("_class", None)
+        obj["change"] = self.tick()
         self.store[ns][obj["handle"]] = obj
         return obj
 
@@ -88,10 +94,12 @@ class FakeGrampsWeb:
             p = new.get(role)
             if p and h not in people[p]["family_list"]:
                 people[p]["family_list"].append(h)
+                people[p]["change"] = self.tick()
         for ref in new.get("child_ref_list", []):
             child = people[ref["ref"]]
             if h not in child["parent_family_list"]:
                 child["parent_family_list"].append(h)
+                child["change"] = self.tick()
 
     # -- the HTTP surface ---------------------------------------------------
 
@@ -146,6 +154,9 @@ class FakeGrampsWeb:
                 rows = [store[h] for h in params["handles"].split(",") if h in store]
             else:
                 rows = list(store.values())
+            if "page" in params:
+                size = int(params["pagesize"])
+                rows = rows[(int(params["page"]) - 1) * size: int(params["page"]) * size]
             if "keys" in params:
                 keys = params["keys"].split(",")
                 rows = [{k: r.get(k) for k in keys} for r in rows]
@@ -168,6 +179,7 @@ class FakeGrampsWeb:
                     return Resp(412, "Resource does not match provided ETag")
                 new = copy.deepcopy(body)
                 new.pop("_class", None)
+                new["change"] = self.tick()
                 if ns == "families":
                     self._family_refs(obj, new)
                 store[parts[1]] = new
