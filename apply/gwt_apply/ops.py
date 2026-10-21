@@ -41,9 +41,13 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "add_citation": ({"source", "page", "attach"}, {"confidence", "date", "gramps_id"}),
     "add_media": ({"file", "path", "attach"}, {"desc", "mime", "gramps_id"}),
     "add_note": ({"text", "attach"}, {"type", "gramps_id"}),
+    "add_transcription": ({"text", "margin_reading", "attach"}, {"gramps_id"}),
+    "attach_existing": ({"object", "attach"}, set()),
+    "dedupe_list": ({"target", "list"}, set()),
     "set_attribute": ({"target", "type", "value"}, set()),
     "merge_person": ({"winner", "loser"}, {"use_loser", "reason"}),
     "merge_family": ({"winner", "loser"}, {"reason"}),
+    "merge_event": ({"winner", "loser"}, {"reason"}),
     "add_association": ({"person", "target", "relation"}, set()),
 }
 MERGE_LISTS = [  # what Gramps' merge carries from the loser to the winner, list by list
@@ -52,6 +56,9 @@ MERGE_LISTS = [  # what Gramps' merge carries from the loser to the winner, list
     "child_ref_list",
 ]
 USE_LOSER = {"birth": "birth_ref_index", "death": "death_ref_index"}
+ATTACHABLE = {"citation": ("Citation", "citation_list"), "media": ("Media", "media_list"),  # attach_existing
+              "note": ("Note", "note_list")}
+REF_OWN_LISTS = ("note_list", "citation_list", "attribute_list")  # what a MediaRef carries besides its ref
 PERSON_FIELDS = {"first_name", "surname", "gender"}
 EVENT_FIELDS = {"type", "date", "place", "description"}
 GENDER = {"F": 0, "M": 1, "U": 2}
@@ -74,7 +81,19 @@ def fold(text: str) -> str:
     return " ".join(bare.casefold().split())
 
 
-_GRAMPS_ID = re.compile(r"^[A-Za-z]+\d+$")
+_GRAMPS_ID = re.compile(r"^[A-Za-z]+\d+(?:-[A-Za-z0-9]+)?$")  # I0042, or I0042-b: an import may add a suffix
+
+
+def _event_fact(event: dict, field: str):
+    """What merge_event compares: the whole date (modifier, quality, values, and the text of a
+    text-only date), the place handle, the description. None when the event has none."""
+    value = event.get(field)
+    if field != "date":
+        return value or None
+    key, text = date_key(value), (value or {}).get("text") or ""
+    if key[2] == (0, 0, 0):
+        return (key, text) if text else None
+    return key
 
 
 class Conflict(Exception):
@@ -115,6 +134,17 @@ def _parse_target(spec) -> tuple[str, object]:
     if kind not in TARGET_KINDS or not isinstance(ref, str) or not ref:
         raise ValueError(f"bad target {spec!r}")
     return TARGET_KINDS[kind], ref
+
+
+def _parse_object(spec) -> tuple[str, str, str]:
+    """attach_existing's object: {"media": "O0054"} -> ("Media", "O0054", "media_list")."""
+    if not isinstance(spec, dict) or len(spec) != 1:
+        raise ValueError(f"object is one of {sorted(ATTACHABLE)} -> ref, got {spec!r}")
+    (kind, ref), = spec.items()
+    if kind not in ATTACHABLE or not isinstance(ref, str) or not ref:
+        raise ValueError(f"object is a citation, media or note, got {kind}")
+    cls, lst = ATTACHABLE[kind]
+    return cls, ref, lst
 
 
 def _target_refs(spec) -> list:
@@ -179,6 +209,8 @@ def validate(ops: list[dict]) -> list[str]:
         refs = [op.get(f) for f in ("person", "family", "father", "mother", "child", "source", "place", "enclosed_by",
                                     "winner", "loser")]
         refs += list(op.get("children") or [])
+        if name == "attach_existing":
+            refs += _target_refs(op.get("object"))
         if name == "add_association":
             refs.append(op.get("target"))
         refs += _ref_list(op.get("namesake_of")) if op.get("namesake_of") else []
@@ -216,6 +248,14 @@ def validate(ops: list[dict]) -> list[str]:
                 raise ValueError("winner and loser are the same")
             if name == "merge_person" and set(op.get("use_loser") or []) - set(USE_LOSER):
                 raise ValueError(f"use_loser takes {sorted(USE_LOSER)}")
+            if name == "add_transcription" and not str(op.get("margin_reading") or "").strip():
+                raise ValueError("margin_reading is required: what the margins say, or 'none' once you looked")
+            if name == "dedupe_list":
+                cls, _ = _parse_target(op.get("target"))
+                if op.get("list") not in CARRIES:
+                    raise ValueError(f"list is one of {sorted(CARRIES)}")
+                if cls not in CARRIES[op["list"]]:
+                    raise ValueError(f"a {cls} has no {op['list']}")
             if name == "add_event" and bool(op.get("person")) == bool(op.get("family")):
                 raise ValueError("add_event needs exactly one of person or family")
             if name == "add_family" and not (op.get("father") or op.get("mother")):
@@ -241,11 +281,15 @@ def validate(ops: list[dict]) -> list[str]:
                     raise ValueError("lat and long go together")
                 if "lat" in op and not (-90 <= float(op["lat"]) <= 90 and -180 <= float(op["long"]) <= 180):
                     raise ValueError("lat/long out of range")
+            if name == "attach_existing":
+                lst = _parse_object(op.get("object"))[2]
+            elif op.get("attach"):
+                lst = {"add_citation": "citation_list", "add_media": "media_list", "add_note": "note_list",
+                       "add_transcription": "note_list"}[name]
             for spec in op.get("attach") or []:
                 cls, _ = _parse_target(spec)
-                lst = {"add_citation": "citation_list", "add_media": "media_list", "add_note": "note_list"}[name]
                 if cls not in CARRIES[lst]:
-                    raise ValueError(f"a {cls} cannot carry a {name[4:]}")
+                    raise ValueError(f"a {cls} cannot carry a {lst[:-5]}")
             if name == "add_media" and not Path(op.get("file", "")).is_file():
                 raise ValueError(f"file not found: {op.get('file')}")
             if name == "add_media" and Path(op.get("path", "")).is_absolute():
@@ -322,6 +366,10 @@ class Applier:
                     return h
                 self.c.create({"_class": "Tag", "handle": h, "name": name, "color": "#000000000000", "priority": 0})
                 self.actions.append(f"create Tag {name!r}")
+                if not self.c.dry_run and self.c.get_live("Tag", h) is None:
+                    # a server that answered 201 and kept nothing: the block's objects would carry a tag that no
+                    # list can filter by, and the block could no longer be found or rolled back by its tag
+                    raise ApiError(f"Tag {name!r} was created but is not there when read back")
                 self._tags[name] = h
         return self._tags[name]
 
@@ -824,6 +872,55 @@ class Applier:
             self.keymap[op["key"]] = handle
         self.attach(op["attach"], "note_list", handle)
 
+    def add_transcription(self, op):
+        """A transcript as a Transcript note, never as media; the margin reading is part of the text.
+
+        `margin_reading` is required: what the margins of the page say (annotations, later notes,
+        corrections), or the word "none" once you have looked. A transcript made without looking at the
+        margin is how a legitimate-looking entry ends up with the wrong person.
+        """
+        reading = str(op["margin_reading"]).strip()
+        text = f"{op['text'].rstrip()}\n\nMargin reading: {reading}"
+        self.add_note(
+            {"op": "add_note", "key": op["key"], "ruling": op["ruling"], "type": "Transcript",
+             "text": text, "attach": op["attach"], "gramps_id": op.get("gramps_id", "")}
+        )
+
+    def attach_existing(self, op):
+        """Link a citation, media object or note the tree already has to more targets.
+
+        For what an import left with no reference at all (orphans) and for a document that belongs
+        to a second person: add_citation, add_media and add_note only make new objects.
+        """
+        cls, ref, lst = _parse_object(op["object"])
+        self.attach(op["attach"], lst, self.resolve(cls, ref))
+
+    def dedupe_list(self, op):
+        """Keep the first of each repeated reference in one list: the same citation twice on a person."""
+        cls, ref = _parse_target(op["target"])
+        target, carrier, label = self.holder(cls, ref)
+        name = op["list"]
+        items = carrier.get(name) or []
+        seen, kept = {}, []
+        for i in items:
+            # the same identity as gwt-check's repeated-ref: a media ref is its media plus its region
+            ident = i if isinstance(i, str) else (i.get("ref"), repr(i.get("rect")))
+            first = seen.get(ident)
+            if first is None:
+                seen[ident] = i
+                kept.append(i)
+                continue
+            for own in REF_OWN_LISTS if isinstance(i, dict) else ():
+                if [x for x in i.get(own) or [] if x not in (first.get(own) or [])]:
+                    raise Conflict(f"{label}: a repeated {name} entry {ident[0]} carries a {own} the first one "
+                                   f"lacks, so dropping it would lose that")
+        if len(kept) == len(items):
+            self.actions.append(f"skip: {label} has no repeated entry in {name}")
+            return
+        before = copy.deepcopy(target)
+        carrier[name] = kept
+        self.save(before, target)
+
     def set_attribute(self, op):
         cls, ref = _parse_target(op["target"])
         if cls == "Place":
@@ -944,6 +1041,53 @@ class Applier:
         winner.setdefault("_class", "Person")
         self._show_merge(winner, loser)
         self.c.merge("Person", winner["handle"], loser["handle"], {"family_merger": True})
+        self.wrote = True
+
+    def merge_event(self, op):
+        """Two events that are one fact: a death in two citations, a birth entered twice.
+
+        Gramps' own event merge: the loser's citations, notes, media and attributes go to the winner,
+        every person and family that listed the loser lists the winner, and the loser is deleted. It
+        never picks a fact: a different type, date, place or description, or one the loser has and the
+        winner lacks, is a conflict (correct one with update_event first). So is a person or family
+        that lists both events in different roles, which Gramps would leave listing the winner twice.
+        """
+        if self._merge_done("Event", op):
+            return
+        winner, loser = self.obj("Event", op["winner"]), self.obj("Event", op["loser"])
+        for o in (winner, loser):
+            o.setdefault("_class", "Event")
+        if winner.get("type") != loser.get("type"):
+            raise Conflict(f"Event {self.label(winner)} is a {winner.get('type')}, {self.label(loser)} a {loser.get('type')}")
+        for field in ("date", "place", "description"):
+            w, l_ = _event_fact(winner, field), _event_fact(loser, field)
+            if l_ is not None and w != l_:
+                raise Conflict(
+                    f"Event {self.label(winner)} and {self.label(loser)} differ in {field}"
+                    + ("" if w is not None else f" ({self.label(winner)} has none, the merge would lose it)")
+                    + "; correct one with update_event first"
+                )
+        holders = []
+        for cls in ("Person", "Family"):
+            for row in self.c.list_all(cls, ["event_ref_list", "gramps_id"]):
+                refs = row.get("event_ref_list") or []
+                lost = [repr(r.get("role")) for r in refs if r.get("ref") == loser["handle"]]
+                kept = [repr(r.get("role")) for r in refs if r.get("ref") == winner["handle"]]
+                if not lost:
+                    continue
+                if kept and set(kept) != set(lost):
+                    raise Conflict(f"{cls} {self.label(row)} lists Event {self.label(winner)} and {self.label(loser)} "
+                                   "in different roles; correct its event references first")
+                holders.append(f"  {cls} {self.label(row)}: " + (
+                    f"already lists {self.label(winner)}, drops {self.label(loser)}" if kept
+                    else f"lists {self.label(winner)} instead of {self.label(loser)}"))
+        self._merge_note(op, "Event", f"Event {self.label(loser)}")
+        winner = self.obj("Event", op["winner"])
+        winner.setdefault("_class", "Event")
+        self._show_merge(winner, loser)
+        delete = self.actions.pop()
+        self.actions += holders + [delete]
+        self.c.merge("Event", winner["handle"], loser["handle"])
         self.wrote = True
 
     def merge_family(self, op):

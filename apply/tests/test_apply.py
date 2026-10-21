@@ -586,7 +586,9 @@ class MergingFake(FakeGrampsWeb):
             win, lose = store[w], store.pop(l_)
             for lst in ("event_ref_list", "citation_list", "note_list", "child_ref_list", "family_list", "parent_family_list"):
                 win[lst] = win.get(lst, []) + [x for x in lose.get(lst, []) if x not in win.get(lst, [])]
-            if ns == "people":
+            if ns == "events":
+                self._merge_event_refs(win, lose, w, l_)
+            elif ns == "people":
                 win["attribute_list"].append({"_class": "Attribute", "type": "Merged Gramps ID", "value": lose["gramps_id"]})
                 for fam in self.store["families"].values():
                     for role in ("father_handle", "mother_handle"):
@@ -602,6 +604,32 @@ class MergingFake(FakeGrampsWeb):
             win["change"] = self.tick()
             return Resp(200, {})
         return super()._route(method, path, headers, params, body, data)
+
+    def _merge_event_refs(self, win, lose, w, l_):
+        """Gramps' MergeEventQuery: lists move to the winner; a holder's ref to the loser becomes a ref to the
+        winner, and is dropped when the holder already lists the winner in the same role."""
+        for lst in ("media_list", "attribute_list"):
+            win[lst] = win.get(lst, []) + [x for x in lose.get(lst, []) if x not in win.get(lst, [])]
+        for holder in [*self.store["people"].values(), *self.store["families"].values()]:
+            refs = holder.get("event_ref_list") or []
+            if not any(r["ref"] == l_ for r in refs):
+                continue
+            first = next((r for r in refs if r["ref"] == w), None)
+            for vital in ("birth_ref_index", "death_ref_index"):
+                if holder.get(vital, -1) >= 0 and refs[holder[vital]]["ref"] == l_:
+                    holder[vital] = -2  # recalculated below, as Gramps does
+            kept = []
+            for r in refs:
+                if r["ref"] == l_ and first is not None and first.get("role") == r.get("role"):
+                    continue
+                kept.append(dict(r, ref=w) if r["ref"] == l_ else r)
+            for vital, kind in (("birth_ref_index", "Birth"), ("death_ref_index", "Death")):
+                if holder.get(vital, -1) >= 0:
+                    holder[vital] = kept.index(refs[holder[vital]])
+                elif holder.get(vital) == -2:
+                    holder[vital] = next((i for i, r in enumerate(kept) if r.get("role") == "Primary"
+                                          and self.store["events"].get(r["ref"], win).get("type") == kind), -1)
+            holder["event_ref_list"] = kept
 
 
 def test_merge_person_moves_everything_and_notes_it(scan, tmp_path):
@@ -771,3 +799,192 @@ def test_association_reads_no_whole_class_per_op(fake):
             "relation": "DNA"} for i in range(3)]
     assert all(r.status == "done" for r in run(fake, ops))
     assert len(seen) == 1  # the people index, once
+
+
+def _event_fixture():
+    fake = MergingFake()
+    fake.add("people", {"handle": "anna", "gender": 0, "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    fake.add("events", {"handle": "d1", "type": "Death", "date": parse_date("1884-05-02"), "citation_list": ["c1"]})   # E0001
+    fake.add("events", {"handle": "d2", "type": "Death", "date": parse_date("1884-05-02"), "citation_list": ["c2"]})   # E0002
+    anna = fake.store["people"]["anna"]
+    anna["event_ref_list"] = [{"_class": "EventRef", "ref": "d1", "role": "Primary"},
+                              {"_class": "EventRef", "ref": "d2", "role": "Primary"}]
+    anna["death_ref_index"] = 1  # points at the loser
+    return fake
+
+
+def test_merge_event_is_gramps_own_merge_and_shows_every_holder_first():
+    fake = _event_fixture()
+    fake.add("families", {"handle": "fam", "event_ref_list": [{"_class": "EventRef", "ref": "d2", "role": "Family"}]})
+    op = {"op": "merge_event", "key": "me", "ruling": R, "winner": "E0001", "loser": "E0002", "reason": "one death, two citations"}
+    plan = run(fake, [op], dry_run=True)
+    text = "\n".join(plan[0].actions)
+    assert plan[0].status == "done" and fake.writes() == []
+    assert 'merge Event E0002 into E0001: citation_list +["c2"]' in text
+    assert "Person I0001: already lists E0001, drops E0002" in text
+    assert "Family F0001: lists E0001 instead of E0002" in text
+    assert plan[0].actions[-1] == "delete Event E0002"
+    res = run(fake, [op])
+    assert res[0].status == "done", res[0].actions
+    assert [p for m, p in fake.calls if m == "DELETE" or (m == "PUT" and "/events/" not in p)] == []  # holders: Gramps
+    assert sum(1 for m, p in fake.calls if m == "POST" and p.endswith("/events/d1/merge/d2")) == 1
+    assert "d2" not in fake.store["events"] and fake.store["events"]["d1"]["citation_list"] == ["c1", "c2"]
+    anna = fake.store["people"]["anna"]
+    assert [r["ref"] for r in anna["event_ref_list"]] == ["d1"] and anna["death_ref_index"] == 0
+    note = fake.store["notes"][stable_handle("me#merge")]
+    assert "Merged Event E0002" in note["text"]["string"] and note["handle"] in fake.store["events"]["d1"]["note_list"]
+    assert run(fake, [op])[0].status == "skip"  # a rerun finds it done
+
+
+@pytest.mark.parametrize("change, why", [
+    ({"date": "1884-05-03"}, "differ in date"),
+    ({"date": "about 1884-05-02"}, "differ in date"),  # the same day, but not the same fact
+    ({"type": "Burial"}, "is a Death"),
+    ({"description": "at sea"}, "differ in description"),
+    ({"place": "pl1"}, "has none, the merge would lose it"),
+])
+def test_merge_event_never_picks_a_fact(change, why):
+    fake = _event_fixture()
+    if "date" in change:
+        change = {"date": parse_date(change["date"])}
+    fake.store["events"]["d2"].update(change)
+    res = run(fake, [{"op": "merge_event", "key": "me", "ruling": R, "winner": "E0001", "loser": "E0002"}])
+    assert res[0].status == "conflict" and why in res[0].actions[-1], res[0].actions
+    assert "d2" in fake.store["events"] and fake.writes() == []
+
+
+def test_merge_event_refuses_a_holder_with_both_events_in_different_roles():
+    fake = _event_fixture()
+    fake.store["people"]["anna"]["event_ref_list"][1]["role"] = "Witness"
+    res = run(fake, [{"op": "merge_event", "key": "me", "ruling": R, "winner": "E0001", "loser": "E0002"}])
+    assert res[0].status == "conflict" and "in different roles" in res[0].actions[-1]
+    assert "d2" in fake.store["events"] and fake.writes() == []
+    assert "winner and loser are the same" in "\n".join(
+        validate([{"op": "merge_event", "key": "x", "ruling": R, "winner": "E0001", "loser": "E0001"}]))
+
+
+def test_merge_event_moves_a_holder_that_only_had_the_loser():
+    fake = _event_fixture()
+    anna = fake.store["people"]["anna"]
+    anna["event_ref_list"] = [{"_class": "EventRef", "ref": "d2", "role": "Primary"}]
+    anna["death_ref_index"] = 0
+    res = run(fake, [{"op": "merge_event", "key": "me", "ruling": R, "winner": "E0001", "loser": "E0002"}])
+    assert res[0].status == "done", res[0].actions
+    anna = fake.store["people"]["anna"]
+    assert [r["ref"] for r in anna["event_ref_list"]] == ["d1"] and anna["death_ref_index"] == 0
+
+
+def test_transcription_is_a_transcript_note_with_a_required_margin_reading(fake):
+    base = {"op": "add_transcription", "key": "t", "ruling": R, "text": "Joseph, son of Anna.",
+            "attach": [{"person": "I0001"}]}
+    assert any("margin_reading" in e for e in validate([base]))
+    assert any("margin_reading" in e for e in validate([dict(base, margin_reading="  ")]))
+    ok = dict(base, margin_reading="none")
+    assert validate([ok]) == []
+    assert run(fake, [ok])[0].status == "done"
+    note = next(iter(fake.store["notes"].values()))
+    assert note["type"] == "Transcript"
+    assert note["text"]["string"].endswith("Margin reading: none")
+    assert fake.store["people"]["anna"]["note_list"] == [stable_handle("t")]
+    assert run(fake, [dict(ok, key="t2")])[0].status == "skip"  # same text on the same person: reused
+    on_child_ref = dict(ok, key="m", attach=[{"child_ref": {"family": "F0001", "child": "I0001"}}])
+    assert validate([on_child_ref]) == []
+
+
+def test_attach_existing_links_an_orphan_and_is_a_skip_the_second_time():
+    fake = FakeGrampsWeb()
+    fake.add("people", {"handle": "anna", "gender": 0, "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})  # I0001
+    fake.add("citations", {"handle": "cit", "source_handle": "src1", "page": "p. 1"})                  # C0001
+    fake.add("media", {"handle": "med", "path": "a.jpg"})                                             # O0001
+    fake.add("notes", {"handle": "nt", "text": {"string": "x"}})                                       # N0001
+    ops = [
+        {"op": "attach_existing", "key": "a1", "ruling": R, "object": {"citation": "C0001"}, "attach": [{"person": "I0001"}]},
+        {"op": "attach_existing", "key": "a2", "ruling": R, "object": {"media": "O0001"}, "attach": [{"citation": "C0001"}]},
+        {"op": "attach_existing", "key": "a3", "ruling": R, "object": {"note": "N0001"}, "attach": [{"person": "I0001"}]},
+    ]
+    assert validate(ops) == []
+    plan = run(fake, ops, dry_run=True)
+    assert [r.status for r in plan] == ["done"] * 3 and fake.writes() == []
+    assert [r.status for r in run(fake, ops)] == ["done"] * 3
+    assert fake.store["people"]["anna"]["citation_list"] == ["cit"]
+    assert fake.store["people"]["anna"]["note_list"] == ["nt"]
+    assert fake.store["citations"]["cit"]["media_list"][0]["ref"] == "med"
+    assert [r.status for r in run(fake, [dict(o, key=o["key"] + "b") for o in ops])] == ["skip"] * 3
+    fake.add("media", {"handle": "scan", "gramps_id": "D051-b", "path": "b.jpg"})  # a suffix an import added
+    op = {"op": "attach_existing", "key": "a4", "ruling": R, "object": {"media": "D051-b"}, "attach": [{"person": "I0001"}]}
+    assert validate([op]) == [] and run(fake, [op])[0].status == "done"
+    assert fake.store["people"]["anna"]["media_list"][0]["ref"] == "scan"
+
+
+def test_attach_existing_refuses_what_cannot_be_attached_or_carried():
+    bad = [
+        {"op": "attach_existing", "key": "b1", "ruling": R, "object": {"person": "I0001"}, "attach": [{"person": "I0002"}]},
+        {"op": "attach_existing", "key": "b2", "ruling": R, "object": {"media": "O0001"}, "attach": [{"child_ref": {"family": "F0001", "child": "I0001"}}]},
+        {"op": "attach_existing", "key": "b3", "ruling": R, "object": {"media": "0123b4e9269542049080d7a4c798"}, "attach": [{"person": "I0001"}]},
+        {"op": "attach_existing", "key": "b4", "ruling": R, "object": {"note": "N0001"}},
+        {"op": "set_attribute", "key": "b5", "ruling": R, "target": {"note": "N0001"}, "type": "x", "value": "y"},
+    ]
+    errors = "\n".join(validate(bad))
+    assert "object is a citation, media or note, got person" in errors
+    assert "cannot carry a media" in errors
+    assert "neither key:<key> nor a Gramps ID" in errors
+    assert "missing ['attach']" in errors
+    assert "bad target {'note': 'N0001'}" in errors  # a note is an object to attach, never a target
+    fake = FakeGrampsWeb()
+    res = run(fake, [{"op": "attach_existing", "key": "c", "ruling": R, "object": {"note": "N0099"}, "attach": [{"person": "I0099"}]}])
+    assert res[0].status == "conflict"
+
+
+def test_dedupe_list_keeps_the_first_of_a_repeated_reference():
+    fake = FakeGrampsWeb()
+    fake.add("people", {"handle": "anna", "gender": 0, "citation_list": ["c1", "c2", "c1"], "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    op = {"op": "dedupe_list", "key": "d", "ruling": R, "target": {"person": "I0001"}, "list": "citation_list"}
+    assert validate([op]) == []
+    assert run(fake, [op], dry_run=True)[0].status == "done" and fake.writes() == []
+    assert run(fake, [op])[0].status == "done"
+    assert fake.store["people"]["anna"]["citation_list"] == ["c1", "c2"]
+    assert run(fake, [dict(op, key="d2")])[0].status == "skip"
+    assert any("list is one of" in e for e in validate([dict(op, list="event_ref_list")]))
+    assert any("has no media_list" in e for e in validate([dict(op, target={"child_ref": {"family": "F0001", "child": "I0001"}}, list="media_list")]))
+
+
+def test_dedupe_list_keys_a_media_ref_on_its_region_and_keeps_what_a_repeat_carries():
+    fake = FakeGrampsWeb()
+    whole, face = {"ref": "m1", "rect": None}, {"ref": "m1", "rect": [10, 10, 40, 40]}
+    fake.add("people", {"handle": "anna", "gender": 0, "media_list": [whole, face, dict(face)],
+                        "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    op = {"op": "dedupe_list", "key": "d", "ruling": R, "target": {"person": "I0001"}, "list": "media_list"}
+    assert run(fake, [op])[0].status == "done"
+    assert fake.store["people"]["anna"]["media_list"] == [whole, face]  # a second region of one photo stays
+    fake.store["people"]["anna"]["media_list"].append(dict(face, note_list=["n1"]))
+    res = run(fake, [dict(op, key="d2")])
+    assert res[0].status == "conflict" and "note_list" in res[0].actions[-1]
+    assert len(fake.store["people"]["anna"]["media_list"]) == 3
+
+
+def test_a_tag_the_server_says_it_made_but_does_not_have_stops_the_op_loudly(fake):
+    real = fake._route
+
+    def forgetful(method, path, headers, params, body, data):
+        if method == "POST" and path.endswith("/objects/") and body and body[0].get("_class") == "Tag":
+            return Resp(201, [{"type": "add", "handle": body[0]["handle"]}])  # says yes, keeps nothing
+        return real(method, path, headers, params, body, data)
+
+    fake._route = forgetful
+    op = {"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}], "tag": "batch-a"}
+    res = run(fake, [op])
+    assert res[0].status == "error" and "is not there when read back" in res[0].actions[-1]
+    assert fake.store["notes"] == {}  # nothing was tagged with a handle that does not exist
+
+
+def test_a_gramps_id_may_carry_a_suffix_but_a_handle_is_still_refused():
+    note = {"op": "add_note", "key": "n", "ruling": R, "text": "x"}
+    ok = validate([dict(note, attach=[{"person": "I0001-b"}])])
+    assert ok == []
+    bad = validate([dict(note, attach=[{"person": "0123b4e9269542049080d7a4c798"}])])
+    assert any("neither key:<key> nor a Gramps ID" in e for e in bad)
+    fake = FakeGrampsWeb()
+    fake.add("people", {"handle": "anna", "gender": 0, "gramps_id": "I0001-b", "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    assert run(fake, [dict(note, attach=[{"person": "I0001-b"}])])[0].status == "done"
+    fake.add("media", {"handle": "scan", "gramps_id": "D051-b", "path": "scan.jpg", "desc": "scan"})
+    assert run(fake, [dict(note, key="m", attach=[{"media": "D051-b"}])])[0].status == "done"

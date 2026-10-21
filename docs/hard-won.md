@@ -330,6 +330,14 @@ Format: what happened, why, and the rule.
 
 **Rule.** `merge_person` and `merge_family` call Gramps' own merge on the server, which moves every reference itself. The dry run lists what moves, which families are repointed or merged, and what is deleted. The winner gets a note naming the loser, the ruling and the reason, written before the merge, so a rerun knows the merge is done.
 
+### 49. A Spanish civil registry refused a third-party request for lack of five things
+
+**What happened.** A Registro Civil refused two birth-act requests made for ancestors by a descendant. The reasons given: no proven legitimate interest, no family authorization or ID copy, no concrete purpose, no anonymisation, and no guarantee of use. The refusal opened a one-month appeal to the Dirección General de Seguridad Jurídica y Fe Pública.
+
+**Why.** The first request said only "genealogy". Ley 20/2011 lets a third party see another person's entries only with a legitimate interest (art. 15.3), and the only interest it presumes is that of the spouse or partner and of ascendants and descendants up to the second degree (art. 84). A great-grandchild is past that, so every further link has to be documented. For a person who is still living, the sede offers only "legal representative" or "authorized by the registered person", so an adult child has no route without that person's authorization. For a deceased person it offers "children, spouses and partners of" or "others".
+
+**Rule.** State the interest, the kinship with a document for each link past the second degree, the concrete purpose, that third parties will be anonymised and that the use is private, in the first request. Set "registered person deceased" before "in the capacity of". Before filing again, look in "my cases"; then wait 15 days before asking the same office again, and 7 days before asking another office with the same certificate. Log a refusal in `gwt-ledger` as `denied` with `--next-date` a few days before the last day of the appeal, and run `gwt-ledger due` at the start of each round. The appeal is signed with a digital certificate through AutoFirma.
+
 ### 50. A shortened handle, a tag with no handle, and the note an event leaves behind
 
 **What happened.** Three things on one Gramps Web 26.10.1 server while applying fixes with hand-written calls.
@@ -339,4 +347,4 @@ Format: what happened, why, and the rule.
 
 **Why.** (1) The API wants the full handle and does not say that a prefix is the problem. (2) Gramps removes an event's references, not the objects the event carried. (3) The tag was never created, so the handle the caller put in `tag_list` was empty. We have not found out whether the 7-character color (`#1a7f37`) is why the create was dropped; Gramps stores colors as 12 hex digits, which is what `gwt-apply` writes.
 
-**Rule.** Resolve a Gramps ID to its full handle by reading it (`/api/events/?gramps_id=...`), never type or cut a handle. When one event replaces another, use `merge_event`: it moves the loser's notes, citations and media to the winner, so nothing is left behind. Make a tag through `gwt-apply`, which gives it its own handle, and which stops with an error if the server does not have the tag when it reads it back.
+**Rule.** Resolve a Gramps ID to its full handle by reading it (`/api/events/?gramps_id=...`), never type or cut a handle. When one event replaces another, use `merge_event`: it calls Gramps' own merge, which moves the loser's citations, notes, media and attributes to the winner, so nothing is left behind. It refuses two events that differ, so correct one with `update_event` first. After any run that deletes events another way, run `gwt-check` and make sure `orphan-note` did not rise. Make tags through `gwt-apply`: it picks the tag's handle itself, writes the 12-digit color, and stops with an error if the tag is not there when it reads it back.

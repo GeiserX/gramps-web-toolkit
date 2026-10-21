@@ -30,12 +30,18 @@ It exits `0` with no new findings and `1` with new findings. It exits `2` on bad
 | `--tag NAME` | Objects carrying this tag become the scope. `gwt-apply --tag` puts the tag only on the objects a run creates, so old objects the run changed are not in it: use `--since` to see those. With `--tag`, the diff counts only tagged objects as changed or new |
 | `--root ID` | Gramps ID of the Ahnentafel root. With `--since`, a number that is lost or now holds another person is a finding |
 | `--known FILE` | Findings to accept: an earlier `--json` report, or a list of `{"check", "key"}` |
+| `--ignore-check NAME` | Leaves a whole check out of the exit code (repeatable). For a check that is noise in your tree, such as `private` after an import that marks every living person private on purpose. The report still counts the findings and prints `ignored NAME: N finding(s)`; a name that is not a check exits 2 |
+| `--baseline OLD` | An earlier dump: the findings it already had count as known, so the exit code reflects only what is new since then. The same as running `check OLD --json` and passing that report to `--known`, in one command. The usual call is `--since OLD --baseline OLD`. It runs the checks twice, so a check takes about twice as long |
 | `--json FILE` | The full report as JSON (`-` prints it instead of the text) |
 | `--save-dump FILE` | Keeps the live dump, to use as `--since` next time |
 | `--limit N` | Findings printed per check (default 30); the JSON has all of them |
 | `--pagesize`, `--workers` | Objects per request (default 1000) and requests in flight (default 4) |
 
 **Scope.** The structural checks always run on the whole tree. The fuzzy duplicate checks (`dup-couple-names`, `dup-person-birth`, `dup-person-relative`, `dup-person-fuzzy`, `dup-vital-event`) report a pair only when at least one side is in scope, so a run is not blamed for duplicates that were already there. Without `--since` or `--tag`, everything is in scope.
+
+**Reasons.** Rows of a known file may carry a `reason`, and the report prints it (`known N0099: kept on purpose`). `gwt-check mark-known REPORT.json --check NAME --key KEY [--key KEY ...] --reason "..." --out known.json` adds findings of a report to a known file with the reason; it refuses a key the report does not have and a blank reason, and adding one twice changes nothing.
+
+**Parent and child.** When one of a same-name pair is a parent of the other in the tree, a shared relative no longer makes them a duplicate (`dup-person-relative`, and the shared-relative branch of `dup-person-fuzzy`): a father and a son with one name share relatives by name across three generations. A shared birth date still does: `dup-person-birth` and "birth within 2 years" report the pair, because a person entered twice and then linked as their own child is a real duplicate.
 
 **Known findings.** Every finding has a `check` and a `key` built from Gramps IDs, for example `repeated-ref` / `F0012 citation_list C0034`. The key stays the same from run to run while the problem does. Pass the first run's report as `--known` and the exit code then reflects only new problems.
 
@@ -58,6 +64,7 @@ It exits `0` with no new findings and `1` with new findings. It exits `2` on bad
 | `dup-person-relative` | Two people with the same name and a parent, spouse or child of the same name, unless their birth years differ |
 | `dup-person-fuzzy` | Two people whose names differ only by an extra given name or surname (every word of the shorter given name is in the longer one, and the same for the surnames), born within 2 years of each other, or with a spouse or child of the same name, or a parent of the same name who is a different person. Siblings share their parents, so the same parent does not count |
 | `dup-vital-event` | One person (role `Primary`) or family (role `Family`) with two Birth, Death, Baptism, Burial or Marriage events |
+| `living-media-sensitive` | Media of a person with no death or burial event of their own (role `Primary`) who was born within 110 years (or has no dated birth), whose path, description or attributes hold an ID number or an ID or address word. Media already private (the person, the media or the reference) is skipped. It reads metadata only, never the image or its notes, and never prints the match. The patterns are Spanish-first: a DNI or NIE counts only with the right check letter, and the words are passport, home-address and ID-card terms in Spanish, English and French, plus `c/` before a street name. Another country adds its ID number to `ID_NUMBERS` and its words to `ID_WORDS` in `check/gwt_check/checks.py`. Accept a false positive with `--known` |
 | `private` | Any object or sub-reference marked private |
 | `place-no-coords` | A place that an event uses, without latitude or longitude |
 | `surname-marker` | A surname containing `[`, such as `Vidal [¿?]` |
@@ -70,7 +77,7 @@ The report also gives, without failing: events without a place (in the whole tre
 
 ## Self-test
 
-`gwt-check selftest` builds an invented three-generation tree, checks that it comes out clean (the positive control), then plants 32 errors, one at a time and then all together, and checks that each comes out as its finding. The test suite also silences each check in turn and requires the self-test to fail, so a check without a planted error cannot slip in.
+`gwt-check selftest` builds an invented three-generation tree, checks that it comes out clean (the positive control), then plants 33 errors, one at a time and then all together, and checks that each comes out as its finding. The test suite also silences each check in turn and requires the self-test to fail, so a check without a planted error cannot slip in.
 
 ## Speed
 
