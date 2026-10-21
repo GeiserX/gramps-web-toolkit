@@ -231,8 +231,9 @@ class Result:
 
 
 class Applier:
-    def __init__(self, client: Client, *, retries: int = 5, retry_wait: float = 30.0):
+    def __init__(self, client: Client, *, retries: int = 5, retry_wait: float = 30.0, lock=None):
         self.c = client
+        self.lock = lock  # a TreeLock to keep fresh between ops, during --apply
         self.retries = retries
         self.retry_wait = retry_wait
         self.keymap: dict[str, str] = {}  # key -> handle of the object it ended up as
@@ -319,6 +320,8 @@ class Applier:
     def run(self, ops: list[dict]) -> list[Result]:
         results = []
         for op in ops:
+            if self.lock is not None:
+                self.lock.refresh()
             res = Result(op["key"], op["op"], op["ruling"])
             self.c.context = {"key": op["key"], "op": op["op"], "ruling": op["ruling"]}
             for attempt in range(1, self.retries + 1):

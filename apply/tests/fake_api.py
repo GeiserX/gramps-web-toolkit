@@ -76,7 +76,7 @@ class FakeGrampsWeb:
         return next(o for o in self.store[ns].values() if o["gramps_id"] == gramps_id)
 
     def writes(self) -> list[tuple[str, str]]:
-        return [c for c in self.calls if c[0] in ("POST", "PUT") and c[1] != "/api/token/"]
+        return [c for c in self.calls if c[0] in ("POST", "PUT", "DELETE") and c[1] != "/api/token/"]
 
     def _family_refs(self, old: dict | None, new: dict):
         """What the real server does on a family write: keep the persons' family links in step."""
@@ -154,6 +154,9 @@ class FakeGrampsWeb:
                     self.edit_after_read, (_, fn) = None, self.edit_after_read
                     fn(obj)
                 return resp
+            if method == "DELETE":
+                del store[parts[1]]
+                return Resp(200, [{"type": "delete", "handle": parts[1]}])
             if method == "PUT":
                 if headers.get("If-Match"):  # like the real server: a GET ETag never matches
                     return Resp(412, "Resource does not match provided ETag")

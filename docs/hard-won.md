@@ -293,3 +293,11 @@ Format: what happened, why, and the rule.
 **Why.** The mark was a separate note op, and `link_child` had nowhere to say it. When the note op was left out, nothing noticed.
 
 **Rule.** `link_child` takes `probable: true` with `probable_reason` and writes the `[probable]` note on the child_ref itself. Rerunning it on an existing link adds a missing mark.
+
+### 44. Two copies of one apply ran on the same tree at once
+
+**What happened.** A second copy of an apply was started on a tree while the first was still writing. They interleaved their writes, and the second overwrote the backup file the first had taken after its block.
+
+**Why.** Nothing in the tree said an apply was running, and the backup and log names came from the date and the block label, which both copies shared.
+
+**Rule.** `--apply` holds a lock note inside the tree for its whole run and refuses to start while another run holds it. Every run has its own id, and its log is created with `O_EXCL` under a name that carries the id, so no run can write into another run's file. Backup names carry a run id too, and are created the same way.
