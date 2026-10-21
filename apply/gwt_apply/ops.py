@@ -42,6 +42,8 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "add_media": ({"file", "path", "attach"}, {"desc", "mime", "gramps_id"}),
     "add_note": ({"text", "attach"}, {"type", "gramps_id"}),
     "add_transcription": ({"text", "margin_reading", "attach"}, {"language", "gramps_id"}),
+    "attach_existing": ({"object", "attach"}, set()),
+    "dedupe_list": ({"target", "list"}, set()),
     "set_attribute": ({"target", "type", "value"}, set()),
     "merge_person": ({"winner", "loser"}, {"use_loser", "reason"}),
     "merge_family": ({"winner", "loser"}, {"reason"}),
@@ -53,6 +55,9 @@ MERGE_LISTS = [  # what Gramps' merge carries from the loser to the winner, list
     "child_ref_list",
 ]
 USE_LOSER = {"birth": "birth_ref_index", "death": "death_ref_index"}
+ATTACHABLE = {"citation": ("Citation", "citation_list"), "media": ("Media", "media_list"),  # attach_existing
+              "note": ("Note", "note_list")}
+REF_OWN_LISTS = ("note_list", "citation_list", "attribute_list")  # what a MediaRef carries besides its ref
 PERSON_FIELDS = {"first_name", "surname", "gender"}
 EVENT_FIELDS = {"type", "date", "place", "description"}
 GENDER = {"F": 0, "M": 1, "U": 2}
@@ -75,7 +80,7 @@ def fold(text: str) -> str:
     return " ".join(bare.casefold().split())
 
 
-_GRAMPS_ID = re.compile(r"^[A-Za-z]+\d+$")
+_GRAMPS_ID = re.compile(r"^[A-Za-z]+\d+(?:-[A-Za-z0-9]+)?$")  # I0042, or I0042-b: an import may add a suffix
 
 
 class Conflict(Exception):
@@ -116,6 +121,17 @@ def _parse_target(spec) -> tuple[str, object]:
     if kind not in TARGET_KINDS or not isinstance(ref, str) or not ref:
         raise ValueError(f"bad target {spec!r}")
     return TARGET_KINDS[kind], ref
+
+
+def _parse_object(spec) -> tuple[str, str, str]:
+    """attach_existing's object: {"media": "O0054"} -> ("Media", "O0054", "media_list")."""
+    if not isinstance(spec, dict) or len(spec) != 1:
+        raise ValueError(f"object is one of {sorted(ATTACHABLE)} -> ref, got {spec!r}")
+    (kind, ref), = spec.items()
+    if kind not in ATTACHABLE or not isinstance(ref, str) or not ref:
+        raise ValueError(f"object is a citation, media or note, got {kind}")
+    cls, lst = ATTACHABLE[kind]
+    return cls, ref, lst
 
 
 def _target_refs(spec) -> list:
@@ -180,6 +196,8 @@ def validate(ops: list[dict]) -> list[str]:
         refs = [op.get(f) for f in ("person", "family", "father", "mother", "child", "source", "place", "enclosed_by",
                                     "winner", "loser")]
         refs += list(op.get("children") or [])
+        if name == "attach_existing":
+            refs += _target_refs(op.get("object"))
         if name == "add_association":
             refs.append(op.get("target"))
         refs += _ref_list(op.get("namesake_of")) if op.get("namesake_of") else []
@@ -219,6 +237,12 @@ def validate(ops: list[dict]) -> list[str]:
                 raise ValueError(f"use_loser takes {sorted(USE_LOSER)}")
             if name == "add_transcription" and not str(op.get("margin_reading") or "").strip():
                 raise ValueError("margin_reading is required: what the margins say, or 'none' once you looked")
+            if name == "dedupe_list":
+                cls, _ = _parse_target(op.get("target"))
+                if op.get("list") not in CARRIES:
+                    raise ValueError(f"list is one of {sorted(CARRIES)}")
+                if cls not in CARRIES[op["list"]]:
+                    raise ValueError(f"a {cls} has no {op['list']}")
             if name == "add_event" and bool(op.get("person")) == bool(op.get("family")):
                 raise ValueError("add_event needs exactly one of person or family")
             if name == "add_family" and not (op.get("father") or op.get("mother")):
@@ -244,12 +268,15 @@ def validate(ops: list[dict]) -> list[str]:
                     raise ValueError("lat and long go together")
                 if "lat" in op and not (-90 <= float(op["lat"]) <= 90 and -180 <= float(op["long"]) <= 180):
                     raise ValueError("lat/long out of range")
-            for spec in op.get("attach") or []:
-                cls, _ = _parse_target(spec)
+            if name == "attach_existing":
+                lst = _parse_object(op.get("object"))[2]
+            elif op.get("attach"):
                 lst = {"add_citation": "citation_list", "add_media": "media_list", "add_note": "note_list",
                        "add_transcription": "note_list"}[name]
+            for spec in op.get("attach") or []:
+                cls, _ = _parse_target(spec)
                 if cls not in CARRIES[lst]:
-                    raise ValueError(f"a {cls} cannot carry a {name[4:]}")
+                    raise ValueError(f"a {cls} cannot carry a {lst[:-5]}")
             if name == "add_media" and not Path(op.get("file", "")).is_file():
                 raise ValueError(f"file not found: {op.get('file')}")
             if name == "add_media" and Path(op.get("path", "")).is_absolute():
@@ -326,6 +353,10 @@ class Applier:
                     return h
                 self.c.create({"_class": "Tag", "handle": h, "name": name, "color": "#000000000000", "priority": 0})
                 self.actions.append(f"create Tag {name!r}")
+                if not self.c.dry_run and self.c.get_live("Tag", h) is None:
+                    # a server that answered 201 and kept nothing: the block's objects would carry a tag that no
+                    # list can filter by, and the block could no longer be found or rolled back by its tag
+                    raise ApiError(f"Tag {name!r} was created but is not there when read back")
                 self._tags[name] = h
         return self._tags[name]
 
@@ -842,6 +873,41 @@ class Applier:
             {"op": "add_note", "key": op["key"], "ruling": op["ruling"], "type": "Transcript",
              "text": text, "attach": op["attach"], "gramps_id": op.get("gramps_id", "")}
         )
+
+    def attach_existing(self, op):
+        """Link a citation, media object or note the tree already has to more targets.
+
+        For what an import left with no reference at all (orphans) and for a document that belongs
+        to a second person: add_citation, add_media and add_note only make new objects.
+        """
+        cls, ref, lst = _parse_object(op["object"])
+        self.attach(op["attach"], lst, self.resolve(cls, ref))
+
+    def dedupe_list(self, op):
+        """Keep the first of each repeated reference in one list: the same citation twice on a person."""
+        cls, ref = _parse_target(op["target"])
+        target, carrier, label = self.holder(cls, ref)
+        name = op["list"]
+        items = carrier.get(name) or []
+        seen, kept = {}, []
+        for i in items:
+            # the same identity as gwt-check's repeated-ref: a media ref is its media plus its region
+            ident = i if isinstance(i, str) else (i.get("ref"), repr(i.get("rect")))
+            first = seen.get(ident)
+            if first is None:
+                seen[ident] = i
+                kept.append(i)
+                continue
+            for own in REF_OWN_LISTS if isinstance(i, dict) else ():
+                if [x for x in i.get(own) or [] if x not in (first.get(own) or [])]:
+                    raise Conflict(f"{label}: a repeated {name} entry {ident[0]} carries a {own} the first one "
+                                   f"lacks, so dropping it would lose that")
+        if len(kept) == len(items):
+            self.actions.append(f"skip: {label} has no repeated entry in {name}")
+            return
+        before = copy.deepcopy(target)
+        carrier[name] = kept
+        self.save(before, target)
 
     def set_attribute(self, op):
         cls, ref = _parse_target(op["target"])
