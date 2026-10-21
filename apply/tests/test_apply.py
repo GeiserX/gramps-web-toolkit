@@ -771,3 +771,15 @@ def test_association_reads_no_whole_class_per_op(fake):
             "relation": "DNA"} for i in range(3)]
     assert all(r.status == "done" for r in run(fake, ops))
     assert len(seen) == 1  # the people index, once
+
+
+def test_dedupe_list_keeps_the_first_of_a_repeated_reference():
+    fake = FakeGrampsWeb()
+    fake.add("people", {"handle": "anna", "gender": 0, "citation_list": ["c1", "c2", "c1"], "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    op = {"op": "dedupe_list", "key": "d", "ruling": R, "target": {"person": "I0001"}, "list": "citation_list"}
+    assert validate([op]) == []
+    assert run(fake, [op], dry_run=True)[0].status == "done" and fake.writes() == []
+    assert run(fake, [op])[0].status == "done"
+    assert fake.store["people"]["anna"]["citation_list"] == ["c1", "c2"]
+    assert run(fake, [dict(op, key="d2")])[0].status == "skip"
+    assert any("list is one of" in e for e in validate([dict(op, list="event_ref_list")]))

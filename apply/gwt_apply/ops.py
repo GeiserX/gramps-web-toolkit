@@ -41,6 +41,7 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "add_citation": ({"source", "page", "attach"}, {"confidence", "date", "gramps_id"}),
     "add_media": ({"file", "path", "attach"}, {"desc", "mime", "gramps_id"}),
     "add_note": ({"text", "attach"}, {"type", "gramps_id"}),
+    "dedupe_list": ({"target", "list"}, set()),
     "set_attribute": ({"target", "type", "value"}, set()),
     "merge_person": ({"winner", "loser"}, {"use_loser", "reason"}),
     "merge_family": ({"winner", "loser"}, {"reason"}),
@@ -52,6 +53,7 @@ MERGE_LISTS = [  # what Gramps' merge carries from the loser to the winner, list
     "child_ref_list",
 ]
 USE_LOSER = {"birth": "birth_ref_index", "death": "death_ref_index"}
+DEDUPE_LISTS = {"citation_list", "note_list", "media_list"}  # dedupe_list
 PERSON_FIELDS = {"first_name", "surname", "gender"}
 EVENT_FIELDS = {"type", "date", "place", "description"}
 GENDER = {"F": 0, "M": 1, "U": 2}
@@ -216,6 +218,10 @@ def validate(ops: list[dict]) -> list[str]:
                 raise ValueError("winner and loser are the same")
             if name == "merge_person" and set(op.get("use_loser") or []) - set(USE_LOSER):
                 raise ValueError(f"use_loser takes {sorted(USE_LOSER)}")
+            if name == "dedupe_list":
+                _parse_target(op.get("target"))
+                if op.get("list") not in DEDUPE_LISTS:
+                    raise ValueError(f"list is one of {sorted(DEDUPE_LISTS)}")
             if name == "add_event" and bool(op.get("person")) == bool(op.get("family")):
                 raise ValueError("add_event needs exactly one of person or family")
             if name == "add_family" and not (op.get("father") or op.get("mother")):
@@ -823,6 +829,25 @@ class Applier:
             )
             self.keymap[op["key"]] = handle
         self.attach(op["attach"], "note_list", handle)
+
+    def dedupe_list(self, op):
+        """Keep the first of each repeated reference in one list: the same citation twice on a person."""
+        cls, ref = _parse_target(op["target"])
+        target, carrier, label = self.holder(cls, ref)
+        name = op["list"]
+        items = carrier.get(name) or []
+        seen, kept = set(), []
+        for i in items:
+            h = i if isinstance(i, str) else i.get("ref")
+            if h not in seen:
+                seen.add(h)
+                kept.append(i)
+        if len(kept) == len(items):
+            self.actions.append(f"skip: {label} has no repeated entry in {name}")
+            return
+        before = copy.deepcopy(target)
+        carrier[name] = kept
+        self.save(before, target)
 
     def set_attribute(self, op):
         cls, ref = _parse_target(op["target"])
