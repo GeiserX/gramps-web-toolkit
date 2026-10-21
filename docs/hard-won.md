@@ -329,3 +329,11 @@ Format: what happened, why, and the rule.
 **Why.** `gwt-apply` had no merge op, so a merge meant leaving it and writing to the API directly, where every reference to move is one more write that can be forgotten.
 
 **Rule.** `merge_person` and `merge_family` call Gramps' own merge on the server, which moves every reference itself. The dry run lists what moves, which families are repointed or merged, and what is deleted. The winner gets a note naming the loser, the ruling and the reason, written before the merge, so a rerun knows the merge is done.
+
+### 49. A Spanish civil registry refused a third-party request for lack of four things
+
+**What happened.** A Registro Civil refused two birth-act requests made for ancestors by a descendant. The reasons given: no proven legitimate interest, no family authorization or ID copy, no concrete purpose, no anonymisation, and no guarantee of use. The refusal opened a one-month appeal to the Dirección General de Seguridad Jurídica y Fe Pública.
+
+**Why.** The first request said only "genealogy". For a person who is still living, the sede offers only "legal representative" or "authorized by the registered person", so an adult child has no route without that person's authorization. For a deceased person it offers "children, spouses and partners of" or "others".
+
+**Rule.** State the interest, the kinship with a document for each link, the concrete purpose, that third parties will be anonymised and that the use is private, in the first request. Set "registered person deceased" before "in the capacity of". Wait at least 7 days before asking another office with the same certificate (the sede says 15 for the same office, so take the longer), and look in "my cases" before filing again. A refusal needs a calendar entry: log it in `gwt-ledger` as `denied` with the last day of the appeal. The appeal needs a digital certificate and AutoFirma; Cl@ve alone fails with "certificate not valid".
