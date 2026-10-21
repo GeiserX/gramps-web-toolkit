@@ -41,6 +41,7 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "add_citation": ({"source", "page", "attach"}, {"confidence", "date", "gramps_id"}),
     "add_media": ({"file", "path", "attach"}, {"desc", "mime", "gramps_id"}),
     "add_note": ({"text", "attach"}, {"type", "gramps_id"}),
+    "add_transcription": ({"text", "margin_reading", "attach"}, {"gramps_id"}),
     "attach_existing": ({"object", "attach"}, set()),
     "dedupe_list": ({"target", "list"}, set()),
     "set_attribute": ({"target", "type", "value"}, set()),
@@ -234,6 +235,8 @@ def validate(ops: list[dict]) -> list[str]:
                 raise ValueError("winner and loser are the same")
             if name == "merge_person" and set(op.get("use_loser") or []) - set(USE_LOSER):
                 raise ValueError(f"use_loser takes {sorted(USE_LOSER)}")
+            if name == "add_transcription" and not str(op.get("margin_reading") or "").strip():
+                raise ValueError("margin_reading is required: what the margins say, or 'none' once you looked")
             if name == "dedupe_list":
                 cls, _ = _parse_target(op.get("target"))
                 if op.get("list") not in CARRIES:
@@ -268,7 +271,8 @@ def validate(ops: list[dict]) -> list[str]:
             if name == "attach_existing":
                 lst = _parse_object(op.get("object"))[2]
             elif op.get("attach"):
-                lst = {"add_citation": "citation_list", "add_media": "media_list", "add_note": "note_list"}[name]
+                lst = {"add_citation": "citation_list", "add_media": "media_list", "add_note": "note_list",
+                       "add_transcription": "note_list"}[name]
             for spec in op.get("attach") or []:
                 cls, _ = _parse_target(spec)
                 if cls not in CARRIES[lst]:
@@ -854,6 +858,20 @@ class Applier:
             )
             self.keymap[op["key"]] = handle
         self.attach(op["attach"], "note_list", handle)
+
+    def add_transcription(self, op):
+        """A transcript as a Transcript note, never as media; the margin reading is part of the text.
+
+        `margin_reading` is required: what the margins of the page say (annotations, later notes,
+        corrections), or the word "none" once you have looked. A transcript made without looking at the
+        margin is how a legitimate-looking entry ends up with the wrong person.
+        """
+        reading = str(op["margin_reading"]).strip()
+        text = f"{op['text'].rstrip()}\n\nMargin reading: {reading}"
+        self.add_note(
+            {"op": "add_note", "key": op["key"], "ruling": op["ruling"], "type": "Transcript",
+             "text": text, "attach": op["attach"], "gramps_id": op.get("gramps_id", "")}
+        )
 
     def attach_existing(self, op):
         """Link a citation, media object or note the tree already has to more targets.
