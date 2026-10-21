@@ -182,3 +182,20 @@ def test_dump_refuses_a_short_type_and_a_wrong_tree():
     client = Client("https://gramps.example.org", "u", "pw", tree="other", opener=FakeServer(data))
     with pytest.raises(ApiError, match="expected 'other'"):
         client.login()
+
+
+def test_baseline_makes_the_findings_it_already_had_known(tmp_path, capsys):
+    old = selftest.clean_tree()
+    selftest.p_orphan_note(old)
+    old_dump = _write(tmp_path, "old.json", old)
+    new = copy.deepcopy(old)
+    selftest.p_surname_marker(new)
+    new_dump = _write(tmp_path, "new.json", new)
+    assert main(["check", new_dump]) == 1
+    capsys.readouterr()
+    report = str(tmp_path / "r.json")
+    assert main(["check", new_dump, "--baseline", old_dump, "--json", report]) == 1
+    data = json.load(open(report))
+    assert [(f["check"], f["key"]) for f in data["new"]] == [("surname-marker", "I0007 Vidal [¿?]")]
+    assert any(f["check"] == "orphan-note" and f["known"] for f in data["findings"])
+    assert main(["check", old_dump, "--baseline", old_dump]) == 0

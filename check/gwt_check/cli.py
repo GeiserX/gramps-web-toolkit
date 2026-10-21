@@ -153,6 +153,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--tag", help="scope is the objects carrying this tag (a run tag)")
     p.add_argument("--root", help="Gramps ID of the Ahnentafel root; with --since, numbers lost or changed fail")
     p.add_argument("--known", help="earlier --json output (or list of {check, key}) to accept as known")
+    p.add_argument("--baseline", help="earlier dump: its own findings count as known, so only what is new since then fails")
     p.add_argument("--json", help="write the full report as JSON to this file (- for stdout)")
     p.add_argument("--save-dump", help="keep the live dump in this file")
     p.add_argument("--limit", type=int, default=30, help="findings printed per check (default 30)")
@@ -170,6 +171,12 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         t0 = time.monotonic()
         known = load_known(args.known) if args.known else None
+        if args.baseline:
+            base = load(args.baseline)
+            if base.partial:
+                raise BadInput(f"{args.baseline}: a .gramps backup has no objects to check; --baseline needs a dump")
+            old = check(base)["findings"]
+            known = {(f["check"], f["key"]) for f in old} | (known or set())
         since = load(args.since) if args.since else None
         if args.tree:
             tree = load(args.tree)
