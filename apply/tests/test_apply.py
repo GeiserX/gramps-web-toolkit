@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from fake_api import FakeGrampsWeb
+from fake_api import FakeGrampsWeb, Resp
 from gwt_apply.client import ApiError, Client
 from gwt_apply.dates import DateError, parse_date
 from gwt_apply.ops import Applier, stable_handle, validate
@@ -561,3 +561,97 @@ def test_login_that_times_out_is_retried(fake):
     op = {"op": "add_event", "key": "e", "ruling": R, "person": "I0001", "type": "Death", "date": "abt 1950"}
     res = Applier(c, retries=2, retry_wait=0).run([op])
     assert res[0].status == "done", res[0].actions
+
+
+class MergingFake(FakeGrampsWeb):
+    """The fake API plus the merge endpoints, doing what Gramps' merge does to the lists the tests look at."""
+
+    def _route(self, method, path, headers, params, body, data):
+        parts = [p for p in path.split("/") if p][1:]
+        if method == "POST" and len(parts) == 4 and parts[2] == "merge":
+            ns, w, l_ = parts[0], parts[1], parts[3]
+            store = self.store[ns]
+            win, lose = store[w], store.pop(l_)
+            for lst in ("event_ref_list", "citation_list", "note_list", "child_ref_list", "family_list", "parent_family_list"):
+                win[lst] = win.get(lst, []) + [x for x in lose.get(lst, []) if x not in win.get(lst, [])]
+            if ns == "people":
+                win["attribute_list"].append({"_class": "Attribute", "type": "Merged Gramps ID", "value": lose["gramps_id"]})
+                for fam in self.store["families"].values():
+                    for role in ("father_handle", "mother_handle"):
+                        if fam.get(role) == l_:
+                            fam[role] = w
+                    for ref in fam.get("child_ref_list", []):
+                        if ref["ref"] == l_:
+                            ref["ref"] = w
+            else:
+                for p in self.store["people"].values():
+                    for lst in ("family_list", "parent_family_list"):
+                        p[lst] = [w if x == l_ else x for x in p.get(lst, [])]
+            win["change"] = self.tick()
+            return Resp(200, {})
+        return super()._route(method, path, headers, params, body, data)
+
+
+def test_merge_person_moves_everything_and_notes_it(scan, tmp_path):
+    fake = MergingFake()
+    fake.add("people", {"handle": "anna", "gender": 0, "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    dup = fake.add("people", {"handle": "anna2", "gender": 0, "primary_name": {"first_name": "Ana", "surname_list": [{"surname": "Example", "primary": True}]}})
+    b = fake.add("events", {"handle": "b2", "type": "Birth", "date": parse_date("1890")})
+    dup["event_ref_list"] = [{"_class": "EventRef", "ref": "b2", "role": "Primary"}]
+    dup["birth_ref_index"] = 0
+    kid = fake.add("people", {"handle": "kid", "primary_name": {"first_name": "Tom", "surname_list": [{"surname": "Example"}]}})
+    fake.add("people", {"handle": "bob", "gender": 1, "primary_name": {"first_name": "Bob", "surname_list": [{"surname": "Sample"}]}})
+    fake.add("families", {"handle": "fam", "mother_handle": "anna2", "father_handle": "bob", "child_ref_list": [{"ref": "kid", "frel": "Birth", "mrel": "Birth"}]})
+    fake.add("families", {"handle": "famw", "mother_handle": "anna", "father_handle": "bob"})
+    op = {"op": "merge_person", "key": "mp", "ruling": R, "winner": "I0001", "loser": "I0002", "use_loser": ["birth"],
+          "reason": "same baptism entry"}
+    plan = run(fake, [op], dry_run=True)
+    assert plan[0].status == "done" and fake.writes() == []
+    text = "\n".join(plan[0].actions)
+    assert "merge Person I0002 into I0001" in text and '"ref": "b2"' in text
+    assert "Family F0001: mother I0002 -> I0001" in text and "delete Person I0002" in text
+    assert "Family F0001 merges into Family F0002: the same partner" in text
+    assert "birth_ref_index: -1 -> 0" in text
+    res = run(fake, [op])
+    assert res[0].status == "done", res[0].actions
+    anna = fake.store["people"]["anna"]
+    assert "anna2" not in fake.store["people"] and fake.store["families"]["fam"]["mother_handle"] == "anna"
+    assert anna["event_ref_list"][0]["ref"] == "b2" and anna["birth_ref_index"] == 0
+    note = fake.store["notes"][stable_handle("mp#merge")]
+    assert note["text"]["string"].startswith("Merged Person I0002 (Ana Example) into this person (ruling ruling-0001). same baptism")
+    assert note["handle"] in anna["note_list"]
+    assert run(fake, [op])[0].status == "skip"  # a rerun finds the merge done
+
+
+def test_merge_whose_answer_was_lost_is_not_done_twice_and_keeps_the_birth():
+    fake = MergingFake()
+    fake.add("people", {"handle": "anna", "gender": 0, "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    dup = fake.add("people", {"handle": "anna2", "gender": 0, "primary_name": {"first_name": "Ana", "surname_list": [{"surname": "Example", "primary": True}]}})
+    fake.add("events", {"handle": "b2", "type": "Birth", "date": parse_date("1890")})
+    dup["event_ref_list"] = [{"_class": "EventRef", "ref": "b2", "role": "Primary"}]
+    dup["birth_ref_index"] = 0
+    fake.drop_after = ("POST", "/api/people/anna/merge/")
+    op = {"op": "merge_person", "key": "mp", "ruling": R, "winner": "I0001", "loser": "I0002", "use_loser": ["birth"]}
+    res = run(fake, [op])
+    assert res[0].status == "skip", res[0].actions  # the retry finds the merge done
+    assert sum(1 for m, p in fake.calls if m == "POST" and "/merge/" in p) == 1
+    anna = fake.store["people"]["anna"]
+    assert "anna2" not in fake.store["people"] and anna["birth_ref_index"] == 0
+    assert anna["event_ref_list"][0]["ref"] == "b2"
+
+
+def test_merge_family_needs_the_same_parents(tmp_path):
+    fake = MergingFake()
+    for h, n in (("dad", "John"), ("dad2", "Jon"), ("mum", "Mary"), ("kid", "Tom")):
+        fake.add("people", {"handle": h, "primary_name": {"first_name": n, "surname_list": [{"surname": "Example"}]}})
+    fake.add("families", {"handle": "f1", "father_handle": "dad", "mother_handle": "mum"})
+    fake.add("families", {"handle": "f2", "mother_handle": "mum", "child_ref_list": [{"ref": "kid", "frel": "Birth", "mrel": "Birth"}]})
+    fake.add("families", {"handle": "f3", "father_handle": "dad2", "mother_handle": "mum"})
+    res = run(fake, [{"op": "merge_family", "key": "mf", "ruling": R, "winner": "F0001", "loser": "F0003"}])
+    assert res[0].status == "conflict" and "different fathers" in res[0].actions[-1]
+    res = run(fake, [{"op": "merge_family", "key": "mf2", "ruling": R, "winner": "F0001", "loser": "F0002"}])
+    assert res[0].status == "done", res[0].actions
+    assert "f2" not in fake.store["families"]
+    assert fake.store["families"]["f1"]["child_ref_list"][0]["ref"] == "kid"
+    assert fake.store["people"]["kid"]["parent_family_list"] == ["f1"]
+    assert "winner and loser are the same" in "\n".join(validate([{"op": "merge_family", "key": "x", "ruling": R, "winner": "F1", "loser": "F1"}]))

@@ -53,6 +53,8 @@ References to other objects are either a **Gramps ID** (`I0042`, `P0007`) or **`
 | `add_media` | `file`, `path`, `attach` | `desc`, `mime`, `gramps_id` | Media object for a local file, or the existing one with the same MD5, attached to each target |
 | `add_note` | `text`, `attach` | `type` (default `General`), `gramps_id` | New note, or a note with the same text already on a target |
 | `set_attribute` | `target`, `type`, `value` | | Sets an attribute; replaces the value of an attribute of the same type |
+| `merge_person` | `winner`, `loser` | `use_loser` (`birth`, `death`), `reason` | Gramps' own person merge: everything that points at the loser moves to the winner, the loser's families with the same partner merge, and the loser is deleted. See [Merges](#merges) |
+| `merge_family` | `winner`, `loser` | `reason` | Gramps' own family merge. Refused when the two families have different fathers or different mothers: merge those people first |
 
 `attach` and `target` take objects with one key, the kind of object: `{"person": "I0042"}`, `{"event": "key:birth-john"}`. Kinds: `person`, `family`, `event`, `citation`, `source`, `media`, `place`, and `child_ref`, the link between a child and a family, written `{"child_ref": {"family": "F0003", "child": "I0042"}}`. A child_ref carries citations and notes (no media, no attributes); that is where a doubtful parent link gets its source and its "probable" note. Mark the link with `probable` on `link_child` rather than with a separate `add_note`, so the mark cannot be left out. The child must already be in that family.
 
@@ -89,6 +91,14 @@ The dry-run prints one block per op:
     skip: Event E0456 already has it in citation_list
 ```
 
+### Merges
+
+A merge is the one op that deletes something, so it says everything it will do before it does it. The dry run lists, list by list, what moves from the loser to the winner (events, citations, notes, media, attributes, names, families), which families now point at the winner instead of the loser, which of the loser's families merge with the winner's because they share the partner, and the loser that goes away.
+
+The merge itself is the server's (`POST /api/people/<winner>/merge/<loser>`, `POST /api/families/<winner>/merge/<loser>`), the same code the Gramps Web merge screen runs, so references are moved by Gramps and never by hand-written `PUT`s. On a person merge the winner keeps its own name, gender, birth and death; `use_loser: ["birth"]` makes the loser's birth event the winner's birth instead (likewise `death`). That change is written to the winner before the merge.
+
+Before the merge, the winner gets a note that records it: `Merged Person I0042 (John Smith) into this person (ruling R-12). <reason>`. The note is how a rerun knows the merge is done: when the loser is gone and the winner has that note, the op is skipped; when the loser is gone and there is no note, the op is a conflict.
+
 ## Snapshots
 
 A dry run against the server reads the tree op by op, which takes hours for a list of thousands of ops. With a snapshot it reads nothing from the server:
@@ -118,7 +128,7 @@ Then it applies, reading from the snapshot. Before each `PUT` of an object read 
 - **One birth and one death.** If the person already has a `Birth` (or `Death`) in role `Primary` with another date, the op is a conflict. Correct the existing event with `update_event` instead of adding a second one.
 - **One apply per tree.** `--apply` takes a lock before its first write and holds it to the end: a private note with a fixed handle and Gramps ID `GWTLOCK`, inside the tree, so it works whichever machine the apply runs on. Creating it is the test: the server refuses a second object with the same handle. The note says which run, host and process hold it and until when; the holder moves that time 15 minutes ahead while it works and deletes the note when it stops, also on Ctrl-C, `SIGTERM` or `SIGHUP`. A second `--apply` on the tree stops before writing and names the holder. A lock whose holder died (power cut, `kill -9`) expires after 15 minutes and the next apply takes it over and says so; `--break-lock` takes it at once, for when you know the holder is dead. A holder that finds its lock gone stops. A dry run takes no lock, and says so when an apply holds the tree. While the lock is held, an export of the tree includes the lock note.
 - **Stop at the first conflict or error.** Later ops are not run, because they may depend on this one.
-- **Writes are narrow.** No op deletes anything. Objects are created with `POST /api/objects/`. Changes to an existing object are a `GET` followed by a `PUT` of the same object with only the named field changed. Right before the `PUT` the object is read again; if it changed since the op read it, the op starts over, so a concurrent edit is not overwritten.
+- **Writes are narrow.** Only a merge deletes anything, and only the loser, through Gramps' own merge. Objects are created with `POST /api/objects/`. Changes to an existing object are a `GET` followed by a `PUT` of the same object with only the named field changed. Right before the `PUT` the object is read again; if it changed since the op read it, the op starts over, so a concurrent edit is not overwritten.
 - **Busy server.** On "database is locked", any 5xx, a request that timed out or lost its connection, or an object that changed since it was read, the op waits `--retry-wait` seconds and starts over from fresh reads. A create whose answer never came is looked up again before the op tries it a second time, so a timeout cannot make an object twice. A login answered 429 (the server rate-limits logins) waits and tries again.
 - **A log of every call.** One JSONL line per API call with the op's `key` and `ruling`, the method, path, status, and the body of every write. The password and the token are never logged.
 - **Re-running is safe.** After a crash, run the same list again: what was written is skipped, and an object that was created but not yet linked gets linked.
