@@ -23,6 +23,7 @@ TARGET_KINDS = {
     "source": "Source",
     "media": "Media",
     "place": "Place",
+    "note": "Note",  # only as the object of attach_existing; no op attaches anything to a note
 }
 
 # op -> (required fields, optional fields), on top of op/key/ruling
@@ -41,6 +42,7 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "add_citation": ({"source", "page", "attach"}, {"confidence", "date", "gramps_id"}),
     "add_media": ({"file", "path", "attach"}, {"desc", "mime", "gramps_id"}),
     "add_note": ({"text", "attach"}, {"type", "gramps_id"}),
+    "attach_existing": ({"object", "attach"}, set()),
     "set_attribute": ({"target", "type", "value"}, set()),
     "merge_person": ({"winner", "loser"}, {"use_loser", "reason"}),
     "merge_family": ({"winner", "loser"}, {"reason"}),
@@ -52,6 +54,7 @@ MERGE_LISTS = [  # what Gramps' merge carries from the loser to the winner, list
     "child_ref_list",
 ]
 USE_LOSER = {"birth": "birth_ref_index", "death": "death_ref_index"}
+ATTACHABLE = {"Citation": "citation_list", "Media": "media_list", "Note": "note_list"}  # attach_existing
 PERSON_FIELDS = {"first_name", "surname", "gender"}
 EVENT_FIELDS = {"type", "date", "place", "description"}
 GENDER = {"F": 0, "M": 1, "U": 2}
@@ -179,6 +182,8 @@ def validate(ops: list[dict]) -> list[str]:
         refs = [op.get(f) for f in ("person", "family", "father", "mother", "child", "source", "place", "enclosed_by",
                                     "winner", "loser")]
         refs += list(op.get("children") or [])
+        if name == "attach_existing":
+            refs += _target_refs(op.get("object"))
         if name == "add_association":
             refs.append(op.get("target"))
         refs += _ref_list(op.get("namesake_of")) if op.get("namesake_of") else []
@@ -241,7 +246,14 @@ def validate(ops: list[dict]) -> list[str]:
                     raise ValueError("lat and long go together")
                 if "lat" in op and not (-90 <= float(op["lat"]) <= 90 and -180 <= float(op["long"]) <= 180):
                     raise ValueError("lat/long out of range")
-            for spec in op.get("attach") or []:
+            if name == "attach_existing":
+                kind = _parse_target(op.get("object"))[0]
+                if kind not in ATTACHABLE:
+                    raise ValueError(f"object is a citation, media or note, got {kind.lower()}")
+                for spec in op.get("attach") or []:
+                    if _parse_target(spec)[0] not in CARRIES[ATTACHABLE[kind]]:
+                        raise ValueError(f"a {_parse_target(spec)[0]} cannot carry a {kind.lower()}")
+            for spec in [] if name == "attach_existing" else op.get("attach") or []:
                 cls, _ = _parse_target(spec)
                 lst = {"add_citation": "citation_list", "add_media": "media_list", "add_note": "note_list"}[name]
                 if cls not in CARRIES[lst]:
@@ -823,6 +835,15 @@ class Applier:
             )
             self.keymap[op["key"]] = handle
         self.attach(op["attach"], "note_list", handle)
+
+    def attach_existing(self, op):
+        """Link a citation, media object or note the tree already has to more targets.
+
+        For what an import left with no reference at all (orphans) and for a document that belongs
+        to a second person: add_citation, add_media and add_note only make new objects.
+        """
+        cls, ref = _parse_target(op["object"])
+        self.attach(op["attach"], ATTACHABLE[cls], self.resolve(cls, ref))
 
     def set_attribute(self, op):
         cls, ref = _parse_target(op["target"])

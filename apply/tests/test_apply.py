@@ -771,3 +771,41 @@ def test_association_reads_no_whole_class_per_op(fake):
             "relation": "DNA"} for i in range(3)]
     assert all(r.status == "done" for r in run(fake, ops))
     assert len(seen) == 1  # the people index, once
+
+
+def test_attach_existing_links_an_orphan_and_is_a_skip_the_second_time():
+    fake = FakeGrampsWeb()
+    fake.add("people", {"handle": "anna", "gender": 0, "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})  # I0001
+    fake.add("citations", {"handle": "cit", "source_handle": "src1", "page": "p. 1"})                  # C0001
+    fake.add("media", {"handle": "med", "path": "a.jpg"})                                             # O0001
+    fake.add("notes", {"handle": "nt", "text": {"string": "x"}})                                       # N0001
+    ops = [
+        {"op": "attach_existing", "key": "a1", "ruling": R, "object": {"citation": "C0001"}, "attach": [{"person": "I0001"}]},
+        {"op": "attach_existing", "key": "a2", "ruling": R, "object": {"media": "O0001"}, "attach": [{"citation": "C0001"}]},
+        {"op": "attach_existing", "key": "a3", "ruling": R, "object": {"note": "N0001"}, "attach": [{"person": "I0001"}]},
+    ]
+    assert validate(ops) == []
+    plan = run(fake, ops, dry_run=True)
+    assert [r.status for r in plan] == ["done"] * 3 and fake.writes() == []
+    assert [r.status for r in run(fake, ops)] == ["done"] * 3
+    assert fake.store["people"]["anna"]["citation_list"] == ["cit"]
+    assert fake.store["people"]["anna"]["note_list"] == ["nt"]
+    assert fake.store["citations"]["cit"]["media_list"][0]["ref"] == "med"
+    assert [r.status for r in run(fake, [dict(o, key=o["key"] + "b") for o in ops])] == ["skip"] * 3
+
+
+def test_attach_existing_refuses_what_cannot_be_attached_or_carried():
+    bad = [
+        {"op": "attach_existing", "key": "b1", "ruling": R, "object": {"person": "I0001"}, "attach": [{"person": "I0002"}]},
+        {"op": "attach_existing", "key": "b2", "ruling": R, "object": {"media": "O0001"}, "attach": [{"child_ref": {"family": "F0001", "child": "I0001"}}]},
+        {"op": "attach_existing", "key": "b3", "ruling": R, "object": {"media": "0123b4e9269542049080d7a4c798"}, "attach": [{"person": "I0001"}]},
+        {"op": "attach_existing", "key": "b4", "ruling": R, "object": {"note": "N0001"}},
+    ]
+    errors = "\n".join(validate(bad))
+    assert "object is a citation, media or note, got person" in errors
+    assert "cannot carry a media" in errors
+    assert "neither key:<key> nor a Gramps ID" in errors
+    assert "missing ['attach']" in errors
+    fake = FakeGrampsWeb()
+    res = run(fake, [{"op": "attach_existing", "key": "c", "ruling": R, "object": {"note": "N0099"}, "attach": [{"person": "I0099"}]}])
+    assert res[0].status == "conflict"
