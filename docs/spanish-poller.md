@@ -16,7 +16,7 @@ Nothing is sent to the administration. The poller fills the sede search form (wh
 
 ## What it reports
 
-Per person it writes `<state_dir>/<id>.json` (the snapshot plus the events), `<state_dir>/<id>.txt` (the summary it also prints) and `<state_dir>/<id>.prev.json` (the snapshot before). Downloads go to `<state_dir>/<id>-downloads/`.
+Per person it writes `<state_dir>/<id>.json` (the snapshot plus the events), `<state_dir>/<id>.txt` (the summary it also prints) and `<state_dir>/<id>.prev.json` (the snapshot before). Downloads go to `<state_dir>/<id>-downloads/`. When a login or a list fails, the page where it stopped (HTML, text and screenshot) is saved in `<state_dir>/<id>-errors/<time>/` even without `--dump`, and the summary says where. `--dump DIR` saves every page.
 
 | Event | Meaning |
 |---|---|

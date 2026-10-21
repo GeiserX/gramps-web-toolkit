@@ -306,12 +306,18 @@ async function goto(page, url) {
   }
 }
 
+// Pages where a login or a list failed are always saved, even without --dump: without them a
+// failure that only happens on some days («login did not reach the inbox») cannot be diagnosed.
+let errorDumpDir = null;
+const setErrorDumpDir = dir => { errorDumpDir = dir; };
+
 async function dump(page, dumpDir, name) {
-  if (!dumpDir) return;
-  fs.mkdirSync(dumpDir, { recursive: true });
-  fs.writeFileSync(path.join(dumpDir, name + '.html'), await page.content().catch(() => ''));
-  fs.writeFileSync(path.join(dumpDir, name + '.txt'), await page.innerText('body').catch(() => ''));
-  await page.screenshot({ path: path.join(dumpDir, name + '.png'), fullPage: true }).catch(() => {});
+  const dir = dumpDir || (/-err/.test(name) ? errorDumpDir : null);
+  if (!dir) return;
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, name + '.html'), await page.content().catch(() => ''));
+  fs.writeFileSync(path.join(dir, name + '.txt'), await page.innerText('body').catch(() => ''));
+  await page.screenshot({ path: path.join(dir, name + '.png'), fullPage: true }).catch(() => {});
 }
 
 // Every table on the page as {headers, rows}; rows are arrays of cell texts.
@@ -613,6 +619,7 @@ async function pollPerson(cfg, person, dumpDir) {
   }, cfg.timeout_minutes * 60000);
   try {
     const d = dumpDir && path.join(dumpDir, person.id);
+    setErrorDumpDir(path.join(cfg.state_dir, person.id + '-errors', snap.polled_at.replace(/[:.]/g, '-')));
     if (person.sede) try {
       session = await open();
       snap.sede = await pollSede(session.page, d, person.sede_role, person.sede_days, person.sede_slice_days);
@@ -636,6 +643,7 @@ async function pollPerson(cfg, person, dumpDir) {
     process.removeListener('SIGINT', onSignal);
     if (session) await session.close();
   }
+  if (errors.length && errorDumpDir && fs.existsSync(errorDumpDir)) errors.push('failed pages saved in ' + errorDumpDir);
   // A failed part keeps its previous snapshot, so a broken login never reads as «every case disappeared».
   if (!snap.sede && prev && prev.sede) snap.sede_stale = true, snap.sede = prev.sede;
   if (!snap.dehu && prev && prev.dehu) snap.dehu_stale = true, snap.dehu = prev.dehu;
@@ -686,4 +694,4 @@ async function main(argv) {
   return changed ? EXIT_CHANGED : failed ? EXIT_ERROR : EXIT_SAME;
 }
 
-module.exports = { isoDate, openPkcs12, openChrome, dehuLogin, loadConfig, parseCases, parseDehuRows, diff, senderAllowed, summarize, describe, main, EXIT_SAME, EXIT_CHANGED, EXIT_ERROR };
+module.exports = { dump, setErrorDumpDir, isoDate, openPkcs12, openChrome, dehuLogin, loadConfig, parseCases, parseDehuRows, diff, senderAllowed, summarize, describe, main, EXIT_SAME, EXIT_CHANGED, EXIT_ERROR };
