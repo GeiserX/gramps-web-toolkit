@@ -419,12 +419,108 @@ def test_lookups_are_read_once_per_run_not_once_per_op(fake):
     assert whole_class_reads(5) == whole_class_reads(1)
 
 
-def test_lock_whose_answer_was_lost_is_still_ours(fake, tmp_path, monkeypatch):
+class NoServer:
+    def request(self, *a, **kw):
+        raise AssertionError("a dry run on a snapshot must not reach the server")
+
+
+@pytest.fixture
+def env(monkeypatch, fake, tmp_path):
     import gwt_apply.client as clientmod
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.chdir(tmp_path)  # the default log lands here
     monkeypatch.setattr(clientmod.requests, "Session", lambda: fake)
     for k, v in {"GWT_URL": "https://gw.example", "GWT_USERNAME": "u", "GWT_PASSWORD": "pw", "GWT_TREE": "tree-test"}.items():
         monkeypatch.setenv(k, v)
+    monkeypatch.setattr("gwt_apply.snapshot.PAGE", 2)  # several pages even in a small tree
+
+
+def test_snapshot_dry_run_needs_no_server_and_plans_like_the_server(fake, scan, tmp_path, env, monkeypatch, capsys):
+    snap = tmp_path / "tree.json.gz"
+    assert main(["--save-snapshot", str(snap)]) == 0
+    assert main(["--save-snapshot", str(snap)]) == 2  # never overwritten
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text("\n".join(json.dumps(op) for op in full_list(scan)))
+    live = run(fake, full_list(scan), dry_run=True)
+    import gwt_apply.client as clientmod
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: NoServer())
+    for k in ("GWT_URL", "GWT_USERNAME", "GWT_PASSWORD"):
+        monkeypatch.delenv(k)
+    capsys.readouterr()
+    assert main([str(changes), "--snapshot", str(snap)]) == 0
+    out = capsys.readouterr().out
+    for r in live:  # the same plan, op by op
+        assert f"[{r.status}] {r.key}" in out
+        for a in r.actions:
+            assert a in out
+
+
+def test_apply_on_a_snapshot_refuses_what_changed_since(fake, scan, tmp_path, env, capsys):
+    snap = tmp_path / "tree.json.gz"
+    assert main(["--save-snapshot", str(snap)]) == 0
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text("\n".join(json.dumps(op) for op in full_list(scan)))
+    # someone renames Anna after the snapshot: the plan updates her, so the apply refuses
+    fake.store["people"]["anna"].update(gender=1, change=fake.tick())
+    before = len(fake.writes())
+    assert main([str(changes), "--snapshot", str(snap), "--apply"]) == 1
+    err = capsys.readouterr().err
+    assert "Person I0001 changed after the snapshot" in err and "take a new one" in err
+    from gwt_apply.lock import LOCK_HANDLE
+    assert fake.writes()[before:] == [("POST", "/api/objects/"), ("DELETE", f"/api/notes/{LOCK_HANDLE}")]  # the lock only
+    # a new person after the snapshot: the plan searched every person for namesakes
+    snap2 = tmp_path / "tree2.json.gz"
+    assert main(["--save-snapshot", str(snap2)]) == 0
+    fake.add("people", {"handle": "late", "primary_name": {"first_name": "Late", "surname_list": [{"surname": "Comer"}]}})
+    assert main([str(changes), "--snapshot", str(snap2), "--apply"]) == 1
+    assert "1 Person object(s) added" in capsys.readouterr().err
+
+
+def test_apply_on_a_current_snapshot_reads_almost_nothing(fake, scan, tmp_path, env, capsys):
+    snap = tmp_path / "tree.json.gz"
+    assert main(["--save-snapshot", str(snap)]) == 0
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text("\n".join(json.dumps(op) for op in full_list(scan)))
+    start = len(fake.calls)
+    assert main([str(changes), "--snapshot", str(snap), "--apply"]) == 0, capsys.readouterr()
+    calls = fake.calls[start:]
+    gets = [c for c in calls if c[0] == "GET"]
+    lists = [c for c in gets if c[1].endswith("/")]
+    assert len(lists) == 6  # the check: one read of handles and stamps per class the plan touched
+    # single reads: the stamp check before each PUT, and objects this run wrote, which the snapshot does not have
+    # (Anna changed when her new family was written, so the update of her name reads her and checks her again)
+    assert [c for c in gets if c[1] in ("/api/places/plc1", "/api/sources/src1")] == []
+    assert gets.count(("GET", "/api/people/anna")) == 2
+    john = fake.store["people"][stable_handle("p-john")]
+    assert john["birth_ref_index"] == 0 and len(john["citation_list"]) == 1
+
+
+def test_an_object_changed_during_a_snapshot_apply_stops_it(fake, tmp_path, env, capsys):
+    from gwt_apply.client import Client, Stale
+    from gwt_apply import snapshot
+    c = Client("https://gw.example", "u", "pw", tree="tree-test", dry_run=False, session=fake)
+    c.login()
+    snapshot.save(c, str(tmp_path / "s.json.gz"))
+    c.use_snapshot(snapshot.load(str(tmp_path / "s.json.gz")))
+    fake.store["people"]["anna"].update(gender=1, change=fake.tick())
+    ops = [{"op": "set_attribute", "key": "a", "ruling": R, "target": {"person": "I0001"}, "type": "Nickname", "value": "Nan"}]
+    res = Applier(c, retries=1, retry_wait=0).run(ops)
+    assert res[0].status == "error" and "changed since the snapshot" in res[0].actions[-1]
+    assert fake.store["people"]["anna"]["attribute_list"] == []
+
+
+def test_apply_on_a_snapshot_survives_a_lost_answer(fake, tmp_path, env):
+    snap = tmp_path / "tree.json.gz"
+    assert main(["--save-snapshot", str(snap)]) == 0
+    changes = tmp_path / "changes.jsonl"
+    op = {"op": "add_event", "key": "e", "ruling": R, "person": "I0001", "type": "Death", "date": "abt 1950"}
+    changes.write_text(json.dumps(op))
+    fake.drop_after = ("POST", "/api/objects/", 1)  # after the lock note, the event's create: made, answer lost
+    assert main([str(changes), "--snapshot", str(snap), "--apply", "--retry-wait", "0"]) == 0
+    assert len(fake.store["events"]) == 1
+    assert fake.store["people"]["anna"]["death_ref_index"] == 0
+
+
+def test_lock_whose_answer_was_lost_is_still_ours(fake, tmp_path, env):
     changes = tmp_path / "changes.jsonl"
     op = {"op": "add_event", "key": "e", "ruling": R, "person": "I0001", "type": "Death", "date": "abt 1950"}
     changes.write_text(json.dumps(op))

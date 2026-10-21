@@ -34,7 +34,7 @@ def _iso(ts: float) -> str:
 
 
 def read_lock(client: Client) -> dict | None:
-    note = client.get("Note", LOCK_HANDLE)
+    note = client.get_live("Note", LOCK_HANDLE)  # never from a snapshot
     if note is None:
         return None
     try:

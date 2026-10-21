@@ -34,6 +34,10 @@ class Retryable(ApiError):
     """The server was busy ("database is locked", 5xx): rerun the whole op."""
 
 
+class Stale(ApiError):
+    """An object read from the snapshot changed on the server since: take a new snapshot."""
+
+
 def jwt_claims(token: str) -> dict:
     payload = token.split(".")[1]
     return json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
@@ -69,6 +73,12 @@ class Client:
         self._lists: dict[tuple[str, tuple], list[dict]] = {}  # (class, keys) -> rows from the server
         self.written: dict[tuple[str, str], dict] = {}  # what this run created or changed, for the indexes
         self.unsure: set[tuple[str, str]] = set()  # creates with no answer: the server may have them
+        # With a snapshot, reads come from it, except for objects this run wrote (or made the server change)
+        self.snapshot: dict[str, dict[str, dict]] | None = None
+        self.offline = False  # a dry run on a snapshot: no server at all
+        self.stale: set[tuple[str, str]] = set()
+        self.reads: set[tuple[str, str]] = set()  # every object the run read, for the snapshot check
+        self.listed: set[str] = set()  # every class the run searched as a whole
         # "x": a log file is never appended to or overwritten; each run writes its own
         self._log = open(log_path, "x", encoding="utf-8") if log_path else None
         self.context: dict = {}  # op key and ruling, stamped on every log line
@@ -118,7 +128,18 @@ class Client:
                 f"login landed in tree {self.tree!r}, expected {self.expected_tree!r}"
             )
 
+    def use_snapshot(self, data: dict, *, offline: bool = False) -> None:
+        self.snapshot = {cls: {o["handle"]: o for o in rows} for cls, rows in data["objects"].items()}
+        self.offline = offline
+        if offline:
+            self.tree = data.get("tree")
+
+    def _snapped(self, cls: str, handle: str) -> bool:
+        return self.snapshot is not None and (cls, handle) not in self.stale
+
     def _request(self, method: str, path: str, *, write: bool = False, **kw):
+        if self.offline:
+            raise ApiError(f"{method} {path}: a dry run on a snapshot does not reach the server")
         if self.token is None:
             self.login()
         for attempt in (1, 2):
@@ -153,6 +174,17 @@ class Client:
         """The object, or None. `_read` keeps what the server sent, for the check in `update`."""
         if (cls, handle) in self.pending:
             return copy.deepcopy(self.pending[(cls, handle)])
+        self.reads.add((cls, handle))
+        if self._snapped(cls, handle):
+            obj = self.snapshot.get(cls, {}).get(handle)
+            if obj is None:
+                return None
+            obj = copy.deepcopy(obj)
+            obj["_snap"] = obj.get("change")  # what `update` compares with the server
+            return obj
+        return self.get_live(cls, handle)
+
+    def get_live(self, cls: str, handle: str) -> dict | None:
         r = self._request("GET", f"/{NAMESPACE[cls]}/{handle}")
         if r.status_code == 404:
             return None
@@ -165,10 +197,13 @@ class Client:
     def _index(self, cls: str) -> dict[str, str]:
         """Gramps ID -> handle for a whole class, from one read the first time it is needed."""
         if cls not in self._ids:
-            r = self._request("GET", f"/{NAMESPACE[cls]}/", params={"keys": "handle,gramps_id"})
-            if r.status_code != 200:
-                raise ApiError(f"GET {cls} list: HTTP {r.status_code}", r.status_code)
-            rows = r.json()
+            if self.snapshot is not None:
+                rows = list(self.snapshot.get(cls, {}).values())
+            else:
+                r = self._request("GET", f"/{NAMESPACE[cls]}/", params={"keys": "handle,gramps_id"})
+                if r.status_code != 200:
+                    raise ApiError(f"GET {cls} list: HTTP {r.status_code}", r.status_code)
+                rows = r.json()
             self._ids[cls] = {row["gramps_id"]: row["handle"] for row in rows if row.get("gramps_id")}
             self._handles[cls] = {row["handle"] for row in rows}
             for (c, h), obj in self.written.items():
@@ -192,6 +227,7 @@ class Client:
         """Whether the object is there, without reading it."""
         if (cls, handle) in self.pending:
             return True
+        self.reads.add((cls, handle))
         if (cls, handle) in self.unsure:
             return self.get(cls, handle) is not None
         self._index(cls)
@@ -200,6 +236,11 @@ class Client:
     def get_many(self, cls: str, handles: list[str]) -> list[dict]:
         out = [copy.deepcopy(self.pending[(cls, h)]) for h in handles if (cls, h) in self.pending]
         rest = [h for h in handles if (cls, h) not in self.pending]
+        self.reads |= {(cls, h) for h in rest}
+        if self.snapshot is not None:
+            out += [copy.deepcopy(self.snapshot.get(cls, {})[h]) for h in rest
+                    if self._snapped(cls, h) and h in self.snapshot.get(cls, {})]
+            rest = [h for h in rest if not self._snapped(cls, h)]
         if rest:
             r = self._request(
                 "GET", f"/{NAMESPACE[cls]}/", params={"handles": ",".join(rest)}
@@ -212,6 +253,9 @@ class Client:
     def list_all(self, cls: str, keys: list[str]) -> list[dict]:
         """Every object of a class with only `keys`, read once per run, with this run's writes on top."""
         cache = (cls, tuple(keys))
+        self.listed.add(cls)
+        if cache not in self._lists and self.snapshot is not None:
+            self._lists[cache] = [{k: o.get(k) for k in ["handle", *keys]} for o in self.snapshot.get(cls, {}).values()]
         if cache not in self._lists:
             r = self._request(
                 "GET", f"/{NAMESPACE[cls]}/", params={"keys": ",".join(["handle", *keys])}
@@ -234,12 +278,21 @@ class Client:
             self.log(method="POST", path="/objects/", body=[obj], status=None)
             return
         self.unsure.add((cls, obj["handle"]))
+        self._wrote(cls, obj)  # before the request: if its answer is lost, the retry reads the server
         r = self._request("POST", "/objects/", write=True, json=[obj])
         if r.status_code != 201:
             raise ApiError(f"create {cls}: HTTP {r.status_code} {r.text[:300]}", r.status_code)
         self.unsure.discard((cls, obj["handle"]))
         self.written[(cls, obj["handle"])] = copy.deepcopy(obj)
         self._remember(cls, obj["handle"], obj)
+
+    def _wrote(self, cls: str, obj: dict) -> None:
+        """Objects this write changed on the server are read from it from now on, not from the snapshot."""
+        self.stale.add((cls, obj["handle"]))
+        if cls == "Family":  # the server keeps the members' family lists in step
+            members = [obj.get("father_handle"), obj.get("mother_handle")]
+            members += [r.get("ref") for r in obj.get("child_ref_list") or []]
+            self.stale |= {("Person", h) for h in members if h}
 
     def update(self, obj: dict) -> None:
         """PUT the whole object back, if it still is what the op read.
@@ -249,15 +302,20 @@ class Client:
         answers 412. Instead the object is read again right before the PUT.
         """
         cls = obj["_class"]
-        body = {k: v for k, v in obj.items() if k not in ("_read", "extended", "profile")}
+        body = {k: v for k, v in obj.items() if k not in ("_read", "_snap", "extended", "profile")}
         if self.dry_run:
             self.pending[(cls, obj["handle"])] = copy.deepcopy(body)
             self.log(method="PUT", path=f"/{NAMESPACE[cls]}/{obj['handle']}", body=body, status=None)
             return
-        if "_read" in obj:
-            fresh = self.get(cls, obj["handle"])
+        if "_snap" in obj:
+            live = self.get_live(cls, obj["handle"])
+            if live is None or live.get("change") != obj["_snap"]:
+                raise Stale(f"{cls} {obj.get('gramps_id') or obj['handle']} changed since the snapshot; take a new one")
+        elif "_read" in obj:
+            fresh = self.get_live(cls, obj["handle"])
             if fresh is None or fresh["_read"] != obj["_read"]:
                 raise Retryable(f"update {cls} {obj['handle']}: changed since read")
+        self._wrote(cls, body)
         r = self._request("PUT", f"/{NAMESPACE[cls]}/{obj['handle']}", write=True, json=body)
         if r.status_code != 200:
             raise ApiError(f"update {cls}: HTTP {r.status_code} {r.text[:300]}", r.status_code)

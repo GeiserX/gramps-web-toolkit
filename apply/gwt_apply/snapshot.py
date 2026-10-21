@@ -1,0 +1,92 @@
+"""A snapshot of a whole tree, so a dry run needs no server and an apply reads nothing it already has.
+
+    gwt-apply --save-snapshot tree.json.gz              # read every object once, a few minutes
+    gwt-apply changes.jsonl --snapshot tree.json.gz     # dry run, offline, seconds
+    gwt-apply changes.jsonl --snapshot tree.json.gz --apply
+
+Before an apply on a snapshot writes anything, it plans the whole list offline and asks the server
+for the `change` stamp of every object of every class the plan looked at. It refuses when an object
+the plan read or would write changed, appeared or went away since the snapshot, or when a class the
+plan searched (names, places, sources, citations, media) has objects added or removed since then.
+"""
+
+from __future__ import annotations
+
+import gzip
+import json
+from datetime import datetime, timezone
+
+from .client import NAMESPACE, ApiError, Client
+from .lock import LOCK_HANDLE
+
+FORMAT = "gwt-apply-snapshot/1"
+PAGE = 500
+
+
+def save(client: Client, path: str) -> dict[str, int]:
+    """Read every object of the tree, page by page, into a new gzip file. Returns counts per class."""
+    objects: dict[str, list[dict]] = {}
+    for cls, ns in NAMESPACE.items():
+        rows: list[dict] = []
+        page = 1
+        while True:
+            r = client._request("GET", f"/{ns}/", params={"page": page, "pagesize": PAGE})
+            if r.status_code != 200:
+                raise ApiError(f"GET {cls} page {page}: HTTP {r.status_code}", r.status_code)
+            batch = r.json()
+            rows += batch
+            if len(batch) < PAGE:
+                break
+            page += 1
+        objects[cls] = rows
+    data = {
+        "format": FORMAT,
+        "tree": client.tree,
+        "taken": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "objects": objects,
+    }
+    with gzip.open(path, "xt", encoding="utf-8") as fh:  # never over another snapshot
+        json.dump(data, fh, ensure_ascii=False)
+    return {cls: len(rows) for cls, rows in objects.items()}
+
+
+def load(path: str) -> dict:
+    with gzip.open(path, "rt", encoding="utf-8") as fh:
+        data = json.load(fh)
+    if data.get("format") != FORMAT:
+        raise ValueError(f"{path} is not a gwt-apply snapshot")
+    return data
+
+
+def check(client: Client, snap: dict, planner: Client) -> list[str]:
+    """What changed on the server since the snapshot, among what the plan made by `planner` relies on."""
+    objects = snap["objects"]
+    touched: dict[str, set[str]] = {}
+    for cls, h in planner.reads | set(planner.pending):
+        touched.setdefault(cls, set()).add(h)
+    problems = []
+    for cls in sorted(set(touched) | planner.listed):
+        r = client._request("GET", f"/{NAMESPACE[cls]}/", params={"keys": "handle,change,gramps_id"})
+        if r.status_code != 200:
+            raise ApiError(f"GET {cls} list: HTTP {r.status_code}", r.status_code)
+        # the apply's own lock note is not a change to the tree
+        now = {row["handle"]: row for row in r.json() if row["handle"] != LOCK_HANDLE}
+        then = {o["handle"]: o for o in objects.get(cls, []) if o["handle"] != LOCK_HANDLE}
+        for h in sorted(touched.get(cls, ())):
+            a, b = then.get(h), now.get(h)
+            label = f"{cls} {(b or a or {}).get('gramps_id') or h}"
+            if a is None and b is not None:
+                problems.append(f"{label} was made after the snapshot")
+            elif a is not None and b is None:
+                problems.append(f"{label} was deleted after the snapshot")
+            elif a is not None and a.get("change") != b.get("change"):
+                problems.append(f"{label} changed after the snapshot")
+        if cls in planner.listed:
+            added = set(now) - set(then)
+            gone = set(then) - set(now)
+            if added or gone:
+                problems.append(
+                    f"{len(added)} {cls} object(s) added and {len(gone)} deleted after the snapshot, "
+                    f"and the plan searched every {cls}"
+                )
+    return problems
