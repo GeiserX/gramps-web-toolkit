@@ -195,6 +195,18 @@ def p_private(d):
     _get(d, "people", "I0007")["primary_name"]["private"] = True
 
 
+def _sensitive_media(d, gid, person_gid, birth, desc):
+    m = {**copy.deepcopy(d["media"][0]), "handle": "h" + gid, "gramps_id": gid, "desc": desc}
+    d["media"].append(m)
+    p = _new_person(d, person_gid, "Nuria", "Prado Lago", birth=birth)
+    p["media_list"] = [_ref(m["handle"], rect=[])]
+    return p
+
+
+def p_living_media(d):
+    _sensitive_media(d, "O0090", "I0090", (2001, 5, 2), "Pasaporte de Nuria")
+
+
 def p_place_no_coords(d):
     _get(d, "places", "P0001")["lat"] = ""
 
@@ -306,6 +318,7 @@ PLANTS = [
     (p_repeated_child, "repeated-ref", "I0008 parent_family_list F0001", False),
     (p_second_birth, "dup-vital-event", "I0001 Birth E0001,E0099", False),
     (p_private, "private", "I0007 primary_name", False),
+    (p_living_media, "living-media-sensitive", "I0090 O0090", False),
     (p_place_no_coords, "place-no-coords", "P0001", False),
     (p_citation_ghost_source, "dangling-ref", "C0002 source_handle -> sources ghost-source", False),
     (p_surname_marker, "surname-marker", "I0007 Vidal [¿?]", False),
