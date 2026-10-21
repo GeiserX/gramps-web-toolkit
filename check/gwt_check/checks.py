@@ -64,8 +64,8 @@ CHECKS = {
     "dup-person-fuzzy": "two people whose names differ by an extra given name or surname, born within 2 years "
                         "or with a parent, spouse or child of the same name",
     "dup-vital-event": "one person or family with two vital events of one type",
-    "living-media-sensitive": "media of a possibly living person whose title, path, description, attributes or "
-                              "notes look like an ID document, passport or home address",
+    "living-media-sensitive": "media of a possibly living person, not marked private, whose path, description or "
+                              "attributes look like an ID document, passport or home address",
     "private": "object or sub-reference marked private",
     "place-no-coords": "place used by an event without coordinates",
     "surname-marker": "surname with a « [ » marker",
@@ -76,11 +76,24 @@ CHECKS = {
 
 
 # What gives away an identity document or a home address. Metadata only: the check cannot read pixels.
+# Spanish first. Another country adds its ID number as a function to ID_NUMBERS (with its check digit, so
+# a dated file name does not match) and its words to ID_WORDS.
+def spanish_id(text: str) -> bool:
+    """A DNI (8 digits) or NIE (X, Y or Z and 7 digits) whose check letter is right."""
+    for m in re.finditer(r"(?<![A-Za-z0-9])([XYZ]\d{7}|\d{8})([A-Z])(?![A-Za-z0-9])", text, re.I):
+        n = m.group(1).upper()
+        n = str("XYZ".index(n[0])) + n[1:] if n[0] in "XYZ" else n
+        if "TRWAGMYFPDXBNJZSQVHLCKE"[int(n) % 23] == m.group(2).upper():
+            return True
+    return False
+
+
+ID_NUMBERS = (spanish_id,)
+ID_WORDS = re.compile(r"\b(?:pasaporte|passport|domicilio|empadronamiento|carnet de identidad|identity card|"
+                      r"id card|carte d.identite|home address)\b|(?<![\w/])c/ ?[A-Za-z]", re.I)
 SENSITIVE_PATTERNS = (
-    ("id number", re.compile(r"\b(?:\d{8}[A-Za-z]|[XYZxyz]\d{7}[A-Za-z])\b")),  # Spanish DNI / NIE
-    ("id or address word", re.compile(
-        r"\b(?:dni|nie|pasaporte|passport|domicilio|empadronamiento|carnet de identidad|"
-        r"identity card|id card|carte d.identite|home address|direccion|calle|c/)\b", re.I)),
+    ("id number", lambda s: any(f(s) for f in ID_NUMBERS)),
+    ("id or address word", ID_WORDS.search),
 )
 # a person with no death event is taken as living if born less than this many years ago, or never dated
 LIVING_YEARS = 110
@@ -90,8 +103,8 @@ def sensitive_kind(*texts: str) -> str:
     """Name the first kind of sensitive text found, never the text itself."""
     for text in texts:
         flat = "".join(c for c in unicodedata.normalize("NFD", text or "") if unicodedata.category(c) != "Mn")
-        for kind, rx in SENSITIVE_PATTERNS:
-            if rx.search(flat):
+        for kind, found in SENSITIVE_PATTERNS:
+            if found(flat):
                 return kind
     return ""
 
@@ -423,23 +436,25 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None) -> tuple[l
     # media of a possibly living person that looks like an ID document or an address
     this_year = datetime.date.today().year
     for p in P.values():
-        if not p.get("media_list"):
+        if not p.get("media_list") or p.get("private"):
             continue
-        events = [E.get(r.get("ref")) for r in p.get("event_ref_list", [])]
+        # their own events only: a godparent at a 2001 baptism was not born in 2001
+        events = [E.get(r.get("ref")) for r in p.get("event_ref_list", []) if r.get("role") == "Primary"]
         if any(e and e.get("type") in ("Death", "Burial") for e in events):
             continue
-        years = [(e.get("date") or {}).get("dateval", [0, 0, 0])[2] for e in events
+        years = [((e.get("date") or {}).get("dateval") or [0, 0, 0])[2] for e in events
                  if e and e.get("type") in ("Birth", "Baptism")]
         years = [y for y in years if y]
         if years and min(years) < this_year - LIVING_YEARS:
             continue
         for r in p["media_list"]:
             m = T["media"].get(r.get("ref"))
-            if not m or not (in_scope("people", p["handle"]) or in_scope("media", m["handle"])):
+            if not m or r.get("private") or m.get("private"):  # already private: nothing left to fix
                 continue
-            notes = [(T["notes"].get(h) or {}).get("text", {}).get("string", "") for h in m.get("note_list", [])]
+            if not (in_scope("people", p["handle"]) or in_scope("media", m["handle"])):
+                continue
             attrs = [str(a.get("value", "")) for a in m.get("attribute_list", [])]
-            kind = sensitive_kind(m.get("path", ""), m.get("desc", ""), *attrs, *notes)
+            kind = sensitive_kind(m.get("path", ""), m.get("desc", ""), *attrs)
             if kind:
                 out.add("living-media-sensitive", f"{p['gramps_id']} {m['gramps_id']}", kind)
 

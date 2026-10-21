@@ -204,7 +204,7 @@ def _sensitive_media(d, gid, person_gid, birth, desc):
 
 
 def p_living_media(d):
-    _sensitive_media(d, "O0090", "I0090", (2001, 5, 2), "Documento DNI de Nuria")
+    _sensitive_media(d, "O0090", "I0090", (2001, 5, 2), "Pasaporte de Nuria")
 
 
 def p_place_no_coords(d):
