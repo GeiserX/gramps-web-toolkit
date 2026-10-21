@@ -4,14 +4,14 @@ A research agent that opens a browser to save a register page is slow and leaves
 
 Python 3.11 or newer with `requests`. Run it as [`fetch/gwt-fetch`](../fetch/gwt-fetch), symlinked onto your `PATH` if you like, or `pip install ./fetch` for a `gwt-fetch` command. The code is in [`fetch/gwt_fetch/`](../fetch/gwt_fetch/). Tests: `cd fetch && python3 -m pytest`.
 
-`iiif` works with any IIIF archive in any country. `digibib`, `gazeta` and `geo` cover Spanish sources only, and `europeana` filters to the Spanish aggregator unless you pass `--provider any`.
+`iiif` works with any IIIF archive in any country. `digibib`, `gazeta` and `geo` cover Spanish sources only. `europeana` searches every provider in any country; `--provider Hispana` narrows it to Spain.
 
 ```
 gwt-fetch iiif URL [--pages 1-5,9] [--labels REGEX] [--out DIR] [--list]
 gwt-fetch digibib URL [--pages ...] [--out DIR] [--list]
 gwt-fetch gazeta search (--text WORDS | --title WORDS) [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--limit N]
 gwt-fetch gazeta fetch BOE-A-YYYY-N [...] [--out DIR]
-gwt-fetch europeana QUERY [--provider Hispana|any] [--data-provider NAME] [--year-from Y] [--year-to Y] [--iiif-only] [--rows N]
+gwt-fetch europeana QUERY [--provider any|NAME] [--data-provider NAME] [--year-from Y] [--year-to Y] [--iiif-only] [--rows N]
 gwt-fetch geo PLACE [...] [--types Municipio,poblacion] [--province NAME] [--limit N]
 gwt-fetch --delay 2 ...   # seconds between requests to one host, default 1
 ```
@@ -98,7 +98,7 @@ $ gwt-fetch gazeta fetch BOE-A-1890-676 --out research/raw/fuentes/gaceta
 
 The Europeana Search API needs a free key: get one at https://pro.europeana.eu/pages/get-api and `export EUROPEANA_KEY=...`. Without a key, the command prints a message and exits 0, so pipelines carry on.
 
-By default it filters to the Spanish aggregator `PROVIDER:"Hispana"` (4.5 million records: BVPH, Galiciana, BNE, the regional digital libraries and more). Use `--data-provider` to narrow to one institution as Europeana names it, for example `"Galiciana: Digital Library of Galicia"` or `"Virtual Library of Historical Press"`. Output is TSV with a `manifest` column for each record, which `gwt-fetch iiif` can fetch.
+By default it searches every provider. `--provider NAME` filters to one aggregator, for example `--provider Hispana` for Spain (4.5 million records: BVPH, Galiciana, BNE, the regional digital libraries and more). Use `--data-provider` to narrow to one institution as Europeana names it, for example `"Galiciana: Digital Library of Galicia"` or `"Virtual Library of Historical Press"`. Output is TSV with a `manifest` column for each record, which `gwt-fetch iiif` can fetch.
 
 `--iiif-only` adds `sv_dcterms_conformsTo:*iiif*`, keeping only records whose provider serves a real Image API. In October 2026 that returns zero Hispana records: no Spanish provider exposes IIIF through Europeana, while France, Austria and the UK expose millions. For Spanish records, use the Europeana manifest without `--iiif-only`; `iiif` swaps each thumbnail for the provider's original file. Where that provider blocks scripted clients (Galiciana's library, BNE), you still need the browser.
 

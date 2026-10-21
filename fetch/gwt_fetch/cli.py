@@ -43,7 +43,7 @@ def parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("europeana", help="search Europeana (needs EUROPEANA_KEY); prints TSV with manifests")
     s.add_argument("query")
-    s.add_argument("--provider", default="Hispana", help='aggregator, default Hispana; "any" for none')
+    s.add_argument("--provider", default="any", help='aggregator, e.g. Hispana for Spain; default any (no filter)')
     s.add_argument("--data-provider", help='institution, e.g. "Galiciana. Arquivo Dixital de Galicia"')
     s.add_argument("--country", help="e.g. spain")
     s.add_argument("--year-from")
