@@ -586,7 +586,9 @@ class MergingFake(FakeGrampsWeb):
             win, lose = store[w], store.pop(l_)
             for lst in ("event_ref_list", "citation_list", "note_list", "child_ref_list", "family_list", "parent_family_list"):
                 win[lst] = win.get(lst, []) + [x for x in lose.get(lst, []) if x not in win.get(lst, [])]
-            if ns == "people":
+            if ns == "events":
+                self._merge_event_refs(win, lose, w, l_)
+            elif ns == "people":
                 win["attribute_list"].append({"_class": "Attribute", "type": "Merged Gramps ID", "value": lose["gramps_id"]})
                 for fam in self.store["families"].values():
                     for role in ("father_handle", "mother_handle"):
@@ -602,6 +604,32 @@ class MergingFake(FakeGrampsWeb):
             win["change"] = self.tick()
             return Resp(200, {})
         return super()._route(method, path, headers, params, body, data)
+
+    def _merge_event_refs(self, win, lose, w, l_):
+        """Gramps' MergeEventQuery: lists move to the winner; a holder's ref to the loser becomes a ref to the
+        winner, and is dropped when the holder already lists the winner in the same role."""
+        for lst in ("media_list", "attribute_list"):
+            win[lst] = win.get(lst, []) + [x for x in lose.get(lst, []) if x not in win.get(lst, [])]
+        for holder in [*self.store["people"].values(), *self.store["families"].values()]:
+            refs = holder.get("event_ref_list") or []
+            if not any(r["ref"] == l_ for r in refs):
+                continue
+            first = next((r for r in refs if r["ref"] == w), None)
+            for vital in ("birth_ref_index", "death_ref_index"):
+                if holder.get(vital, -1) >= 0 and refs[holder[vital]]["ref"] == l_:
+                    holder[vital] = -2  # recalculated below, as Gramps does
+            kept = []
+            for r in refs:
+                if r["ref"] == l_ and first is not None and first.get("role") == r.get("role"):
+                    continue
+                kept.append(dict(r, ref=w) if r["ref"] == l_ else r)
+            for vital, kind in (("birth_ref_index", "Birth"), ("death_ref_index", "Death")):
+                if holder.get(vital, -1) >= 0:
+                    holder[vital] = kept.index(refs[holder[vital]])
+                elif holder.get(vital) == -2:
+                    holder[vital] = next((i for i, r in enumerate(kept) if r.get("role") == "Primary"
+                                          and self.store["events"].get(r["ref"], win).get("type") == kind), -1)
+            holder["event_ref_list"] = kept
 
 
 def test_merge_person_moves_everything_and_notes_it(scan, tmp_path):
@@ -773,30 +801,34 @@ def test_association_reads_no_whole_class_per_op(fake):
     assert len(seen) == 1  # the people index, once
 
 
-def _event_fixture(fake):
+def _event_fixture():
+    fake = MergingFake()
     fake.add("people", {"handle": "anna", "gender": 0, "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
-    d1 = fake.add("events", {"handle": "d1", "type": "Death", "date": parse_date("1884-05-02"), "citation_list": ["c1"]})   # E0001
-    d2 = fake.add("events", {"handle": "d2", "type": "Death", "date": parse_date("1884-05-02"), "citation_list": ["c2"]})   # E0002
+    fake.add("events", {"handle": "d1", "type": "Death", "date": parse_date("1884-05-02"), "citation_list": ["c1"]})   # E0001
+    fake.add("events", {"handle": "d2", "type": "Death", "date": parse_date("1884-05-02"), "citation_list": ["c2"]})   # E0002
     anna = fake.store["people"]["anna"]
     anna["event_ref_list"] = [{"_class": "EventRef", "ref": "d1", "role": "Primary"},
                               {"_class": "EventRef", "ref": "d2", "role": "Primary"}]
     anna["death_ref_index"] = 1  # points at the loser
-    return anna
+    return fake
 
 
-def test_merge_event_keeps_both_citations_and_moves_the_death_pointer(tmp_path):
-    fake = FakeGrampsWeb()
-    anna = _event_fixture(fake)
+def test_merge_event_is_gramps_own_merge_and_shows_every_holder_first():
+    fake = _event_fixture()
+    fake.add("families", {"handle": "fam", "event_ref_list": [{"_class": "EventRef", "ref": "d2", "role": "Family"}]})
     op = {"op": "merge_event", "key": "me", "ruling": R, "winner": "E0001", "loser": "E0002", "reason": "one death, two citations"}
     plan = run(fake, [op], dry_run=True)
     text = "\n".join(plan[0].actions)
     assert plan[0].status == "done" and fake.writes() == []
-    assert "merge Event E0002 into E0001: citation_list +[\"c2\"]" in text
-    assert "already lists E0001, drops E0002" in text and "delete Event E0002" in text
+    assert 'merge Event E0002 into E0001: citation_list +["c2"]' in text
+    assert "Person I0001: already lists E0001, drops E0002" in text
+    assert "Family F0001: lists E0001 instead of E0002" in text
+    assert plan[0].actions[-1] == "delete Event E0002"
     res = run(fake, [op])
     assert res[0].status == "done", res[0].actions
-    assert "d2" not in fake.store["events"]
-    assert fake.store["events"]["d1"]["citation_list"] == ["c1", "c2"]
+    assert [p for m, p in fake.calls if m == "DELETE" or (m == "PUT" and "/events/" not in p)] == []  # holders: Gramps
+    assert sum(1 for m, p in fake.calls if m == "POST" and p.endswith("/events/d1/merge/d2")) == 1
+    assert "d2" not in fake.store["events"] and fake.store["events"]["d1"]["citation_list"] == ["c1", "c2"]
     anna = fake.store["people"]["anna"]
     assert [r["ref"] for r in anna["event_ref_list"]] == ["d1"] and anna["death_ref_index"] == 0
     note = fake.store["notes"][stable_handle("me#merge")]
@@ -804,39 +836,42 @@ def test_merge_event_keeps_both_citations_and_moves_the_death_pointer(tmp_path):
     assert run(fake, [op])[0].status == "skip"  # a rerun finds it done
 
 
-def test_merge_event_refuses_other_facts():
-    fake = FakeGrampsWeb()
-    _event_fixture(fake)
-    fake.store["events"]["d2"]["date"] = parse_date("1884-05-03")
-    op = {"op": "merge_event", "key": "me", "ruling": R, "winner": "E0001", "loser": "E0002"}
-    res = run(fake, [op])
-    assert res[0].status == "conflict" and "differ in date" in res[0].actions[-1]
-    fake.store["events"]["d2"].update(date=parse_date("1884-05-02"), type="Burial")
-    res = run(fake, [dict(op, key="me2")])
-    assert res[0].status == "conflict" and "is a Death" in res[0].actions[-1]
-    assert "d2" in fake.store["events"]
-    assert "winner and loser are the same" in "\n".join(validate([dict(op, loser="E0001")]))
+@pytest.mark.parametrize("change, why", [
+    ({"date": "1884-05-03"}, "differ in date"),
+    ({"date": "about 1884-05-02"}, "differ in date"),  # the same day, but not the same fact
+    ({"type": "Burial"}, "is a Death"),
+    ({"description": "at sea"}, "differ in description"),
+    ({"place": "pl1"}, "has none, the merge would lose it"),
+])
+def test_merge_event_never_picks_a_fact(change, why):
+    fake = _event_fixture()
+    if "date" in change:
+        change = {"date": parse_date(change["date"])}
+    fake.store["events"]["d2"].update(change)
+    res = run(fake, [{"op": "merge_event", "key": "me", "ruling": R, "winner": "E0001", "loser": "E0002"}])
+    assert res[0].status == "conflict" and why in res[0].actions[-1], res[0].actions
+    assert "d2" in fake.store["events"] and fake.writes() == []
+
+
+def test_merge_event_refuses_a_holder_with_both_events_in_different_roles():
+    fake = _event_fixture()
+    fake.store["people"]["anna"]["event_ref_list"][1]["role"] = "Witness"
+    res = run(fake, [{"op": "merge_event", "key": "me", "ruling": R, "winner": "E0001", "loser": "E0002"}])
+    assert res[0].status == "conflict" and "in different roles" in res[0].actions[-1]
+    assert "d2" in fake.store["events"] and fake.writes() == []
+    assert "winner and loser are the same" in "\n".join(
+        validate([{"op": "merge_event", "key": "x", "ruling": R, "winner": "E0001", "loser": "E0001"}]))
 
 
 def test_merge_event_moves_a_holder_that_only_had_the_loser():
-    fake = FakeGrampsWeb()
-    anna = _event_fixture(fake)
+    fake = _event_fixture()
+    anna = fake.store["people"]["anna"]
     anna["event_ref_list"] = [{"_class": "EventRef", "ref": "d2", "role": "Primary"}]
     anna["death_ref_index"] = 0
     res = run(fake, [{"op": "merge_event", "key": "me", "ruling": R, "winner": "E0001", "loser": "E0002"}])
     assert res[0].status == "done", res[0].actions
     anna = fake.store["people"]["anna"]
     assert [r["ref"] for r in anna["event_ref_list"]] == ["d1"] and anna["death_ref_index"] == 0
-
-
-def test_merge_event_moves_the_losers_notes_so_none_is_left_orphaned():
-    fake = FakeGrampsWeb()
-    _event_fixture(fake)
-    fake.add("notes", {"handle": "n2", "text": {"string": "[Event import E0002] entry text"}})
-    fake.store["events"]["d2"]["note_list"] = ["n2"]
-    res = run(fake, [{"op": "merge_event", "key": "me", "ruling": R, "winner": "E0001", "loser": "E0002"}])
-    assert res[0].status == "done", res[0].actions
-    assert "n2" in fake.store["events"]["d1"]["note_list"] and "n2" in fake.store["notes"]
 
 
 def test_transcription_is_a_transcript_note_with_a_required_margin_reading(fake):
