@@ -266,7 +266,7 @@ def test_probable_link_is_marked_on_the_child_ref(fake):
     assert run(fake, [dict(ops[0], key="l3", probable_reason="other words")])[0].status == "skip"
 
 
-def test_preflight_flags_likely_duplicates_before_any_write(fake, tmp_path):
+def test_preflight_flags_likely_duplicates_before_any_write(fake):
     from gwt_apply.dupes import preflight
     from gwt_apply.client import Client
     birth = fake.add("events", {"handle": "ab", "type": "Baptism", "date": parse_date("1890-05-01")})
@@ -291,6 +291,9 @@ def test_preflight_flags_likely_duplicates_before_any_write(fake, tmp_path):
     ops[3].update(allow_namesake=True, namesake_reason="twins", namesake_of="key:p2")
     assert preflight(ops, c) == []
     assert fake.writes() == []
+    # a rerun after the list went in: the people it made are not duplicates of themselves
+    assert [r.status for r in run(fake, ops)] == ["done"] * 6
+    assert preflight(ops, c) == []
 
 
 def test_update_event_fixes_the_existing_event(fake):

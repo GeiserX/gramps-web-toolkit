@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .dates import DateError, parse_date
-from .ops import _ref_list, fold
+from .ops import _ref_list, fold, stable_handle
 
 BIRTHLIKE = {"birth", "baptism", "christening"}
 
@@ -25,6 +25,7 @@ class Who:
     ref: str  # Gramps ID, or key:<key> for a person an op makes
     first: str
     surname: str
+    handle: str = ""
     years: set[int] = field(default_factory=set)
     parents: set[str] = field(default_factory=set)
     spouses: set[str] = field(default_factory=set)
@@ -68,7 +69,7 @@ def tree_people(client) -> tuple[list[Who], dict[str, set[str]]]:
     for p in people:
         n = p.get("primary_name") or {}
         surname = " ".join(s.get("surname", "") for s in n.get("surname_list") or [])
-        who = Who(ids[p["handle"]], n.get("first_name", ""), surname)
+        who = Who(ids[p["handle"]], n.get("first_name", ""), surname, handle=p["handle"])
         for ref in p.get("event_ref_list") or []:
             ev = events.get(ref.get("ref"))
             if ev and str(ev.get("type")).lower() in BIRTHLIKE and ref.get("role", "Primary") == "Primary":
@@ -133,6 +134,9 @@ def preflight(ops: list[dict], client) -> list[str]:
     if not any(op["op"] == "add_person" for op in ops):
         return []
     tree, family_parents = tree_people(client)
+    # people an earlier run of this list already made are the ops themselves, not duplicates of them
+    made = {stable_handle(op["key"]) for op in ops if op["op"] == "add_person"}
+    tree = [w for w in tree if w.handle not in made]
     ids = {w.ref for w in tree}
     new = list_people(ops, family_parents)
     by_loose: dict[tuple[str, str], list[Who]] = {}

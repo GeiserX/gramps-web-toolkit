@@ -70,7 +70,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     mode = "APPLY" if args.apply else "DRY-RUN (nothing written)"
     print(f"{mode} on tree {client.tree}, {len(ops)} op(s), log {log}")
-    problems = preflight(ops, client)
+    try:
+        problems = preflight(ops, client)
+    except ApiError as exc:
+        print(exc, file=sys.stderr)
+        return 1
     if problems:
         print("\n".join(problems), file=sys.stderr)
         print(f"{len(problems)} likely duplicate(s); nothing was written", file=sys.stderr)
