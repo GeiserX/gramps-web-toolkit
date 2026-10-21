@@ -273,6 +273,17 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None) -> tuple[l
             children |= {person_name(P[c.get("ref")]) for c in f.get("child_ref_list", []) if c.get("ref") in P}
         return parents - {""}, spouses - {""}, children - {""}
 
+    def parent_handles(p: dict) -> set:
+        out_: set = set()
+        for fh in p.get("parent_family_list", []):
+            f = F.get(fh) or {}
+            out_ |= {h for h in (f.get("father_handle"), f.get("mother_handle")) if h in P}
+        return out_
+
+    def parent_and_child(a: str, b: str) -> bool:
+        """A person is never their own parent: a father and a son with one name are two people."""
+        return a in parent_handles(P[b]) or b in parent_handles(P[a])
+
     names: dict[str, list] = defaultdict(list)
     for p in P.values():
         n = person_name(p)
@@ -292,7 +303,9 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None) -> tuple[l
                 if bp and bq and compatible(bp, bq):
                     out.add("dup-person-birth", pair, n)
                 years_differ = bp and bq and not ({x[0] for x in bp} & {x[0] for x in bq})
-                if (pp & pq or sp & sq or cp & cq) and not years_differ:
+                # a shared relative proves nothing when one is the other's parent; a shared birth date still does
+                if (pp & pq or sp & sq or cp & cq) and not years_differ \
+                        and not parent_and_child(p["handle"], q["handle"]):
                     why = "same parent" if pp & pq else "same spouse" if sp & sq else "same child"
                     out.add("dup-person-relative", pair, f"{n}, {why}")
 
@@ -350,7 +363,7 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None) -> tuple[l
             if pp & pq:
                 ph, qh = parents_by_name(h), parents_by_name(c)
                 pp = {n for n in pp & pq if ph[n] != qh[n]}
-            kin_shared = pp & pq or sp & sq or cp & cq
+            kin_shared = (pp & pq or sp & sq or cp & cq) and not parent_and_child(h, c)
             if near or (kin_shared and not (yp and yq)):
                 why = "birth within 2 years" if near else (
                     "same parent" if pp & pq else "same spouse" if sp & sq else "same child")

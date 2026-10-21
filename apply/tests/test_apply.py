@@ -771,3 +771,31 @@ def test_association_reads_no_whole_class_per_op(fake):
             "relation": "DNA"} for i in range(3)]
     assert all(r.status == "done" for r in run(fake, ops))
     assert len(seen) == 1  # the people index, once
+
+
+def test_a_tag_the_server_says_it_made_but_does_not_have_stops_the_op_loudly(fake):
+    real = fake._route
+
+    def forgetful(method, path, headers, params, body, data):
+        if method == "POST" and path.endswith("/objects/") and body and body[0].get("_class") == "Tag":
+            return Resp(201, [{"type": "add", "handle": body[0]["handle"]}])  # says yes, keeps nothing
+        return real(method, path, headers, params, body, data)
+
+    fake._route = forgetful
+    op = {"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}], "tag": "batch-a"}
+    res = run(fake, [op])
+    assert res[0].status == "error" and "is not there when read back" in res[0].actions[-1]
+    assert fake.store["notes"] == {}  # nothing was tagged with a handle that does not exist
+
+
+def test_a_gramps_id_may_carry_a_suffix_but_a_handle_is_still_refused():
+    note = {"op": "add_note", "key": "n", "ruling": R, "text": "x"}
+    ok = validate([dict(note, attach=[{"person": "I0001-b"}])])
+    assert ok == []
+    bad = validate([dict(note, attach=[{"person": "0123b4e9269542049080d7a4c798"}])])
+    assert any("neither key:<key> nor a Gramps ID" in e for e in bad)
+    fake = FakeGrampsWeb()
+    fake.add("people", {"handle": "anna", "gender": 0, "gramps_id": "I0001-b", "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    assert run(fake, [dict(note, attach=[{"person": "I0001-b"}])])[0].status == "done"
+    fake.add("media", {"handle": "scan", "gramps_id": "D051-b", "path": "scan.jpg", "desc": "scan"})
+    assert run(fake, [dict(note, key="m", attach=[{"media": "D051-b"}])])[0].status == "done"
