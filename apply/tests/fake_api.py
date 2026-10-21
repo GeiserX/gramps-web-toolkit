@@ -19,6 +19,7 @@ NS = {
     "sources": ("Source", "S"),
     "media": ("Media", "O"),
     "notes": ("Note", "N"),
+    "tags": ("Tag", "T"),
 }
 CLASS_NS = {cls: ns for ns, (cls, _) in NS.items()}
 
@@ -65,7 +66,7 @@ class FakeGrampsWeb:
             obj["gramps_id"] = f"{prefix}{len(self.store[ns]) + 1:04d}"
         obj.setdefault("handle", hashlib.md5(json.dumps(obj, sort_keys=True).encode()).hexdigest())
         for lst in ("citation_list", "media_list", "note_list", "attribute_list", "event_ref_list"):
-            if cls not in ("Note",):
+            if cls not in ("Note", "Tag"):
                 obj.setdefault(lst, [])
         if cls == "Person":
             obj.setdefault("family_list", [])

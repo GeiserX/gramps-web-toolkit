@@ -655,3 +655,31 @@ def test_merge_family_needs_the_same_parents(tmp_path):
     assert fake.store["families"]["f1"]["child_ref_list"][0]["ref"] == "kid"
     assert fake.store["people"]["kid"]["parent_family_list"] == ["f1"]
     assert "winner and loser are the same" in "\n".join(validate([{"op": "merge_family", "key": "x", "ruling": R, "winner": "F1", "loser": "F1"}]))
+
+
+def test_run_and_op_tags_go_on_every_object_created(fake, scan):
+    fake.add("tags", {"handle": "tagold", "name": "r12"})
+    ops = full_list(scan)
+    ops[1]["tag"] = "r12-weak"
+    client = Client("https://gw.example", "u", "pw", tree="tree-test", dry_run=False, session=fake)
+    res = Applier(client, retries=1, retry_wait=0, tag="r12").run(ops)
+    assert all(r.status == "done" for r in res), [r.actions for r in res]
+    weak = stable_handle("tag:r12-weak")
+    assert fake.store["tags"][weak]["name"] == "r12-weak"  # made once, when first needed
+    assert len(fake.store["tags"]) == 2  # the existing r12 is reused by name
+    created = [fake.store[ns][stable_handle(k)] for ns, k in
+               [("people", "p-john"), ("families", "f-anna"), ("citations", "c-bapt"), ("media", "m-bapt"), ("notes", "n-john")]]
+    assert all(o["tag_list"] == ["tagold"] for o in created)
+    assert fake.store["events"][stable_handle("e-john-birth")]["tag_list"] == ["tagold", weak]
+    assert fake.store["people"]["anna"].get("tag_list", []) == []  # changed objects are not tagged, only new ones
+    assert any("tag is a non-empty name" in e for e in validate([dict(ops[0], key="x", tag="")]))
+
+
+def test_tag_whose_answer_was_lost_is_made_once(fake):
+    fake.drop_after = ("POST", "/api/objects/")  # the tag's create, the first write of the run
+    client = Client("https://gw.example", "u", "pw", tree="tree-test", dry_run=False, session=fake)
+    op = {"op": "add_event", "key": "e", "ruling": R, "person": "I0001", "type": "Death", "date": "abt 1950"}
+    res = Applier(client, retries=2, retry_wait=0, tag="r12").run([op])
+    assert res[0].status == "done", res[0].actions
+    assert list(fake.store["tags"]) == [stable_handle("tag:r12")]
+    assert fake.store["events"][stable_handle("e")]["tag_list"] == [stable_handle("tag:r12")]

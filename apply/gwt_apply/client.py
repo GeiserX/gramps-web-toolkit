@@ -21,6 +21,7 @@ NAMESPACE = {
     "Source": "sources",
     "Media": "media",
     "Note": "notes",
+    "Tag": "tags",
 }
 
 

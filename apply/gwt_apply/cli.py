@@ -60,6 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--snapshot", metavar="FILE",
                     help="a tree snapshot: a dry run reads only it, with no server; --apply checks it is current, then reads it")
     ap.add_argument("--save-snapshot", metavar="FILE", help="read the whole tree into a new FILE (gzip JSON) and stop")
+    ap.add_argument("--tag", help="a Gramps tag put on every object this run creates, e.g. r12 (ops can add their own with \"tag\")")
     ap.add_argument("--retries", type=int, default=5)
     ap.add_argument("--retry-wait", type=float, default=30.0, help="seconds after a busy server")
     ap.add_argument("--break-lock", action="store_true",
@@ -151,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
             print("\n".join(problems), file=sys.stderr)
             print(f"{len(problems)} likely duplicate(s); nothing was written", file=sys.stderr)
             return 1
-        results = Applier(client, retries=args.retries, retry_wait=args.retry_wait, lock=lock).run(ops)
+        results = Applier(client, retries=args.retries, retry_wait=args.retry_wait, lock=lock, tag=args.tag).run(ops)
     except (LockHeld, ApiError) as exc:
         print(exc, file=sys.stderr)
         return 1
