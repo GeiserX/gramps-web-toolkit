@@ -151,7 +151,11 @@ def print_report(report: dict, limit: int) -> None:
     if report["scope"] is not None:
         print(f"scope: {report['scope']} objects (duplicates need one side in scope)")
     if report.get("in_flight"):
-        print(f"left out: {report['in_flight']} finding(s) not seen in {SEEN_IN} passes in a row, writes caught halfway")
+        print(f"left out: {report['in_flight']} finding(s) seen in one pass only, writes caught halfway")
+    unconfirmed = [f for f in report["findings"] if f.get("unconfirmed")]
+    if unconfirmed:
+        print(f"unconfirmed: {len(unconfirmed)} finding(s) seen only in the last 2 passes while the tree was being "
+              "written to; a write caught halfway or a problem made late in the read: run the check again")
     by_check: dict[str, list] = {}
     for f in report["findings"]:
         by_check.setdefault(f["check"], []).append(f)
@@ -285,8 +289,9 @@ def main(argv: list[str] | None = None) -> int:
         else:
             # While something writes, a pass can catch it halfway: a note made and not yet attached is an orphan for
             # a moment. A pass reads the types one after another, so one such write can show in two passes in a
-            # row, never in three. What counts is what three passes in a row found, and the read is settled once
-            # that stops changing. A real problem made during the read shows from its third pass on.
+            # row, never in three. Confirmed is what three passes in a row found, and the read is settled once
+            # that stops changing. What only the last two passes found may be a write caught halfway or a real
+            # problem made late in the read: it is reported, marked unconfirmed. What only one pass found is not.
             seen: list[set] = []
             persistent: list[set] = []
 
@@ -305,9 +310,13 @@ def main(argv: list[str] | None = None) -> int:
         if not args.tree and "passes" in data:
             report["passes"] = data["passes"]
             if data.get("settled"):
-                keep = lambda fs: [f for f in fs if (f["check"], f["key"]) in persistent[-1]]  # noqa: E731
+                unconfirmed = (seen[-1] & seen[-2]) - seen[-3]
+                keep = lambda fs: [f for f in fs if (f["check"], f["key"]) in persistent[-1] | unconfirmed]  # noqa: E731
                 report["in_flight"] = len(report["findings"]) - len(keep(report["findings"]))
                 report["findings"], report["new"] = keep(report["findings"]), keep(report["new"])
+                for f in report["findings"]:
+                    if (f["check"], f["key"]) in unconfirmed:
+                        f["unconfirmed"] = True
         report["seconds"] = {"read": round(t1 - t0, 1), "check": round(time.monotonic() - t1, 1)}
     except BadInput as exc:
         print(f"gwt-check: {exc}", file=sys.stderr)

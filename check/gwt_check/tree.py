@@ -109,6 +109,8 @@ def load(path: str) -> Tree:
     if not isinstance(data, dict):
         raise BadInput(f"{path}: a dump is a JSON object with one list per type")
     if data.get("format") == APPLY_SNAPSHOT:
+        if not isinstance(data.get("objects"), dict) or not all(isinstance(v, list) for v in data["objects"].values()):
+            raise BadInput(f"{path}: a gwt-apply snapshot without an objects map of lists")
         missing = [cls for cls in APPLY_CLASSES if cls not in data["objects"] and cls != "Tag"]
         if missing:
             raise BadInput(f"{path}: a gwt-apply snapshot without {', '.join(missing)}; take a new one")
