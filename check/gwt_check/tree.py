@@ -35,6 +35,18 @@ XML_TYPES = {
 }
 
 
+# a gwt-apply snapshot keeps its objects by Gramps class
+APPLY_SNAPSHOT = "gwt-apply-snapshot/1"
+APPLY_CLASSES = {
+    "Person": "people", "Family": "families", "Event": "events", "Place": "places", "Citation": "citations",
+    "Source": "sources", "Media": "media", "Note": "notes", "Repository": "repositories", "Tag": "tags",
+}
+
+
+# the note a running gwt-apply holds the tree with (LOCK_HANDLE in apply/gwt_apply/lock.py): not part of the tree
+APPLY_LOCK = "gwt8e1481beef5aa4a5c4de4424f"
+
+
 class BadInput(Exception):
     """A file that cannot be read as a tree: exit code 2."""
 
@@ -46,7 +58,7 @@ class Tree:
             rows = data.get(t)
             if rows is None and t != "tags":
                 raise BadInput(f"{source}: no {t!r} list")
-            self.objs[t] = {o["handle"]: o for o in rows or []}
+            self.objs[t] = {o["handle"]: o for o in rows or [] if o["handle"] != APPLY_LOCK}
         self.has_tags = data.get("tags") is not None
         self.partial = partial  # from a backup: handles, ids, change times and family links only
         self.source = source
@@ -96,6 +108,13 @@ def load(path: str) -> Tree:
         raise BadInput(f"{path}: not a JSON dump or a .gramps backup ({exc})") from exc
     if not isinstance(data, dict):
         raise BadInput(f"{path}: a dump is a JSON object with one list per type")
+    if data.get("format") == APPLY_SNAPSHOT:
+        if not isinstance(data.get("objects"), dict) or not all(isinstance(v, list) for v in data["objects"].values()):
+            raise BadInput(f"{path}: a gwt-apply snapshot without an objects map of lists")
+        missing = [cls for cls in APPLY_CLASSES if cls not in data["objects"] and cls != "Tag"]
+        if missing:
+            raise BadInput(f"{path}: a gwt-apply snapshot without {', '.join(missing)}; take a new one")
+        data = {t: data["objects"].get(cls) for cls, t in APPLY_CLASSES.items()}
     data = data.get("objects", data)
     return Tree(data, source=path)
 

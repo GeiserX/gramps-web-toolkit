@@ -22,6 +22,7 @@ NAMESPACE = {
     "Media": "media",
     "Note": "notes",
     "Tag": "tags",
+    "Repository": "repositories",  # never written; in a snapshot so gwt-check can read one
 }
 
 

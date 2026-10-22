@@ -383,3 +383,202 @@ def test_known_reasons_are_shown_and_mark_known_writes_them(tmp_path, capsys):
     assert main(["mark-known", report, "--check", "orphan-note", "--key", "N0099", "--reason", "x",
                  "--out", str(broken)]) == 2
     assert broken.read_text() == "not json"
+
+
+class LiveServer:
+    """A fake tree that someone writes to while it is read: `write(server)` runs before chosen requests."""
+
+    def __init__(self, data, write=None):
+        self.data, self.write, self.calls = data, write, []
+
+    def __call__(self, req, timeout):
+        url = urllib.parse.urlparse(req.full_url)
+        self.calls.append((url.path, url.query))
+        if url.path.endswith("/token/"):
+            claims = base64.urlsafe_b64encode(json.dumps({"tree": "tree-1"}).encode()).decode().rstrip("=")
+            return Resp(200, json.dumps({"access_token": f"x.{claims}.y"}).encode())
+        t = url.path.rstrip("/").rsplit("/", 1)[-1]
+        q = dict(urllib.parse.parse_qsl(url.query))
+        if self.write:
+            self.write(self, t, q)
+        rows = self.data[t]
+        if "handles" in q:
+            wanted = q["handles"].split(",")
+            rows = [o for o in rows if o["handle"] in wanted]
+        if "keys" in q:
+            rows = [{k: o.get(k) for k in q["keys"].split(",")} for o in rows]
+        headers = {"X-Total-Count": str(len(rows))}
+        if "page" in q:
+            page, size = int(q["page"]), int(q["pagesize"])
+            rows = rows[(page - 1) * size: page * size]
+        return Resp(200, json.dumps(rows).encode(), headers)
+
+    def tick(self, obj):
+        obj["change"] = obj.get("change", 0) + 1
+
+
+def attach_note_mid_read(server, t, q):
+    """While the notes are paged, a new note goes in at the front and gets attached to I0001."""
+    if t == "notes" and q.get("page") == "2" and not any(n["gramps_id"] == "N0099" for n in server.data["notes"]):
+        note = {**copy.deepcopy(server.data["notes"][0]), "handle": "hN0099", "gramps_id": "N0099"}
+        server.data["notes"].insert(0, note)
+        person = next(p for p in server.data["people"] if p["gramps_id"] == "I0001")
+        person["note_list"] = [*person.get("note_list", []), "hN0099"]
+        server.tick(person)
+
+
+@pytest.fixture
+def live(monkeypatch):
+    def serve(data, write=None):
+        server = LiveServer(data, write)
+        import gwt_check.client as clientmod
+        monkeypatch.setattr(clientmod.urllib.request, "urlopen", server)
+        monkeypatch.setattr(clientmod.time, "sleep", lambda s: None)
+        for k, v in {"GWT_URL": "https://gramps.example.org", "GWT_USERNAME": "u", "GWT_PASSWORD": "pw"}.items():
+            monkeypatch.setenv(k, v)
+        return server
+    return serve
+
+
+def test_a_write_during_the_check_does_not_stop_it_or_leave_a_false_finding(live, tmp_path, capsys):
+    data = selftest.clean_tree()
+    live(data, attach_note_mid_read)
+    report = str(tmp_path / "r.json")
+    assert main(["check", "--pagesize", "1", "--json", report]) == 0, capsys.readouterr().err
+    r = json.load(open(report))
+    assert r["findings"] == [] and r["passes"] == 2  # the person read before the write was read again
+    assert r["counts"]["notes"] == len(data["notes"])
+
+
+def test_the_lock_note_of_a_running_apply_is_not_part_of_the_tree(tmp_path):
+    from gwt_check import tree as tree_mod
+    data = selftest.clean_tree()
+    data["notes"].append({**copy.deepcopy(data["notes"][0]), "handle": tree_mod.APPLY_LOCK, "gramps_id": "GWTLOCK",
+                          "private": True})
+    assert main(["check", _write(tmp_path, "t.json", data)]) == 0
+
+
+def test_live_keeps_the_old_strict_read(live, capsys):
+    live(selftest.clean_tree(), attach_note_mid_read)
+    assert main(["check", "--live", "--pagesize", "1"]) == 2
+    assert "notes: server says" in capsys.readouterr().err
+
+
+def test_a_tree_that_keeps_changing_settles_when_the_findings_stop_changing(live, tmp_path):
+    def busy(server, t, q):  # a write on every stamp list: some other person's name keeps changing
+        if q.get("keys"):
+            p = server.data["people"][-1]
+            p["primary_name"]["first_name"] += "x"
+            server.tick(p)
+    live(selftest.clean_tree(), busy)
+    report = str(tmp_path / "r.json")
+    assert main(["check", "--json", report]) == 0
+    assert json.load(open(report))["passes"] == 4
+
+
+def busy_people(server):
+    """Some other person's name keeps changing, so no pass ever finds the tree still."""
+    p = server.data["people"][-1]
+    p["primary_name"]["first_name"] += "x"
+    server.tick(p)
+
+
+def test_a_write_caught_halfway_in_one_pass_is_left_out(live, tmp_path, capsys):
+    """Each pass sees a note made and not attached yet; the next request attaches it."""
+    def writer(server, t, q):
+        person = next(p for p in server.data["people"] if p["gramps_id"] == "I0001")
+        pending = [n["handle"] for n in server.data["notes"]
+                   if n["handle"].startswith("hW") and n["handle"] not in person.get("note_list", [])]
+        if pending:
+            person["note_list"] = person.get("note_list", []) + pending
+            server.tick(person)
+        if q.get("keys") and t == "notes":
+            n = len(server.data["notes"])
+            server.data["notes"].append({**copy.deepcopy(server.data["notes"][0]), "handle": f"hW{n}", "gramps_id": f"W{n}"})
+        if q.get("keys") and t == "people":
+            busy_people(server)
+    live(selftest.clean_tree(), writer)
+    report = str(tmp_path / "r.json")
+    assert main(["check", "--json", report]) == 0, capsys.readouterr().err
+    r = json.load(open(report))
+    assert r["findings"] == [] and r["in_flight"] == 1 and r["passes"] == 4
+
+
+def test_a_write_caught_halfway_in_two_passes_is_reported_unconfirmed(live, tmp_path, capsys):
+    """The worst case: a note made while the notes are listed, attached only in the next pass."""
+    def writer(server, t, q):
+        if q.get("keys") and t == "notes":
+            person = next(p for p in server.data["people"] if p["gramps_id"] == "I0001")
+            pending = [n["handle"] for n in server.data["notes"] if n["handle"].startswith("hW")]
+            person["note_list"] = sorted(set(person.get("note_list", []) + pending))  # attach the last one
+            server.tick(person)
+            n = len(server.data["notes"])
+            server.data["notes"].append({**copy.deepcopy(server.data["notes"][0]), "handle": f"hW{n}", "gramps_id": f"W{n}"})
+    live(selftest.clean_tree(), writer)
+    report = str(tmp_path / "r.json")
+    assert main(["check", "--json", report]) == 1
+    r = json.load(open(report))
+    assert [(f["check"], f.get("unconfirmed")) for f in r["findings"]] == [("orphan-note", True)]
+    assert "unconfirmed: 1 finding(s)" in capsys.readouterr().out
+
+
+def test_a_real_problem_made_late_in_the_read_is_not_dropped(live, tmp_path):
+    passes = []
+
+    def writer(server, t, q):
+        if q.get("keys") and t == "people":
+            passes.append(1)
+            busy_people(server)
+            if len(passes) == 3:  # in the third pass: a real orphan that stays
+                selftest.p_orphan_note(server.data)
+    live(selftest.clean_tree(), writer)
+    report = str(tmp_path / "r.json")
+    assert main(["check", "--json", report]) == 1
+    assert [(f["check"], f["key"]) for f in json.load(open(report))["findings"]] == [("orphan-note", "N0099")]
+
+
+def test_a_real_problem_made_during_the_read_is_still_reported(live, tmp_path):
+    def writer(server, t, q):  # one orphan note, made once, after the first pass started
+        if q.get("keys") and t == "notes" and not any(n["gramps_id"] == "N0099" for n in server.data["notes"]):
+            selftest.p_orphan_note(server.data)
+        if q.get("keys") and t == "people":  # and writes that never stop
+            busy_people(server)
+    live(selftest.clean_tree(), writer)
+    report = str(tmp_path / "r.json")
+    assert main(["check", "--json", report]) == 1
+    assert [(f["check"], f["key"]) for f in json.load(open(report))["findings"]] == [("orphan-note", "N0099")]
+
+
+def test_a_tree_whose_findings_never_settle_gives_up_with_exit_2(live, capsys):
+    def churn(server, t, q):  # every pass adds one more lasting orphan: the findings never stop changing
+        if q.get("keys") and t == "notes":
+            n = len(server.data["notes"])
+            server.data["notes"].append({**copy.deepcopy(server.data["notes"][0]), "handle": f"hX{n}", "gramps_id": f"X{n}"})
+    live(selftest.clean_tree(), churn)
+    assert main(["check"]) == 2
+    assert "kept changing" in capsys.readouterr().err
+
+
+def test_a_gwt_apply_snapshot_is_a_tree(tmp_path, capsys):
+    from gwt_check.tree import APPLY_CLASSES
+    data = selftest.clean_tree()
+    snap = {"format": "gwt-apply-snapshot/1", "tree": "tree-1", "taken": "2026-01-01T00:00:00+00:00",
+            "objects": {cls: data[t] for cls, t in APPLY_CLASSES.items()}}
+    path = tmp_path / "snap.json.gz"
+    with gzip.open(path, "wt", encoding="utf-8") as fh:
+        json.dump(snap, fh)
+    assert main(["check", str(path)]) == 0
+    selftest.p_orphan_note(data)
+    snap["objects"]["Note"] = data["notes"]
+    with gzip.open(tmp_path / "planted.json.gz", "wt", encoding="utf-8") as fh:
+        json.dump(snap, fh)
+    assert main(["check", str(tmp_path / "planted.json.gz"), "--since", str(path)]) == 1
+    del snap["objects"]["Repository"]
+    with gzip.open(tmp_path / "old.json.gz", "wt", encoding="utf-8") as fh:
+        json.dump(snap, fh)
+    assert main(["check", str(tmp_path / "old.json.gz")]) == 2
+    assert "take a new one" in capsys.readouterr().err
+    with gzip.open(tmp_path / "bad.json.gz", "wt", encoding="utf-8") as fh:
+        json.dump({"format": "gwt-apply-snapshot/1", "objects": []}, fh)
+    assert main(["check", str(tmp_path / "bad.json.gz")]) == 2
+    assert "objects map" in capsys.readouterr().err

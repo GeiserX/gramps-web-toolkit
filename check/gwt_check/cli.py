@@ -28,22 +28,59 @@ def read_config(path: str | None) -> dict:
     return conf
 
 
-def live_dump(args) -> dict:
+PASSES = 10  # rereads of what moved before a read of a tree that never stops changing gives up
+SEEN_IN = 3  # passes in a row a finding must show in while the tree is being written to
+
+
+def _client(args) -> Client:
     conf = read_config(args.config)
     missing = [k for k in ("GWT_URL", "GWT_USERNAME", "GWT_PASSWORD") if not conf.get(k)]
     if missing:
         raise BadInput(f"missing settings: {', '.join(missing)}")
     client = Client(conf["GWT_URL"], conf["GWT_USERNAME"], conf["GWT_PASSWORD"], tree=conf.get("GWT_TREE"))
-    t0 = time.monotonic()
     try:
         client.login()
-        data = client.dump(pagesize=args.pagesize, workers=args.workers,
-                           progress=lambda t, n: print(f"  {t}: {n}", file=sys.stderr, flush=True))
     except ApiError as exc:
         raise BadInput(str(exc)) from exc
-    print(f"dumped tree {client.tree} in {time.monotonic() - t0:.0f} s, {client.requests} requests",
+    return client
+
+
+def _dump(client: Client, objs: dict) -> dict:
+    return {"tree": client.tree, "dumped_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "objects": {t: list(rows.values()) for t, rows in objs.items()}}
+
+
+def live_dump(args, settled=None) -> dict:
+    """The live tree, read while it may change. Pages are read without trusting them, then the change stamps
+    of every type are compared and what moved is read again, pass after pass, until a pass finds nothing
+    moved, or `settled(dump)` says the findings no longer depend on what is moving. With --live, the old
+    strict read: one pass, and a type whose count changes mid-read stops it."""
+    client = _client(args)
+    t0 = time.monotonic()
+    progress = lambda t, n: print(f"  {t}: {n}", file=sys.stderr, flush=True)  # noqa: E731
+    try:
+        if args.live:
+            data = {"tree": client.tree, "dumped_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                    "objects": client.dump(pagesize=args.pagesize, workers=args.workers, progress=progress)}
+        else:
+            objs = client.read_all(pagesize=args.pagesize, workers=args.workers, progress=progress)
+            for n in range(1, PASSES + 1):
+                moved = client.refresh(objs)
+                data = _dump(client, objs)
+                if not moved:
+                    break
+                if settled is not None and settled(data):
+                    data["settled"] = True  # by findings, while writes went on
+                    break
+                print(f"  pass {n}: {moved} object(s) changed during the read, reading them again", file=sys.stderr)
+            else:
+                raise BadInput(f"the tree kept changing: {moved} object(s) still moving after {PASSES} passes")
+            data["passes"] = n
+    except ApiError as exc:
+        raise BadInput(str(exc)) from exc
+    print(f"read tree {client.tree} in {time.monotonic() - t0:.0f} s, {client.requests} requests",
           file=sys.stderr)
-    return {"tree": client.tree, "dumped_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "objects": data}
+    return data
 
 
 def load_known(path: str) -> dict[tuple[str, str], str]:
@@ -113,6 +150,12 @@ def print_report(report: dict, limit: int) -> None:
     print("tree: " + ", ".join(f"{v} {k}" for k, v in c.items()))
     if report["scope"] is not None:
         print(f"scope: {report['scope']} objects (duplicates need one side in scope)")
+    if report.get("in_flight"):
+        print(f"left out: {report['in_flight']} finding(s) seen in one pass only, writes caught halfway")
+    unconfirmed = [f for f in report["findings"] if f.get("unconfirmed")]
+    if unconfirmed:
+        print(f"unconfirmed: {len(unconfirmed)} finding(s) seen only in the last 2 passes while the tree was being "
+              "written to; a write caught halfway or a problem made late in the read: run the check again")
     by_check: dict[str, list] = {}
     for f in report["findings"]:
         by_check.setdefault(f["check"], []).append(f)
@@ -189,14 +232,16 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--config", help="KEY=VALUE file with GWT_URL, GWT_USERNAME, GWT_PASSWORD, GWT_TREE")
         p.add_argument("--pagesize", type=int, default=1000, help="objects per request (default 1000)")
         p.add_argument("--workers", type=int, default=4, help="requests in flight at once (default 4)")
+        p.add_argument("--live", action="store_true",
+                       help="the old strict read: stop when the tree changes mid-read instead of reading again what moved")
 
     p = sub.add_parser("dump", help="save the live tree to a JSON file (.gz to compress)")
     p.add_argument("out")
     live_opts(p)
 
     p = sub.add_parser("check", help="run every check on a dump, or on the live tree")
-    p.add_argument("tree", nargs="?", help="dump file; without it the live tree is read")
-    p.add_argument("--since", help="earlier dump or .gramps backup: diff, and new objects are the scope")
+    p.add_argument("tree", nargs="?", help="dump file or gwt-apply snapshot; without it the live tree is read")
+    p.add_argument("--since", help="earlier dump, gwt-apply snapshot or .gramps backup: diff, and new objects are the scope")
     p.add_argument("--tag", help="scope is the objects carrying this tag (a run tag)")
     p.add_argument("--root", help="Gramps ID of the Ahnentafel root; with --since, numbers lost or changed fail")
     p.add_argument("--known", help="earlier --json output (or list of {check, key}) to accept as known")
@@ -237,16 +282,41 @@ def main(argv: list[str] | None = None) -> int:
             old = check(base)["findings"]
             known = {**{(f["check"], f["key"]): "" for f in old}, **(known or {})}
         since = load(args.since) if args.since else None
+        run = lambda tree: check(tree, since=since, tag=args.tag, root=args.root, known=known,  # noqa: E731
+                                 ignore=set(args.ignore_check))
         if args.tree:
             tree = load(args.tree)
         else:
-            data = live_dump(args)
+            # While something writes, a pass can catch it halfway: a note made and not yet attached is an orphan for
+            # a moment. A pass reads the types one after another, so one such write can show in two passes in a
+            # row, never in three. Confirmed is what three passes in a row found, and the read is settled once
+            # that stops changing. What only the last two passes found may be a write caught halfway or a real
+            # problem made late in the read: it is reported, marked unconfirmed. What only one pass found is not.
+            seen: list[set] = []
+            persistent: list[set] = []
+
+            def settled(data):
+                seen.append({(f["check"], f["key"]) for f in run(Tree(data["objects"]))["findings"]})
+                if len(seen) >= SEEN_IN:
+                    persistent.append(set.intersection(*seen[-SEEN_IN:]))
+                return len(persistent) >= 2 and persistent[-1] == persistent[-2]
+
+            data = live_dump(args, settled)
             if args.save_dump:
                 save(data, args.save_dump)
             tree = Tree(data["objects"], source="live tree")
         t1 = time.monotonic()
-        report = check(tree, since=since, tag=args.tag, root=args.root, known=known,
-                       ignore=set(args.ignore_check))
+        report = run(tree)
+        if not args.tree and "passes" in data:
+            report["passes"] = data["passes"]
+            if data.get("settled"):
+                unconfirmed = (seen[-1] & seen[-2]) - seen[-3]
+                keep = lambda fs: [f for f in fs if (f["check"], f["key"]) in persistent[-1] | unconfirmed]  # noqa: E731
+                report["in_flight"] = len(report["findings"]) - len(keep(report["findings"]))
+                report["findings"], report["new"] = keep(report["findings"]), keep(report["new"])
+                for f in report["findings"]:
+                    if (f["check"], f["key"]) in unconfirmed:
+                        f["unconfirmed"] = True
         report["seconds"] = {"read": round(t1 - t0, 1), "check": round(time.monotonic() - t1, 1)}
     except BadInput as exc:
         print(f"gwt-check: {exc}", file=sys.stderr)
