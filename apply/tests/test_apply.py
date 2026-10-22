@@ -1113,3 +1113,53 @@ def test_held_associations_on_a_snapshot_apply(fake, tmp_path, env, capsys):
     assert main([str(changes), "--snapshot", str(snap), "--apply"]) == 0, capsys.readouterr()
     assert fake.writes().count(("PUT", "/api/people/anna")) == 1
     assert len(fake.store["people"]["anna"]["person_ref_list"]) == 4
+
+
+def test_a_snapshot_since_an_older_one_reads_only_what_changed(fake, scan, tmp_path, env, capsys):
+    before, after, full = (tmp_path / f"{n}.json.gz" for n in ("before", "after", "full"))
+    assert main(["--save-snapshot", str(before)]) == 0
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text("\n".join(json.dumps(op) for op in full_list(scan)))
+    assert main([str(changes), "--apply"]) == 0
+    fake.store["places"]["plc1"].update(name={"value": "Shelbyville"}, change=fake.tick())  # an edit by someone else
+    start = len(fake.calls)
+    assert main(["--save-snapshot", str(after), "--since", str(before)]) == 0
+    calls = fake.calls[start:]
+    assert not [c for c in calls if c[0] != "GET" and c[1] != "/api/token/"]
+    assert len([c for c in calls if c[0] == "GET"]) <= 9 * 2  # per class: the stamps, and the changed objects at most
+    assert main(["--save-snapshot", str(full)]) == 0
+    from gwt_apply import snapshot
+    by_handle = lambda p: {cls: {o["handle"]: o for o in rows} for cls, rows in snapshot.load(str(p))["objects"].items()}
+    assert by_handle(after) == by_handle(full)  # the same as reading the whole tree again
+    capsys.readouterr()
+    assert main([str(changes), "--snapshot", str(after)]) == 0  # the fast redry: offline, every op skips
+    assert "0 done, 8 skip" in capsys.readouterr().out
+
+
+def test_the_fast_redry_reports_an_object_changed_after_the_apply(fake, scan, tmp_path, env, capsys):
+    before, after = tmp_path / "before.json.gz", tmp_path / "after.json.gz"
+    assert main(["--save-snapshot", str(before)]) == 0
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text("\n".join(json.dumps(op) for op in full_list(scan)))
+    assert main([str(changes), "--apply"]) == 0
+    anna = fake.store["people"]["anna"]  # in the older snapshot too
+    anna["primary_name"]["first_name"] = "Anna"  # someone undoes the list's rename
+    anna["change"] = fake.tick()
+    gone = fake.store["citations"].pop(stable_handle("c-bapt"))  # and deletes its citation
+    assert main(["--save-snapshot", str(after), "--since", str(before)]) == 0
+    from gwt_apply import snapshot
+    assert gone["handle"] not in {o["handle"] for o in snapshot.load(str(after))["objects"]["Citation"]}
+    capsys.readouterr()
+    main([str(changes), "--snapshot", str(after)])
+    out = capsys.readouterr().out
+    assert "[done] u-anna" in out and "[done] c-bapt" in out
+
+
+def test_since_refuses_a_snapshot_of_another_tree(fake, tmp_path, env, monkeypatch, capsys):
+    old = tmp_path / "old.json.gz"
+    assert main(["--save-snapshot", str(old)]) == 0
+    fake.tree = "tree-other"
+    monkeypatch.setenv("GWT_TREE", "tree-other")
+    assert main(["--save-snapshot", str(tmp_path / "new.json.gz"), "--since", str(old)]) == 2
+    assert "tree-test" in capsys.readouterr().err
+    assert not (tmp_path / "new.json.gz").exists()
