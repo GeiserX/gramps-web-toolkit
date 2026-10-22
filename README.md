@@ -20,6 +20,7 @@ The toolkit works for genealogy in any country. One module, `spanish-poller`, is
 - `gwt-fetch`: downloads archive images and text without a browser, with one manifest row per file: any IIIF archive, Europeana search, plus Spanish sources (DIGIBIB, the historical Gaceta de Madrid, CartoCiudad geocoding)
 - `gwt-ledger`: a shared "already searched" ledger, so parallel agents stop repeating each other's negative searches
 - `gwt-fscache`: an on-disk HTTP cache for rate-limited genealogy APIs that never stores a block or an auth header
+- `gwt-gate`: one request pace shared by every agent on a machine, which backs off on a block and lets priority lanes go first
 - `gwt-rawstore`: keeps source images in an S3-compatible bucket and only a small manifest in git
 - `gwt-spanish-poller` (Spain only): watches Spanish civil-registry requests and the DEHú inbox read-only, and flags cases that vanish
 - `ocr-bench`: scores OCR, HTR and LLM readings of the same pages on how many names they recover
@@ -32,13 +33,13 @@ python3 -m pip install -e apply      # Python 3.11+, needs only requests
 gwt-apply changes.jsonl              # dry-run: prints the plan and the diff
 ```
 
-`gwt-check`, the ledger, cache and rawstore tools need only the Python standard library and run from their folders (`check/gwt-check`, `ledger/gwt-ledger`, `fscache/gwt-fscache`, `rawstore/gwt-rawstore`). `gwt-spanish-poller` needs Node 18+ and Playwright.
+`gwt-check`, the ledger, cache and rawstore tools need only the Python standard library and run from their folders (`check/gwt-check`, `ledger/gwt-ledger`, `fscache/gwt-fscache`, `gate/gwt-gate`, `rawstore/gwt-rawstore`). `gwt-spanish-poller` needs Node 18+ and Playwright.
 
 ## Documentation
 
 - [The research pipeline](docs/pipeline.md): how agents, verifiers, a judge and a writer share one tree
 - [Hard-won lessons](docs/hard-won.md): each failure that cost us time, data or an account, and the rule that followed
-- [gwt-apply](docs/apply.md), [gwt-check](docs/check.md), [gwt-fetch](docs/fetch.md), [gwt-ledger](docs/ledger.md), [gwt-fscache](docs/fscache.md), [gwt-rawstore](docs/rawstore.md), [gwt-spanish-poller](docs/spanish-poller.md), [ocr-bench](docs/ocr-bench.md)
+- [gwt-apply](docs/apply.md), [gwt-check](docs/check.md), [gwt-fetch](docs/fetch.md), [gwt-ledger](docs/ledger.md), [gwt-fscache](docs/fscache.md), [gwt-gate](docs/gate.md), [gwt-rawstore](docs/rawstore.md), [gwt-spanish-poller](docs/spanish-poller.md), [ocr-bench](docs/ocr-bench.md)
 
 ## License
 
