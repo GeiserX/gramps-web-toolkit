@@ -20,6 +20,7 @@ NS = {
     "media": ("Media", "O"),
     "notes": ("Note", "N"),
     "tags": ("Tag", "T"),
+    "repositories": ("Repository", "R"),
 }
 CLASS_NS = {cls: ns for ns, (cls, _) in NS.items()}
 

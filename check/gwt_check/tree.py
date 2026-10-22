@@ -35,6 +35,14 @@ XML_TYPES = {
 }
 
 
+# a gwt-apply snapshot keeps its objects by Gramps class
+APPLY_SNAPSHOT = "gwt-apply-snapshot/1"
+APPLY_CLASSES = {
+    "Person": "people", "Family": "families", "Event": "events", "Place": "places", "Citation": "citations",
+    "Source": "sources", "Media": "media", "Note": "notes", "Repository": "repositories", "Tag": "tags",
+}
+
+
 class BadInput(Exception):
     """A file that cannot be read as a tree: exit code 2."""
 
@@ -96,6 +104,11 @@ def load(path: str) -> Tree:
         raise BadInput(f"{path}: not a JSON dump or a .gramps backup ({exc})") from exc
     if not isinstance(data, dict):
         raise BadInput(f"{path}: a dump is a JSON object with one list per type")
+    if data.get("format") == APPLY_SNAPSHOT:
+        missing = [cls for cls in APPLY_CLASSES if cls not in data["objects"] and cls != "Tag"]
+        if missing:
+            raise BadInput(f"{path}: a gwt-apply snapshot without {', '.join(missing)}; take a new one")
+        data = {t: data["objects"].get(cls) for cls, t in APPLY_CLASSES.items()}
     data = data.get("objects", data)
     return Tree(data, source=path)
 

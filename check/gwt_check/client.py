@@ -114,6 +114,42 @@ class Client:
             raise ApiError(f"GET {path}: HTTP {status}")
         raise ApiError(f"GET {path}: gave up after {TRIES} tries, last {last}")
 
+    def read_all(self, *, pagesize: int = 1000, workers: int = 4, progress=None) -> dict[str, dict[str, dict]]:
+        """Every object of every type, by handle, page by page, without trusting the pages: a write during the
+        read shifts them, so an object can come twice or not at all. `refresh` puts that right."""
+        out: dict[str, dict[str, dict]] = {}
+        for t in TYPES:
+            headers, first = self.get(f"/{t}/", {"page": 1, "pagesize": pagesize})
+            total = int({k.lower(): v for k, v in headers.items()}.get("x-total-count", len(first)))
+            rows = list(first)
+            with ThreadPoolExecutor(workers) as pool:
+                for _, chunk in pool.map(lambda p: self.get(f"/{t}/", {"page": p, "pagesize": pagesize}),
+                                         range(2, max(1, -(-total // pagesize)) + 1)):
+                    rows += chunk
+            out[t] = {o["handle"]: o for o in rows}
+            if progress:
+                progress(t, len(out[t]))
+        return out
+
+    def refresh(self, objs: dict[str, dict[str, dict]], chunk: int = 100) -> int:
+        """One list of change stamps per type (a single request, so one consistent view of that type), then a
+        reread of every object whose stamp moved or that is missing, and out with the ones that are gone.
+        Returns how many objects that touched: 0 means nothing changed since the last read."""
+        moved = 0
+        for t in TYPES:
+            _, rows = self.get(f"/{t}/", {"keys": "handle,change"})
+            now = {r["handle"]: r.get("change") for r in rows}
+            have = objs.setdefault(t, {})
+            gone = [h for h in have if h not in now]
+            stale = [h for h, c in now.items() if h not in have or have[h].get("change") != c]
+            for h in gone:
+                del have[h]
+            for i in range(0, len(stale), chunk):
+                _, fresh = self.get(f"/{t}/", {"handles": ",".join(stale[i:i + chunk])})
+                have.update((o["handle"], o) for o in fresh)
+            moved += len(gone) + len(stale)
+        return moved
+
     def dump(self, *, pagesize: int = 1000, workers: int = 4, progress=None) -> dict:
         """Every object of every type. Raises if a type comes back short or with repeats."""
         out: dict[str, list] = {}
