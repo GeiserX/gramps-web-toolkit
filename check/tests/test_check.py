@@ -450,6 +450,14 @@ def test_a_write_during_the_check_does_not_stop_it_or_leave_a_false_finding(live
     assert r["counts"]["notes"] == len(data["notes"])
 
 
+def test_the_lock_note_of_a_running_apply_is_not_part_of_the_tree(tmp_path):
+    from gwt_check import tree as tree_mod
+    data = selftest.clean_tree()
+    data["notes"].append({**copy.deepcopy(data["notes"][0]), "handle": tree_mod.APPLY_LOCK, "gramps_id": "GWTLOCK",
+                          "private": True})
+    assert main(["check", _write(tmp_path, "t.json", data)]) == 0
+
+
 def test_live_keeps_the_old_strict_read(live, capsys):
     live(selftest.clean_tree(), attach_note_mid_read)
     assert main(["check", "--live", "--pagesize", "1"]) == 2
@@ -465,11 +473,42 @@ def test_a_tree_that_keeps_changing_settles_when_the_findings_stop_changing(live
     live(selftest.clean_tree(), busy)
     report = str(tmp_path / "r.json")
     assert main(["check", "--json", report]) == 0
-    assert json.load(open(report))["passes"] == 2
+    assert json.load(open(report))["passes"] == 4
+
+
+def test_a_write_caught_halfway_in_every_pass_is_left_out(live, tmp_path, capsys):
+    """A writer that makes a note and attaches it a moment later: each pass sees one note not yet attached."""
+    def writer(server, t, q):
+        if q.get("keys") and t == "notes":
+            person = next(p for p in server.data["people"] if p["gramps_id"] == "I0001")
+            pending = [n["handle"] for n in server.data["notes"] if n["handle"].startswith("hW")]
+            person["note_list"] = sorted(set(person.get("note_list", []) + pending))  # attach the last one
+            server.tick(person)
+            n = len(server.data["notes"])
+            server.data["notes"].append({**copy.deepcopy(server.data["notes"][0]), "handle": f"hW{n}", "gramps_id": f"W{n}"})
+    live(selftest.clean_tree(), writer)
+    report = str(tmp_path / "r.json")
+    assert main(["check", "--json", report]) == 0, capsys.readouterr().err
+    r = json.load(open(report))
+    assert r["findings"] == [] and r["in_flight"] >= 1 and r["passes"] == 4
+
+
+def test_a_real_problem_made_during_the_read_is_still_reported(live, tmp_path):
+    def writer(server, t, q):  # one orphan note, made once, after the first pass started
+        if q.get("keys") and t == "notes" and not any(n["gramps_id"] == "N0099" for n in server.data["notes"]):
+            selftest.p_orphan_note(server.data)
+        if q.get("keys") and t == "people":  # and writes that never stop
+            p = server.data["people"][-1]
+            p["primary_name"]["first_name"] += "x"
+            server.tick(p)
+    live(selftest.clean_tree(), writer)
+    report = str(tmp_path / "r.json")
+    assert main(["check", "--json", report]) == 1
+    assert [(f["check"], f["key"]) for f in json.load(open(report))["findings"]] == [("orphan-note", "N0099")]
 
 
 def test_a_tree_whose_findings_never_settle_gives_up_with_exit_2(live, capsys):
-    def churn(server, t, q):  # a new orphan note on every stamp list: every pass finds something new
+    def churn(server, t, q):  # every pass adds one more lasting orphan: the findings never stop changing
         if q.get("keys") and t == "notes":
             n = len(server.data["notes"])
             server.data["notes"].append({**copy.deepcopy(server.data["notes"][0]), "handle": f"hX{n}", "gramps_id": f"X{n}"})

@@ -43,6 +43,10 @@ APPLY_CLASSES = {
 }
 
 
+# the note a running gwt-apply holds the tree with (LOCK_HANDLE in apply/gwt_apply/lock.py): not part of the tree
+APPLY_LOCK = "gwt8e1481beef5aa4a5c4de4424f"
+
+
 class BadInput(Exception):
     """A file that cannot be read as a tree: exit code 2."""
 
@@ -54,7 +58,7 @@ class Tree:
             rows = data.get(t)
             if rows is None and t != "tags":
                 raise BadInput(f"{source}: no {t!r} list")
-            self.objs[t] = {o["handle"]: o for o in rows or []}
+            self.objs[t] = {o["handle"]: o for o in rows or [] if o["handle"] != APPLY_LOCK}
         self.has_tags = data.get("tags") is not None
         self.partial = partial  # from a backup: handles, ids, change times and family links only
         self.source = source

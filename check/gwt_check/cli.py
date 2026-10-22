@@ -29,6 +29,7 @@ def read_config(path: str | None) -> dict:
 
 
 PASSES = 10  # rereads of what moved before a read of a tree that never stops changing gives up
+SEEN_IN = 3  # passes in a row a finding must show in while the tree is being written to
 
 
 def _client(args) -> Client:
@@ -52,7 +53,7 @@ def _dump(client: Client, objs: dict) -> dict:
 def live_dump(args, settled=None) -> dict:
     """The live tree, read while it may change. Pages are read without trusting them, then the change stamps
     of every type are compared and what moved is read again, pass after pass, until a pass finds nothing
-    moved, or `settled(dump)` says the result no longer depends on what is moving. With --live, the old
+    moved, or `settled(dump)` says the findings no longer depend on what is moving. With --live, the old
     strict read: one pass, and a type whose count changes mid-read stops it."""
     client = _client(args)
     t0 = time.monotonic()
@@ -66,7 +67,10 @@ def live_dump(args, settled=None) -> dict:
             for n in range(1, PASSES + 1):
                 moved = client.refresh(objs)
                 data = _dump(client, objs)
-                if not moved or (settled is not None and settled(data)):
+                if not moved:
+                    break
+                if settled is not None and settled(data):
+                    data["settled"] = True  # by findings, while writes went on
                     break
                 print(f"  pass {n}: {moved} object(s) changed during the read, reading them again", file=sys.stderr)
             else:
@@ -146,6 +150,8 @@ def print_report(report: dict, limit: int) -> None:
     print("tree: " + ", ".join(f"{v} {k}" for k, v in c.items()))
     if report["scope"] is not None:
         print(f"scope: {report['scope']} objects (duplicates need one side in scope)")
+    if report.get("in_flight"):
+        print(f"left out: {report['in_flight']} finding(s) not seen in {SEEN_IN} passes in a row, writes caught halfway")
     by_check: dict[str, list] = {}
     for f in report["findings"]:
         by_check.setdefault(f["check"], []).append(f)
@@ -277,14 +283,18 @@ def main(argv: list[str] | None = None) -> int:
         if args.tree:
             tree = load(args.tree)
         else:
-            # a pass that moved objects without changing a single finding is settled: what moved was not checked wrong
-            last: list = []
+            # While something writes, a pass can catch it halfway: a note made and not yet attached is an orphan for
+            # a moment. A pass reads the types one after another, so one such write can show in two passes in a
+            # row, never in three. What counts is what three passes in a row found, and the read is settled once
+            # that stops changing. A real problem made during the read shows from its third pass on.
+            seen: list[set] = []
+            persistent: list[set] = []
 
             def settled(data):
-                keys = sorted((f["check"], f["key"]) for f in run(Tree(data["objects"]))["findings"])
-                same = bool(last) and keys == last[-1]
-                last.append(keys)
-                return same
+                seen.append({(f["check"], f["key"]) for f in run(Tree(data["objects"]))["findings"]})
+                if len(seen) >= SEEN_IN:
+                    persistent.append(set.intersection(*seen[-SEEN_IN:]))
+                return len(persistent) >= 2 and persistent[-1] == persistent[-2]
 
             data = live_dump(args, settled)
             if args.save_dump:
@@ -294,6 +304,10 @@ def main(argv: list[str] | None = None) -> int:
         report = run(tree)
         if not args.tree and "passes" in data:
             report["passes"] = data["passes"]
+            if data.get("settled"):
+                keep = lambda fs: [f for f in fs if (f["check"], f["key"]) in persistent[-1]]  # noqa: E731
+                report["in_flight"] = len(report["findings"]) - len(keep(report["findings"]))
+                report["findings"], report["new"] = keep(report["findings"]), keep(report["new"])
         report["seconds"] = {"read": round(t1 - t0, 1), "check": round(time.monotonic() - t1, 1)}
     except BadInput as exc:
         print(f"gwt-check: {exc}", file=sys.stderr)

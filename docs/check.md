@@ -12,6 +12,7 @@ python3 -m pip install -e .        # Python 3.11+, standard library only
 gwt-check selftest                 # proves every check can fail (no tree needed)
 gwt-check check                    # reads the live tree, runs every check
 gwt-check check dump.json.gz       # the same on a saved dump
+gwt-check check tree.json.gz       # or on a gwt-apply snapshot, offline, in seconds
 gwt-check dump dump.json.gz        # save the live tree (.gz compresses)
 ```
 
@@ -19,14 +20,26 @@ Without installing, run `check/gwt-check` from a clone.
 
 Settings come from the environment, or from a `KEY=VALUE` file passed with `--config`, the same as [`gwt-apply`](apply.md): `GWT_URL`, `GWT_USERNAME`, `GWT_PASSWORD`, and `GWT_TREE`, the tree id the login must land in. If `GWT_TREE` is set and the token's `tree` claim differs, it stops. One login serves the whole run, and the password never reaches the output.
 
-It exits `0` with no new findings and `1` with new findings. It exits `2` on bad input, which covers a file that is not a dump, missing settings, a failed login and a dump that came back short.
+It exits `0` with no new findings and `1` with new findings. It exits `2` on bad input, which covers a file that is not a dump, missing settings, a failed login, and a live tree that never settles (below).
+
+## Reading a tree that is being written to
+
+A live read takes a while, and an apply may be writing to the tree meanwhile. Reading page by page, a write shifts the pages, so an object comes twice or not at all, and a person read before a note was attached to it makes that note look like an orphan. So `gwt-check` does not trust the pages. After paging through every type it compares the `change` stamp of every object with one list per type, a single request each, and reads again whatever moved, appeared or went away. It repeats that until a pass finds nothing moved.
+
+When writes never stop, a pass can still catch one halfway: a note made and not yet attached is an orphan for a moment. A pass reads the types one after another, so such a write can show in two passes in a row but not in three. While the tree keeps moving, a finding counts only when three passes in a row found it, and the read ends once that set stops changing. The report says how many passes it took (`passes` in the JSON) and how many findings it left out as half-done writes (`in_flight`). A real problem made during the read is still reported, from its third pass on. If the findings are still changing after 10 passes, it exits `2`. The note a running `gwt-apply` holds the tree with is left out of every check.
+
+On a copy of a real tree (about 10,000 people, 50,000 objects), a quiet tree gives the same 208 findings this way, with `--live`, and on a `gwt-apply` snapshot. While an apply wrote 1,200 ops on the same server, the old read stopped within seconds every time. The new one finished every time, in 3 to 5 minutes on the loaded server against 9 s on a quiet one, with exactly the 208 findings the tree had once the apply was done. For a check between apply blocks, check the snapshot instead: about 4 s, no server reads.
+
+`--live` keeps the old read: one pass, and a type whose count changes during the read stops it with exit `2`.
+
+A `gwt-apply` snapshot (`gwt-apply --save-snapshot`, or `--save-snapshot NEW --since OLD` right after an apply) is a tree too, for `TREE`, `--since` and `--baseline`. Checking one needs no server and takes seconds. A snapshot from before snapshots kept repositories is refused: take a new one.
 
 ## Options of `check`
 
 | Option | What it does |
 |---|---|
-| `TREE` | A dump file. Without it, the live tree is read |
-| `--since OLD` | An earlier dump, or a `.gramps` backup. Adds the diff, and objects new since `OLD` become the scope |
+| `TREE` | A dump file or a `gwt-apply` snapshot. Without it, the live tree is read |
+| `--since OLD` | An earlier dump, a `gwt-apply` snapshot, or a `.gramps` backup. Adds the diff, and objects new since `OLD` become the scope |
 | `--tag NAME` | Objects carrying this tag become the scope. `gwt-apply --tag` puts the tag only on the objects a run creates, so old objects the run changed are not in it: use `--since` to see those. With `--tag`, the diff counts only tagged objects as changed or new |
 | `--root ID` | Gramps ID of the Ahnentafel root. With `--since`, a number that is lost or now holds another person is a finding |
 | `--known FILE` | Findings to accept: an earlier `--json` report, or a list of `{"check", "key"}` |
@@ -36,6 +49,7 @@ It exits `0` with no new findings and `1` with new findings. It exits `2` on bad
 | `--save-dump FILE` | Keeps the live dump, to use as `--since` next time |
 | `--limit N` | Findings printed per check (default 30); the JSON has all of them |
 | `--pagesize`, `--workers` | Objects per request (default 1000) and requests in flight (default 4) |
+| `--live` | The old strict read of the live tree, which stops when the tree changes during it |
 
 **Scope.** The structural checks always run on the whole tree. The fuzzy duplicate checks (`dup-couple-names`, `dup-person-birth`, `dup-person-relative`, `dup-person-fuzzy`, `dup-vital-event`) report a pair only when at least one side is in scope, so a run is not blamed for duplicates that were already there. Without `--since` or `--tag`, everything is in scope.
 
