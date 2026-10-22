@@ -360,6 +360,14 @@ class Client:
         self.written.pop((cls, handle), None)
         self._handles.get(cls, set()).discard(handle)
 
+    def remove(self, cls: str, handle: str) -> None:
+        """DELETE an object an op has emptied of references. A dry run only marks it as gone."""
+        self.deleted.add((cls, handle))
+        if self.dry_run:
+            self.log(method="DELETE", path=f"/{NAMESPACE[cls]}/{handle}", status=None)
+            return
+        self.delete(cls, handle)
+
     def merge(self, cls: str, winner: str, loser: str, body: dict | None = None) -> None:
         """Gramps' own merge: every reference to the loser moves to the winner, then the loser is deleted.
 

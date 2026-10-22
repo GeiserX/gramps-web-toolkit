@@ -23,6 +23,7 @@ TARGET_KINDS = {
     "source": "Source",
     "media": "Media",
     "place": "Place",
+    "repository": "Repository",
 }
 
 # op -> (required fields, optional fields), on top of op/key/ruling
@@ -38,8 +39,11 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "link_child": ({"family", "child"}, {"frel", "mrel", "probable", "probable_reason"}),
     "add_place": ({"name", "type"}, {"enclosed_by", "lat", "long", "gramps_id"}),
     "add_source": ({"title"}, {"author", "pubinfo", "abbrev", "gramps_id"}),
-    "add_repository": ({"name", "type"}, {"gramps_id"}),
-    "link_repository": ({"source", "repository"}, {"call_number"}),
+    "add_repository": ({"name", "type"}, {"gramps_id", "url", "address"}),
+    "update_repository": ({"repository", "set"}, set()),
+    "link_repository": ({"source", "repository"}, {"call_number", "media_type"}),
+    "unlink_repository": ({"source", "repository"}, set()),
+    "merge_repository": ({"winner", "loser"}, {"reason"}),
     "add_citation": ({"source", "page", "attach"}, {"confidence", "date", "gramps_id"}),
     "add_media": ({"file", "path", "attach"}, {"desc", "mime", "gramps_id"}),
     "add_note": ({"text", "attach"}, {"type", "gramps_id"}),
@@ -62,6 +66,12 @@ ATTACHABLE = {"citation": ("Citation", "citation_list"), "media": ("Media", "med
               "note": ("Note", "note_list")}
 REF_OWN_LISTS = ("note_list", "citation_list", "attribute_list")  # what a MediaRef carries besides its ref
 PERSON_FIELDS = {"first_name", "surname", "gender"}
+# what Gramps accepts for a repository's type and for how a source is held there
+REPOSITORY_TYPES = {"Library", "Cemetery", "Church", "Archive", "Album", "Web site", "Bookstore", "Collection", "Safe"}
+MEDIA_TYPES = {"Audio", "Book", "Card", "Electronic", "Fiche", "Film", "Magazine", "Manuscript", "Map",
+               "Newspaper", "Photo", "Tombstone", "Video", "Unknown"}
+ADDRESS_KEYS = {"street", "locality", "city", "county", "state", "country", "postal", "phone"}
+REPOSITORY_FIELDS = {"name", "type", "url", "address"}
 EVENT_FIELDS = {"type", "date", "place", "description"}
 GENDER = {"F": 0, "M": 1, "U": 2}
 SINGLE_VITAL = {"Birth": "birth_ref_index", "Death": "death_ref_index"}
@@ -70,7 +80,7 @@ PROBABLE = "[probable]"  # how a doubtful parent link is marked: a note on its c
 CARRIES = {
     "citation_list": {"Person", "Family", "Event", "Media", "Place"},
     "media_list": {"Person", "Family", "Event", "Citation", "Source", "Place"},
-    "note_list": {"Person", "Family", "Event", "Citation", "Source", "Media", "Place", "ChildRef"},
+    "note_list": {"Person", "Family", "Event", "Citation", "Source", "Media", "Place", "Repository", "ChildRef"},
 }
 CARRIES["citation_list"] = CARRIES["citation_list"] | {"ChildRef", "PersonRef"}
 CARRIES["note_list"] = CARRIES["note_list"] | {"PersonRef"}
@@ -209,7 +219,7 @@ def validate(ops: list[dict]) -> list[str]:
         else:
             payloads[payload] = where
         refs = [op.get(f) for f in ("person", "family", "father", "mother", "child", "source", "place", "enclosed_by",
-                                    "winner", "loser")]
+                                    "winner", "loser", "repository")]
         refs += list(op.get("children") or [])
         if name == "attach_existing":
             refs += _target_refs(op.get("object"))
@@ -278,6 +288,21 @@ def validate(ops: list[dict]) -> list[str]:
                     raise ValueError(f"{s['place']!r} is neither key:<key> nor a Gramps ID (never a handle)")
             if name == "set_attribute" and _parse_target(op.get("target"))[0] in ("ChildRef", "PersonRef"):
                 raise ValueError("a child_ref or an association has no attributes")
+            if name in ("add_repository", "update_repository"):
+                f = op if name == "add_repository" else op.get("set")
+                if name == "update_repository" and (not isinstance(f, dict) or not f or set(f) - REPOSITORY_FIELDS):
+                    raise ValueError(f"set takes only {sorted(REPOSITORY_FIELDS)}")
+                if "type" in f and f["type"] not in REPOSITORY_TYPES:
+                    raise ValueError(f"type is one of {sorted(REPOSITORY_TYPES)}")
+                if "name" in f and not str(f["name"]).strip():
+                    raise ValueError("name is empty")
+                if "url" in f and not re.match(r"^https?://\S+$", str(f["url"])):
+                    raise ValueError("url starts with http:// or https://")
+                if "address" in f and (not isinstance(f["address"], dict) or not f["address"]
+                                       or set(f["address"]) - ADDRESS_KEYS):
+                    raise ValueError(f"address is an object with some of {sorted(ADDRESS_KEYS)}")
+            if name == "link_repository" and "media_type" in op and op["media_type"] not in MEDIA_TYPES:
+                raise ValueError(f"media_type is one of {sorted(MEDIA_TYPES)}")
             if name == "add_place":
                 if ("lat" in op) != ("long" in op):
                     raise ValueError("lat and long go together")
@@ -864,18 +889,131 @@ class Applier:
                      "name": name, "type": op["type"]})
         self.keymap[op["key"]] = h
 
+    @staticmethod
+    def _repo_fields(obj: dict, f: dict) -> None:
+        """Put url and address on a repository: a url already there is kept, the first address is completed."""
+        if "url" in f and not any(u.get("path") == f["url"] for u in obj.get("urls") or []):
+            obj["urls"] = [*(obj.get("urls") or []), {"_class": "Url", "path": f["url"], "type": "Web Link", "desc": ""}]
+        if "address" in f:
+            addrs = obj.get("address_list") or []
+            if not addrs:
+                addrs = [{"_class": "Address"}]
+            addrs[0] = {**addrs[0], **f["address"]}
+            obj["address_list"] = addrs
+
+    def add_repository(self, op):
+        if self._existing("Repository", op):
+            return
+        name = op["name"].strip()
+        for row in self.c.list_all("Repository", ["name", "gramps_id"]):
+            if fold(row.get("name") or "") == fold(name):
+                self.keymap[op["key"]] = row["handle"]
+                self.actions.append(f"skip: Repository {row.get('gramps_id') or row['handle']} has that name")
+                return
+        self._check_gramps_id("Repository", op)
+        h = stable_handle(op["key"])
+        obj = {"_class": "Repository", "handle": h, "gramps_id": op.get("gramps_id", ""), "name": name, "type": op["type"]}
+        self._repo_fields(obj, op)
+        self.create(obj)
+        self.keymap[op["key"]] = h
+
+    def update_repository(self, op):
+        repo = self.obj("Repository", op["repository"])
+        repo.setdefault("_class", "Repository")
+        before = copy.deepcopy(repo)
+        s = op["set"]
+        if "name" in s:
+            new = s["name"].strip()
+            for row in self.c.list_all("Repository", ["name", "gramps_id"]):
+                if row["handle"] != repo["handle"] and fold(row.get("name") or "") == fold(new):
+                    raise Conflict(f"Repository {row.get('gramps_id') or row['handle']} already has the name {new!r}; "
+                                   "merge them with merge_repository")
+            repo["name"] = new
+        if "type" in s:
+            repo["type"] = s["type"]
+        self._repo_fields(repo, s)
+        if repo == before:
+            self.actions.append(f"skip: Repository {self.label(repo)} already has those values")
+            return
+        self.save(before, repo)
+
     def link_repository(self, op):
         source = self.obj("Source", op["source"])
         repo = self.resolve("Repository", op["repository"])
         source.setdefault("_class", "Source")
         before = copy.deepcopy(source)
         refs = source.setdefault("reporef_list", [])
-        if any(r.get("ref") == repo for r in refs):
-            self.actions.append(f"skip: Source {self.label(source)} already lists that repository")
-            return
-        ref = {"_class": "RepoRef", "ref": repo, "call_number": op.get("call_number", "")}
-        refs.append(ref)
+        wanted = {k: op[k] for k in ("call_number", "media_type") if k in op}
+        for r in refs:
+            if r.get("ref") == repo:
+                r.update({k: v for k, v in wanted.items() if r.get(k) != v})
+                if source == before:
+                    self.actions.append(f"skip: Source {self.label(source)} already lists that repository")
+                    return
+                self.save(before, source)
+                return
+        refs.append({"_class": "RepoRef", "ref": repo, "call_number": "", **wanted})
         self.save(before, source)
+
+    def unlink_repository(self, op):
+        source = self.obj("Source", op["source"])
+        repo = self.resolve("Repository", op["repository"])
+        source.setdefault("_class", "Source")
+        before = copy.deepcopy(source)
+        source["reporef_list"] = [r for r in source.get("reporef_list") or [] if r.get("ref") != repo]
+        if source == before:
+            self.actions.append(f"skip: Source {self.label(source)} does not list that repository")
+            return
+        self.save(before, source)
+
+    def merge_repository(self, op):
+        """Sources move from the loser to the winner, then the loser goes. Only sources point at a repository, so
+        there is no merge call to lean on: the references are moved here, one source at a time."""
+        if self._merge_done("Repository", op):
+            return
+        winner, loser = self.obj("Repository", op["winner"]), self.obj("Repository", op["loser"])
+        for o in (winner, loser):
+            o.setdefault("_class", "Repository")
+        if winner["handle"] == loser["handle"]:
+            raise Conflict("winner and loser are the same repository")
+        self._merge_note(op, "Repository", f"Repository {self.label(loser)} ({loser.get('name', '')})")
+        winner = self.obj("Repository", op["winner"])
+        winner.setdefault("_class", "Repository")
+        before = copy.deepcopy(winner)
+        for u in loser.get("urls") or []:
+            if not any(x.get("path") == u.get("path") for x in winner.get("urls") or []):
+                winner["urls"] = [*(winner.get("urls") or []), u]
+        for a in loser.get("address_list") or []:
+            if a not in (winner.get("address_list") or []):
+                winner["address_list"] = [*(winner.get("address_list") or []), a]
+        for n in loser.get("note_list") or []:
+            if n not in (winner.get("note_list") or []):
+                winner["note_list"] = [*(winner.get("note_list") or []), n]
+        if winner != before:
+            self.save(before, winner)
+        for row in self.c.list_all("Source", ["reporef_list", "gramps_id"]):
+            if not any(r.get("ref") == loser["handle"] for r in row.get("reporef_list") or []):
+                continue
+            src = self.c.get("Source", row["handle"])
+            src.setdefault("_class", "Source")
+            b = copy.deepcopy(src)
+            out = []
+            for r in src.get("reporef_list") or []:
+                if r.get("ref") != loser["handle"]:
+                    out.append(r)
+                    continue
+                twin = next((x for x in src["reporef_list"] if x.get("ref") == winner["handle"]), None)
+                if twin is None:
+                    out.append({**r, "ref": winner["handle"]})
+                else:  # the source already lists the winner: keep what the loser's entry knew that the winner's lacks
+                    for k in ("call_number",):
+                        if r.get(k) and not twin.get(k):
+                            twin[k] = r[k]
+            src["reporef_list"] = out
+            self.save(b, src)
+        self.actions.append(f"delete Repository {self.label(loser)}")
+        self.c.remove("Repository", loser["handle"])
+        self.wrote = True
 
     def add_citation(self, op):
         source = self.resolve("Source", op["source"])

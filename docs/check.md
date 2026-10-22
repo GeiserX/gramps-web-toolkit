@@ -59,6 +59,18 @@ A `gwt-apply` snapshot (`gwt-apply --save-snapshot`, or `--save-snapshot NEW --s
 
 **Known findings.** Every finding has a `check` and a `key` built from Gramps IDs, for example `repeated-ref` / `F0012 citation_list C0034`. The key stays the same from run to run while the problem does. Pass the first run's report as `--known` and the exit code then reflects only new problems.
 
+## Finding repositories
+
+`gwt-check repos` reads a dump or the live tree and prints each repository with its source count. It never writes.
+
+```sh
+gwt-check repos dump.json.gz --name archives          # part of the name, case and accents ignored
+gwt-check repos --type Archive --unlinked             # live tree; adds the unlinked lists
+gwt-check repos dump.json.gz --json                   # repositories with their sources, call numbers and media types
+```
+
+`--unlinked` adds the sources that list no repository and the repositories no source lists. Fix them with `link_repository` and `merge_repository` in [`gwt-apply`](apply.md).
+
 ## The checks
 
 | Check | Fires on |
@@ -80,6 +92,9 @@ A `gwt-apply` snapshot (`gwt-apply --save-snapshot`, or `--save-snapshot NEW --s
 | `dup-vital-event` | One person (role `Primary`) or family (role `Family`) with two Birth, Death, Baptism, Burial or Marriage events |
 | `living-media-sensitive` | Media of a person with no death or burial event of their own (role `Primary`) who was born within 110 years (or has no dated birth), whose path, description or attributes hold an ID number or an ID or address word. Media already private (the person, the media or the reference) is skipped. It reads metadata only, never the image or its notes, and never prints the match. The patterns are Spanish-first: a DNI or NIE counts only with the right check letter, and the words are passport, home-address and ID-card terms in Spanish, English and French, plus `c/` before a street name. Another country adds its ID number to `ID_NUMBERS` and its words to `ID_WORDS` in `check/gwt_check/checks.py`. Accept a false positive with `--known` |
 | `private` | Any object or sub-reference marked private |
+| `repository-no-source` | A repository that no source lists |
+| `source-no-repository` | A source with no repository. It fires only when the tree has at least one repository; a tree that does not use repositories is not wrong |
+| `dup-repository` | Two repositories with the same name, ignoring case, accents and extra spaces |
 | `place-no-coords` | A place that an event uses, without latitude or longitude |
 | `surname-marker` | A surname containing `[`, such as `Vidal [¿?]` |
 | `missing-object` | With `--since`: an object of the earlier tree that is gone |
@@ -91,7 +106,7 @@ The report also gives, without failing: events without a place (in the whole tre
 
 ## Self-test
 
-`gwt-check selftest` builds an invented three-generation tree, checks that it comes out clean (the positive control), then plants 33 errors, one at a time and then all together, and checks that each comes out as its finding. The test suite also silences each check in turn and requires the self-test to fail, so a check without a planted error cannot slip in.
+`gwt-check selftest` builds an invented three-generation tree, checks that it comes out clean (the positive control), then plants 36 errors, one at a time and then all together, and checks that each comes out as its finding. The test suite also silences each check in turn and requires the self-test to fail, so a check without a planted error cannot slip in.
 
 ## Speed
 

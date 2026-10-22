@@ -582,3 +582,19 @@ def test_a_gwt_apply_snapshot_is_a_tree(tmp_path, capsys):
         json.dump({"format": "gwt-apply-snapshot/1", "objects": []}, fh)
     assert main(["check", str(tmp_path / "bad.json.gz")]) == 2
     assert "objects map" in capsys.readouterr().err
+
+
+def test_repos_command_finds_by_name_and_type_and_lists_unlinked(tmp_path, capsys):
+    data = selftest.clean_tree()
+    selftest.p_repository_no_source(data)
+    selftest.p_source_no_repository(data)
+    dump = _write(tmp_path, "t.json", data)
+    assert main(["repos", dump, "--name", "diocesano", "--unlinked"]) == 0
+    out = capsys.readouterr().out
+    assert "R0001  Archivo Diocesano de Ejemplo  [Archive]  1 sources" in out
+    assert "R0099" in out and "S0099" in out  # the unlinked ones
+    assert main(["repos", dump, "--type", "library"]) == 0
+    assert "no repository matches" in capsys.readouterr().out
+    assert main(["repos", dump, "--name", "IMAGINARIO", "--json"]) == 0
+    got = json.loads(capsys.readouterr().out)
+    assert [r["id"] for r in got["repositories"]] == ["R0099"]

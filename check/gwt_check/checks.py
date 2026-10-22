@@ -66,6 +66,9 @@ CHECKS = {
     "dup-vital-event": "one person or family with two vital events of one type",
     "living-media-sensitive": "media of a possibly living person, not marked private, whose path, description or "
                               "attributes look like an ID document, passport or home address",
+    "repository-no-source": "repository no source lists",
+    "source-no-repository": "source with no repository, in a tree that has repositories",
+    "dup-repository": "two repositories with the same name, ignoring case and accents",
     "private": "object or sub-reference marked private",
     "place-no-coords": "place used by an event without coordinates",
     "surname-marker": "surname with a « [ » marker",
@@ -217,6 +220,24 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None) -> tuple[l
         for h, o in T[t].items():
             if h not in owners:
                 out.add(check, o.get("gramps_id") or h)
+
+    # repositories: where each source is kept. A tree with no repository at all does not use them, so a
+    # source without one is a finding only once the tree has at least one.
+    R = T["repositories"]
+    for h, o in R.items():
+        if h not in referenced["repositories"]:
+            out.add("repository-no-source", o.get("gramps_id") or h, o.get("name", ""))
+    if R:
+        for h, o in T["sources"].items():
+            if not o.get("reporef_list"):
+                out.add("source-no-repository", o.get("gramps_id") or h, o.get("title", ""))
+    by_name: dict[str, list[str]] = defaultdict(list)
+    for h, o in R.items():
+        if (o.get("name") or "").strip():
+            by_name[" ".join("".join(c for c in unicodedata.normalize("NFD", o["name"].lower()) if unicodedata.category(c) != "Mn").split())].append(o.get("gramps_id") or h)
+    for ids in by_name.values():
+        if len(ids) > 1:
+            out.add("dup-repository", ",".join(sorted(ids)))
 
     # birth and death pointers
     E = T["events"]

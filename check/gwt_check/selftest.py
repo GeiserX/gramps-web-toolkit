@@ -162,6 +162,22 @@ def p_orphan_media(d):
     d["media"].append({**copy.deepcopy(d["media"][0]), "handle": "hO0099", "gramps_id": "O0099"})
 
 
+def p_repository_no_source(d):
+    d["repositories"].append(_base("R0099", name="Archivo Imaginario", type="Archive",
+                                   address_list=[], urls=[], note_list=[]))
+
+
+def p_source_no_repository(d):
+    d["sources"].append(_base("S0099", title="Libro inventado sin archivo", author="", pubinfo="", abbrev="",
+                              attribute_list=[], media_list=[], note_list=[], reporef_list=[]))
+
+
+def p_dup_repository(d):
+    d["repositories"].append({**copy.deepcopy(d["repositories"][0]), "handle": "hR0098", "gramps_id": "R0098",
+                              "name": "ARCHIVO DIOCESANO DE EJEMPLO"})
+    d["sources"][0]["reporef_list"].append({**copy.deepcopy(d["sources"][0]["reporef_list"][0]), "ref": "hR0098"})
+
+
 def p_dangling_child(d):
     _get(d, "families", "F0002")["child_ref_list"].append(_ref("ghost-person", frel="Birth", mrel="Birth"))
 
@@ -310,6 +326,9 @@ PLANTS = [
     (p_orphan_citation, "orphan-citation", "C0099", False),
     (p_orphan_note, "orphan-note", "N0099", False),
     (p_orphan_media, "orphan-media", "O0099", False),
+    (p_repository_no_source, "repository-no-source", "R0099", False),
+    (p_source_no_repository, "source-no-repository", "S0099", False),
+    (p_dup_repository, "dup-repository", "R0001,R0098", False),
     (p_dangling_child, "dangling-ref", "F0002 child_ref_list -> people ghost-person", False),
     (p_dangling_subref, "dangling-ref", "F0003 child_ref_list[I0003].note_list -> notes ghost-note", False),
     (p_place_not_place, "place-not-place", "E0201 place", False),

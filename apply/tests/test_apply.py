@@ -237,6 +237,103 @@ def test_link_repository_needs_an_existing_repository(fake):
     assert [r.status for r in run(fake, ops)] == ["conflict"]
 
 
+def _two_repos(fake):
+    fake.add("repositories", {"handle": "repo1", "name": "Example County Archives", "type": "Archive", "urls": [], "address_list": [], "note_list": []})  # R0001
+    fake.add("repositories", {"handle": "repo2", "name": "County Archive (old name)", "type": "Library", "urls": [{"path": "https://old.example", "type": "Web Link", "desc": ""}], "address_list": [], "note_list": []})  # R0002
+    fake.add("sources", {"handle": "src2", "title": "Parish register of Shelbyville", "reporef_list": [{"ref": "repo2", "call_number": "B7", "media_type": "Book", "note_list": []}]})  # S0002
+
+
+def test_update_repository_edits_fields_and_is_idempotent(fake):
+    _two_repos(fake)
+    ops = [{"op": "update_repository", "key": "u", "ruling": R, "repository": "R0001",
+            "set": {"name": "Example County Record Office", "type": "Library", "url": "https://records.example",
+                    "address": {"street": "1 Fake Street", "city": "Springfield", "country": "Nowhere"}}}]
+    assert [r.status for r in run(fake, ops)] == ["done"]
+    repo = fake.store["repositories"]["repo1"]
+    assert (repo["name"], repo["type"]) == ("Example County Record Office", "Library")
+    assert [u["path"] for u in repo["urls"]] == ["https://records.example"]
+    assert repo["address_list"][0]["street"] == "1 Fake Street"
+    assert [r.status for r in run(fake, ops)] == ["skip"]
+    assert len(fake.store["repositories"]["repo1"]["urls"]) == 1
+    clash = [{"op": "update_repository", "key": "u2", "ruling": R, "repository": "R0001",
+              "set": {"name": "county archive (OLD name)"}}]
+    assert [r.status for r in run(fake, clash)] == ["conflict"]  # another repository has that name
+
+
+def test_update_repository_dry_run_writes_nothing(fake):
+    _two_repos(fake)
+    ops = [{"op": "update_repository", "key": "u", "ruling": R, "repository": "R0001", "set": {"type": "Church"}}]
+    res = run(fake, ops, dry_run=True)
+    assert [r.status for r in res] == ["done"] and fake.writes() == []
+    assert any("type" in a for a in res[0].actions)
+
+
+def test_link_repository_updates_call_number_and_media_type_then_unlinks(fake):
+    _two_repos(fake)
+    link = [{"op": "link_repository", "key": "l", "ruling": R, "source": "S0001", "repository": "R0001",
+             "call_number": "A1", "media_type": "Manuscript"}]
+    assert [r.status for r in run(fake, link)] == ["done"]
+    ref = fake.store["sources"]["src1"]["reporef_list"][0]
+    assert (ref["call_number"], ref["media_type"]) == ("A1", "Manuscript")
+    assert [r.status for r in run(fake, link)] == ["skip"]
+    fix = [{"op": "link_repository", "key": "l2", "ruling": R, "source": "S0001", "repository": "R0001", "call_number": "A2"}]
+    assert [r.status for r in run(fake, fix)] == ["done"]  # an existing link takes the new call number, no second link
+    refs = fake.store["sources"]["src1"]["reporef_list"]
+    assert len(refs) == 1 and refs[0]["call_number"] == "A2" and refs[0]["media_type"] == "Manuscript"
+    off = [{"op": "unlink_repository", "key": "x", "ruling": R, "source": "S0001", "repository": "R0001"}]
+    assert [r.status for r in run(fake, off)] == ["done"]
+    assert fake.store["sources"]["src1"]["reporef_list"] == []
+    assert [r.status for r in run(fake, off)] == ["skip"]
+    assert "R0001" in fake.by_id("repositories", "R0001")["gramps_id"]  # the repository itself stays
+
+
+def test_merge_repository_moves_sources_and_removes_the_loser(fake):
+    _two_repos(fake)
+    fake.by_id("sources", "S0001")["reporef_list"] = [{"ref": "repo1", "call_number": "", "media_type": "Book", "note_list": []}]
+    fake.by_id("sources", "S0001")["reporef_list"].append({"ref": "repo2", "call_number": "C9", "media_type": "Book", "note_list": []})
+    ops = [{"op": "merge_repository", "key": "m", "ruling": R, "winner": "R0001", "loser": "R0002", "reason": "same archive"}]
+    res = run(fake, ops)
+    assert [r.status for r in res] == ["done"], res[0].actions
+    assert "repo2" not in fake.store["repositories"]
+    assert [r["ref"] for r in fake.store["sources"]["src2"]["reporef_list"]] == ["repo1"]
+    assert fake.store["sources"]["src2"]["reporef_list"][0]["call_number"] == "B7"
+    both = fake.store["sources"]["src1"]["reporef_list"]
+    assert [r["ref"] for r in both] == ["repo1"] and both[0]["call_number"] == "C9"  # one entry, call number kept
+    assert [u["path"] for u in fake.store["repositories"]["repo1"]["urls"]] == ["https://old.example"]
+    assert [r.status for r in run(fake, ops)] == ["skip"]  # a rerun finds the merge note
+
+
+def test_merge_repository_dry_run_keeps_everything(fake):
+    _two_repos(fake)
+    ops = [{"op": "merge_repository", "key": "m", "ruling": R, "winner": "R0001", "loser": "R0002"}]
+    res = run(fake, ops, dry_run=True)
+    assert res[0].status == "done" and fake.writes() == [] and "repo2" in fake.store["repositories"]
+    assert any(a.startswith("delete Repository R0002") for a in res[0].actions)
+
+
+def test_repository_ops_are_validated():
+    base = {"key": "k", "ruling": R}
+    bad = [
+        {**base, "op": "add_repository", "name": "A", "type": "Castle"},
+        {**base, "key": "k2", "op": "add_repository", "name": "A", "type": "Archive", "url": "ftp://x"},
+        {**base, "key": "k3", "op": "add_repository", "name": "A", "type": "Archive", "address": {"planet": "Mars"}},
+        {**base, "key": "k4", "op": "update_repository", "repository": "R0001", "set": {"gramps_id": "R5"}},
+        {**base, "key": "k5", "op": "link_repository", "source": "S0001", "repository": "R0001", "media_type": "Scroll"},
+        {**base, "key": "k6", "op": "unlink_repository", "source": "S0001", "repository": "0a1b2c3d4e5f"},
+        {**base, "key": "k7", "op": "merge_repository", "winner": "R0001", "loser": "R0001"},
+    ]
+    errors = validate(bad)
+    assert len(errors) == 7, errors
+
+
+def test_a_note_can_be_attached_to_a_repository(fake):
+    _two_repos(fake)
+    ops = [{"op": "add_note", "key": "n", "ruling": R, "text": "Opening hours checked on the website.",
+            "attach": [{"repository": "R0001"}]}]
+    assert [r.status for r in run(fake, ops)] == ["done"]
+    assert len(fake.store["repositories"]["repo1"]["note_list"]) == 1
+
+
 def test_a_concurrent_edit_is_not_overwritten(fake):
     # another writer renames Anna right after our first read; the op must start over and keep that rename
     fake.edit_after_read = ("anna", lambda o: o["primary_name"].update(first_name="Annie"))
