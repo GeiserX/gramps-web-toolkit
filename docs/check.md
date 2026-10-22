@@ -92,6 +92,8 @@ On a tree of 13,035 people, 3,874 families, 10,831 events, 9,120 citations, 5,58
 
 Each request costs about 1.3 s before the first object, so small pages waste most of the time. The checks themselves take under a second, and reading a saved dump about one. Large pages are safe without `profile=all`. It was `profile=all` that answered 500 on a whole-tree listing.
 
+A request that fails on the network (a timeout, a reset connection, an SSL read error) is tried again, the same as a 429 or a 5xx: up to 6 tries per request, waiting 5, 10, 20, 40 and then 60 s between them. Only a page that fails all 6 stops the run, with exit code 2 and the last error. On a loaded server, where a 1000-object page can take minutes, read with `--pagesize 100 --workers 1`: smaller pages answer within the timeout, and nothing else competes with them.
+
 If the tree changes while it is being read, pages shift, and a type comes back short or with repeats. `gwt-check` then stops with exit code 2 instead of reporting false orphans. Run it when no apply is writing.
 
 ## A `.gramps` backup as the earlier tree
