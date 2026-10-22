@@ -214,6 +214,29 @@ def test_add_place_dedupes_on_name_type_parent_and_feeds_event_places(fake):
         [{"op": "add_place", "key": "x", "ruling": R, "name": "A", "type": "Town", "lat": 1}]))
 
 
+def test_add_repository_and_link_it_to_a_source(fake):
+    ops = [
+        {"op": "add_repository", "key": "r-archive", "ruling": R, "name": "Example County Archives", "type": "Archive"},
+        {"op": "link_repository", "key": "lk", "ruling": R, "source": "S0001", "repository": "key:r-archive",
+         "call_number": "5MI149/R13"},
+    ]
+    res = run(fake, ops)
+    assert [r.status for r in res] == ["done", "done"], [r.actions for r in res]
+    repo = fake.store["repositories"][stable_handle("r-archive")]
+    assert (repo["name"], repo["type"]) == ("Example County Archives", "Archive")
+    src = fake.store["sources"]["src1"]
+    assert src["reporef_list"] == [{"_class": "RepoRef", "ref": repo["handle"], "call_number": "5MI149/R13"}]
+    assert [r.status for r in run(fake, ops)] == ["skip", "skip"]  # nothing is made or linked twice
+    again = [{"op": "add_repository", "key": "r-other-key", "ruling": R, "name": "example county archives", "type": "Archive"}]
+    assert [r.status for r in run(fake, again)] == ["skip"]  # same name, found by name
+    assert len(fake.store["repositories"]) == 1
+
+
+def test_link_repository_needs_an_existing_repository(fake):
+    ops = [{"op": "link_repository", "key": "lk", "ruling": R, "source": "S0001", "repository": "R0099"}]
+    assert [r.status for r in run(fake, ops)] == ["conflict"]
+
+
 def test_a_concurrent_edit_is_not_overwritten(fake):
     # another writer renames Anna right after our first read; the op must start over and keep that rename
     fake.edit_after_read = ("anna", lambda o: o["primary_name"].update(first_name="Annie"))

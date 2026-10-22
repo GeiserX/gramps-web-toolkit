@@ -56,6 +56,8 @@ References to other objects are either a **Gramps ID** (`I0042`, `P0007`, or wit
 | `add_family` | `father` or `mother` | `children`, `type`, `gramps_id` | New family, or the existing one with the same parents |
 | `link_child` | `family`, `child` | `frel`, `mrel` (default `Birth`), `probable: true` with `probable_reason` | Adds a child to a family. With `probable`, the link also gets a `Research` note on its child_ref that reads `[probable] <probable_reason>`; a link that is already there gets the note if it has none starting with `[probable]` |
 | `add_source` | `title` | `author`, `pubinfo`, `abbrev`, `gramps_id` | New source, or the existing one with the same title |
+| `add_repository` | `name`, `type` | `gramps_id` | New repository (an archive, library or parish office), or the existing one with the same name, ignoring case and accents |
+| `link_repository` | `source`, `repository` | `call_number` | Adds the repository to the source's repository list, with the call number if given. Skipped when the source already lists it |
 | `add_citation` | `source`, `page`, `attach` | `confidence` (0-4, default 2), `date`, `gramps_id` | New citation, or the existing one with the same page on that source, attached to each target |
 | `add_media` | `file`, `path`, `attach` | `desc`, `mime`, `gramps_id` | Media object for a local file, or the existing one with the same MD5, attached to each target |
 | `add_note` | `text`, `attach` | `type` (default `General`), `gramps_id` | New note, or a note with the same text already on a target |

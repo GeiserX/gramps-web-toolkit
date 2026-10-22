@@ -19,6 +19,7 @@ NAMESPACE = {
     "Place": "places",
     "Citation": "citations",
     "Source": "sources",
+    "Repository": "repositories",
     "Media": "media",
     "Note": "notes",
     "Tag": "tags",

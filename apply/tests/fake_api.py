@@ -17,6 +17,7 @@ NS = {
     "places": ("Place", "P"),
     "citations": ("Citation", "C"),
     "sources": ("Source", "S"),
+    "repositories": ("Repository", "R"),
     "media": ("Media", "O"),
     "notes": ("Note", "N"),
     "tags": ("Tag", "T"),

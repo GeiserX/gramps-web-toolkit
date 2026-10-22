@@ -38,6 +38,8 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "link_child": ({"family", "child"}, {"frel", "mrel", "probable", "probable_reason"}),
     "add_place": ({"name", "type"}, {"enclosed_by", "lat", "long", "gramps_id"}),
     "add_source": ({"title"}, {"author", "pubinfo", "abbrev", "gramps_id"}),
+    "add_repository": ({"name", "type"}, {"gramps_id"}),
+    "link_repository": ({"source", "repository"}, {"call_number"}),
     "add_citation": ({"source", "page", "attach"}, {"confidence", "date", "gramps_id"}),
     "add_media": ({"file", "path", "attach"}, {"desc", "mime", "gramps_id"}),
     "add_note": ({"text", "attach"}, {"type", "gramps_id"}),
@@ -846,6 +848,34 @@ class Applier:
                 obj[f] = op[f]
         self.create(obj)
         self.keymap[op["key"]] = h
+
+    def add_repository(self, op):
+        if self._existing("Repository", op):
+            return
+        name = op["name"].strip()
+        for row in self.c.list_all("Repository", ["name", "gramps_id"]):
+            if fold(row.get("name") or "") == fold(name):
+                self.keymap[op["key"]] = row["handle"]
+                self.actions.append(f"skip: Repository {row.get('gramps_id') or row['handle']} has that name")
+                return
+        self._check_gramps_id("Repository", op)
+        h = stable_handle(op["key"])
+        self.create({"_class": "Repository", "handle": h, "gramps_id": op.get("gramps_id", ""),
+                     "name": name, "type": op["type"]})
+        self.keymap[op["key"]] = h
+
+    def link_repository(self, op):
+        source = self.obj("Source", op["source"])
+        repo = self.resolve("Repository", op["repository"])
+        source.setdefault("_class", "Source")
+        before = copy.deepcopy(source)
+        refs = source.setdefault("reporef_list", [])
+        if any(r.get("ref") == repo for r in refs):
+            self.actions.append(f"skip: Source {self.label(source)} already lists that repository")
+            return
+        ref = {"_class": "RepoRef", "ref": repo, "call_number": op.get("call_number", "")}
+        refs.append(ref)
+        self.save(before, source)
 
     def add_citation(self, op):
         source = self.resolve("Source", op["source"])
