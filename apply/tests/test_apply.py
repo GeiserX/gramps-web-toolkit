@@ -320,6 +320,16 @@ def test_update_event_fixes_the_existing_event(fake):
     assert run(fake, ops)[0].status == "skip"
 
 
+def test_update_place_sets_coordinates_on_an_existing_place(fake):
+    ops = [{"op": "update_place", "key": "up", "ruling": R, "place": "P0001", "set": {"lat": 47.39, "long": 0.689}}]
+    assert run(fake, ops)[0].status == "done"
+    pl = fake.store["places"]["plc1"]
+    assert (pl["lat"], pl["long"]) == ("47.39", "0.689")
+    assert run(fake, ops)[0].status == "skip"
+    for bad in ({"lat": 47.39}, {"lat": 95, "long": 0}, {"name": "x"}, {}):
+        assert validate([dict(ops[0], key="bad", set=bad)]), bad
+
+
 def test_citation_and_note_on_a_child_ref(fake):
     kid = fake.add("people", {"handle": "kid", "gender": 1, "primary_name": {"first_name": "Tom", "surname_list": [{"surname": "Example", "primary": True}]}})
     fake.add("families", {"handle": "fam", "mother_handle": "anna", "child_ref_list": [{"ref": "kid", "frel": "Birth", "mrel": "Birth"}]})  # F0001
