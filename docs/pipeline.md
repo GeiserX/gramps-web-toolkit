@@ -120,7 +120,7 @@ Two shared files keep parallel agents from paying twice:
 
 ## Rate-limit gates
 
-Every lane that touches a rate-limited site goes through one shared gate:
+Every lane that touches a rate-limited site goes through one shared gate ([`gate/`](../gate/), [gwt-gate](gate.md)):
 
 - `wait <lane>` before **every** request: page, search or image. The gate hands out one common pace across all lanes, not one per lane.
 - `hit <lane> <what>` on any 429, 403, captcha or security notice. That pauses every lane and slows the pace.
