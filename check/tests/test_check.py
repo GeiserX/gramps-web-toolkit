@@ -3,6 +3,7 @@ import copy
 import gzip
 import io
 import json
+import ssl
 import urllib.parse
 
 import pytest
@@ -172,6 +173,38 @@ def test_dump_pages_every_type_with_one_login():
     out = client.dump(pagesize=3, workers=2)
     assert {t: len(v) for t, v in out.items()} == {t: len(v) for t, v in data.items()}
     assert server.calls.count("/api/token/") == 2  # one 429, then the login that is reused
+
+
+class Flaky:
+    """Raises a network error on the first `fails` page reads (or on every one), then lets the server answer."""
+
+    def __init__(self, server, fails, error=TimeoutError("The read operation timed out")):
+        self.server, self.fails, self.error, self.raised = server, fails, error, 0
+
+    def __call__(self, req, timeout):
+        if not req.full_url.split("?")[0].endswith("/token/") and (self.fails is None or self.raised < self.fails):
+            self.raised += 1
+            raise self.error
+        return self.server(req, timeout)
+
+
+def test_a_page_that_times_out_twice_is_read_on_the_third_try():
+    data = selftest.clean_tree()
+    waits = []
+    flaky = Flaky(FakeServer(data), 2)
+    client = Client("https://gramps.example.org", "u", "pw", opener=flaky, sleep=waits.append)
+    out = client.dump(pagesize=1000)
+    assert {t: len(v) for t, v in out.items()} == {t: len(v) for t, v in data.items()}
+    assert flaky.raised == 2 and waits == [5.0, 10.0]  # backoff doubles
+
+
+def test_a_page_that_never_answers_fails_after_the_retry_limit():
+    flaky = Flaky(FakeServer(selftest.clean_tree()), None, ssl.SSLError("The read operation timed out"))
+    waits = []
+    client = Client("https://gramps.example.org", "u", "pw", opener=flaky, sleep=waits.append)
+    with pytest.raises(ApiError, match="gave up after 6 tries, last SSLError"):
+        client.dump(pagesize=1000)
+    assert flaky.raised == 6 and waits == [5.0, 10.0, 20.0, 40.0, 60.0]  # capped, no wait after the last
 
 
 def test_dump_refuses_a_short_type_and_a_wrong_tree():

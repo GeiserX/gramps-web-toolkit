@@ -348,3 +348,11 @@ Format: what happened, why, and the rule.
 **Why.** (1) The API wants the full handle and does not say that a prefix is the problem. (2) Gramps removes an event's references, not the objects the event carried. (3) The tag was never created, so the handle the caller put in `tag_list` was empty. We have not found out whether the 7-character color (`#1a7f37`) is why the create was dropped; Gramps stores colors as 12 hex digits, which is what `gwt-apply` writes.
 
 **Rule.** Resolve a Gramps ID to its full handle by reading it (`/api/events/?gramps_id=...`), never type or cut a handle. When one event replaces another, use `merge_event`: it calls Gramps' own merge, which moves the loser's citations, notes, media and attributes to the winner, so nothing is left behind. It refuses two events that differ, so correct one with `update_event` first. After any run that deletes events another way, run `gwt-check` and make sure `orphan-note` did not rise. Make tags through `gwt-apply`: it picks the tag's handle itself, writes the 12-digit color, and stops with an error if the tag is not there when it reads it back.
+
+### 52. One slow page ended a whole-tree read
+
+**What happened.** On a loaded server, `gwt-check` failed six runs in a row with `TimeoutError` and SSL read errors, some with nothing else writing to the tree. A sequential reader taking 100 objects per request and retrying each page got the whole tree.
+
+**Why.** The client retried 429 and 5xx answers but not network errors, so one page that timed out ended a 15-minute read. It is the read side of lesson 48.
+
+**Rule.** Every request of a long read retries network errors with a growing wait, the same as a 5xx; `gwt-check` tries each request 6 times. On a loaded server, read with small pages and one request at a time (`--pagesize 100 --workers 1`), save the dump, and run the checks on the file.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import http.client
 import json
 import threading
 import time
@@ -16,6 +17,16 @@ from .tree import TYPES
 
 class ApiError(RuntimeError):
     pass
+
+
+# a timeout, a reset or an SSL read error on a loaded server; HTTPError is answered in _call first
+NETWORK_ERRORS = (OSError, http.client.HTTPException)
+TRIES = 6
+
+
+def backoff(attempt: int) -> float:
+    """5, 10, 20, 40, then 60 s at most between tries."""
+    return min(60.0, 5.0 * 2 ** (attempt - 1))
 
 
 def jwt_claims(token: str) -> dict:
@@ -52,7 +63,13 @@ class Client:
         body = json.dumps({"username": self.username, "password": self._password}).encode()
         for attempt in range(1, 8):
             req = urllib.request.Request(self.base + "/token/", body, {"Content-Type": "application/json"})
-            status, headers, data = self._call(req)
+            try:
+                status, headers, data = self._call(req)
+            except NETWORK_ERRORS as exc:
+                if attempt >= TRIES:
+                    raise ApiError(f"login failed: {type(exc).__name__}: {exc}") from exc
+                self.sleep(backoff(attempt))
+                continue
             if status != 429:
                 break
             # logins are rate-limited: wait as told, never retry in a burst
@@ -66,25 +83,36 @@ class Client:
 
     def get(self, path: str, params: dict) -> tuple[dict, object]:
         url = f"{self.base}{path}?{urllib.parse.urlencode(params)}"
-        for attempt in range(1, 7):
+        last = ""
+        for attempt in range(1, TRIES + 1):
             with self._lock:
                 if self.token is None:
                     self.login()
                 token = self.token
-            status, headers, data = self._call(
-                urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"}))
+            try:
+                status, headers, data = self._call(
+                    urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"}))
+            except NETWORK_ERRORS as exc:
+                # one slow page must not end a whole-tree read: retry it like a 5xx
+                last = f"{type(exc).__name__}: {exc}"
+                if attempt < TRIES:
+                    self.sleep(backoff(attempt))
+                continue
             if status == 200:
                 return headers, json.loads(data)
             if status == 401:
+                last = "HTTP 401"
                 with self._lock:
                     if self.token == token:  # one relogin for every thread that saw the 401
                         self.token = None
                 continue
             if status == 429 or status >= 500:
-                self.sleep(float(headers.get("Retry-After") or 5 * attempt))
+                last = f"HTTP {status}"
+                if attempt < TRIES:
+                    self.sleep(float(headers.get("Retry-After") or backoff(attempt)))
                 continue
             raise ApiError(f"GET {path}: HTTP {status}")
-        raise ApiError(f"GET {path}: gave up after {attempt} tries")
+        raise ApiError(f"GET {path}: gave up after {TRIES} tries, last {last}")
 
     def dump(self, *, pagesize: int = 1000, workers: int = 4, progress=None) -> dict:
         """Every object of every type. Raises if a type comes back short or with repeats."""
