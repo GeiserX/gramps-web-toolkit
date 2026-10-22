@@ -58,7 +58,9 @@ Queries match fuzzily. The score is the best of three measures:
 - character similarity (`difflib`);
 - for a new query of three words or more, the share of its words already in a logged query. A short query inside a longer logged one counts as done.
 
-The default threshold is 0.75 (`--threshold` to change it). Reworded, reordered or re-accented queries still match. A different collection, place or date range does not.
+Before any of that, every word of the new query must already be in the logged one. Particles (`de`, `la`, `y`, `the`…) don't count, and a one-letter typo in a word of five letters or more is allowed. Numbers must match exactly. Without this gate, two searches of one catalogue that share a long prefix and differ in one surname (`Real Chancilleria de Granada: Toledo` after `Real Chancilleria de Granada: Peiro Villanueva`) scored over 0.8, and the second search was skipped as already done.
+
+The default threshold is 0.75 (`--threshold` to change it). Reworded, reordered or re-accented queries still match. A different collection, place, name or date range does not.
 
 ## Traps
 

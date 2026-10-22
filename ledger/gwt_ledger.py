@@ -31,12 +31,29 @@ def key(text):
     return normalize(text).replace(' ', '-')
 
 
+# Particles that rewording drops or adds without changing the search.
+PARTICLES = frozenset('a al con da de del di do du e el en la las le les los of the y'.split())
+
+
+def has_word(word, words):
+    """`word` is in `words`, or a one-letter typo of it is (Villanueba for Villanueva). Numbers must match exactly."""
+    if word in words:
+        return True
+    if word.isdigit() or len(word) < 5:
+        return False
+    return any(len(w) >= 5 and difflib.SequenceMatcher(None, word, w).ratio() >= 0.85 for w in words)
+
+
 def similarity(a, b):
     """Fuzzy match of a new query `a` against a logged query `b`: the best of word-set overlap,
-    character ratio, and (for queries of three words or more) how much of `a` the logged query covers."""
+    character ratio, and (for queries of three words or more) how much of `a` the logged query covers.
+    Every word of `a` except particles must be in `b`, give or take a typo: a different name, place
+    or year after a long shared prefix is a different search, however high the overlap."""
     if a == b:
         return 1.0
     ta, tb = set(a.split()), set(b.split())
+    if not all(has_word(w, tb) for w in ta - PARTICLES):
+        return 0.0
     jaccard = len(ta & tb) / len(ta | tb) if ta | tb else 0.0
     covered = len(ta & tb) / len(ta) if len(ta) >= 3 else 0.0
     return max(jaccard, covered, difflib.SequenceMatcher(None, a, b).ratio())
