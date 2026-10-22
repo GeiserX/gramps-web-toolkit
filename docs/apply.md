@@ -23,7 +23,7 @@ Settings come from the environment, or from a `KEY=VALUE` file passed with `--co
 
 On a multi-tree server, the tree comes from the user: the login (`POST /api/token/`) returns a token whose `tree` claim names that user's tree. `gwt-apply` refuses to go on if that claim is not `GWT_TREE`, so a wrong account cannot write into the wrong tree.
 
-Other flags: `--log PATH`, `--retries N` (default 5), `--retry-wait SECONDS` (default 30), `--snapshot FILE` and `--save-snapshot FILE` ([Snapshots](#snapshots)), `--tag NAME` ([Tags](#tags)), `--break-lock` (below).
+Other flags: `--log PATH`, `--retries N` (default 5), `--retry-wait SECONDS` (default 30), `--snapshot FILE`, `--save-snapshot FILE` and `--since OLD` ([Snapshots](#snapshots)), `--tag NAME` ([Tags](#tags)), `--break-lock` (below).
 
 Every run gets a run id, `<date>-<time>-<6 hex>`, printed on the first line. The log goes to `PATH` with the run id before the extension (`--log apply.jsonl` writes `apply.20261021-101500-a1b2c3.jsonl`), or to `gwt-apply-<run id>.jsonl`. The file is created with `O_EXCL`: a run never appends to or overwrites another run's log, so rerunning the same command after a crash leaves both logs.
 
@@ -141,6 +141,17 @@ gwt-apply changes.jsonl --snapshot tree-0412.json.gz --apply    # checks the sna
 - a class the plan searched as a whole (names for namesakes, places, sources, citation pages, media checksums) gained or lost an object, because the plan's "already there" answers could be wrong.
 
 Then it applies, reading from the snapshot. Before each `PUT` of an object read from the snapshot it reads the object's `change` stamp from the server, and stops with an error if it moved. Objects the run itself wrote, and the people whose family lists the server updated for it, are read from the server from then on.
+
+### Checking an apply quickly
+
+After an apply, the usual check is to run the same list again as a dry run: every op must come out `skip`. Against the server that rereads the tree op by op. Instead, bring the snapshot taken before the apply up to date and run the dry run on it, offline:
+
+```sh
+gwt-apply --save-snapshot tree-0413.json.gz --since tree-0412.json.gz   # only what changed since 0412
+gwt-apply changes.jsonl --snapshot tree-0413.json.gz                    # every op must say skip
+```
+
+`--since` reads one list of `change` stamps per class, then only the objects whose stamp moved and the new ones, and leaves out the deleted ones. The new file holds what a full `--save-snapshot` would, so the check is as strong as a dry run against the server: an object the list touched and someone changed afterwards, or one that went away, makes its op come out `done` or `conflict` instead of `skip`. That holds for any change since the older snapshot, not only the ones the list made, so the new snapshot is also the one to plan and apply the next list on. Gramps' `change` stamp counts seconds, so take the older snapshot while nothing writes to the tree, as an apply's lock guarantees.
 
 ## Safety rules
 

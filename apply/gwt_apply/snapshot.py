@@ -3,6 +3,7 @@
     gwt-apply --save-snapshot tree.json.gz              # read every object once, a few minutes
     gwt-apply changes.jsonl --snapshot tree.json.gz     # dry run, offline, seconds
     gwt-apply changes.jsonl --snapshot tree.json.gz --apply
+    gwt-apply --save-snapshot after.json.gz --since tree.json.gz   # only what changed since, seconds
 
 Before an apply on a snapshot writes anything, it plans the whole list offline and asks the server
 for the `change` stamp of every object of every class the plan looked at. It refuses when an object
@@ -21,6 +22,7 @@ from .lock import LOCK_HANDLE
 
 FORMAT = "gwt-apply-snapshot/1"
 PAGE = 500
+CHUNK = 100  # handles per read of changed objects
 
 
 def save(client: Client, path: str) -> dict[str, int]:
@@ -39,15 +41,43 @@ def save(client: Client, path: str) -> dict[str, int]:
                 break
             page += 1
         objects[cls] = rows
-    data = {
-        "format": FORMAT,
-        "tree": client.tree,
-        "taken": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "objects": objects,
-    }
+    _write(path, client.tree, datetime.now(timezone.utc), objects)
+    return {cls: len(rows) for cls, rows in objects.items()}
+
+
+def refresh(client: Client, old: dict, path: str) -> dict[str, tuple[int, int, int]]:
+    """A new snapshot from an older one of the same tree, reading only what changed since: one list of
+    `change` stamps per class, then every object whose stamp moved or that is new. The result holds what a
+    full `save` would. Returns, per class, (objects, objects read, objects deleted since)."""
+    if old.get("tree") != client.tree:
+        raise ValueError(f"the snapshot is of tree {old.get('tree')!r}, the login is in {client.tree!r}")
+    taken = datetime.now(timezone.utc)  # before the first read: anything changed later is read or caught later
+    objects: dict[str, list[dict]] = {}
+    counts = {}
+    for cls, ns in NAMESPACE.items():
+        r = client._request("GET", f"/{ns}/", params={"keys": "handle,change"})
+        if r.status_code != 200:
+            raise ApiError(f"GET {cls} list: HTTP {r.status_code}", r.status_code)
+        now = {row["handle"]: row.get("change") for row in r.json()}
+        then = {o["handle"]: o for o in old["objects"].get(cls, [])}
+        stale = [h for h, change in now.items() if h not in then or then[h].get("change") != change]
+        fresh: dict[str, dict] = {}
+        for i in range(0, len(stale), CHUNK):
+            r = client._request("GET", f"/{ns}/", params={"handles": ",".join(stale[i:i + CHUNK])})
+            if r.status_code != 200:
+                raise ApiError(f"GET {cls} by handles: HTTP {r.status_code}", r.status_code)
+            fresh.update((o["handle"], o) for o in r.json())
+        # a stale object the second read did not return was deleted in between
+        objects[cls] = [fresh[h] if h in fresh else then[h] for h in now if h in fresh or h not in stale]
+        counts[cls] = (len(objects[cls]), len(fresh), len(set(then) - set(now)))
+    _write(path, client.tree, taken, objects)
+    return counts
+
+
+def _write(path: str, tree: str | None, taken: datetime, objects: dict[str, list[dict]]) -> None:
+    data = {"format": FORMAT, "tree": tree, "taken": taken.isoformat(timespec="seconds"), "objects": objects}
     with gzip.open(path, "xt", encoding="utf-8") as fh:  # never over another snapshot
         json.dump(data, fh, ensure_ascii=False)
-    return {cls: len(rows) for cls, rows in objects.items()}
 
 
 def load(path: str) -> dict:

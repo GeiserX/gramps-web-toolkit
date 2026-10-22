@@ -60,6 +60,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--snapshot", metavar="FILE",
                     help="a tree snapshot: a dry run reads only it, with no server; --apply checks it is current, then reads it")
     ap.add_argument("--save-snapshot", metavar="FILE", help="read the whole tree into a new FILE (gzip JSON) and stop")
+    ap.add_argument("--since", metavar="OLD",
+                    help="with --save-snapshot: start from the older snapshot OLD and read only what changed since")
     ap.add_argument("--tag", help="a Gramps tag put on every object this run creates, e.g. r12 (ops can add their own with \"tag\")")
     ap.add_argument("--retries", type=int, default=5)
     ap.add_argument("--retry-wait", type=float, default=30.0, help="seconds after a busy server")
@@ -68,6 +70,8 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     if not args.change_list and not args.save_snapshot:
         ap.error("give a change list, or --save-snapshot FILE")
+    if args.since and not args.save_snapshot:
+        ap.error("--since goes with --save-snapshot")
 
     ops = load_change_list(args.change_list) if args.change_list else []
     errors = validate(ops)
@@ -77,13 +81,13 @@ def main(argv: list[str] | None = None) -> int:
         print("\n".join(errors), file=sys.stderr)
         print(f"{len(errors)} problem(s); nothing was read or written", file=sys.stderr)
         return 2
-    snap = None
-    if args.snapshot:
-        try:
-            snap = snapshot.load(args.snapshot)
-        except (OSError, ValueError) as exc:
-            print(f"snapshot: {exc}", file=sys.stderr)
-            return 2
+    snap = old = None
+    try:
+        snap = snapshot.load(args.snapshot) if args.snapshot else None
+        old = snapshot.load(args.since) if args.since else None
+    except (OSError, ValueError) as exc:
+        print(f"snapshot: {exc}", file=sys.stderr)
+        return 2
     offline = snap is not None and not args.apply
 
     conf = read_config(args.config)
@@ -113,6 +117,11 @@ def main(argv: list[str] | None = None) -> int:
             client.use_snapshot(snap, offline=True)
         else:
             client.login()
+        if args.save_snapshot and old is not None:
+            counts = snapshot.refresh(client, old, args.save_snapshot)
+            print(f"snapshot of tree {client.tree} in {args.save_snapshot}, from {args.since} of {old['taken']}: "
+                  + ", ".join(f"{n} {cls} ({read} read, {gone} deleted)" for cls, (n, read, gone) in counts.items()))
+            return 0
         if args.save_snapshot:
             counts = snapshot.save(client, args.save_snapshot)
             print(f"snapshot of tree {client.tree} in {args.save_snapshot}: "
@@ -120,6 +129,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
     except FileExistsError as exc:
         print(f"{exc.filename} already exists; a snapshot is never overwritten", file=sys.stderr)
+        return 2
+    except ValueError as exc:
+        print(f"snapshot: {exc}", file=sys.stderr)
         return 2
     except ApiError as exc:
         print(exc, file=sys.stderr)
