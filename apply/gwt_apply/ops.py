@@ -323,6 +323,11 @@ class Applier:
         self.actions: list[str] = []
         self.wrote = False
         self._names: dict[tuple[str, str], str] | None = None  # (first name, surname) -> Gramps ID
+        # person handle -> the associations this run adds to that person and their ops, waiting for one PUT
+        self._held: dict[str, dict] = {}
+        self._holding: str | None = None  # set by an add_association whose write is held
+        self._flushing = False
+        client.touch = self._touch
 
     # -- references -------------------------------------------------------
 
@@ -445,7 +450,7 @@ class Applier:
             for attempt in range(1, self.retries + 1):
                 if self.lock is not None:  # every try: a slow server can make one op outlast the lock
                     self.lock.refresh()
-                self.actions, self.wrote = [], False
+                self.actions, self.wrote, self._holding = [], False, None
                 try:
                     getattr(self, op["op"])(op)
                     res.status = "done" if self.wrote else "skip"
@@ -466,12 +471,76 @@ class Applier:
                     self.actions.append(f"error: {exc}")
                     break
             res.actions = self.actions
-            self.c.log(event="op", status=res.status, actions=res.actions)
             results.append(res)
+            if self._holding:  # logged when the held write is made
+                self._held[self._holding]["results"].append(res)
+                continue
+            self.c.log(event="op", status=res.status, actions=res.actions)
             if res.status in ("conflict", "error"):
                 break
+        self.flush(list(self._held))
         self.c.context = {}
         return results
+
+    # -- held association writes ------------------------------------------
+
+    def _touch(self, cls: str | None, handle: str | None) -> None:
+        """Before anything reads, writes or merges a person with held associations, write them."""
+        if self._flushing or not self._held or cls not in (None, "Person"):
+            return
+        handles = list(self._held) if handle is None else [handle] if handle in self._held else []
+        failed = self.flush(handles)
+        if failed:
+            raise ApiError(failed)
+
+    def flush(self, handles: list[str]) -> str | None:
+        """One PUT per person for the associations held for it. Every held op gets its final status here;
+        returns what went wrong, or None. Each try starts from a fresh read and adds only the associations
+        the person still lacks, so a try whose answer was lost is not written twice."""
+        context, self._flushing, failed = self.c.context, True, None
+        try:
+            for handle in handles:
+                held = self._held.pop(handle)
+                results = held["results"]
+                self.c.context = {"op": "add_association", "keys": [r.key for r in results]}
+                error = None
+                for attempt in range(1, self.retries + 1):
+                    if self.lock is not None:
+                        self.lock.refresh()
+                    try:
+                        person = self.c.get("Person", handle)
+                        if person is None:
+                            raise ApiError(f"Person {held['label']} is gone")
+                        person.setdefault("_class", "Person")
+                        refs = person.get("person_ref_list") or []
+                        have = {(r.get("ref"), r.get("rel")) for r in refs}
+                        missing = [n for n in held["new"] if (n["ref"], n["rel"]) not in have]
+                        if missing:
+                            person["person_ref_list"] = [*refs, *missing]
+                            self.c.update(person)
+                        self.c.log(event="held-write", person=held["label"], held=len(held["new"]), written=len(missing))
+                        break
+                    except Retryable as exc:
+                        if attempt == self.retries:
+                            error = f"{exc} (gave up after {attempt} tries)"
+                            break
+                        self.c.log(event="retry", attempt=attempt, error=str(exc))
+                        time.sleep(self.retry_wait)
+                    except ApiError as exc:
+                        error = str(exc)
+                        break
+                for res in results:
+                    if error is not None:
+                        res.status = "error"
+                        res.actions.append(f"error: the one write of the {len(results)} held associations of "
+                                           f"Person {held['label']} failed: {error}")
+                    self.c.context = {"key": res.key, "op": res.op, "ruling": res.ruling}
+                    self.c.log(event="op", status=res.status, actions=res.actions)
+                if error is not None and failed is None:
+                    failed = f"the held associations of Person {held['label']} were not written: {error}"
+        finally:
+            self.c.context, self._flushing = context, False
+        return failed
 
     def _existing(self, cls: str, op: dict) -> dict | None:
         """The object an earlier run made for this key, if any."""
@@ -682,20 +751,29 @@ class Applier:
         self.save(before, family)
 
     def add_association(self, op):
-        """A PersonRef from person to target with this relation; Gramps Web's DNA view reads relation "DNA"."""
-        person = self.obj("Person", op["person"])
-        person.setdefault("_class", "Person")
+        """A PersonRef from person to target with this relation; Gramps Web's DNA view reads relation "DNA".
+
+        The write is held: every association the run adds to one person goes in a single PUT, made at the end
+        of the run or as soon as anything else reads, writes or merges that person. A PUT rewrites the whole
+        person, so one per association made a list of n associations cost n rewrites of a growing person.
+        """
         target = self.resolve("Person", op["target"])
+        handle = self.resolve("Person", op["person"])
+        held = self._held.get(handle)
+        person = held["person"] if held else self.c.get("Person", handle)
         refs = person.get("person_ref_list") or []
         if any(r.get("ref") == target and r.get("rel") == op["relation"] for r in refs):
             self.actions.append(f"skip: Person {self.label(person)} already has a {op['relation']} association with {op['target']}")
             return
-        before = copy.deepcopy(person)
-        person["person_ref_list"] = [
-            *refs,
-            {"_class": "PersonRef", "ref": target, "rel": op["relation"], "citation_list": [], "note_list": [], "private": False},
-        ]
-        self.save(before, person)
+        new = {"_class": "PersonRef", "ref": target, "rel": op["relation"], "citation_list": [], "note_list": [], "private": False}
+        if held is None:
+            held = self._held[handle] = {"person": person, "label": self.label(person), "new": [], "results": []}
+        person["person_ref_list"] = [*refs, new]
+        held["new"].append(new)
+        self.actions.append(f"update Person {held['label']}: person_ref_list +{json.dumps([new], ensure_ascii=False)} "
+                            "(one write with the other associations of this person)")
+        self.wrote = True
+        self._holding = handle
 
     def link_child(self, op):
         family = self.resolve("Family", op["family"])

@@ -85,6 +85,9 @@ class Client:
         # "x": a log file is never appended to or overwritten; each run writes its own
         self._log = open(log_path, "x", encoding="utf-8") if log_path else None
         self.context: dict = {}  # op key and ruling, stamped on every log line
+        # called with (class, handle) before an object is read, written or merged, and with (class, None) when a
+        # whole class may change: the applier writes what it holds for that object first
+        self.touch = None
         self._last_login = 0.0
 
     # -- plumbing ---------------------------------------------------------
@@ -173,8 +176,13 @@ class Client:
 
     # -- reads ------------------------------------------------------------
 
+    def _touched(self, cls: str | None, handle: str | None) -> None:
+        if self.touch is not None:
+            self.touch(cls, handle)
+
     def get(self, cls: str, handle: str) -> dict | None:
         """The object, or None. `_read` keeps what the server sent, for the check in `update`."""
+        self._touched(cls, handle)
         if (cls, handle) in self.deleted:
             return None
         if (cls, handle) in self.pending:
@@ -190,6 +198,7 @@ class Client:
         return self.get_live(cls, handle)
 
     def get_live(self, cls: str, handle: str) -> dict | None:
+        self._touched(cls, handle)
         r = self._request("GET", f"/{NAMESPACE[cls]}/{handle}")
         if r.status_code == 404:
             return None
@@ -246,6 +255,8 @@ class Client:
         return handle in self._handles[cls]
 
     def get_many(self, cls: str, handles: list[str]) -> list[dict]:
+        for h in handles:
+            self._touched(cls, h)
         handles = [h for h in handles if (cls, h) not in self.deleted]
         out = [copy.deepcopy(self.pending[(cls, h)]) for h in handles if (cls, h) in self.pending]
         rest = [h for h in handles if (cls, h) not in self.pending]
@@ -267,6 +278,8 @@ class Client:
         """Every object of a class with only `keys`, read once per run, with this run's writes on top."""
         cache = (cls, tuple(keys))
         self.listed.add(cls)
+        if "person_ref_list" in keys:
+            self._touched(cls, None)
         if cache not in self._lists and self.snapshot is not None:
             self._lists[cache] = [{k: o.get(k) for k in ["handle", *keys]} for o in self.snapshot.get(cls, {}).values()]
         if cache not in self._lists:
@@ -315,6 +328,7 @@ class Client:
         answers 412. Instead the object is read again right before the PUT.
         """
         cls = obj["_class"]
+        self._touched(cls, obj["handle"])
         body = {k: v for k, v in obj.items() if k not in ("_read", "_snap", "extended", "profile")}
         if self.dry_run:
             self.pending[(cls, obj["handle"])] = copy.deepcopy(body)
@@ -349,6 +363,7 @@ class Client:
 
         A dry run only marks the loser as gone; the op shows what would move.
         """
+        self._touched(None, None)  # a merge rewrites whatever pointed at the loser
         path = f"/{NAMESPACE[cls]}/{winner}/merge/{loser}"
         self.deleted.add((cls, loser))
         if self.dry_run:

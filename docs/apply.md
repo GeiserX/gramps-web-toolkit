@@ -113,7 +113,7 @@ Gramps Web's DNA view shows, for a person, every association with relation `DNA`
 {"op": "add_note", "key": "n-kit-a17", "ruling": "R-40", "text": "Chromosome,Start Location,End Location,Centimorgans,Matching SNPs\n7,1000000,9000000,12.5,1500", "attach": [{"association": {"person": "I0042", "target": "key:m-kit-a17"}}]}
 ```
 
-An association op reads only the person it changes: one read and one write each, with no whole-class read per op.
+An association lives inside its person, and a `PUT` rewrites the whole person, so writing associations one by one gets slower with every match: a tested person with thousands of matches is a large object rewritten once per op. `gwt-apply` holds them instead. Every association a run adds to one person goes in a single `PUT`, made when the run ends or as soon as another op reads, writes or merges that person (the segment note on an association, for example). Each `add_association` still reports `done` or `skip` on its own, the dry run shows the same thing, and the log has one `op` line per op plus a `held-write` line for the write itself. If that write fails, every op it carried reports the error and a rerun adds what is missing; a write whose answer was lost is read back first, so nothing is added twice.
 
 ### Merges
 

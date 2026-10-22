@@ -801,6 +801,108 @@ def test_association_reads_no_whole_class_per_op(fake):
     assert len(seen) == 1  # the people index, once
 
 
+def _dna_block(n, start=0):
+    """n matches the way a DNA block lists them: the person, the association, a note on the person."""
+    ops = []
+    for i in range(start, start + n):
+        ops += [
+            {"op": "add_person", "key": f"m{i}", "ruling": R, "first_name": f"Match{i}", "surname": "Kit"},
+            {"op": "add_association", "key": f"a{i}", "ruling": R, "person": "I0001", "target": f"key:m{i}", "relation": "DNA"},
+            {"op": "add_note", "key": f"n{i}", "ruling": R, "text": f"match {i}", "attach": [{"person": f"key:m{i}"}]},
+        ]
+    return ops
+
+
+def test_a_block_of_associations_is_one_write_of_the_person(fake, tmp_path):
+    ops = _dna_block(5)
+    plan = run(fake, ops, dry_run=True)
+    res = run(fake, ops, tmp_path=tmp_path)
+    assert [r.status for r in res] == ["done"] * 15, [r.actions for r in res if r.status != "done"]
+    assert [r.status for r in plan] == [r.status for r in res]
+    assert [r.actions for r in plan if r.op == "add_association"] == [r.actions for r in res if r.op == "add_association"]
+    assert fake.writes().count(("PUT", "/api/people/anna")) == 1
+    refs = fake.store["people"]["anna"]["person_ref_list"]
+    assert [r["ref"] for r in refs] == [stable_handle(f"m{i}") for i in range(5)]  # in the order of the list
+    log = [json.loads(line) for line in (tmp_path / "log.jsonl").read_text().splitlines()]
+    assert sorted(e["key"] for e in log if e.get("event") == "op") == sorted(op["key"] for op in ops)  # every op logged once
+    assert [e["written"] for e in log if e.get("event") == "held-write"] == [5]
+    before = len(fake.writes())
+    assert all(r.status == "skip" for r in run(fake, ops))  # a rerun changes nothing
+    assert len(fake.writes()) == before
+
+
+def test_a_rerun_adds_only_the_missing_associations(fake):
+    run(fake, _dna_block(3))
+    res = run(fake, _dna_block(5))
+    assert [r.status for r in res if r.op == "add_association"] == ["skip"] * 3 + ["done"] * 2
+    assert len(fake.store["people"]["anna"]["person_ref_list"]) == 5
+
+
+def test_anything_else_reading_the_person_gets_the_held_associations_written_first(fake):
+    ops = _dna_block(2) + [
+        {"op": "set_attribute", "key": "s", "ruling": R, "target": {"person": "I0001"}, "type": "Nickname", "value": "Nan"},
+    ] + _dna_block(2, start=2)
+    res = run(fake, ops)
+    assert all(r.status == "done" for r in res), [r.actions for r in res]
+    anna = fake.store["people"]["anna"]
+    assert len(anna["person_ref_list"]) == 4 and anna["attribute_list"][0]["value"] == "Nan"
+    assert fake.writes().count(("PUT", "/api/people/anna")) == 3  # two held writes, one attribute
+
+
+def test_a_merge_writes_the_held_associations_first(scan, tmp_path):
+    fake = MergingFake()
+    fake.add("people", {"handle": "anna", "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example"}]}})
+    fake.add("people", {"handle": "k1", "primary_name": {"first_name": "Kit", "surname_list": [{"surname": "One"}]}})
+    fake.add("people", {"handle": "k2", "primary_name": {"first_name": "Kit", "surname_list": [{"surname": "Two"}]}})
+    ops = [
+        {"op": "add_association", "key": "a", "ruling": R, "person": "I0001", "target": "I0003", "relation": "DNA"},
+        {"op": "merge_person", "key": "mp", "ruling": R, "winner": "I0002", "loser": "I0003"},
+    ]
+    res = run(fake, ops)
+    assert all(r.status == "done" for r in res), [r.actions for r in res]
+    writes = fake.writes()
+    assert writes.index(("PUT", "/api/people/anna")) < writes.index(("POST", "/api/people/k1/merge/k2"))
+
+
+def test_a_lost_answer_to_the_held_write_does_not_add_an_association_twice(fake):
+    for i in range(3):
+        fake.add("people", {"handle": f"k{i}", "primary_name": {"first_name": f"K{i}", "surname_list": [{"surname": "Kit"}]}})
+    fake.drop_after = ("PUT", "/api/people/anna")
+    ops = [{"op": "add_association", "key": f"a{i}", "ruling": R, "person": "I0001", "target": f"I000{i + 2}",
+            "relation": "DNA"} for i in range(3)]
+    res = run(fake, ops)
+    assert [r.status for r in res] == ["done"] * 3
+    assert len(fake.store["people"]["anna"]["person_ref_list"]) == 3
+    assert fake.writes().count(("PUT", "/api/people/anna")) == 1  # the retry found them all there
+
+
+def test_a_held_write_that_fails_fails_every_op_it_carried(fake, tmp_path):
+    for i in range(2):
+        fake.add("people", {"handle": f"k{i}", "primary_name": {"first_name": f"K{i}", "surname_list": [{"surname": "Kit"}]}})
+    fake.busy = 10
+    ops = [{"op": "add_association", "key": f"a{i}", "ruling": R, "person": "I0001", "target": f"I000{i + 2}",
+            "relation": "DNA"} for i in range(2)]
+    res = run(fake, ops, tmp_path=tmp_path)
+    assert [r.status for r in res] == ["error"] * 2
+    assert "held associations of Person I0001 failed" in res[0].actions[-1]
+    assert not fake.store["people"]["anna"].get("person_ref_list")
+    fake.busy = 0
+    assert [r.status for r in run(fake, ops)] == ["done"] * 2  # and a rerun writes them
+
+
+def test_a_held_write_that_fails_inside_a_later_op_stops_the_run_there(fake):
+    fake.add("people", {"handle": "k0", "primary_name": {"first_name": "K0", "surname_list": [{"surname": "Kit"}]}})
+    ops = [
+        {"op": "add_association", "key": "a", "ruling": R, "person": "I0001", "target": "I0002", "relation": "DNA"},
+        {"op": "set_attribute", "key": "s", "ruling": R, "target": {"person": "I0001"}, "type": "Nickname", "value": "Nan"},
+        {"op": "add_person", "key": "later", "ruling": R, "first_name": "Not", "surname": "Run"},
+    ]
+    fake.busy = 10
+    res = run(fake, ops)
+    assert [r.status for r in res] == ["error", "error"]  # the association, and the op that needed it written
+    assert "were not written" in res[1].actions[-1]
+
+
 def _event_fixture():
     fake = MergingFake()
     fake.add("people", {"handle": "anna", "gender": 0, "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
@@ -988,3 +1090,14 @@ def test_a_gramps_id_may_carry_a_suffix_but_a_handle_is_still_refused():
     assert run(fake, [dict(note, attach=[{"person": "I0001-b"}])])[0].status == "done"
     fake.add("media", {"handle": "scan", "gramps_id": "D051-b", "path": "scan.jpg", "desc": "scan"})
     assert run(fake, [dict(note, key="m", attach=[{"media": "D051-b"}])])[0].status == "done"
+
+
+def test_held_associations_on_a_snapshot_apply(fake, tmp_path, env, capsys):
+    snap = tmp_path / "tree.json.gz"
+    assert main(["--save-snapshot", str(snap)]) == 0
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text("\n".join(json.dumps(op) for op in _dna_block(4)))
+    assert main([str(changes), "--snapshot", str(snap)]) == 0  # the offline plan
+    assert main([str(changes), "--snapshot", str(snap), "--apply"]) == 0, capsys.readouterr()
+    assert fake.writes().count(("PUT", "/api/people/anna")) == 1
+    assert len(fake.store["people"]["anna"]["person_ref_list"]) == 4
