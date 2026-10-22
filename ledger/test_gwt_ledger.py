@@ -78,6 +78,14 @@ class LedgerTest(unittest.TestCase):
             self.assertEqual(run('--ledger', self.path, 'check', '--person', 'Ana Peiro Toledo', '--source',
                                  'archive', '--query', q)[0], 0, q)
 
+    def test_typo_rule_is_one_edit_and_spares_identifiers(self):
+        self.assertTrue(L.words_covered({'peira'}, {'peiro'}))
+        self.assertFalse(L.words_covered({'villanuevaa1'}, {'villanueva1'}))
+        self.assertFalse(L.words_covered({'a123456'}, {'a123457'}))
+        self.assertFalse(L.words_covered({'peiroxx'}, {'peiro'}))
+        # One logged word cannot cover two new ones.
+        self.assertFalse(L.words_covered({'antonio', 'antonia'}, {'antonio'}))
+
     def test_tabs_and_newlines_in_values_cannot_break_the_file(self):
         self.add(query='line one\nline\ttwo')
         rows = L.read_rows(self.path)

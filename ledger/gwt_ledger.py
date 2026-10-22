@@ -35,13 +35,34 @@ def key(text):
 PARTICLES = frozenset('a al con da de del di do du e el en la las le les los of the y'.split())
 
 
-def has_word(word, words):
-    """`word` is in `words`, or a one-letter typo of it is (Villanueba for Villanueva). Numbers must match exactly."""
-    if word in words:
-        return True
-    if word.isdigit() or len(word) < 5:
+def one_edit(a, b):
+    """True if `a` becomes `b` with at most one insertion, deletion or substitution."""
+    if abs(len(a) - len(b)) > 1:
         return False
-    return any(len(w) >= 5 and difflib.SequenceMatcher(None, word, w).ratio() >= 0.85 for w in words)
+    i = 0
+    while i < min(len(a), len(b)) and a[i] == b[i]:
+        i += 1
+    return a[i + 1:] == b[i + 1:] or a[i + 1:] == b[i:] or a[i:] == b[i + 1:]
+
+
+def words_covered(new, logged):
+    """Every word of `new` matches its own word of `logged`: exactly, or (words of five letters or more,
+    no digits) with one typo, Villanueba for Villanueva. One logged word never covers two new words."""
+    free = set(logged)
+    rest = []
+    for w in new:
+        if w in free:
+            free.discard(w)
+        else:
+            rest.append(w)
+    for w in rest:
+        if len(w) < 5 or any(c.isdigit() for c in w):
+            return False
+        hit = next((x for x in sorted(free) if len(x) >= 5 and not any(c.isdigit() for c in x) and one_edit(w, x)), None)
+        if hit is None:
+            return False
+        free.discard(hit)
+    return True
 
 
 def similarity(a, b):
@@ -52,7 +73,7 @@ def similarity(a, b):
     if a == b:
         return 1.0
     ta, tb = set(a.split()), set(b.split())
-    if not all(has_word(w, tb) for w in ta - PARTICLES):
+    if not words_covered(ta - PARTICLES, tb):
         return 0.0
     jaccard = len(ta & tb) / len(ta | tb) if ta | tb else 0.0
     covered = len(ta & tb) / len(ta) if len(ta) >= 3 else 0.0
