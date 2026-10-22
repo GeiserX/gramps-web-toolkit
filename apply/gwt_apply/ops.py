@@ -443,6 +443,14 @@ class Applier:
 
     def run(self, ops: list[dict]) -> list[Result]:
         results = []
+        try:
+            self._run(ops, results)
+        finally:  # also on an exception no op caught: what earlier ops reported as held still gets written
+            self.flush(list(self._held))
+            self.c.context = {}
+        return results
+
+    def _run(self, ops: list[dict], results: list[Result]) -> None:
         for op in ops:
             res = Result(op["key"], op["op"], op["ruling"])
             self._op_tags = list(dict.fromkeys(t for t in [self.run_tag, *_tag_names(op.get("tag"))] if t))
@@ -478,9 +486,6 @@ class Applier:
             self.c.log(event="op", status=res.status, actions=res.actions)
             if res.status in ("conflict", "error"):
                 break
-        self.flush(list(self._held))
-        self.c.context = {}
-        return results
 
     # -- held association writes ------------------------------------------
 

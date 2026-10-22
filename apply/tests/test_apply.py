@@ -890,6 +890,18 @@ def test_a_held_write_that_fails_fails_every_op_it_carried(fake, tmp_path):
     assert [r.status for r in run(fake, ops)] == ["done"] * 2  # and a rerun writes them
 
 
+def test_held_associations_are_written_when_a_later_op_crashes(fake, tmp_path):
+    fake.add("people", {"handle": "k0", "primary_name": {"first_name": "K0", "surname_list": [{"surname": "Kit"}]}})
+    ops = [
+        {"op": "add_association", "key": "a", "ruling": R, "person": "I0001", "target": "I0002", "relation": "DNA"},
+        {"op": "add_media", "key": "m", "ruling": R, "file": str(tmp_path / "gone.jpg"), "path": "x.jpg",
+         "attach": [{"person": "I0001"}]},
+    ]
+    with pytest.raises(FileNotFoundError):
+        run(fake, ops)
+    assert len(fake.store["people"]["anna"]["person_ref_list"]) == 1
+
+
 def test_a_held_write_that_fails_inside_a_later_op_stops_the_run_there(fake):
     fake.add("people", {"handle": "k0", "primary_name": {"first_name": "K0", "surname_list": [{"surname": "Kit"}]}})
     ops = [
