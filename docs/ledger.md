@@ -75,6 +75,14 @@ The default threshold is 0.75 (`--threshold` to change it). Reworded, reordered 
 
 `flock` works between processes on one machine. Agents on several machines need the file on one host, or a separate ledger per host merged afterwards.
 
+### One file per lane
+
+When the ledger lives in git and several lanes commit to the same repository, one shared file is a problem even with the lock: a lane's new rows sit uncommitted in a file the other lanes also change. With `--ledger-dir DIR` (or `$GWT_LEDGER_DIR`), `add` writes to `DIR/<agent>.tsv` instead, so each lane only ever changes its own file, and `add` refuses to run without an agent name. `check`, `list`, `due` and `stats` read the `--ledger` file plus every `DIR/*.tsv`, so a row one lane logged counts for all of them, and an older shared ledger keeps counting after the switch.
+
+```sh
+export GWT_LEDGER=research/buscado.tsv GWT_LEDGER_DIR=research/ledger.d GWT_AGENT=lane-7
+```
+
 ## Tests
 
 ```sh

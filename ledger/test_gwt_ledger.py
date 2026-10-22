@@ -129,6 +129,30 @@ class LedgerTest(unittest.TestCase):
         self.assertEqual(len(lines), 1 + n_proc * n_rows)
         self.assertTrue(all(len(l.split('\t')) == len(L.COLUMNS) for l in lines))
 
+    def test_ledger_dir_writes_one_file_per_lane_and_reads_them_all(self):
+        self.add(query='Ana Peiro defuncion 1890', agent='lane-old')  # the shared ledger from before
+        lanes = os.path.join(self.dir.name, 'lanes')
+        for agent, query in (('Lane A', 'Ana Peiro bautismo 1850'), ('lane-b', 'Ana Peiro boda 1875')):
+            self.assertEqual(run('--ledger', self.path, '--ledger-dir', lanes, 'add', '--person', 'Ana Peiro Toledo',
+                                 '--source', 'FamilySearch', '--query', query, '--result', 'none', '--agent', agent)[0], 0)
+        self.assertEqual(sorted(os.listdir(lanes)), ['lane-a.tsv', 'lane-b.tsv'])
+        with open(self.path) as f:
+            self.assertEqual(len(f.read().splitlines()), 2)  # the shared file got no new rows
+        for query in ('Ana Peiro bautismo 1850', 'Ana Peiro boda 1875', 'Ana Peiro defuncion 1890'):
+            code, _ = run('--ledger', self.path, '--ledger-dir', lanes, 'check', '--person', 'Ana Peiro Toledo',
+                          '--source', 'FamilySearch', '--query', query)
+            self.assertEqual(code, 0, query)  # a row of lane A is seen from lane B, and the old ledger still counts
+        self.assertIn('rows\t3', run('--ledger', self.path, '--ledger-dir', lanes, 'stats')[1])
+        self.assertEqual(run('--ledger', self.path, 'check', '--person', 'Ana Peiro Toledo', '--source', 'FamilySearch',
+                             '--query', 'Ana Peiro boda 1875')[0], 1)  # without the dir, the lane files are not read
+
+    def test_ledger_dir_add_needs_an_agent(self):
+        err = io.StringIO()
+        with redirect_stderr(err), self.assertRaises(SystemExit):
+            run('--ledger', self.path, '--ledger-dir', self.dir.name, 'add', '--person', 'x', '--source', 's',
+                '--query', 'q', '--result', 'none', '--agent', '')
+        self.assertIn('add needs --agent', err.getvalue())
+
     def test_cli_launcher(self):
         self.add()
         p = subprocess.run([sys.executable, CLI, '--ledger', self.path, 'check', '--query', 'ana peiro bautismo 1850 1860'],

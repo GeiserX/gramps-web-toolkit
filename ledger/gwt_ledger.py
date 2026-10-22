@@ -10,9 +10,11 @@ Agents run `check` before a search and `add` after it, so two lanes never pay fo
   gwt-ledger due [--on YYYY-MM-DD]                           rows whose next_date has arrived (appeal windows, retries)
   gwt-ledger stats
 
-The ledger path comes from --ledger, else $GWT_LEDGER, else ./buscado.tsv. Standard library only.
+The ledger path comes from --ledger, else $GWT_LEDGER, else ./buscado.tsv. With --ledger-dir (or $GWT_LEDGER_DIR),
+`add` writes to <dir>/<agent>.tsv, one file per lane, and every reader reads the ledger plus all <dir>/*.tsv.
+Standard library only.
 """
-import argparse, collections, datetime, difflib, fcntl, os, re, sys, unicodedata
+import argparse, collections, datetime, difflib, fcntl, glob, os, re, sys, unicodedata
 
 COLUMNS = ('person_key', 'person_label', 'source', 'query', 'date', 'result', 'evidence', 'agent', 'next_date')
 RESULTS = ('hit', 'none', 'partial', 'blocked', 'denied')
@@ -99,6 +101,11 @@ def read_rows(path):
     return rows
 
 
+def ledger_paths(ledger, ledger_dir=''):
+    """The main ledger first, then every per-lane file of ledger_dir."""
+    return [ledger] + (sorted(glob.glob(os.path.join(ledger_dir, '*.tsv'))) if ledger_dir else [])
+
+
 def add_row(path, row):
     """Append one row under an exclusive lock, writing the header if the file is new or empty."""
     line = '\t'.join(clean(row.get(c)) for c in COLUMNS) + '\n'
@@ -146,6 +153,8 @@ def iso_date(value):
 def main(argv=None):
     p = argparse.ArgumentParser(prog='gwt-ledger', description=__doc__.split('\n')[0])
     p.add_argument('--ledger', default=os.environ.get('GWT_LEDGER', 'buscado.tsv'))
+    p.add_argument('--ledger-dir', default=os.environ.get('GWT_LEDGER_DIR', ''),
+                   help='one file per lane: add writes <dir>/<agent>.tsv, readers read the ledger and every file here')
     sub = p.add_subparsers(dest='cmd', required=True)
     c = sub.add_parser('check', help='has this search been done? exit 0 with the rows if so, 1 if not')
     c.add_argument('--person'); c.add_argument('--source'); c.add_argument('--query', required=True)
@@ -165,12 +174,17 @@ def main(argv=None):
     args = p.parse_args(argv)
 
     if args.cmd == 'add':
-        add_row(args.ledger, {'person_key': key(args.person), 'person_label': args.label,
-                              'source': key(args.source), 'query': normalize(args.query), 'date': args.date,
-                              'result': args.result, 'evidence': args.evidence, 'agent': args.agent,
-                              'next_date': args.next_date})
+        path = args.ledger
+        if args.ledger_dir:
+            if not key(args.agent):
+                p.error('add needs --agent (or $GWT_AGENT): rows go to <ledger-dir>/<agent>.tsv')
+            path = os.path.join(args.ledger_dir, key(args.agent) + '.tsv')
+        add_row(path, {'person_key': key(args.person), 'person_label': args.label,
+                       'source': key(args.source), 'query': normalize(args.query), 'date': args.date,
+                       'result': args.result, 'evidence': args.evidence, 'agent': args.agent,
+                       'next_date': args.next_date})
         return 0
-    rows = read_rows(args.ledger)
+    rows = [r for path in ledger_paths(args.ledger, args.ledger_dir) for r in read_rows(path)]
     if args.cmd == 'check':
         scored = find(rows, args.person, args.source, args.query, args.threshold)
         print_rows(scored, with_score=True)
