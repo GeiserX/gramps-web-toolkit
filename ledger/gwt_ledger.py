@@ -31,12 +31,50 @@ def key(text):
     return normalize(text).replace(' ', '-')
 
 
+# Particles that rewording drops or adds without changing the search.
+PARTICLES = frozenset('a al con da de del di do du e el en la las le les los of the y'.split())
+
+
+def one_edit(a, b):
+    """True if `a` becomes `b` with at most one insertion, deletion or substitution."""
+    if abs(len(a) - len(b)) > 1:
+        return False
+    i = 0
+    while i < min(len(a), len(b)) and a[i] == b[i]:
+        i += 1
+    return a[i + 1:] == b[i + 1:] or a[i + 1:] == b[i:] or a[i:] == b[i + 1:]
+
+
+def words_covered(new, logged):
+    """Every word of `new` matches its own word of `logged`: exactly, or (words of five letters or more,
+    no digits) with one typo, Villanueba for Villanueva. One logged word never covers two new words."""
+    free = set(logged)
+    rest = []
+    for w in new:
+        if w in free:
+            free.discard(w)
+        else:
+            rest.append(w)
+    for w in rest:
+        if len(w) < 5 or any(c.isdigit() for c in w):
+            return False
+        hit = next((x for x in sorted(free) if len(x) >= 5 and not any(c.isdigit() for c in x) and one_edit(w, x)), None)
+        if hit is None:
+            return False
+        free.discard(hit)
+    return True
+
+
 def similarity(a, b):
     """Fuzzy match of a new query `a` against a logged query `b`: the best of word-set overlap,
-    character ratio, and (for queries of three words or more) how much of `a` the logged query covers."""
+    character ratio, and (for queries of three words or more) how much of `a` the logged query covers.
+    Every word of `a` except particles must be in `b`, give or take a typo: a different name, place
+    or year after a long shared prefix is a different search, however high the overlap."""
     if a == b:
         return 1.0
     ta, tb = set(a.split()), set(b.split())
+    if not words_covered(ta - PARTICLES, tb):
+        return 0.0
     jaccard = len(ta & tb) / len(ta | tb) if ta | tb else 0.0
     covered = len(ta & tb) / len(ta) if len(ta) >= 3 else 0.0
     return max(jaccard, covered, difflib.SequenceMatcher(None, a, b).ratio())

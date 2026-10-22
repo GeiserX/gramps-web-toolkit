@@ -64,6 +64,28 @@ class LedgerTest(unittest.TestCase):
                       '--query', 'Villanueva del Campo bautismos 1801-1850')
         self.assertEqual(code, 0)
 
+    def test_a_different_name_after_a_shared_prefix_is_not_done(self):
+        # Two searches of one archive catalogue share the long prefix and differ in one surname.
+        # The old scoring matched them (4 of 5 words covered, character ratio over 0.8) and the
+        # second search was skipped as already done.
+        self.add(source='archive', query='Real Chancilleria de Granada: Peiro Villanueva')
+        for q in ('Real Chancilleria de Granada: Toledo', 'Real Chancilleria de Granada: Peiro Campo',
+                  'Ana Peiro bautismo 1850-1870'):
+            self.assertEqual(run('--ledger', self.path, 'check', '--person', 'Ana Peiro Toledo', '--source',
+                                 'archive', '--query', q)[0], 1, q)
+        # A typo or a dropped particle in the same search still counts as done.
+        for q in ('Real Chancilleria Granada: Peiro Villanueba', 'real chancillería de granada peiro villanueva'):
+            self.assertEqual(run('--ledger', self.path, 'check', '--person', 'Ana Peiro Toledo', '--source',
+                                 'archive', '--query', q)[0], 0, q)
+
+    def test_typo_rule_is_one_edit_and_spares_identifiers(self):
+        self.assertTrue(L.words_covered({'peira'}, {'peiro'}))
+        self.assertFalse(L.words_covered({'villanuevaa1'}, {'villanueva1'}))
+        self.assertFalse(L.words_covered({'a123456'}, {'a123457'}))
+        self.assertFalse(L.words_covered({'peiroxx'}, {'peiro'}))
+        # One logged word cannot cover two new ones.
+        self.assertFalse(L.words_covered({'antonio', 'antonia'}, {'antonio'}))
+
     def test_tabs_and_newlines_in_values_cannot_break_the_file(self):
         self.add(query='line one\nline\ttwo')
         rows = L.read_rows(self.path)
