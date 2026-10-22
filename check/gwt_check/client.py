@@ -101,6 +101,7 @@ class Client:
             if status == 200:
                 return headers, json.loads(data)
             if status == 401:
+                last = "HTTP 401"
                 with self._lock:
                     if self.token == token:  # one relogin for every thread that saw the 401
                         self.token = None
