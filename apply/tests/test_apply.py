@@ -352,9 +352,10 @@ def test_repository_ops_are_validated():
         {**base, "key": "k5", "op": "link_repository", "source": "S0001", "repository": "R0001", "media_type": ""},
         {**base, "key": "k6", "op": "unlink_repository", "source": "S0001", "repository": "0a1b2c3d4e5f"},
         {**base, "key": "k7", "op": "merge_repository", "winner": "R0001", "loser": "R0001"},
+        {**base, "key": "k8", "op": "add_repository", "name": 123, "type": "Archive"},
     ]
     errors = validate(bad)
-    assert len(errors) == 7, errors
+    assert len(errors) == 8, errors
 
 
 def test_a_note_can_be_attached_to_a_repository(fake):

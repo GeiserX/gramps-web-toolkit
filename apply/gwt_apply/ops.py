@@ -311,8 +311,8 @@ def validate(ops: list[dict]) -> list[str]:
                     raise ValueError(f"set takes only {sorted(REPOSITORY_FIELDS)}")
                 if "type" in f and not (isinstance(f["type"], str) and f["type"].strip()):
                     raise ValueError("type is a non-empty string, e.g. Archive")
-                if "name" in f and not str(f["name"]).strip():
-                    raise ValueError("name is empty")
+                if "name" in f and not (isinstance(f["name"], str) and f["name"].strip()):
+                    raise ValueError("name is a non-empty string")
                 if "url" in f and not re.match(r"^https?://\S+$", str(f["url"])):
                     raise ValueError("url starts with http:// or https://")
                 if "address" in f and (not isinstance(f["address"], dict) or not f["address"]

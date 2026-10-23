@@ -623,3 +623,16 @@ def test_orphan_repository_and_dup_repository_names_fold_like_people(tmp_path):
     findings, _ = checks.run_checks(load(_write(tmp_path, "t.json", data)))
     got = {(f["check"], f["key"]) for f in findings}
     assert got == {("orphan-repository", "R0099"), ("dup-repository", "R0001,R0097")}, got
+
+
+def test_repos_reads_odd_names_and_types_and_refuses_a_backup(tmp_path, capsys):
+    data = selftest.clean_tree()
+    selftest.p_orphan_repository(data)
+    data["repositories"][-1]["name"] = None  # a dump can hold a repository with no name
+    data["repositories"][0]["type"] = {"_class": "RepositoryType", "string": "Archive"}
+    assert main(["repos", _write(tmp_path, "t.json", data), "--name", "diocesano"]) == 0
+    assert "R0001  Archivo Diocesano de Ejemplo  [Archive]  1 sources" in capsys.readouterr().out
+    backup = tmp_path / "t.gramps"
+    backup.write_bytes(_to_xml(selftest.clean_tree()))
+    assert main(["repos", str(backup)]) == 2
+    assert "no repository details" in capsys.readouterr().err

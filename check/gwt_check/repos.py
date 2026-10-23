@@ -22,11 +22,12 @@ def repository_report(tree: Tree, *, name: str | None = None, rtype: str | None 
                                        "call_number": r.get("call_number", ""), "media_type": r.get("media_type", "")})
     found = []
     for h, o in repos.items():
-        if name and norm(name) not in norm(o.get("name", "")):
+        kind = o.get("type") if isinstance(o.get("type"), str) else (o.get("type") or {}).get("string", "")
+        if name and norm(name) not in norm(o.get("name") or ""):
             continue
-        if rtype and norm(rtype) != norm(o.get("type") if isinstance(o.get("type"), str) else (o.get("type") or {}).get("string", "")):
+        if rtype and norm(rtype) != norm(kind):
             continue
-        found.append({"id": o.get("gramps_id"), "name": o.get("name", ""), "type": o.get("type"),
+        found.append({"id": o.get("gramps_id"), "name": o.get("name") or "", "type": kind,
                       "urls": [u.get("path") for u in o.get("urls") or []], "sources": used[h]})
     found.sort(key=lambda r: r["id"] or "")
     return {

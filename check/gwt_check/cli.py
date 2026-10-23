@@ -285,6 +285,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "repos":
             from .repos import print_repository_report, repository_report
             tree = load(args.tree) if args.tree else Tree(live_dump(args)["objects"], source="live tree")
+            if tree.partial:
+                raise BadInput(f"{tree.source}: a .gramps backup has no repository details; use a dump")
             rep = repository_report(tree, name=args.name, rtype=args.rtype)
             if args.json:
                 json.dump(rep, sys.stdout, ensure_ascii=False, indent=1)
