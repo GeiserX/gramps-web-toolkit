@@ -59,12 +59,24 @@ A `gwt-apply` snapshot (`gwt-apply --save-snapshot`, or `--save-snapshot NEW --s
 
 **Known findings.** Every finding has a `check` and a `key` built from Gramps IDs, for example `repeated-ref` / `F0012 citation_list C0034`. The key stays the same from run to run while the problem does. Pass the first run's report as `--known` and the exit code then reflects only new problems.
 
+## Finding repositories
+
+`gwt-check repos` reads a dump or the live tree and prints each repository with its source count. It never writes.
+
+```sh
+gwt-check repos dump.json.gz --name archives          # part of the name, compared like people's names
+gwt-check repos --type Archive --unlinked             # live tree; adds the unlinked lists
+gwt-check repos dump.json.gz --json                   # repositories with their sources, call numbers and media types
+```
+
+`--unlinked` adds the sources that list no repository and the repositories no source lists. Fix them with `link_repository` and `merge_repository` in [`gwt-apply`](apply.md).
+
 ## The checks
 
 | Check | Fires on |
 |---|---|
 | `orphan-event` | An event that no person or family lists |
-| `orphan-citation`, `orphan-note`, `orphan-media` | A citation, note or media object nothing refers to |
+| `orphan-citation`, `orphan-note`, `orphan-media`, `orphan-repository` | A citation, note, media object or repository nothing refers to |
 | `dangling-ref` | A handle that points at nothing, in any list or sub-reference: `child_ref`, `event_ref`, names, attributes, `media_ref`, `placeref`, `reporef`, tags, a citation's source, a family's father or mother |
 | `place-not-place` | A `place` field that holds a handle of another type, or of nothing |
 | `citation-no-source` | A citation with an empty source |
@@ -80,6 +92,7 @@ A `gwt-apply` snapshot (`gwt-apply --save-snapshot`, or `--save-snapshot NEW --s
 | `dup-vital-event` | One person (role `Primary`) or family (role `Family`) with two Birth, Death, Baptism, Burial or Marriage events |
 | `living-media-sensitive` | Media of a person with no death or burial event of their own (role `Primary`) who was born within 110 years (or has no dated birth), whose path, description or attributes hold an ID number or an ID or address word. Media already private (the person, the media or the reference) is skipped. It reads metadata only, never the image or its notes, and never prints the match. The patterns are Spanish-first: a DNI or NIE counts only with the right check letter, and the words are passport, home-address and ID-card terms in Spanish, English and French, plus `c/` before a street name. Another country adds its ID number to `ID_NUMBERS` and its words to `ID_WORDS` in `check/gwt_check/checks.py`. Accept a false positive with `--known` |
 | `private` | Any object or sub-reference marked private |
+| `dup-repository` | Two repositories with the same name, compared like people's names (below) |
 | `place-no-coords` | A place that an event uses, without latitude or longitude |
 | `surname-marker` | A surname containing `[`, such as `Vidal [¿?]` |
 | `missing-object` | With `--since`: an object of the earlier tree that is gone |
@@ -87,11 +100,11 @@ A `gwt-apply` snapshot (`gwt-apply --save-snapshot`, or `--save-snapshot NEW --s
 
 Names are compared lowercased, without accents, with b/v and i/y folded and the particle "de" dropped. `dup-person-fuzzy` also drops "del", "la", "las", "los" and "y", and matches "Pedro Lasa" with "Pedro José Lasa Ibarra". For a pair to count, at least one side must be in scope, or belong to a family that is. That covers an old person the run gave a new spouse or new parents. A different spelling of the same word ("Lasa" against "Lassa") is still not matched. A run that allowed namesakes still needs its homonyms read one by one.
 
-The report also gives, without failing: events without a place (in the whole tree and in scope), the objects changed and new since `--since`, the last changed object (it should be the last item applied), and the Ahnentafel counts.
+The report also gives, without failing: events without a place (in the whole tree and in scope), sources without a repository (in a tree that has repositories: a source is linked only when its repository is certain, so some stay unlinked), the objects changed and new since `--since`, the last changed object (it should be the last item applied), and the Ahnentafel counts.
 
 ## Self-test
 
-`gwt-check selftest` builds an invented three-generation tree, checks that it comes out clean (the positive control), then plants 33 errors, one at a time and then all together, and checks that each comes out as its finding. The test suite also silences each check in turn and requires the self-test to fail, so a check without a planted error cannot slip in.
+`gwt-check selftest` builds an invented three-generation tree, checks that it comes out clean (the positive control), then plants 36 errors, one at a time and then all together, and checks that each comes out as its finding. The test suite also silences each check in turn and requires the self-test to fail, so a check without a planted error cannot slip in.
 
 ## Speed
 

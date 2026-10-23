@@ -162,6 +162,22 @@ def p_orphan_media(d):
     d["media"].append({**copy.deepcopy(d["media"][0]), "handle": "hO0099", "gramps_id": "O0099"})
 
 
+def p_orphan_repository(d):
+    d["repositories"].append(_base("R0099", name="Archivo Imaginario", type="Archive",
+                                   address_list=[], urls=[], note_list=[]))
+
+
+def p_source_no_repository(d):
+    d["sources"].append(_base("S0099", title="Libro inventado sin archivo", author="", pubinfo="", abbrev="",
+                              attribute_list=[], media_list=[], note_list=[], reporef_list=[]))
+
+
+def p_dup_repository(d):
+    d["repositories"].append({**copy.deepcopy(d["repositories"][0]), "handle": "hR0098", "gramps_id": "R0098",
+                              "name": "ARCHIVO DIOCESANO DE EJEMPLO"})
+    d["sources"][0]["reporef_list"].append({**copy.deepcopy(d["sources"][0]["reporef_list"][0]), "ref": "hR0098"})
+
+
 def p_dangling_child(d):
     _get(d, "families", "F0002")["child_ref_list"].append(_ref("ghost-person", frel="Birth", mrel="Birth"))
 
@@ -310,6 +326,9 @@ PLANTS = [
     (p_orphan_citation, "orphan-citation", "C0099", False),
     (p_orphan_note, "orphan-note", "N0099", False),
     (p_orphan_media, "orphan-media", "O0099", False),
+    (p_orphan_repository, "orphan-repository", "R0099", False),
+    (p_source_no_repository, "info:sources without repository", "S0099", False),
+    (p_dup_repository, "dup-repository", "R0001,R0098", False),
     (p_dangling_child, "dangling-ref", "F0002 child_ref_list -> people ghost-person", False),
     (p_dangling_subref, "dangling-ref", "F0003 child_ref_list[I0003].note_list -> notes ghost-note", False),
     (p_place_not_place, "place-not-place", "E0201 place", False),
@@ -357,6 +376,8 @@ def _run(data: dict, clean: dict):
     # events without place is a count, not a finding: compare it with the clean tree's
     got |= {("info:events without place", e) for e in no_place}
     got |= {("info:events without place", e["gramps_id"]) for e in data["events"] if not e.get("place")}
+    if report["info"].get("sources without repository"):  # a count too, so the ids come from the tree
+        got |= {("info:sources without repository", s["gramps_id"]) for s in data["sources"] if not s.get("reporef_list")}
     return got, report
 
 

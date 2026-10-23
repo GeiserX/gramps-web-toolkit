@@ -582,3 +582,57 @@ def test_a_gwt_apply_snapshot_is_a_tree(tmp_path, capsys):
         json.dump({"format": "gwt-apply-snapshot/1", "objects": []}, fh)
     assert main(["check", str(tmp_path / "bad.json.gz")]) == 2
     assert "objects map" in capsys.readouterr().err
+
+
+def test_repos_command_finds_by_name_and_type_and_lists_unlinked(tmp_path, capsys):
+    data = selftest.clean_tree()
+    selftest.p_orphan_repository(data)
+    selftest.p_source_no_repository(data)
+    dump = _write(tmp_path, "t.json", data)
+    assert main(["repos", dump, "--name", "diocesano", "--unlinked"]) == 0
+    out = capsys.readouterr().out
+    assert "R0001  Archivo Diocesano de Ejemplo  [Archive]  1 sources" in out
+    assert "R0099" in out and "S0099" in out  # the unlinked ones
+    assert main(["repos", dump, "--type", "library"]) == 0
+    assert "no repository matches" in capsys.readouterr().out
+    assert main(["repos", dump, "--name", "IMAGINARIO", "--json"]) == 0
+    got = json.loads(capsys.readouterr().out)
+    assert [r["id"] for r in got["repositories"]] == ["R0099"]
+
+
+def test_a_source_with_no_repository_is_counted_not_a_finding(tmp_path, capsys):
+    # linking only unambiguous sources leaves some unlinked for good: that must not fail the check
+    data = selftest.clean_tree()
+    selftest.p_source_no_repository(data)
+    findings, info = checks.run_checks(load(_write(tmp_path, "t.json", data)))
+    assert findings == [] and info["sources without repository"] == 1
+    assert main(["check", _write(tmp_path, "t2.json", data)]) == 0
+    assert "sources without repository: 1" in capsys.readouterr().out
+    data["repositories"] = []
+    data["sources"] = [{**s, "reporef_list": []} for s in data["sources"]]
+    _, info = checks.run_checks(load(_write(tmp_path, "t3.json", data)))
+    assert "sources without repository" not in info  # a tree that does not use repositories
+
+
+def test_orphan_repository_and_dup_repository_names_fold_like_people(tmp_path):
+    data = selftest.clean_tree()
+    selftest.p_orphan_repository(data)
+    data["repositories"].append({**data["repositories"][0], "handle": "hR0097", "gramps_id": "R0097",
+                                 "name": "ARCHIBO  DIÓCESANO  Ejemplo"})  # b/v, accents, the «de» dropped, spaces
+    data["sources"][0]["reporef_list"].append({**data["sources"][0]["reporef_list"][0], "ref": "hR0097"})
+    findings, _ = checks.run_checks(load(_write(tmp_path, "t.json", data)))
+    got = {(f["check"], f["key"]) for f in findings}
+    assert got == {("orphan-repository", "R0099"), ("dup-repository", "R0001,R0097")}, got
+
+
+def test_repos_reads_odd_names_and_types_and_refuses_a_backup(tmp_path, capsys):
+    data = selftest.clean_tree()
+    selftest.p_orphan_repository(data)
+    data["repositories"][-1]["name"] = None  # a dump can hold a repository with no name
+    data["repositories"][0]["type"] = {"_class": "RepositoryType", "string": "Archive"}
+    assert main(["repos", _write(tmp_path, "t.json", data), "--name", "diocesano"]) == 0
+    assert "R0001  Archivo Diocesano de Ejemplo  [Archive]  1 sources" in capsys.readouterr().out
+    backup = tmp_path / "t.gramps"
+    backup.write_bytes(_to_xml(selftest.clean_tree()))
+    assert main(["repos", str(backup)]) == 2
+    assert "no repository details" in capsys.readouterr().err

@@ -174,6 +174,8 @@ def print_report(report: dict, limit: int) -> None:
     info = report["info"]
     print(f"\nevents without place: {info['events without place']}"
           + (f", {len(info['events without place, in scope'])} in scope" if "events without place, in scope" in info else ""))
+    if "sources without repository" in info:
+        print(f"sources without repository: {info['sources without repository']} (list them with gwt-check repos --unlinked)")
     if "diff" in report:
         d = report["diff"]
         for k in ("changed", "new"):
@@ -259,6 +261,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--key", action="append", required=True, help="the finding key (repeatable)")
     p.add_argument("--reason", required=True, help="why this is not a problem, e.g. father and son, same name")
     p.add_argument("--out", required=True, help="the known file to create or add to")
+    p = sub.add_parser("repos", help="find repositories by name or type; list unlinked sources and repositories")
+    p.add_argument("tree", nargs="?", help="dump file; without it the live tree is read")
+    p.add_argument("--name", help="part of a repository's name (compared like people's names)")
+    p.add_argument("--type", dest="rtype", help="repository type, e.g. Archive")
+    p.add_argument("--unlinked", action="store_true", help="also list sources with no repository and repositories no source lists")
+    p.add_argument("--json", action="store_true", help="print the result as JSON")
+    p.add_argument("--limit", type=int, default=30, help="sources listed with --unlinked (default 30)")
+    live_opts(p)
 
     sub.add_parser("selftest", help="plant every error kind in a synthetic tree and prove each check fires")
 
@@ -271,6 +281,18 @@ def main(argv: list[str] | None = None) -> int:
             return mark_known(args.report, args.check, args.key, args.reason, args.out)
         if args.cmd == "dump":
             save(live_dump(args), args.out)
+            return 0
+        if args.cmd == "repos":
+            from .repos import print_repository_report, repository_report
+            tree = load(args.tree) if args.tree else Tree(live_dump(args)["objects"], source="live tree")
+            if tree.partial:
+                raise BadInput(f"{tree.source}: a .gramps backup has no repository details; use a dump")
+            rep = repository_report(tree, name=args.name, rtype=args.rtype)
+            if args.json:
+                json.dump(rep, sys.stdout, ensure_ascii=False, indent=1)
+                print()
+            else:
+                print_repository_report(rep, unlinked=args.unlinked, limit=args.limit)
             return 0
         check_names(set(args.ignore_check))  # before a dump that can take minutes
         t0 = time.monotonic()
