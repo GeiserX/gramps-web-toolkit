@@ -462,6 +462,28 @@ def test_preflight_flags_likely_duplicates_before_any_write(fake):
     assert preflight(ops, c) == []
 
 
+def test_namesake_of_a_key_from_an_earlier_list(fake):
+    """namesake_of may name key:<key> of a person an earlier list made; once that person is in the tree
+    (with a Gramps ID of its own) the key still counts as compared, in preflight and in the apply."""
+    from gwt_apply.dupes import preflight
+    from gwt_apply.client import Client
+    first = [{"op": "add_person", "key": "list1-rose", "ruling": R, "first_name": "Rose", "surname": "Sample"}]
+    assert run(fake, first)[0].status == "done"
+    made = fake.store["people"][stable_handle("list1-rose")]["gramps_id"]
+    assert made
+    second = [{"op": "add_person", "key": "list2-rose", "ruling": R, "first_name": "Rose", "surname": "Sample",
+               "allow_namesake": True, "namesake_reason": "born forty years later, other parents",
+               "namesake_of": "key:list1-rose"}]
+    c = Client("https://gw.example", "u", "pw", session=fake)
+    assert preflight(second, c) == []
+    res = run(fake, second)
+    assert res[0].status == "done", res[0].actions
+    # a key that names nobody in the tree compares with nobody: the real namesake is still flagged
+    third = [dict(second[0], key="list3-rose", namesake_of="key:no-such-person")]
+    assert preflight(third, c) and made in preflight(third, c)[0]
+    assert run(fake, third)[0].status == "conflict"
+
+
 def test_update_event_fixes_the_existing_event(fake):
     ev = fake.add("events", {"handle": "b1", "type": "Birth", "date": parse_date("1890"), "description": "old"})
     ops = [{"op": "update_event", "key": "u", "ruling": R, "event": ev["gramps_id"],

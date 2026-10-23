@@ -619,6 +619,15 @@ class Applier:
                 self._names.setdefault(name, []).append(row.get("gramps_id") or row["handle"])
         return self._names
 
+    def _compared(self, op) -> set[str]:
+        """namesake_of as written, plus the Gramps ID of each key:<key> an earlier list already made."""
+        refs = set(_ref_list(op.get("namesake_of") or []))
+        for ref in [r for r in refs if r.startswith("key:")]:
+            person = self.c.get("Person", self.keymap.get(ref[4:]) or stable_handle(ref[4:]))
+            if person:
+                refs.add(person.get("gramps_id") or person["handle"])
+        return refs
+
     def add_person(self, op):
         if self._existing("Person", op):
             return
@@ -630,7 +639,7 @@ class Applier:
                 f"{op['first_name']} {op['surname']} already exists as {', '.join(same)}; "
                 "use that ID, or set allow_namesake with namesake_reason and namesake_of if this is another person"
             )
-        unchecked = [x for x in same if x not in _ref_list(op.get("namesake_of") or [])]
+        unchecked = [x for x in same if x not in self._compared(op)]
         if unchecked:
             raise Conflict(
                 f"{op['first_name']} {op['surname']} also exists as {', '.join(unchecked)}, "
