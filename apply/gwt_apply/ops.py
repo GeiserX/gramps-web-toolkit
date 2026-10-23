@@ -33,6 +33,7 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     ),
     "update_person": ({"person", "set"}, set()),
     "update_event": ({"event", "set"}, set()),
+    "update_place": ({"place", "set"}, set()),
     "add_event": ({"type"}, {"person", "family", "role", "date", "place", "description", "gramps_id"}),
     "add_family": (set(), {"father", "mother", "children", "type", "gramps_id"}),
     "link_child": ({"family", "child"}, {"frel", "mrel", "probable", "probable_reason"}),
@@ -61,6 +62,7 @@ ATTACHABLE = {"citation": ("Citation", "citation_list"), "media": ("Media", "med
 REF_OWN_LISTS = ("note_list", "citation_list", "attribute_list")  # what a MediaRef carries besides its ref
 PERSON_FIELDS = {"first_name", "surname", "gender"}
 EVENT_FIELDS = {"type", "date", "place", "description"}
+PLACE_FIELDS = {"lat", "long"}
 GENDER = {"F": 0, "M": 1, "U": 2}
 SINGLE_VITAL = {"Birth": "birth_ref_index", "Death": "death_ref_index"}
 PROBABLE = "[probable]"  # how a doubtful parent link is marked: a note on its child_ref starting with this
@@ -274,6 +276,14 @@ def validate(ops: list[dict]) -> list[str]:
                     parse_date(s["date"])
                 if s.get("place") and not (s["place"].startswith("key:") or _GRAMPS_ID.match(s["place"])):
                     raise ValueError(f"{s['place']!r} is neither key:<key> nor a Gramps ID (never a handle)")
+            if name == "update_place":
+                s = op.get("set")
+                if not isinstance(s, dict) or not s or set(s) - PLACE_FIELDS:
+                    raise ValueError(f"set takes only {sorted(PLACE_FIELDS)}")
+                if ("lat" in s) != ("long" in s):
+                    raise ValueError("lat and long go together")
+                if not (-90 <= float(s["lat"]) <= 90 and -180 <= float(s["long"]) <= 180):
+                    raise ValueError("lat/long out of range")
             if name == "set_attribute" and _parse_target(op.get("target"))[0] in ("ChildRef", "PersonRef"):
                 raise ValueError("a child_ref or an association has no attributes")
             if name == "add_place":
@@ -653,6 +663,17 @@ class Applier:
             self.actions.append(f"skip: Event {self.label(event)} already has those values")
             return
         self.save(before, event)
+
+    def update_place(self, op):
+        place = self.obj("Place", op["place"])
+        place.setdefault("_class", "Place")
+        before = copy.deepcopy(place)
+        s = op["set"]
+        place["lat"], place["long"] = str(s["lat"]), str(s["long"])
+        if place == before:
+            self.actions.append(f"skip: Place {self.label(place)} already has those coordinates")
+            return
+        self.save(before, place)
 
     def add_event(self, op):
         target_cls = "Person" if op.get("person") else "Family"
