@@ -148,10 +148,12 @@ def preflight(ops: list[dict], client) -> list[str]:
     for ref, who in new.items():
         op = by_key[ref]
         compared = set(_ref_list(op.get("namesake_of") or [])) if op.get("allow_namesake") else set()
+        # key:<key> of a person an earlier list made: that person is in the tree under its own Gramps ID
+        compared |= {stable_handle(r[4:]) for r in compared if r.startswith("key:")}
         candidates = by_loose.get(who.loose, []) + [w for w in seen if w.loose == who.loose or w.full == who.full]
         for other in candidates:
             why = _alike(who, other)
-            if why is None or other.ref in compared:
+            if why is None or other.ref in compared or other.handle in compared:
                 continue
             if other.ref in new and ref in set(_ref_list(by_key[other.ref].get("namesake_of") or [])):
                 continue  # the earlier op already says these two are different people
