@@ -636,3 +636,58 @@ def test_repos_reads_odd_names_and_types_and_refuses_a_backup(tmp_path, capsys):
     backup.write_bytes(_to_xml(selftest.clean_tree()))
     assert main(["repos", str(backup)]) == 2
     assert "no repository details" in capsys.readouterr().err
+
+
+def test_unconnected_flags_a_satellite_family_component():
+    import copy
+    from gwt_check import checks
+    from gwt_check.selftest import clean_tree, p_unconnected
+    from gwt_check.tree import Tree
+
+    d = clean_tree()
+    found, _ = checks.run_checks(Tree(d, source="t"))
+    assert [f for f in found if f["check"] == "unconnected"] == []
+
+    d = clean_tree()
+    p_unconnected(d)
+    found, _ = checks.run_checks(Tree(d, source="t"))
+    hits = [f for f in found if f["check"] == "unconnected"]
+    assert [f["key"] for f in hits] == ["I9001,I9002"]
+    assert "2 people" in hits[0]["detail"]
+
+
+def test_unconnected_scope_reports_only_touched_components():
+    from gwt_check import checks
+    from gwt_check.selftest import clean_tree, p_unconnected
+    from gwt_check.tree import Tree
+
+    d = clean_tree()
+    p_unconnected(d)
+    tree = Tree(d, source="t")
+    found, _ = checks.run_checks(tree, scope={("people", "hI0001")})
+    assert [f for f in found if f["check"] == "unconnected"] == []
+    found, _ = checks.run_checks(tree, scope={("people", "hI9001")})
+    assert [f["key"] for f in found if f["check"] == "unconnected"] == ["I9001,I9002"]
+
+
+def test_unconnected_flags_an_isolated_person_as_a_singleton():
+    from gwt_check import checks
+    from gwt_check.selftest import clean_tree, _new_person
+    from gwt_check.tree import Tree
+
+    d = clean_tree()
+    _new_person(d, "I9003", "Casimiro", "Solo")
+    found, _ = checks.run_checks(Tree(d, source="t"))
+    assert [f["key"] for f in found if f["check"] == "unconnected"] == ["I9003"]
+
+
+def test_unconnected_scope_counts_a_scoped_family_of_the_component():
+    from gwt_check import checks
+    from gwt_check.selftest import clean_tree, p_unconnected
+    from gwt_check.tree import Tree
+
+    d = clean_tree()
+    p_unconnected(d)
+    tree = Tree(d, source="t")
+    found, _ = checks.run_checks(tree, scope={("families", "hF9001")})
+    assert [f["key"] for f in found if f["check"] == "unconnected"] == ["I9001,I9002"]

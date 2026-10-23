@@ -74,6 +74,7 @@ CHECKS = {
     "missing-object": "object of the earlier tree that is gone",
     "ahnentafel-lost": "Ahnentafel number of the earlier tree that is gone",
     "ahnentafel-changed": "Ahnentafel number that now holds another person",
+    "unconnected": "family component with no link to the largest one",
 }
 
 
@@ -479,5 +480,44 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None) -> tuple[l
             for s in n.get("surname_list", []):
                 if "[" in (s.get("surname") or ""):
                     out.add("surname-marker", f"{p['gramps_id']} {s['surname']}")
+
+    # family components: people added outside the main family are the classic wrong-tree write, so every
+    # satellite component is one finding; a research branch documented on purpose is accepted with mark-known
+    P, F = T["people"], T["families"]
+    adj: dict[str, set] = {h: set() for h in P}
+    for f in F.values():
+        members = [f.get("father_handle"), f.get("mother_handle")]
+        members += [r.get("ref") for r in f.get("child_ref_list", []) if isinstance(r, dict)]
+        members = [m for m in members if m in adj]
+        for a in members:
+            adj[a].update(m for m in members if m != a)
+    comps: list[list[str]] = []
+    seen: set[str] = set()
+    for h in adj:
+        if h in seen:
+            continue
+        stack, comp = [h], []
+        seen.add(h)
+        while stack:
+            x = stack.pop()
+            comp.append(x)
+            for y in adj[x] - seen:
+                seen.add(y)
+                stack.append(y)
+        comps.append(comp)
+    if len(comps) > 1:
+        comps.sort(key=len, reverse=True)
+        main_size = len(comps[0])
+        for comp in comps[1:]:
+            if scope is not None:
+                fams = {fh for f in F.values()
+                        for fh in [f["handle"]]
+                        if f.get("father_handle") in comp or f.get("mother_handle") in comp
+                        or any(r.get("ref") in comp for r in f.get("child_ref_list", []) if isinstance(r, dict))}
+                if not any(("people", h) in scope for h in comp) and not any(("families", fh) in scope for fh in fams):
+                    continue
+            ids = sorted(P[h].get("gramps_id") or h for h in comp)
+            out.add("unconnected", ",".join(ids),
+                    f"{len(comp)} people, largest component has {main_size}")
 
     return out.items, info
