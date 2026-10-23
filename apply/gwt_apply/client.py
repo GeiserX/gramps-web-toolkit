@@ -23,7 +23,6 @@ NAMESPACE = {
     "Media": "media",
     "Note": "notes",
     "Tag": "tags",
-    "Repository": "repositories",  # never written; in a snapshot so gwt-check can read one
 }
 
 
@@ -351,7 +350,7 @@ class Client:
         self.written[(cls, obj["handle"])] = copy.deepcopy(body)
 
     def delete(self, cls: str, handle: str) -> None:
-        """DELETE one object. Used only for the lock note."""
+        """DELETE one object: the lock note, and what `remove` deletes."""
         if self.dry_run:
             raise ApiError("delete in a dry run")
         r = self._request("DELETE", f"/{NAMESPACE[cls]}/{handle}", write=True)
@@ -366,7 +365,17 @@ class Client:
         if self.dry_run:
             self.log(method="DELETE", path=f"/{NAMESPACE[cls]}/{handle}", status=None)
             return
-        self.delete(cls, handle)
+        try:
+            self.delete(cls, handle)
+        except Retryable:
+            # like a lost merge: the object may still be there, so the retry asks the server
+            self.deleted.discard((cls, handle))
+            self.unsure.add((cls, handle))
+            raise
+        except ApiError:
+            self.deleted.discard((cls, handle))
+            raise
+        self.unsure.discard((cls, handle))
 
     def merge(self, cls: str, winner: str, loser: str, body: dict | None = None) -> None:
         """Gramps' own merge: every reference to the loser moves to the winner, then the loser is deleted.

@@ -303,6 +303,37 @@ def test_merge_repository_moves_sources_and_removes_the_loser(fake):
     assert [r.status for r in run(fake, ops)] == ["skip"]  # a rerun finds the merge note
 
 
+def test_merge_repository_keeps_media_type_and_notes_of_a_twin_entry(fake):
+    _two_repos(fake)
+    fake.by_id("sources", "S0001")["reporef_list"] = [
+        {"ref": "repo1", "call_number": "A1", "media_type": "", "note_list": ["n-winner"]},
+        {"ref": "repo2", "call_number": "C9", "media_type": "Film", "note_list": ["n-loser", "n-winner"]},
+    ]
+    ops = [{"op": "merge_repository", "key": "m", "ruling": R, "winner": "R0001", "loser": "R0002"}]
+    assert [r.status for r in run(fake, ops)] == ["done"]
+    (ref,) = fake.store["sources"]["src1"]["reporef_list"]
+    assert ref["call_number"] == "A1"  # the winner's own call number stays
+    assert ref["media_type"] == "Film" and ref["note_list"] == ["n-winner", "n-loser"]
+
+
+def test_merge_repository_retries_a_delete_that_failed(fake):
+    # the DELETE of the loser answers 503 once: the retry must still delete it, not skip on the merge note
+    _two_repos(fake)
+    real, failed = fake.request, []
+
+    def request(method, url, **kw):
+        if method == "DELETE" and "/repositories/" in url and not failed:
+            failed.append(url)
+            return Resp(503, "busy")
+        return real(method, url, **kw)
+
+    fake.request = request
+    ops = [{"op": "merge_repository", "key": "m", "ruling": R, "winner": "R0001", "loser": "R0002"}]
+    res = run(fake, ops)
+    assert failed and res[0].status == "done", res[0].actions
+    assert "repo2" not in fake.store["repositories"]
+
+
 def test_merge_repository_dry_run_keeps_everything(fake):
     _two_repos(fake)
     ops = [{"op": "merge_repository", "key": "m", "ruling": R, "winner": "R0001", "loser": "R0002"}]
@@ -314,11 +345,11 @@ def test_merge_repository_dry_run_keeps_everything(fake):
 def test_repository_ops_are_validated():
     base = {"key": "k", "ruling": R}
     bad = [
-        {**base, "op": "add_repository", "name": "A", "type": "Castle"},
+        {**base, "op": "add_repository", "name": "A", "type": " "},
         {**base, "key": "k2", "op": "add_repository", "name": "A", "type": "Archive", "url": "ftp://x"},
         {**base, "key": "k3", "op": "add_repository", "name": "A", "type": "Archive", "address": {"planet": "Mars"}},
         {**base, "key": "k4", "op": "update_repository", "repository": "R0001", "set": {"gramps_id": "R5"}},
-        {**base, "key": "k5", "op": "link_repository", "source": "S0001", "repository": "R0001", "media_type": "Scroll"},
+        {**base, "key": "k5", "op": "link_repository", "source": "S0001", "repository": "R0001", "media_type": ""},
         {**base, "key": "k6", "op": "unlink_repository", "source": "S0001", "repository": "0a1b2c3d4e5f"},
         {**base, "key": "k7", "op": "merge_repository", "winner": "R0001", "loser": "R0001"},
     ]
@@ -448,6 +479,15 @@ def test_update_place_sets_coordinates_on_an_existing_place(fake):
     assert run(fake, ops)[0].status == "skip"
     for bad in ({"lat": 47.39}, {"lat": 95, "long": 0}, {"name": "x"}, {}):
         assert validate([dict(ops[0], key="bad", set=bad)]), bad
+
+
+def test_coordinates_that_are_not_numbers_are_a_validation_error():
+    # float(None) is a TypeError: it must come out as a line in the error list, not a crash
+    for bad in (None, "north", [1]):
+        up = {"op": "update_place", "key": "up", "ruling": R, "place": "P0001", "set": {"lat": bad, "long": 0.6}}
+        add = {"op": "add_place", "key": "ap", "ruling": R, "name": "A", "type": "Town", "lat": 1, "long": bad}
+        errors = validate([up, add])
+        assert len(errors) == 2 and all("number" in e for e in errors), errors
 
 
 def test_citation_and_note_on_a_child_ref(fake):

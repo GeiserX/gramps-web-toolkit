@@ -67,10 +67,6 @@ ATTACHABLE = {"citation": ("Citation", "citation_list"), "media": ("Media", "med
               "note": ("Note", "note_list")}
 REF_OWN_LISTS = ("note_list", "citation_list", "attribute_list")  # what a MediaRef carries besides its ref
 PERSON_FIELDS = {"first_name", "surname", "gender"}
-# what Gramps accepts for a repository's type and for how a source is held there
-REPOSITORY_TYPES = {"Library", "Cemetery", "Church", "Archive", "Album", "Web site", "Bookstore", "Collection", "Safe"}
-MEDIA_TYPES = {"Audio", "Book", "Card", "Electronic", "Fiche", "Film", "Magazine", "Manuscript", "Map",
-               "Newspaper", "Photo", "Tombstone", "Video", "Unknown"}
 ADDRESS_KEYS = {"street", "locality", "city", "county", "state", "country", "postal", "phone"}
 REPOSITORY_FIELDS = {"name", "type", "url", "address"}
 EVENT_FIELDS = {"type", "date", "place", "description"}
@@ -175,6 +171,20 @@ def _tag_names(value) -> list:
 
 def _ref_list(value) -> list:
     return value if isinstance(value, list) else [value]
+
+
+def _check_coords(f: dict) -> None:
+    """lat and long of add_place and update_place: both or neither, numbers, in range."""
+    if ("lat" in f) != ("long" in f):
+        raise ValueError("lat and long go together")
+    if "lat" not in f:
+        return
+    try:
+        lat, long = float(f["lat"]), float(f["long"])
+    except (TypeError, ValueError):
+        raise ValueError("lat and long are numbers") from None
+    if not (-90 <= lat <= 90 and -180 <= long <= 180):
+        raise ValueError("lat/long out of range")
 
 
 def validate(ops: list[dict]) -> list[str]:
@@ -292,18 +302,15 @@ def validate(ops: list[dict]) -> list[str]:
                 s = op.get("set")
                 if not isinstance(s, dict) or not s or set(s) - PLACE_FIELDS:
                     raise ValueError(f"set takes only {sorted(PLACE_FIELDS)}")
-                if ("lat" in s) != ("long" in s):
-                    raise ValueError("lat and long go together")
-                if not (-90 <= float(s["lat"]) <= 90 and -180 <= float(s["long"]) <= 180):
-                    raise ValueError("lat/long out of range")
+                _check_coords(s)
             if name == "set_attribute" and _parse_target(op.get("target"))[0] in ("ChildRef", "PersonRef"):
                 raise ValueError("a child_ref or an association has no attributes")
             if name in ("add_repository", "update_repository"):
                 f = op if name == "add_repository" else op.get("set")
                 if name == "update_repository" and (not isinstance(f, dict) or not f or set(f) - REPOSITORY_FIELDS):
                     raise ValueError(f"set takes only {sorted(REPOSITORY_FIELDS)}")
-                if "type" in f and f["type"] not in REPOSITORY_TYPES:
-                    raise ValueError(f"type is one of {sorted(REPOSITORY_TYPES)}")
+                if "type" in f and not (isinstance(f["type"], str) and f["type"].strip()):
+                    raise ValueError("type is a non-empty string, e.g. Archive")
                 if "name" in f and not str(f["name"]).strip():
                     raise ValueError("name is empty")
                 if "url" in f and not re.match(r"^https?://\S+$", str(f["url"])):
@@ -311,13 +318,11 @@ def validate(ops: list[dict]) -> list[str]:
                 if "address" in f and (not isinstance(f["address"], dict) or not f["address"]
                                        or set(f["address"]) - ADDRESS_KEYS):
                     raise ValueError(f"address is an object with some of {sorted(ADDRESS_KEYS)}")
-            if name == "link_repository" and "media_type" in op and op["media_type"] not in MEDIA_TYPES:
-                raise ValueError(f"media_type is one of {sorted(MEDIA_TYPES)}")
+            if name == "link_repository" and "media_type" in op and not (
+                    isinstance(op["media_type"], str) and op["media_type"].strip()):
+                raise ValueError("media_type is a non-empty string, e.g. Book")
             if name == "add_place":
-                if ("lat" in op) != ("long" in op):
-                    raise ValueError("lat and long go together")
-                if "lat" in op and not (-90 <= float(op["lat"]) <= 90 and -180 <= float(op["long"]) <= 180):
-                    raise ValueError("lat/long out of range")
+                _check_coords(op)
             if name == "attach_existing":
                 lst = _parse_object(op.get("object"))[2]
             elif op.get("attach"):
@@ -895,21 +900,6 @@ class Applier:
         self.create(obj)
         self.keymap[op["key"]] = h
 
-    def add_repository(self, op):
-        if self._existing("Repository", op):
-            return
-        name = op["name"].strip()
-        for row in self.c.list_all("Repository", ["name", "gramps_id"]):
-            if fold(row.get("name") or "") == fold(name):
-                self.keymap[op["key"]] = row["handle"]
-                self.actions.append(f"skip: Repository {row.get('gramps_id') or row['handle']} has that name")
-                return
-        self._check_gramps_id("Repository", op)
-        h = stable_handle(op["key"])
-        self.create({"_class": "Repository", "handle": h, "gramps_id": op.get("gramps_id", ""),
-                     "name": name, "type": op["type"]})
-        self.keymap[op["key"]] = h
-
     @staticmethod
     def _repo_fields(obj: dict, f: dict) -> None:
         """Put url and address on a repository: a url already there is kept, the first address is completed."""
@@ -1027,9 +1017,11 @@ class Applier:
                 if twin is None:
                     out.append({**r, "ref": winner["handle"]})
                 else:  # the source already lists the winner: keep what the loser's entry knew that the winner's lacks
-                    for k in ("call_number",):
+                    for k in ("call_number", "media_type"):
                         if r.get(k) and not twin.get(k):
                             twin[k] = r[k]
+                    notes = twin.get("note_list") or []
+                    twin["note_list"] = notes + [n for n in r.get("note_list") or [] if n not in notes]
             src["reporef_list"] = out
             self.save(b, src)
         self.actions.append(f"delete Repository {self.label(loser)}")
