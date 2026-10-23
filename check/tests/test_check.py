@@ -586,7 +586,7 @@ def test_a_gwt_apply_snapshot_is_a_tree(tmp_path, capsys):
 
 def test_repos_command_finds_by_name_and_type_and_lists_unlinked(tmp_path, capsys):
     data = selftest.clean_tree()
-    selftest.p_repository_no_source(data)
+    selftest.p_orphan_repository(data)
     selftest.p_source_no_repository(data)
     dump = _write(tmp_path, "t.json", data)
     assert main(["repos", dump, "--name", "diocesano", "--unlinked"]) == 0
@@ -598,3 +598,28 @@ def test_repos_command_finds_by_name_and_type_and_lists_unlinked(tmp_path, capsy
     assert main(["repos", dump, "--name", "IMAGINARIO", "--json"]) == 0
     got = json.loads(capsys.readouterr().out)
     assert [r["id"] for r in got["repositories"]] == ["R0099"]
+
+
+def test_a_source_with_no_repository_is_counted_not_a_finding(tmp_path, capsys):
+    # linking only unambiguous sources leaves some unlinked for good: that must not fail the check
+    data = selftest.clean_tree()
+    selftest.p_source_no_repository(data)
+    findings, info = checks.run_checks(load(_write(tmp_path, "t.json", data)))
+    assert findings == [] and info["sources without repository"] == 1
+    assert main(["check", _write(tmp_path, "t2.json", data)]) == 0
+    assert "sources without repository: 1" in capsys.readouterr().out
+    data["repositories"] = []
+    data["sources"] = [{**s, "reporef_list": []} for s in data["sources"]]
+    _, info = checks.run_checks(load(_write(tmp_path, "t3.json", data)))
+    assert "sources without repository" not in info  # a tree that does not use repositories
+
+
+def test_orphan_repository_and_dup_repository_names_fold_like_people(tmp_path):
+    data = selftest.clean_tree()
+    selftest.p_orphan_repository(data)
+    data["repositories"].append({**data["repositories"][0], "handle": "hR0097", "gramps_id": "R0097",
+                                 "name": "ARCHIBO  DIÓCESANO  Ejemplo"})  # b/v, accents, the «de» dropped, spaces
+    data["sources"][0]["reporef_list"].append({**data["sources"][0]["reporef_list"][0], "ref": "hR0097"})
+    findings, _ = checks.run_checks(load(_write(tmp_path, "t.json", data)))
+    got = {(f["check"], f["key"]) for f in findings}
+    assert got == {("orphan-repository", "R0099"), ("dup-repository", "R0001,R0097")}, got

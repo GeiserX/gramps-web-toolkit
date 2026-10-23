@@ -50,6 +50,7 @@ CHECKS = {
     "orphan-citation": "citation nothing refers to",
     "orphan-note": "note nothing refers to",
     "orphan-media": "media object nothing refers to",
+    "orphan-repository": "repository no source lists",
     "dangling-ref": "reference to an object that does not exist",
     "place-not-place": "a place field that holds something other than a place",
     "citation-no-source": "citation without a source",
@@ -66,9 +67,7 @@ CHECKS = {
     "dup-vital-event": "one person or family with two vital events of one type",
     "living-media-sensitive": "media of a possibly living person, not marked private, whose path, description or "
                               "attributes look like an ID document, passport or home address",
-    "repository-no-source": "repository no source lists",
-    "source-no-repository": "source with no repository, in a tree that has repositories",
-    "dup-repository": "two repositories with the same name, ignoring case and accents",
+    "dup-repository": "two repositories with the same name, compared like people's names",
     "private": "object or sub-reference marked private",
     "place-no-coords": "place used by an event without coordinates",
     "surname-marker": "surname with a « [ » marker",
@@ -215,26 +214,21 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None) -> tuple[l
         for o in T[t].values():
             event_owner.update(r.get("ref") for r in o.get("event_ref_list", []))
     for t, check in (("events", "orphan-event"), ("citations", "orphan-citation"),
-                     ("notes", "orphan-note"), ("media", "orphan-media")):
+                     ("notes", "orphan-note"), ("media", "orphan-media"), ("repositories", "orphan-repository")):
         owners = event_owner if t == "events" else referenced[t]
         for h, o in T[t].items():
             if h not in owners:
                 out.add(check, o.get("gramps_id") or h)
 
-    # repositories: where each source is kept. A tree with no repository at all does not use them, so a
-    # source without one is a finding only once the tree has at least one.
+    # repositories: where each source is kept. A source is linked only when its repository is certain, so a
+    # source without one is counted, not a finding; a tree with no repository at all does not use them.
     R = T["repositories"]
-    for h, o in R.items():
-        if h not in referenced["repositories"]:
-            out.add("repository-no-source", o.get("gramps_id") or h, o.get("name", ""))
     if R:
-        for h, o in T["sources"].items():
-            if not o.get("reporef_list"):
-                out.add("source-no-repository", o.get("gramps_id") or h, o.get("title", ""))
+        info["sources without repository"] = sum(1 for o in T["sources"].values() if not o.get("reporef_list"))
     by_name: dict[str, list[str]] = defaultdict(list)
     for h, o in R.items():
-        if (o.get("name") or "").strip():
-            by_name[" ".join("".join(c for c in unicodedata.normalize("NFD", o["name"].lower()) if unicodedata.category(c) != "Mn").split())].append(o.get("gramps_id") or h)
+        if norm(o.get("name") or ""):
+            by_name[norm(o["name"])].append(o.get("gramps_id") or h)
     for ids in by_name.values():
         if len(ids) > 1:
             out.add("dup-repository", ",".join(sorted(ids)))

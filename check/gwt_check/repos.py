@@ -2,18 +2,12 @@
 
 from __future__ import annotations
 
-import unicodedata
-
+from .checks import norm
 from .tree import Tree
 
 
-def fold(text: str) -> str:
-    bare = "".join(c for c in unicodedata.normalize("NFKD", text or "") if not unicodedata.combining(c))
-    return " ".join(bare.casefold().split())
-
-
 def repository_report(tree: Tree, *, name: str | None = None, rtype: str | None = None) -> dict:
-    """Repositories matching `name` (a part of the name, ignoring case and accents) and `rtype`, each with the
+    """Repositories matching `name` (a part of the name, compared like people's names) and `rtype`, each with the
     sources that list it; plus the sources that list no repository and the repositories no source lists."""
     repos, sources = tree.objs["repositories"], tree.objs["sources"]
     used: dict[str, list[dict]] = {h: [] for h in repos}
@@ -28,9 +22,9 @@ def repository_report(tree: Tree, *, name: str | None = None, rtype: str | None 
                                        "call_number": r.get("call_number", ""), "media_type": r.get("media_type", "")})
     found = []
     for h, o in repos.items():
-        if name and fold(name) not in fold(o.get("name", "")):
+        if name and norm(name) not in norm(o.get("name", "")):
             continue
-        if rtype and fold(rtype) != fold(o.get("type") if isinstance(o.get("type"), str) else (o.get("type") or {}).get("string", "")):
+        if rtype and norm(rtype) != norm(o.get("type") if isinstance(o.get("type"), str) else (o.get("type") or {}).get("string", "")):
             continue
         found.append({"id": o.get("gramps_id"), "name": o.get("name", ""), "type": o.get("type"),
                       "urls": [u.get("path") for u in o.get("urls") or []], "sources": used[h]})

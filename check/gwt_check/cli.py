@@ -174,6 +174,8 @@ def print_report(report: dict, limit: int) -> None:
     info = report["info"]
     print(f"\nevents without place: {info['events without place']}"
           + (f", {len(info['events without place, in scope'])} in scope" if "events without place, in scope" in info else ""))
+    if "sources without repository" in info:
+        print(f"sources without repository: {info['sources without repository']} (list them with gwt-check repos --unlinked)")
     if "diff" in report:
         d = report["diff"]
         for k in ("changed", "new"):
@@ -261,7 +263,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", required=True, help="the known file to create or add to")
     p = sub.add_parser("repos", help="find repositories by name or type; list unlinked sources and repositories")
     p.add_argument("tree", nargs="?", help="dump file; without it the live tree is read")
-    p.add_argument("--name", help="part of a repository's name (case and accents ignored)")
+    p.add_argument("--name", help="part of a repository's name (compared like people's names)")
     p.add_argument("--type", dest="rtype", help="repository type, e.g. Archive")
     p.add_argument("--unlinked", action="store_true", help="also list sources with no repository and repositories no source lists")
     p.add_argument("--json", action="store_true", help="print the result as JSON")
