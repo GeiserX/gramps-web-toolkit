@@ -562,6 +562,23 @@ def test_a_tree_whose_findings_never_settle_gives_up_with_exit_2(live, capsys):
     assert "kept changing" in capsys.readouterr().err
 
 
+def test_info_findings_that_keep_changing_do_not_stop_a_live_read_settling(live, tmp_path):
+    def satellites(server, t, q):  # every pass writes a new couple in no link to the tree, while writes go on
+        if q.get("keys") and t == "families":
+            n = len(server.data["families"])
+            selftest._new_person(server.data, f"I8{n}a", f"Uno{n}", f"Apartado{n}", family=f"hF8{n}")
+            selftest._new_person(server.data, f"I8{n}b", f"Dos{n}", f"Apartado{n}", family=f"hF8{n}")
+            selftest._new_family(server.data, f"F8{n}", f"hI8{n}a", f"hI8{n}b")
+        if q.get("keys") and t == "people":
+            busy_people(server)
+    live(selftest.clean_tree(), satellites)
+    report = str(tmp_path / "r.json")
+    assert main(["check", "--json", report]) == 0
+    r = json.load(open(report))
+    assert r["passes"] == 4 and r["new"] == []
+    assert r["findings"] and {f["check"] for f in r["findings"]} == {"unconnected"}
+
+
 def test_a_gwt_apply_snapshot_is_a_tree(tmp_path, capsys):
     from gwt_check.tree import APPLY_CLASSES
     data = selftest.clean_tree()
@@ -735,7 +752,7 @@ def test_unconnected_never_sets_the_exit_code(tmp_path, capsys):
     report = tmp_path / "r.json"
     assert main(["check", dump, "--json", str(report)]) == 0
     out = capsys.readouterr().out
-    assert "info unconnected: 1 new" in out and "OK: 0 new finding(s), 0 known, 1 for information only" in out
+    assert "info unconnected: 1 found (0 known)" in out and "OK: 0 new finding(s), 0 known, 1 for information only" in out
     data = json.loads(report.read_text())
     assert data["new"] == [] and [(f["check"], f["key"], f["info"]) for f in data["findings"]] == [
         ("unconnected", "I9001", True)]

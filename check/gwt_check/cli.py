@@ -171,7 +171,9 @@ def print_report(report: dict, limit: int) -> None:
         new = [f for f in fs if not f["known"]]
         if not fs:
             continue
-        print(f"\n{'info' if name in INFO_CHECKS else 'FAIL' if new else 'known'} {name}: {len(new)} new, {len(fs) - len(new)} known  ({CHECKS[name]})")
+        counts = (f"{len(fs)} found ({len(fs) - len(new)} known)" if name in INFO_CHECKS
+                  else f"{len(new)} new, {len(fs) - len(new)} known")
+        print(f"\n{'info' if name in INFO_CHECKS else 'FAIL' if new else 'known'} {name}: {counts}  ({CHECKS[name]})")
         for f in [f for f in fs if f["known"] and f.get("reason")][:limit]:
             print(f"  known {f['key']}: {f['reason']}")
         for f in new[:limit]:
@@ -328,7 +330,8 @@ def main(argv: list[str] | None = None) -> int:
             persistent: list[set] = []
 
             def settled(data):
-                seen.append({(f["check"], f["key"]) for f in run(Tree(data["objects"]))["findings"]})
+                # info findings never fail the run, so a satellite that comes and goes mid-write must not keep it reading
+                seen.append({(f["check"], f["key"]) for f in run(Tree(data["objects"]))["findings"] if not f["info"]})
                 if len(seen) >= SEEN_IN:
                     persistent.append(set.intersection(*seen[-SEEN_IN:]))
                 return len(persistent) >= 2 and persistent[-1] == persistent[-2]
@@ -343,7 +346,8 @@ def main(argv: list[str] | None = None) -> int:
             report["passes"] = data["passes"]
             if data.get("settled"):
                 unconfirmed = (seen[-1] & seen[-2]) - seen[-3]
-                keep = lambda fs: [f for f in fs if (f["check"], f["key"]) in persistent[-1] | unconfirmed]  # noqa: E731
+                keep = lambda fs: [f for f in fs if f["info"]  # noqa: E731
+                                   or (f["check"], f["key"]) in persistent[-1] | unconfirmed]
                 report["in_flight"] = len(report["findings"]) - len(keep(report["findings"]))
                 report["findings"], report["new"] = keep(report["findings"]), keep(report["new"])
                 for f in report["findings"]:
