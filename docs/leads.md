@@ -31,9 +31,9 @@ Every output format leaves out:
 
 A birth is proven old by any of these, each one ending in `--living-after` or earlier:
 
-- the person's own birth year, or the baptism year when the birth has none;
+- the person's own birth, baptism or christening year, any of them;
 - the person's death year;
-- the marriage of a family the person heads;
+- the marriage of a family the person heads. Other family events, such as a divorce, do not count;
 - any of those for anyone descending from the person, through any parent family. A grandchild baptised in 1890 proves every ancestor above was born before 1890, so a dated person anywhere below keeps the whole direct line above them on the list.
 
 For this test a date counts by its latest possible year: the end of a range or span, the year plus 10 for an "about" or estimated date, and no year at all for "after" or "from", which have no upper bound. A date with only text proves nothing.

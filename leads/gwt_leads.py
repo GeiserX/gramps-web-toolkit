@@ -236,7 +236,9 @@ def not_living(T, living_after):
     def by_cutoff(e):
         y = latest_year(e)
         return y is not None and y <= living_after
-    seeds = {h for h, p in T['people'].items() if by_cutoff(birth_dated(T, p)) or by_cutoff(death(T, p))}
+    seeds = {h for h, p in T['people'].items()
+             if any(by_cutoff(e) for e in own_events(T, p) if etype(e) in BIRTH_LIKE) or by_cutoff(birth(T, p))
+             or by_cutoff(death(T, p))}
     for f in T['families'].values():
         if any(by_cutoff(T['events'].get(r.get('ref'))) and etype(T['events'][r['ref']]) in MARRIAGE_LIKE
                for r in f.get('event_ref_list', []) if r.get('ref') in T['events']):

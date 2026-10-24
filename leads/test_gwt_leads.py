@@ -225,6 +225,25 @@ class LeadsTest(unittest.TestCase):
         self.assertNotIn('I3', held)
         self.assertIn('I1', held)  # the child of that marriage is not proven old by it
 
+    def test_an_exact_baptism_proves_age_beside_an_about_birth(self):
+        T = tree()
+        T['people'].pop('r')
+        T['events']['eb2']['date'] = {'dateval': [0, 0, 1920, False], 'modifier': 3}  # about 1920: up to 1930
+        T['events']['bp2'] = event('bp2', 'Baptism', 1920)
+        self.assertIn('I2', L.leads(T, None, living_after=1925)[1])
+        T['people']['fa']['event_ref_list'].append({'ref': 'bp2', 'role': 'Primary'})
+        self.assertNotIn('I2', L.leads(T, None, living_after=1925)[1])
+
+    def test_only_a_marriage_among_family_events_proves_age(self):
+        T = tree()
+        for h in ('fa', 'mo', 'r'):
+            T['people'][h]['event_ref_list'] = []
+        T['events']['dv1'] = event('dv1', 'Divorce', 1910)
+        T['families']['f1']['event_ref_list'] = [{'ref': 'dv1', 'role': 'Family'}]
+        held = L.leads(T, None, living_after=1925)[1]
+        self.assertIn('I2', held)
+        self.assertIn('I3', held)
+
     def test_the_living_test_uses_the_latest_possible_year(self):
         def held_with(**date):
             T = tree()
