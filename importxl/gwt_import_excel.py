@@ -35,8 +35,9 @@ GENDER = {'m': 'M', 'h': 'M', 'v': 'M', 'male': 'M', 'man': 'M', 'hombre': 'M', 
           'f': 'F', 'female': 'F', 'woman': 'F', 'mujer': 'F', 'hembra': 'F', 'femenino': 'F', 'femme': 'F',
           'feminin': 'F', 'u': 'U', '?': 'U', '': 'U'}
 MAX_MEMBER = 100 * 1024 * 1024       # bytes of one unpacked workbook part: more is a zip bomb, not research
+MAX_TOTAL = 200 * 1024 * 1024        # bytes of all parts together
 MAX_ROW, MAX_COL = 1048576, 16384    # Excel's own limits
-LIVING_YEARS = 100                   # born this recently with no death: maybe alive, held unless --allow-living
+LIVING_YEARS = 100                   # born this recently, or never, with no death: maybe alive, held unless --allow-living
 GRAMPS_ID = re.compile(r'^[A-Za-z]+\d+(?:-[A-Za-z0-9]+)?$')   # as gwt-apply accepts them
 BATCH = re.compile(r'^[a-z0-9][a-z0-9-]{0,39}$')
 
@@ -126,7 +127,7 @@ def serial_to_iso(text, date1904=False):
 
 
 def read_workbook(path, meta=None):
-    """{sheet name: [row, ...]} where a row is a list of strings ('' for empty cells).
+    """{sheet name: {row number: {column index: text}}}, holding only the cells that have text.
 
     Cells with a date style hold an ISO date. Formula cells give their cached value. `meta`, when a dict, gets
     {(sheet, row, col): set of 'formula' / 'error' / 'date' / 'time'} for those cells. A cell or row without its
@@ -137,6 +138,8 @@ def read_workbook(path, meta=None):
 
 
 def _read_workbook(z, meta):
+    if sum(i.file_size for i in z.infolist()) > MAX_TOTAL:
+        raise MappingError('the workbook unpacks to more than %d MB' % (MAX_TOTAL // 2 ** 20))
     date_styles, time_styles = date_style_ids(z)
     wbroot = ET.fromstring(read_member(z, 'xl/workbook.xml'))
     pr = wbroot.find('m:workbookPr', NS)
@@ -151,7 +154,7 @@ def _read_workbook(z, meta):
         target = rels[sh.get('{%s}id' % NS['r'])].lstrip('/')
         name = target if target.startswith('xl/') else 'xl/' + target
         sheet = sh.get('name')
-        rows = []
+        rows = {}
         n = 0
         for row in ET.fromstring(read_member(z, name)).iter('{%s}row' % NS['m']):
             n = int(row.get('r')) if row.get('r') else n + 1
@@ -167,7 +170,10 @@ def _read_workbook(z, meta):
                 t = c.get('t')
                 v = c.find('m:v', NS)
                 if t == 's' and v is not None:
-                    val = shared[int(v.text)]
+                    i = int(v.text)
+                    if not 0 <= i < len(shared):
+                        raise MappingError('sheet %r row %d points at shared string %d of %d' % (sheet, n, i, len(shared)))
+                    val = shared[i]
                 elif t == 'inlineStr':
                     val = ''.join(x.text or '' for x in c.iter('{%s}t' % NS['m']))
                 elif t == 'e':
@@ -187,10 +193,10 @@ def _read_workbook(z, meta):
                     val = ''
                 if c.find('m:f', NS) is not None and meta is not None:
                     meta.setdefault(where, set()).add('formula')
-                cells[col] = val.strip()
-            if len(rows) < n:
-                rows.extend([()] * (n - len(rows)))      # one shared empty tuple per missing row, not a list each
-            rows[n - 1] = [cells.get(i, '') for i in range(max(cells) + 1)] if cells else []
+                if val.strip():
+                    cells[col] = val.strip()          # empty cells cost nothing, however far right the last one is
+            if cells:
+                rows[n] = cells
         out[sheet] = rows
     return out
 
@@ -332,15 +338,16 @@ def import_rows(book, mapping, tree=None, meta=None, batch='b', this_year=None, 
         if rows is None:
             raise MappingError('sheet %r not in workbook (has: %s)' % (spec['sheet'], ', '.join(book)))
         hr = spec.get('header_row', 1) - 1
-        header = list(rows[hr]) if hr < len(rows) else []
-        dup = sorted({h for h in header if h and header.count(h) > 1})
+        header = rows.get(hr + 1, {})
+        names = list(header.values())
+        dup = sorted({h for h in names if names.count(h) > 1})
         cols = spec['columns']
         if dup and any(h in dup for h in cols.values()):
             raise MappingError('sheet %r has the column %s more than once' % (spec['sheet'], ', '.join(map(repr, dup))))
-        idx = {h: i for i, h in enumerate(header)}
+        idx = {h: i for i, h in header.items()}
         for k, h in cols.items():
             if h not in idx:
-                raise MappingError('sheet %r has no column %r (mapped as %s); header is %s' % (spec['sheet'], h, k, header))
+                raise MappingError('sheet %r has no column %r (mapped as %s); header is %s' % (spec['sheet'], h, k, names))
 
         cur = {}
 
@@ -360,7 +367,7 @@ def import_rows(book, mapping, tree=None, meta=None, batch='b', this_year=None, 
                 report['error_cells'].append(label)
             if 'date' in marks:
                 report['excel_dates'] += 1
-            return row[idx[h]].strip() if idx[h] < len(row) else ''
+            return row.get(idx[h], '')
 
         def read_date(row, key):
             """(raw text, gwt-apply date or None, problem or None). A time or duration cell is never parsed as a date."""
@@ -371,10 +378,9 @@ def import_rows(book, mapping, tree=None, meta=None, batch='b', this_year=None, 
             ds, why = parse_date(raw)
             return raw, ds, why
 
-        for n, row in enumerate(rows[hr + 1:], start=hr + 2):
+        for n in sorted(r for r in rows if r > hr + 1):
+            row = rows[n]
             cur['n'] = n
-            if not any(row):
-                continue
             report['rows_read'] += 1
             where = '%s!%d' % (spec['sheet'], n)
             first, sur = get(row, 'first_name'), get(row, 'surname')
@@ -386,11 +392,13 @@ def import_rows(book, mapping, tree=None, meta=None, batch='b', this_year=None, 
             spots = {ev: (get(row, ev + '_place'), get(row, ev + '_place_id')) for ev in ('birth', 'death')}
             by = re.search(r'\d{4}', dates['birth'][1]) if dates['birth'][1] else None
             died = dates['death'][1] or dates['death'][2] or any(spots['death'])
-            if by and int(by.group(0)) > this_year - LIVING_YEARS and not died and not allow_living:
+            if not died and not allow_living and (not by or int(by.group(0)) > this_year - LIVING_YEARS):
                 report['living_held'].append({'row': where, 'name': name, 'born': dates['birth'][1]})
                 continue
-            # one key per workbook batch, sheet, row and name: a row that moves gets a new key, never another's
-            key = 'xl-%s-%s-r%d-%s-%s' % (batch, slug(spec['sheet'])[:20], n, slug(name)[:30], short_hash(fold(name)))
+            # one key per workbook batch, sheet, row and name: a row that moves gets a new key, never another's.
+            # The hashes cover the exact sheet name and the whole name, so cutting the slugs short never joins two.
+            key = 'xl-%s-%s-%s-r%d-%s-%s' % (batch, slug(spec['sheet'])[:20], short_hash(spec['sheet']), n,
+                                            slug(name)[:30], short_hash(fold(name)))
             full, lo = (fold(first), fold(sur)), loose(first, sur)
             tree_ids = sorted(set(people['full'].get(full, []) + (people['loose'].get(lo, []) if lo else [])))
             rows_same = [r for r in made['full'].get(full, []) + (made['loose'].get(lo, []) if lo else [])]
@@ -482,7 +490,7 @@ def main(argv=None):
     ap.add_argument('--tree', help='tree dump or gwt-apply snapshot (JSON, optionally .gz): namesakes and places')
     ap.add_argument('--report')
     ap.add_argument('--allow-living', action='store_true',
-                    help='import people born less than %d years ago with no death' % LIVING_YEARS)
+                    help='import people with no death who were born less than %d years ago or have no birth date' % LIVING_YEARS)
     a = ap.parse_args(argv)
     try:
         if not BATCH.match(a.batch):

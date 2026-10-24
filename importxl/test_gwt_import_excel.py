@@ -137,14 +137,14 @@ class T(unittest.TestCase):
         self.assertEqual(rep['day_first_assumed'], [{'row': 'People!2', 'event': 'Birth', 'text': '03/04/1901', 'read_as': '1901-04-03'}])
 
     def test_unreadable_date_is_kept_as_text_not_as_a_date(self):
-        ops, rep = run([row('Ana', 'Perez', 'F', 'spring of the war')])
+        ops, rep = run([row('Ana', 'Perez', 'F', 'spring of the war')], allow_living=True)
         ev = of(ops, 'add_event')[0]
         self.assertNotIn('date', ev)
         self.assertEqual(ev['description'], 'Date as written: spring of the war')
         self.assertEqual(rep['date_problems'][0]['reason'], 'unreadable date')
 
     def test_question_mark_makes_no_event(self):
-        ops, rep = run([row('Ana', 'Perez', 'F', '?', '', '?', '')])
+        ops, rep = run([row('Ana', 'Perez', 'F', '?', '', '?', '')], allow_living=True)
         self.assertEqual(of(ops, 'add_event'), [])
         self.assertEqual(rep['date_problems'], [])
 
@@ -173,8 +173,8 @@ class T(unittest.TestCase):
         rows = [row('Ana', 'Perez', 'F', '1950'), row('Luis', 'Gil', 'M', '1950', died='2001'),
                 row('Eva', 'Sanz', 'F', '1925'), row('Rosa', 'Mora', 'F', '1940', died='?'), row('Pio', 'Vila', 'M', '')]
         ops, rep = run(rows)
-        self.assertEqual([h['name'] for h in rep['living_held']], ['Ana Perez', 'Rosa Mora'])
-        self.assertEqual(sorted(o['first_name'] for o in of(ops, 'add_person')), ['Eva', 'Luis', 'Pio'])
+        self.assertEqual([h['name'] for h in rep['living_held']], ['Ana Perez', 'Rosa Mora', 'Pio Vila'])   # no birth date: maybe alive
+        self.assertEqual(sorted(o['first_name'] for o in of(ops, 'add_person')), ['Eva', 'Luis'])
         ops, rep = run(rows, allow_living=True)
         self.assertEqual((rep['living_held'], rep['people']), ([], 5))
 
@@ -185,7 +185,15 @@ class T(unittest.TestCase):
         self.assertFalse({o['key'] for o in a} & {o['key'] for o in b})
         moved, _ = run([row('Ana', 'Perez', 'F', '1901')] + same, batch='cousin-a')   # a row inserted above
         self.assertFalse({o['key'] for o in a} & {o['key'] for o in moved if o['op'] != 'add_source'})
-        self.assertTrue(of(a, 'add_person')[0]['key'].startswith('xl-cousin-a-people-r2-luis-gil-'))
+        self.assertTrue(of(a, 'add_person')[0]['key'].startswith('xl-cousin-a-people-%s-r2-luis-gil-' % X.short_hash('People')))
+        two = {}
+        for sheet in ('Bautismos Santiago 1850', 'Bautismos Santiago 1851'):     # the same 20-character slug
+            m = json.loads(json.dumps(MAP)); m['sheets'][0]['sheet'] = sheet
+            with tempfile.TemporaryDirectory() as d:
+                p = os.path.join(d, 'b.xlsx')
+                make_xlsx(p, {sheet: [HEAD] + same})
+                two[sheet] = of(X.import_rows(X.read_workbook(p), m, None, batch='cousin-a', this_year=YEAR)[0], 'add_person')[0]['key']
+        self.assertEqual(len(set(two.values())), 2, two)
         ops, _ = run([row('Ana', 'Perez', 'F', '1901', 'Madrid', '1970', 'Madrid', 'B', 'p'), row('Ana', 'Perez', 'F', '1901', src='B', page='q')])
         keys = [o['key'] for o in ops]
         self.assertEqual(len(keys), len(set(keys)))
@@ -252,7 +260,7 @@ class T(unittest.TestCase):
             self.skipTest('gwt-apply not importable (needs requests)')
         ops, _ = run([row('Ana', 'Perez', 'F', '1901', 'Madrid', '1970', 'Madrid', 'Parish book', 'f 3'),
                       row('Luis', 'Gil', 'M', 'spring', src='', page=''),
-                      row('Luis', 'Gil', 'M', '1890', why='another baptism book')], tree_of([('I0001', 'Luis', 'Gil')]))
+                      row('Luis', 'Gil', 'M', '1890', why='another baptism book')], tree_of([('I0001', 'Luis', 'Gil')]), allow_living=True)
         self.assertTrue(of(ops, 'add_person')[2]['allow_namesake'])
         self.assertEqual(validate(ops), [])
 
@@ -278,20 +286,20 @@ class T(unittest.TestCase):
             make_native(p)
             meta = {}
             book = X.read_workbook(p, meta)
-            rows = book['People']
-            self.assertEqual(rows[1][3], '1901-03-14')          # date-styled serial 1901-03-14 -> ISO, not a year
-            self.assertEqual(rows[2][3], '1901')                # plain number stays what was typed, never read as a serial
-            self.assertEqual(rows[3][3], '1901-03-14')          # custom d/m/yyyy style counts as a date
-            self.assertEqual(rows[4][3], '')                    # #REF! error is empty, flagged
-            self.assertEqual(rows[5][3], '1950')                # formula: cached value, flagged
+            rows = book['People']                               # by row number
+            self.assertEqual(rows[2][3], '1901-03-14')          # date-styled serial 1901-03-14 -> ISO, not a year
+            self.assertEqual(rows[3][3], '1901')                # plain number stays what was typed, never read as a serial
+            self.assertEqual(rows[4][3], '1901-03-14')          # custom d/m/yyyy style counts as a date
+            self.assertNotIn(3, rows[5])                        # #REF! error is empty, flagged
+            self.assertEqual(rows[6][3], '1950')                # formula: cached value, flagged
             self.assertEqual(meta[('People', 5, 3)], {'error'})
             self.assertEqual(meta[('People', 6, 3)], {'formula'})
-            for r in (7, 8, 9, 10):                     # time of day and durations are never dates
+            for r in (8, 9, 10, 11):                    # time of day and durations are never dates
                 self.assertEqual(rows[r][3], '1')
-                self.assertEqual(meta[('People', r + 1, 3)], {'time'})
-            self.assertEqual(rows[11][3], '1901-03-14')  # "mmm yyyy" is a date format
+                self.assertEqual(meta[('People', r, 3)], {'time'})
+            self.assertEqual(rows[12][3], '1901-03-14')  # "mmm yyyy" is a date format
             m = {'ruling': 'R-1', 'sheets': [{'sheet': 'People', 'columns': {'first_name': 'Given', 'surname': 'Surname', 'birth_date': 'Born'}}]}
-            ops, rep = X.import_rows(book, m, None, meta, this_year=YEAR)
+            ops, rep = X.import_rows(book, m, None, meta, this_year=YEAR, allow_living=True)
             self.assertEqual(rep['time_cells'], ['People!%d:Born' % r for r in (8, 9, 10, 11)])
             self.assertFalse(any(o.get('date') == '1900-01-01' for o in ops))
             self.assertEqual(rep['excel_dates'], 4)
@@ -299,15 +307,16 @@ class T(unittest.TestCase):
             self.assertEqual(meta[('People', 7, 3)], {'formula', 'date'})
             self.assertEqual(rep['error_cells'], ['People!5:Born'])
             by = {o['person']: o.get('date') for o in of(ops, 'add_event')}
-            self.assertEqual(sorted(v for v in by.values() if v), ['1901', '1901-03-14', '1901-03-14', '1901-03-14', '1901-03-14'])
-            self.assertEqual([h['born'] for h in rep['living_held']], ['1950'])
+            self.assertEqual(sorted(v for v in by.values() if v), ['1901', '1901-03-14', '1901-03-14', '1901-03-14', '1901-03-14', '1950'])
+            _, rep = X.import_rows(book, m, None, {}, this_year=YEAR)
+            self.assertEqual([h['born'] for h in rep['living_held']], [None, '1950', None, None, None, None])   # no date, 1950, time cells
 
     def test_time_cell_that_looks_like_a_year_is_not_a_year(self):
         meta = {('People', 2, 3): {'time'}}
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, 'b.xlsx')
             make_xlsx(p, {'People': [HEAD, row('Ana', 'Perez', 'F', '1901')]})
-            ops, rep = X.import_rows(X.read_workbook(p), MAP, None, meta, this_year=YEAR)
+            ops, rep = X.import_rows(X.read_workbook(p), MAP, None, meta, this_year=YEAR, allow_living=True)
         ev = of(ops, 'add_event')
         self.assertTrue(ev and all('date' not in e for e in ev))
         self.assertEqual(ev[0]['description'], 'Time/duration value as written: 1901')
@@ -326,7 +335,7 @@ class T(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, 'n.xlsx')
             make_native(p)       # the fixture lists row 12 before row 7
-            self.assertEqual(X.read_workbook(p)['People'][6][0], 'F')
+            self.assertEqual(X.read_workbook(p)['People'][7][0], 'F')
 
     def test_serials_out_of_range_or_1900_bug_are_not_dates(self):
         self.assertIsNone(X.serial_to_iso('60'))
@@ -343,7 +352,7 @@ class T(unittest.TestCase):
             raw_sheet(p, '<row><c t="inlineStr"><is><t>a</t></is></c><c t="inlineStr"><is><t>b</t></is></c></row>'
                          '<row r="4"><c r="C4" t="inlineStr"><is><t>c</t></is></c><c t="inlineStr"><is><t>d</t></is></c></row>'
                          '<row><c t="inlineStr"><is><t>e</t></is></c></row>')
-            self.assertEqual(X.read_workbook(p)['S'], [['a', 'b'], (), (), ['', '', 'c', 'd'], ['e']])
+            self.assertEqual(X.read_workbook(p)['S'], {1: {0: 'a', 1: 'b'}, 4: {2: 'c', 3: 'd'}, 5: {0: 'e'}})
 
     def test_absurd_rows_and_zip_bombs_are_refused(self):
         with tempfile.TemporaryDirectory() as d:
@@ -362,6 +371,34 @@ class T(unittest.TestCase):
                     X.read_workbook(p)
             finally:
                 X.MAX_MEMBER = old
+
+    def test_far_right_cells_cost_nothing_for_the_empty_ones(self):
+        import tracemalloc
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, 'b.xlsx')
+            raw_sheet(p, ''.join('<row r="%d"><c r="A%d" t="inlineStr"><is><t>x</t></is></c><c r="XFD%d" t="inlineStr"><is><t>y</t></is></c></row>'
+                                 % (r, r, r) for r in range(1, 1001)))
+            tracemalloc.start()
+            rows = X.read_workbook(p)['S']
+            peak = tracemalloc.get_traced_memory()[1]
+            tracemalloc.stop()
+        self.assertEqual(rows[1000], {0: 'x', 16383: 'y'})
+        self.assertLess(peak, 20 * 2 ** 20)          # padding each row to column XFD took about 130 MB here
+
+    def test_negative_shared_string_index_and_total_size_are_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, 'b.xlsx')
+            raw_sheet(p, '<row r="1"><c r="A1" t="s"><v>-1</v></c></row>', shared=True)
+            with self.assertRaisesRegex(X.MappingError, 'shared string -1 of 1'):
+                X.read_workbook(p)
+            raw_sheet(p, '<row r="1"><c r="A1"><v>%s</v></c></row>' % ('0' * 3000))
+            old = X.MAX_TOTAL
+            X.MAX_TOTAL = 3000                       # each part is under MAX_MEMBER, all of them together are not
+            try:
+                with self.assertRaisesRegex(X.MappingError, 'workbook unpacks to more than'):
+                    X.read_workbook(p)
+            finally:
+                X.MAX_TOTAL = old
 
     def test_read_tree_takes_a_check_dump_or_an_apply_snapshot(self):
         person = {'gramps_id': 'I0001', 'handle': 'h1', 'primary_name': {'first_name': 'Ana María', 'surname_list': [{'surname': 'Pérez'}, {'surname': 'Gil'}]}}

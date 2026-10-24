@@ -37,10 +37,12 @@ class EndToEnd(unittest.TestCase):
             json.dump({'objects': objs}, f)
         return X.read_tree(p)
 
-    def convert(self, rows, batch):
-        p = os.path.join(self.dir.name, '%s.xlsx' % batch)
-        make_xlsx(p, {'People': [HEAD] + rows})
-        ops, rep = X.import_rows(X.read_workbook(p), MAP, self.dump(), batch=batch, this_year=2026)
+    def convert(self, rows, batch, sheet='People'):
+        p = os.path.join(self.dir.name, '%s-%d.xlsx' % (batch, len(os.listdir(self.dir.name))))
+        make_xlsx(p, {sheet: [HEAD] + rows})
+        mapping = json.loads(json.dumps(MAP))
+        mapping['sheets'][0]['sheet'] = sheet
+        ops, rep = X.import_rows(X.read_workbook(p), mapping, self.dump(), batch=batch, this_year=2026)
         self.assertEqual(validate(ops), [])
         return ops, rep
 
@@ -101,6 +103,26 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual(len(self.fake.store['places']), 1)
         self.assertEqual(len(luis_a['event_ref_list']), 1)
         self.assertEqual(len(luis_b['event_ref_list']), 2)
+
+
+    def test_two_sheets_whose_names_start_alike_never_share_a_person(self):
+        # two runs under one batch, one sheet each; the names cut to 20 characters are the same
+        first = [row('José', 'García', 'M', '1850', src='Bautismos 1850', page='f 1')]
+        ops1, _ = self.convert(first, 'parish', sheet='Bautismos Santiago 1850')
+        self.apply(ops1)
+        jose_1 = self.people('José', 'García')[0]
+        second = [row('José', 'García', 'M', '1851', src='Bautismos 1851', page='f 7')]
+        ops2, _ = self.convert(second, 'parish', sheet='Bautismos Santiago 1851')
+        self.assertFalse({o['key'] for o in ops1 if o['op'] != 'add_source'} & {o['key'] for o in ops2})
+        problems = preflight(ops2, self.client)
+        self.assertEqual(len(problems), 1, problems)                 # the 1850 José is a namesake, not the same key
+        self.assertIn(jose_1['gramps_id'], problems[0])
+        second[0][9] = 'baptised 1851, a year after the other José'
+        ops2, _ = self.convert(second, 'parish', sheet='Bautismos Santiago 1851')
+        self.apply(ops2)
+        jose = self.people('José', 'García')
+        self.assertEqual(len(jose), 2)
+        self.assertEqual(sorted(self.pages(p) for p in jose), [['f 1'], ['f 7']])
 
 
 if __name__ == '__main__':
