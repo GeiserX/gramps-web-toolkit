@@ -28,7 +28,7 @@ Workbooks differ, so nothing is hard-coded. The mapping names the sheet, the hea
                "source": "Source", "page": "Page", "namesake_reason": "Why another person"}}]}
 ```
 
-Births, baptisms, christenings, deaths and burials each take `<event>_date`, `<event>_place` and `<event>_place_id` columns (`baptism_date`, `christening_place`, `burial_place_id`...), and each becomes an event of that type. Only `first_name` and `surname` are needed for a row to import. A mapped column that is not in the header, or a header name that appears twice, stops the run and names the column. `ruling` goes on every op, as gwt-apply requires.
+Births, baptisms, christenings, deaths and burials each take `<event>_date`, `<event>_place` and `<event>_place_id` columns (`baptism_date`, `christening_place`, `burial_place_id`...), and each becomes an event of that type. Only `first_name` and `surname` are needed for a row to import. A field name the tool does not know (a typo such as `bautismo_date`), a mapped column that is not in the header, or a header name that appears twice, stops the run and names the column. `ruling` goes on every op, as gwt-apply requires.
 
 ## What it does with each row
 
