@@ -12,7 +12,7 @@ On a bot wall or lockout, in a page or in an image download, it blocks the accou
 raises Wall (exit 3); on a login wall, Dead (exit 4); on a paywall, Paywall (exit 5). None of the three is
 ever stored in the cache.
 """
-import base64, fcntl, json, os, random, sys, time
+import base64, fcntl, json, os, random, sys, time, urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 for sub in ('gate', 'fscache'):
@@ -262,7 +262,8 @@ class Session:
         st, ctype, data, final = got
         self._stop(mh.classify_bytes(final or url, st, ctype, data), mh.normalize_url(url))
         if final_ok and not final_ok(final or url):
-            self.log('dropped %s: redirected off the allowed hosts to %s' % (url, (final or '').split('?')[0]))
+            self.log('dropped %s: redirected to host %s, not an allowed MyHeritage host'
+                     % (url, urllib.parse.urlsplit(final or '').hostname or '?'))
             return 0, '', b''
         return st, ctype, data
 

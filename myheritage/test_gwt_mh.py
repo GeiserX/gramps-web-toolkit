@@ -313,6 +313,44 @@ class FetchPlan(unittest.TestCase):
                          ['https://www.myheritage.com/research/scan/download?itemId=1',
                           'https://www.myheritage.com.br/research/record-image/x'])
 
+    def test_cdn_links_skip_the_deny_list(self):
+        """The image CDN only serves files; newspaper titles and signed tokens there hold deny-list letters."""
+        for good in ('https://cf.myheritageimages.com/records/full/El_Exportador_1890/1890/01/01/0001.jpg',
+                     'https://cf.myheritageimages.com/records/full/newbuyer_gazette/0001.jpg',
+                     'https://cf.myheritageimages.com/records/full/x.jpg?sig=Abuyz09Kq&exp=1',
+                     'https://cf.myheritageimages.com/records/full/x.jpg?token=qqUPGRADEqq'):
+            self.assertEqual(mh.image_download_links([good]), [good], good)
+        self.assertEqual(mh.image_download_links(['https://www.myheritage.es/research/record-image/El_Exportador']), [],
+                         'on a MyHeritage site the deny list still applies')
+
+    def test_userinfo_and_port(self):
+        for bad in ('https://evil.io@www.myheritage.es/research/record-image/download?itemId=1',
+                    'https://evil.io@cf.myheritageimages.com/records/full/x.jpg',
+                    'https://evil.io\\@www.myheritage.es/research/record-image/download?itemId=1'):
+            self.assertEqual(mh.image_download_links([bad]), [], bad)
+            self.assertFalse(mh.is_mh_image_host(bad), bad)
+        self.assertFalse(mh.is_oldnews_link('https://evil.io@www.oldnews.com/x'))
+        port = 'https://www.myheritage.es:443/research/record-image/download?itemId=1'
+        self.assertEqual(mh.image_download_links([port]), [port], 'the host is read without its port')
+        self.assertTrue(mh.is_mh_image_host('https://cf.myheritageimages.com:443/records/x.jpg'))
+
+    def test_host_option_adds_its_country_domain(self):
+        saved = mh.MH_TLDS, mh._MH_HOST
+        try:
+            self.assertFalse(mh.is_mh_image_host('https://www.myheritage.ee/research/record-image/x'))
+            with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(CLI.main(['--host', 'https://www.myheritage.ee', '--cache-dir', d, 'plan']), mh.EXIT_OK)
+            self.assertTrue(mh.is_mh_image_host('https://www.myheritage.ee/research/record-image/x'))
+            self.assertEqual(mh.image_download_links(['https://www.myheritage.ee/research/record-image/x']),
+                             ['https://www.myheritage.ee/research/record-image/x'])
+            before = mh.MH_TLDS
+            mh.allow_host('https://evil.io')
+            mh.allow_host('https://www.myheritage.es')
+            self.assertEqual(mh.MH_TLDS, before)
+        finally:
+            mh.MH_TLDS, mh._MH_HOST = saved
+        self.assertTrue(mh.is_mh_image_host('https://www.myheritage.at/research/record-image/x'))
+
     def test_hosts_by_hostname(self):
         self.assertTrue(mh.is_mh_image_host('https://cf.myheritageimages.com/x.jpg'))
         self.assertTrue(mh.is_mh_image_host('https://www.myheritage.de/research/record-image/x'))
@@ -355,6 +393,8 @@ class FetchPlan(unittest.TestCase):
         self.assertEqual(mh.classify_bytes(u, 401, '', b''), 'dead')
         self.assertEqual(mh.classify_bytes(u, 200, 'text/html', load('login_wall.html').encode()), 'dead')
         self.assertEqual(mh.classify_bytes(u, 404, 'image/png', b''), 'ok', 'a missing image is no wall')
+        for ctype in ('', 'image/jpeg', 'application/octet-stream'):
+            self.assertEqual(mh.classify_bytes(mh.HOST + '/login?returnUrl=x', 200, ctype, b''), 'dead', ctype)
 
     def test_paid_with_images_plans_image(self):
         caps = mh.capabilities([{'signal': 'records', 'value': True}, {'signal': 'images', 'value': True}])
@@ -659,10 +699,23 @@ class Redirects(unittest.TestCase):
                                                         second: (200, 'image/png', png)})
         with tempfile.TemporaryDirectory() as d:
             S, _ = offline_session(d, page, record_env())
+            logs = []
+            S.log = logs.append
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(CLI.cmd_fetch(S, fetch_args(d)), mh.EXIT_OK)
             self.assertEqual(page.fetched[:2], [first, second])
+            self.assertTrue([m for m in logs if m.startswith('dropped') and 'host evil.example' in m], logs)
             self.assertEqual(slurp(os.path.join(d, 'out', '40001', '9000002', 'image.png'), 'rb'), png)
+
+
+class FinalUrl(unittest.TestCase):
+    def test_download_redirected_to_login_without_markers_is_dead(self):
+        url = 'https://cf.myheritageimages.com/records/full/x_INVENTED.jpg'
+        page = FakePage(answers={url: (200, '', b'', mh.HOST + '/login?returnUrl=%2Fresearch')})
+        with tempfile.TemporaryDirectory() as d:
+            S, _ = offline_session(d, page)
+            with self.assertRaises(b.Dead):
+                S.fetch_bytes(url, final_ok=mh.is_mh_image_host)
 
 
 class OldNewsLink(unittest.TestCase):

@@ -758,11 +758,20 @@ def plan_fetch(caps, has_images=False, oldnews=False, thumbnail=False):
     return kinds
 
 
-# MyHeritage's own sites and its image CDN, nothing else. The country sites are listed, not guessed.
-MH_TLDS = ('com', 'es', 'de', 'fr', 'nl', 'it', 'pt', 'se', 'no', 'dk', 'fi', 'pl', 'cz', 'hu', 'com.br', 'co.il')
-_MH_HOST = re.compile(r'(?:^|\.)myheritage\.(?:%s)$' % '|'.join(re.escape(t) for t in MH_TLDS))
+# MyHeritage's own sites and its image CDN, nothing else. The country sites are listed, not guessed; the
+# site --host names is added by allow_host().
+MH_TLDS = ('com', 'es', 'de', 'at', 'fr', 'nl', 'it', 'pt', 'se', 'no', 'dk', 'fi', 'pl', 'cz', 'hu', 'com.br', 'co.il')
+
+
+def _mh_host_re(tlds):
+    return re.compile(r'(?:^|\.)myheritage\.(?:%s)$' % '|'.join(re.escape(t) for t in tlds))
+
+
+_MH_HOST = _mh_host_re(MH_TLDS)
 _MH_IMAGE_HOST = re.compile(r'(?:^|\.)myheritageimages\.com$')
-# Matched on the unquoted, lowercased path and query. Plain substrings catch camelCase (exportGedcom,
+# Matched on the unquoted, lowercased path and query of links on a MyHeritage site; never on the image CDN,
+# which serves static files (it cannot export, sell or subscribe) and whose newspaper titles and signed
+# tokens hold these letters (El_Exportador, sig=Abuyz09). Plain substrings catch camelCase (exportGedcom,
 # imageExport, buyNow); the short words keep word edges so "application" or "scandal" stay allowed.
 _NOT_IMAGE_SUBSTR = ('gedcom', 'export', 'subscri', 'checkout', 'purchase', 'upgrade', 'buy', 'paywall', 'install',
                      'family-tree-builder')
@@ -772,8 +781,21 @@ _IMAGE_FILE = re.compile(r'\.(?:jpe?g|png|tiff?|gif|webp|pdf)$', re.I)
 
 
 def _host(url):
+    """(scheme, hostname, split). A URL with userinfo or a backslash in its authority gets no host: what a
+    parser and a browser call its host can differ."""
     p = urllib.parse.urlsplit(url or '')
+    if '@' in p.netloc or '\\' in p.netloc:
+        return p.scheme, '', p
     return p.scheme, (p.hostname or '').lower(), p
+
+
+def allow_host(host_url):
+    """Add the country domain of a MyHeritage --host (https://www.myheritage.ee -> ee) to MH_TLDS."""
+    global MH_TLDS, _MH_HOST
+    m = re.search(r'(?:^|\.)myheritage\.([a-z]{2,3}(?:\.[a-z]{2})?)$', _host(host_url)[1])
+    if m and m.group(1) not in MH_TLDS:
+        MH_TLDS = MH_TLDS + (m.group(1),)
+        _MH_HOST = _mh_host_re(MH_TLDS)
 
 
 def is_mh_image_host(url):
@@ -798,7 +820,9 @@ def image_download_links(hrefs, limit=2):
     for h in hrefs or []:
         scheme, host, p = _host(h)
         rest = urllib.parse.unquote(p.path + '?' + p.query).lower()
-        if scheme != 'https' or any(w in rest for w in _NOT_IMAGE_SUBSTR) or _NOT_IMAGE_WORD.search(rest):
+        if scheme != 'https':
+            continue
+        if not _MH_IMAGE_HOST.search(host) and (any(w in rest for w in _NOT_IMAGE_SUBSTR) or _NOT_IMAGE_WORD.search(rest)):
             continue
         if (_MH_HOST.search(host) and _IMAGE_PATH.search(p.path)) or \
                 (_MH_IMAGE_HOST.search(host) and (_IMAGE_PATH.search(p.path) or _IMAGE_FILE.search(p.path))):
@@ -810,15 +834,17 @@ def image_download_links(hrefs, limit=2):
 
 
 def classify_bytes(url, status, ctype, data):
-    """'wall', 'dead' or 'ok' for one fetched URL (an image download). A page instead of bytes is read
-    like any page; a bare 403 or 429 is a wall and a bare 401 a dead session, even without a page."""
+    """'wall', 'dead' or 'ok' for one fetched URL (an image download); `url` is its final URL after
+    redirects, so a redirect to /login is a dead session even with no page. A page instead of bytes is read
+    like any page; a bare 403 or 429 is a wall and a bare 401 a dead session."""
     ctype = (ctype or '').lower()
     head = (data or b'')[:512].lstrip().lower()
+    page = ''
     if ctype.startswith('text/') or 'html' in ctype or head.startswith((b'<!doctype', b'<html', b'<')):
         page = (data or b'').decode('utf-8', 'replace')
-        st = classify(url, html_to_text(page), page)
-        if st in ('wall', 'dead'):
-            return st
+    st = classify(url, html_to_text(page) if page else '', page)
+    if st in ('wall', 'dead'):
+        return st
     if status in (403, 429):
         return 'wall'
     if status == 401:

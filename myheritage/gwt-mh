@@ -400,6 +400,7 @@ def main(argv=None):
     a = parser().parse_args(argv)
     if a.cmd == 'normalize':
         return cmd_normalize(a)
+    mh.allow_host(a.host)
     acct = mh.slug(a.account)
     a.cache_dir = a.cache_dir or '~/.cache/gwt-mh-%s' % acct
     a.gate_dir = a.gate_dir or '~/.cache/gwt-gate-mh-%s' % acct
