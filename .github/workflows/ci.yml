@@ -35,6 +35,8 @@ jobs:
         run: cd rawstore && python -m unittest -v test_gwt_rawstore
       - name: importxl
         run: cd importxl && python -m unittest -v test_gwt_import_excel test_end_to_end
+      - name: queue
+        run: cd queue && python -m unittest -v test_gwt_queue
 
   spanish-poller:
     runs-on: ubuntu-latest
