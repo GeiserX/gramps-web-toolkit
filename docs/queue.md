@@ -57,7 +57,7 @@ Two lanes never receive the same task: every command runs under an exclusive loc
 
 `add` one task, or many with `--jsonl FILE` (`-` for stdin): one JSON object per line with `person` and any of `label`, `kind`, `source`, `query`, `priority`, `note`, `next_at` and `dedupe_key`. A batch runs under one lock and one write, and a bad line stops it before anything is written.
 
-`--dedupe` skips a task that is already queued, running or done: the same `dedupe_key` when either side has one, else the same person, kind, source and query. A `failed` match is skipped too, unless `--retry-failed` is given. On an open match the new label, note and priority replace the old ones, so a re-seed carries the latest picture.
+`--dedupe` skips a task that is already queued, running or done: the same `dedupe_key` when either side has one, else the same person, kind, source and query. A done task counts only when its search ran (`hit`, `none` or `partial`); one closed as `blocked` or `denied` does not stop a re-seed. A `failed` match is skipped too, unless `--retry-failed` is given. On an open match the new label, note and priority replace the old ones, so a re-seed carries the latest picture.
 
 ```bash
 gwt-queue add --person "Ana Peiró Toledo" --label "Ana Peiró Toledo" \
