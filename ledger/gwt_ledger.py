@@ -5,6 +5,7 @@ One TSV file, one row per search: who was searched, where, with what query, when
 Agents run `check` before a search and `add` after it, so two lanes never pay for the same search twice.
 
   gwt-ledger check --person KEY --source SRC --query "..."   exit 0 and print rows if done, 1 if not
+                                                             (--exact: same source, identical normalized query)
   gwt-ledger add --person KEY --label "..." --source SRC --query "..." --result none [--evidence F] [--agent A]
   gwt-ledger list --person KEY [--source SRC]
   gwt-ledger due [--on YYYY-MM-DD]                           rows whose next_date has arrived (appeal windows, retries)
@@ -123,20 +124,25 @@ def add_row(path, row):
             fcntl.flock(f, fcntl.LOCK_UN)
 
 
-def find(rows, person=None, source=None, query=None, threshold=DEFAULT_THRESHOLD):
-    """Rows for this person and source whose query is close enough, best match first."""
+def find(rows, person=None, source=None, query=None, threshold=DEFAULT_THRESHOLD, exact=False):
+    """Rows for this person and source whose query is close enough, best match first and, among equal
+    scores, newest first (by date, then by position), so an old `none` cannot hide a newer `hit`.
+    With exact=True only the identical normalized query counts."""
     pk, sk, q = key(person) if person else None, key(source) if source else None, normalize(query or '')
     out = []
-    for r in rows:
+    for i, r in enumerate(rows):
         if pk and key(r['person_key']) != pk:
             continue
         if sk and key(r['source']) != sk:
             continue
-        score = similarity(q, normalize(r['query'])) if q else 1.0
-        if score >= threshold:
-            out.append((score, r))
-    out.sort(key=lambda x: -x[0])
-    return out
+        if exact and normalize(r['query']) != q:
+            continue
+        score = 1.0 if exact or not q else similarity(q, normalize(r['query']))
+        if exact or score >= threshold:
+            out.append((score, r['date'], i, r))
+    if q:
+        out.sort(key=lambda x: x[:3], reverse=True)
+    return [(score, r) for score, _, _, r in out]
 
 
 def print_rows(scored, with_score=False):
@@ -159,6 +165,8 @@ def main(argv=None):
     c = sub.add_parser('check', help='has this search been done? exit 0 with the rows if so, 1 if not')
     c.add_argument('--person'); c.add_argument('--source'); c.add_argument('--query', required=True)
     c.add_argument('--threshold', type=float, default=DEFAULT_THRESHOLD)
+    c.add_argument('--exact', action='store_true',
+                   help='only rows of this --source (required) with the identical normalized query; safe for automatic reuse')
     a = sub.add_parser('add', help='append a row (safe with concurrent writers)')
     a.add_argument('--person', required=True); a.add_argument('--label', default='')
     a.add_argument('--source', required=True); a.add_argument('--query', required=True)
@@ -186,7 +194,9 @@ def main(argv=None):
         return 0
     rows = [r for path in ledger_paths(args.ledger, args.ledger_dir) for r in read_rows(path)]
     if args.cmd == 'check':
-        scored = find(rows, args.person, args.source, args.query, args.threshold)
+        if args.exact and not key(args.source or ''):
+            p.error('check --exact needs a non-empty --source')
+        scored = find(rows, args.person, args.source, args.query, args.threshold, args.exact)
         print_rows(scored, with_score=True)
         return 0 if scored else 1
     if args.cmd == 'due':

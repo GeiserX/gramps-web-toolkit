@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from collections import deque
+
 from .tree import Tree
 
 MAX_GENERATIONS = 60  # deeper than any real pedigree; stops a loop where someone is their own ancestor
+MAX_POSITIONS = 100_000  # pedigree collapse doubles positions per generation; past the cap, say so
 
 
 def diff(old: Tree, new: Tree, scope: set[tuple[str, str]] | None = None) -> tuple[list[dict], dict]:
@@ -33,16 +36,31 @@ def diff(old: Tree, new: Tree, scope: set[tuple[str, str]] | None = None) -> tup
     return findings, info
 
 
-def ahnentafel(tree: Tree, root_gid: str) -> dict[int, str]:
-    """Ahnentafel number -> handle, following the first parent family of each person."""
+class Ahnentafel(dict):
+    """Ahnentafel number -> handle. `complete_depth` is None when every reachable position is
+    present, else the last generation fully expanded before MAX_POSITIONS stopped the walk."""
+    complete_depth: int | None = None
+
+
+def ahnentafel(tree: Tree, root_gid: str) -> Ahnentafel:
+    """Ahnentafel number -> handle, following the first parent family of each person.
+
+    Breadth-first so a MAX_POSITIONS stop leaves a clean prefix of generations: every position
+    up to complete_depth is present, deeper ones may be missing. Pedigree collapse keeps one
+    entry per position (the same person legitimately holds many numbers), so a collapsed
+    pedigree grows exponentially in generations and only the cap keeps the walk bounded.
+    """
     P, F = tree.objs["people"], tree.objs["families"]
     root = next((h for h, p in P.items() if p.get("gramps_id") == root_gid), None)
+    out: Ahnentafel = Ahnentafel()
     if root is None:
-        return {}
-    out: dict[int, str] = {}
-    todo = [(1, root, 0)]
+        return out
+    todo = deque([(1, root, 0)])
     while todo:
-        n, h, depth = todo.pop()
+        n, h, depth = todo.popleft()
+        if len(out) >= MAX_POSITIONS:
+            out.complete_depth = depth - 1
+            break
         out[n] = h
         parents = P[h].get("parent_family_list") or []
         if depth >= MAX_GENERATIONS or not parents or parents[0] not in F:
@@ -60,8 +78,17 @@ def compare_ahnentafel(old: Tree, new: Tree, root_gid: str) -> tuple[list[dict],
     if not b:
         return [{"check": "ahnentafel-lost", "key": f"root {root_gid}", "detail": "not in the tree"}], {}
     gid = lambda tree, h: tree.objs["people"][h].get("gramps_id") or h  # noqa: E731
+    gen = lambda n: n.bit_length() - 1  # noqa: E731
+    # a truncated side was only walked up to its complete_depth: nothing deeper may be
+    # reported lost or changed, and the truncation itself must be a finding, never silent
+    limit = min((d for d in (a.complete_depth, b.complete_depth) if d is not None), default=None)
     findings = []
+    if limit is not None:
+        findings.append({"check": "ahnentafel-truncated", "key": f"root {root_gid}",
+                         "detail": f"over {MAX_POSITIONS} positions; compared up to generation {limit}"})
     for n in sorted(a):
+        if limit is not None and gen(n) > limit:
+            continue
         if n not in b:
             findings.append({"check": "ahnentafel-lost", "key": f"{n} {gid(old, a[n])}", "detail": ""})
         elif a[n] != b[n]:
@@ -70,6 +97,9 @@ def compare_ahnentafel(old: Tree, new: Tree, root_gid: str) -> tuple[list[dict],
     info = {
         "before": {"numbers": len(a), "people": len(set(a.values()))},
         "after": {"numbers": len(b), "people": len(set(b.values()))},
-        "new numbers": {n: gid(new, b[n]) for n in sorted(b.keys() - a.keys())},
+        "new numbers": {n: gid(new, b[n]) for n in sorted(b.keys() - a.keys())
+                        if limit is None or gen(n) <= limit},
     }
+    if limit is not None:
+        info["compared up to generation"] = limit
     return findings, info
