@@ -16,6 +16,8 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      - name: every tested package has a CI step
+        run: python .github/scripts/ci_covers_every_package.py
       - run: python -m pip install requests pytest
       - name: apply
         run: cd apply && python -m pytest -q
