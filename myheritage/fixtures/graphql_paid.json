@@ -1,0 +1,93 @@
+[
+ {
+  "url": "https://www.myheritage.es/web-family-graphql/search_in_historical_records_split/",
+  "body": {
+   "data": {
+    "search_query_upload": {
+     "response": {
+      "results": {
+       "count": 1,
+       "data": [
+        {
+         "record_type": "family-tree",
+         "user_info": {
+          "is_new": false,
+          "is_purchased": false,
+          "link": "https://www.myheritage.es/paywall?colId=40001&itemId=9000002"
+         },
+         "record": {
+          "id": "record-40001-9000002",
+          "name": "Ana Zorvalo Brineda",
+          "translated_name": null,
+          "name_annotations": null,
+          "thumbnail": {
+           "url": "https://sites-cf.example.invalid/t/1_96x96/.jpg"
+          },
+          "fallback_thumbnail": null,
+          "link": "https://www.myheritage.es/research/collection-40001/x?itemId=9000002&action=showRecord&recordTitle=Ana+Zorvalo+Brineda&perm_id=T_x",
+          "is_free": false,
+          "collection": {
+           "id": "collection-40001",
+           "name": "Invented tree collection",
+           "thumbnail": {
+            "url": "https://cf.example.invalid/c.png"
+           },
+           "record_count": 1000,
+           "short_description": "Invented collection for tests.",
+           "link": "https://www.myheritage.es/research/collection-40001/x?perm_id=T_x",
+           "is_new": false,
+           "is_free": false,
+           "is_temporary_free": false,
+           "is_updated": false,
+           "is_in_color": false,
+           "has_images": false,
+           "is_consolidated": false
+          },
+          "related_photos": null,
+          "hidden_fields": null,
+          "display_fields": [
+           {
+            "name": "birth",
+            "label": "Nacimiento",
+            "value": "12 de marzo de 1851 - Villazul, Murcia, España"
+           },
+           {
+            "name": "death",
+            "label": "Fallecimiento",
+            "value": "1910 - Puertoalto"
+           },
+           {
+            "name": "parents",
+            "label": "Padres",
+            "value": "Pedro Zorvalo, María Brineda Sol"
+           },
+           {
+            "name": "spouse",
+            "label": "Esposo",
+            "value": "Tomás Quirell"
+           },
+           {
+            "name": "children",
+            "label": "Hijos",
+            "value": "Luis Quirell Zorvalo, Rosa Quirell Zorvalo"
+           }
+          ]
+         },
+         "cursor": "1"
+        }
+       ]
+      },
+      "summary": {
+       "category_counts": [],
+       "total": {
+        "category_name": "Todas",
+        "count": "1",
+        "link": "https://www.myheritage.es/research?action=query"
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+]

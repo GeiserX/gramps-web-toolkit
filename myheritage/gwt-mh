@@ -1,0 +1,429 @@
+#!/usr/bin/env python3
+"""gwt-mh: MyHeritage record search, record pages and originals, through a signed-in browser.
+
+  gwt-mh [global options] search --given G --surname S [--surname S2] [--by Y] [--dy Y] [--spouse "G S"]
+         [--father "G S"] [--mother "G S"] [--collection CID] [--exact] --out DIR
+  gwt-mh [global options] record (URL | --collection CID --item ITEM) --out DIR
+  gwt-mh [global options] fetch --collection CID --item ITEM [--search ENVELOPE.json] --out DIR [--no-rawstore]
+  gwt-mh [global options] matches --site SITE --person N [--type record|smart] [--status pending|confirmed] [--tree T] --out DIR
+  gwt-mh [global options] collections --out FILE.tsv [--max-pages N]
+  gwt-mh [global options] plan [--probe]
+  gwt-mh [global options] mirror-check --collection CID --fs-collection FSID --fs-sample sample.json --out mirrors.tsv
+  gwt-mh normalize FILE...                      offline: envelope or record -> {"candidates": [...]}
+
+Global options: --cdp URL (the Chrome to attach to), --storage-state FILE (the account's saved login; the
+tool always opens its own new context from it), --account NAME, --cache-dir, --gate-dir, --lane, --host,
+--rest-every N, --refresh.
+
+Exit codes: 0 ok, 2 nothing parsed, 3 bot wall or account lockout, in a page or an image download (the
+account's gate is now blocked for 24 h; nothing was clicked; never log in again after it), 4 session logged
+out, 5 paywall (the plan does not open that page; recorded as plan evidence), 6 the account's gate is paused
+(after a wall, until its 24 h end; nothing was requested), 7 another gwt-mh session is open on the account
+(nothing was requested; do other work).
+Read only: no code path saves, confirms, uploads, messages, starts a trial or buys.
+"""
+import argparse, datetime, json, os, subprocess, sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import gwt_mh as mh  # noqa: E402
+
+
+def out(msg):
+    print(msg, flush=True)
+
+
+def err(msg):
+    print('gwt-mh: ' + msg, file=sys.stderr, flush=True)
+
+
+# ---------------------------------------------------------------- offline
+
+
+def cmd_normalize(a):
+    cands = []
+    for path in a.files:
+        with open(path, encoding='utf-8') as f:
+            doc = json.load(f)
+        if isinstance(doc, dict) and 'candidates' in doc:
+            cands += doc['candidates']
+        elif isinstance(doc, dict) and doc.get('graphql'):
+            cands += mh.candidates_from_envelope(doc)[0]
+        elif isinstance(doc, dict) and 'showRecord' in (doc.get('final_url') or doc.get('url') or ''):
+            cid, item = mh.ids_from_link(doc.get('final_url') or doc.get('url'))
+            cands.append(mh.record_candidate(mh.parse_record_text(doc.get('text', '')), cid, item))
+        elif isinstance(doc, list) or (isinstance(doc, dict) and 'data' in doc):
+            cands += mh.candidates_from_envelope({'graphql': doc if isinstance(doc, list) else [doc]})[0]
+    print(json.dumps({'candidates': cands}, ensure_ascii=False, indent=1))
+    return mh.EXIT_OK if cands else mh.EXIT_EMPTY
+
+
+# ---------------------------------------------------------------- browser commands
+
+
+def cmd_search(S, a):
+    url = mh.search_url(a.given, a.surname, a.by, a.dy, a.spouse, a.father, a.mother, a.collection, a.exact, a.host)
+    env = S.capture(url, wait_graphql=True)
+    items, total = mh.graphql_records(env)
+    if not env.get('from_cache'):
+        S.plan.add([dict(o, at=env['captured_at']) for o in mh.search_observations(items, mh.normalize_url(url))])
+    cands = [mh.candidate(x) for x in items]
+    key = mh.search_key(url, a.given, a.surname, a.by)
+    base = os.path.join(a.out, key)
+    mh.write_json(base + '.json', env)
+    mh.write_json(base + '.candidates.json', {'candidates': cands})
+    source = mh.source_slug(a.collection or '') if a.collection else 'myheritage'
+    out('source\t%s' % source)
+    out('evidence\t%s.json' % base)
+    out('candidates\t%s.candidates.json' % base)
+    out('plan\t%s' % S.plan.label())
+    out('results\t%s total, %d read%s' % (total if total is not None else '?', len(cands),
+                                         ' (cache)' if env.get('from_cache') else ''))
+    return mh.EXIT_OK if cands else mh.EXIT_EMPTY
+
+
+def _record_files(d, env, parsed, cand, cid, item, link, extra_collection=None):
+    """Write the record kinds; returns [(path, kind, url)]."""
+    files = []
+    mh.write_atomic(os.path.join(d, 'record.html'), env['html'])
+    files.append((os.path.join(d, 'record.html'), 'record-html', env['final_url']))
+    mh.write_atomic(os.path.join(d, 'record.txt'), env['text'])
+    files.append((os.path.join(d, 'record.txt'), 'record-text', env['final_url']))
+    mh.write_json(os.path.join(d, 'record.json'), dict(parsed, url=mh.normalize_url(env['final_url']),
+                                                         captured_at=env['captured_at']))
+    files.append((os.path.join(d, 'record.json'), 'record-json', env['final_url']))
+    mh.write_json(os.path.join(d, 'normalized.json'), {'candidates': [cand]})
+    files.append((os.path.join(d, 'normalized.json'), 'normalized', ''))
+    mh.write_atomic(os.path.join(d, 'citation.txt'),
+                    mh.citation(parsed.get('collection'), cand['name'], link, item, provider=parsed.get('provider')))
+    files.append((os.path.join(d, 'citation.txt'), 'citation', ''))
+    col = dict(extra_collection or {})
+    col.update({k: v for k, v in (('name', parsed.get('collection')), ('record_count', parsed.get('record_count')),
+                                  ('description', parsed.get('collection_blurb')), ('provider', parsed.get('provider')))
+                if v})
+    col['id'] = cid
+    mh.write_json(os.path.join(d, 'collection.json'), col)
+    files.append((os.path.join(d, 'collection.json'), 'collection', ''))
+    return files
+
+
+def _search_item(path, cid, item):
+    if not path:
+        return None
+    with open(path, encoding='utf-8') as f:
+        env = json.load(f)
+    for x in mh.graphql_records(env)[0]:
+        rec = x.get('record') or {}
+        c2, i2 = mh.ids_from_link(rec.get('link'))
+        if str(c2) == str(cid) and i2 == item:
+            return x
+    return None
+
+
+def cmd_record(S, a):
+    from gwt_mh_browser import Paywall
+    if a.url:
+        cid, item = mh.ids_from_link(a.url)
+        url = a.url
+    else:
+        cid, item, url = a.collection, a.item, mh.record_url(a.collection, a.item, a.host)
+    if not cid or not item:
+        err('need a showRecord URL or --collection and --item')
+        return 64
+    try:
+        env = S.capture(url)
+    except Paywall as e:
+        err(str(e))
+        return mh.EXIT_PAYWALL
+    parsed = mh.parse_record_text(env['text'])
+    if not parsed['fields']:
+        err('no record fields on %s' % env['final_url'])
+        return mh.EXIT_EMPTY
+    S.plan.add(mh.record_observations(env['final_url'], parsed=parsed, url=mh.normalize_url(url)))
+    cand = mh.record_candidate(parsed, cid, item)
+    d = os.path.join(a.out, str(cid), item)
+    _record_files(d, env, parsed, cand, cid, item, env['final_url'])
+    out('source\t%s' % cand['source'])
+    out('evidence\t%s' % os.path.join(d, 'record.txt'))
+    out('plan\t%s' % S.plan.label())
+    return mh.EXIT_OK
+
+
+def _ext(ctype, url):
+    for k, e in (('png', '.png'), ('pdf', '.pdf'), ('webp', '.webp'), ('gif', '.gif'), ('tif', '.tif')):
+        if k in (ctype or '') or url.lower().split('?')[0].endswith(e):
+            return e
+    return '.jpg'
+
+
+def cmd_fetch(S, a):
+    from gwt_mh_browser import Paywall
+    cid, item = str(a.collection), a.item
+    d = os.path.join(a.out, cid, item)
+    os.makedirs(d, exist_ok=True)
+    sitem = _search_item(a.search, cid, item)
+    if a.search and sitem is None:
+        err('record %s:%s is not in %s' % (cid, item, a.search))
+    srec = (sitem or {}).get('record') or {}
+    scol = srec.get('collection') or {}
+    link = srec.get('link') or mh.record_url(cid, item, a.host)
+    has_images = bool(scol.get('has_images'))
+    oldnews = mh.source_slug(cid, scol.get('name')) == 'myheritage-oldnews'
+    thumb = (srec.get('thumbnail') or {}).get('url') or ''
+    files, opened, env = [], False, None
+    collection_meta = {k: scol.get(k) for k in ('name', 'record_count', 'short_description', 'is_free',
+                                               'is_temporary_free', 'has_images') if k in scol}
+    try:
+        env = S.capture(link)
+        parsed = mh.parse_record_text(env['text'])
+        opened = bool(parsed['fields'])
+        S.plan.add(mh.record_observations(env['final_url'], collection_free=scol.get('is_free') if scol else None,
+                                          parsed=parsed, url=mh.normalize_url(link)))
+        cand = mh.record_candidate(parsed, cid, item)
+        files += _record_files(d, env, parsed, cand, cid, item, link, collection_meta)
+    except Paywall as e:
+        err('%s; keeping what the search showed' % e)
+        if sitem is None:
+            return mh.EXIT_PAYWALL
+    if not opened and sitem is not None:      # basic plan: the search record is all the account may read
+        cand = mh.candidate(sitem)
+        mh.write_json(os.path.join(d, 'record.json'), mh.scrub(sitem))
+        files.append((os.path.join(d, 'record.json'), 'record-json', mh.normalize_url(link)))
+        mh.write_json(os.path.join(d, 'normalized.json'), {'candidates': [cand]})
+        files.append((os.path.join(d, 'normalized.json'), 'normalized', ''))
+        mh.write_atomic(os.path.join(d, 'citation.txt'), mh.citation(scol.get('name'), cand['name'], link, item))
+        files.append((os.path.join(d, 'citation.txt'), 'citation', ''))
+        mh.write_json(os.path.join(d, 'collection.json'), dict(collection_meta, id=cid))
+        files.append((os.path.join(d, 'collection.json'), 'collection', ''))
+    caps = S.plan.caps()
+    plan = mh.plan_label(caps)
+    kinds = mh.plan_fetch(caps, has_images=has_images and opened, oldnews=oldnews and opened, thumbnail=bool(thumb))
+    fallback = []
+    if 'image' in kinds:
+        if env.get('from_cache'):
+            env = S.capture(link, refresh=True)
+        got = None
+        for href in mh.image_download_links(S.links('a[download], a[href*="download"]')):
+            st, ctype, data = S.fetch_bytes(href, final_ok=mh.is_mh_image_host)
+            if st == 200 and (ctype.startswith('image/') or 'pdf' in ctype):
+                got = (href, data, ctype)
+                break
+        if got is None:
+            big = S.largest_image()
+            got = big and (big[0], big[1], '')
+        S.plan.add(mh.record_observations(env['final_url'], has_images=True, viewer=bool(got), url=mh.normalize_url(link),
+                                          collection=cid))
+        if got:
+            p = os.path.join(d, 'image' + _ext(got[2], got[0]))
+            mh.write_atomic(p, got[1])
+            files.append((p, 'image', got[0]))
+        else:
+            fallback.append('image')
+    if 'oldnews-page' in kinds:
+        hrefs = [h for h in S.links('a[href*="oldnews.com"]') if mh.is_oldnews_link(h)]
+        if hrefs:
+            on = S.capture(hrefs[0], refresh=True)
+            big = S.largest_image()
+            if big:
+                p = os.path.join(d, 'oldnews-page' + _ext('', big[0]))
+                mh.write_atomic(p, big[1])
+                files.append((p, 'oldnews-page', big[0]))
+                mh.write_atomic(os.path.join(d, 'oldnews-ocr.txt'), on['text'])
+                files.append((os.path.join(d, 'oldnews-ocr.txt'), 'oldnews-ocr', on['final_url']))
+            else:
+                S.plan.add([{'signal': 'oldnews_pages', 'value': False, 'url': mh.normalize_url(hrefs[0])}])
+                fallback.append('oldnews-page')
+    if fallback and opened:
+        p = os.path.join(d, 'screenshot-fallback.png')
+        S.screenshot(p)
+        files.append((p, 'screenshot-fallback', link))
+        err('no original for %s; saved a screenshot marked original=no' % ', '.join(fallback))
+    if 'thumbnail' in kinds:
+        st, ctype, data = S.fetch_bytes(thumb)
+        if st == 200 and data:
+            p = os.path.join(d, 'thumbnail' + _ext(ctype, thumb))
+            mh.write_atomic(p, data)
+            files.append((p, 'thumbnail', mh.normalize_url(thumb)))
+    rows = [mh.manifest_row(p, kind, url, plan, cid, item) for p, kind, url in files]
+    mh.write_manifest(os.path.join(d, 'manifest.tsv'), rows)
+    for r in rows:
+        out('%s\t%s\t%s\toriginal=%s' % (r['kind'], r['file'], r['size'], r['original']))
+    binaries = [p for p, kind, _ in files if kind in mh.RAWSTORE_KINDS and os.path.exists(p)]
+    if binaries and not a.no_rawstore:
+        rs = os.environ.get('GWT_RAWSTORE_BIN') or os.path.join(HERE, '..', 'rawstore', 'gwt-rawstore')
+        r = subprocess.run([sys.executable, rs, 'put', '--remove'] + binaries)
+        if r.returncode:
+            err('gwt-rawstore put failed (exit %d); the files stay in %s' % (r.returncode, d))
+            return 1
+    out('plan\t%s' % plan)
+    out('evidence\t%s' % os.path.join(d, 'manifest.tsv'))
+    return mh.EXIT_OK
+
+
+def cmd_matches(S, a):
+    url = mh.matches_url(a.site, a.person, a.type, a.status, a.tree, a.host)
+    env = S.capture(url)
+    cards = mh.parse_matches(env['text'])
+    path = os.path.join(a.out, 'matches-%s-%s-%s-%s.json' % (mh.slug(a.site), a.person, a.type, a.status))
+    mh.write_json(path, {'url': mh.normalize_url(url), 'captured_at': env['captured_at'], 'matches': cards})
+    out('matches\t%d' % len(cards))
+    out('evidence\t%s' % path)
+    return mh.EXIT_OK
+
+
+def cmd_collections(S, a):
+    """Every page of the catalogue (?p=1..N), each one a gated, cached page load."""
+    env = S.capture(mh.catalog_url(1, a.host))
+    last = mh.catalog_pages(env['html'])
+    if a.max_pages:
+        last = min(last, a.max_pages)
+    rows, seen = [], set()
+    for page in range(1, last + 1):
+        if page > 1:
+            env = S.capture(mh.catalog_url(page, a.host))
+        for r in mh.parse_catalog(env['html']):
+            if r['id'] not in seen:
+                seen.add(r['id'])
+                rows.append(r)
+    mh.write_atomic(a.out, mh.catalog_tsv(rows))
+    out('collections\t%d from %d page(s)' % (len(rows), last))
+    return mh.EXIT_OK if rows else mh.EXIT_EMPTY
+
+
+def cmd_plan(S, a):
+    if a.probe:
+        url = mh.search_url('Isaac', ['Peral'], 1851, exact=True, host=a.host)    # a public 19th-century figure
+        env = S.capture(url, wait_graphql=True, refresh=True)
+        items, _ = mh.graphql_records(env)
+        S.plan.add(mh.search_observations(items, mh.normalize_url(url)))
+        caps = S.plan.caps()
+        news = [x for x in items if mh.source_slug(*mh.ids_from_link((x.get('record') or {}).get('link'))[:1]) ==
+                'myheritage-oldnews']
+        if caps.get('records') and news:
+            from gwt_mh_browser import Paywall
+            link = news[0]['record']['link']
+            try:
+                renv = S.capture(link)
+                S.plan.add(mh.record_observations(renv['final_url'], collection_free=False,
+                                                  parsed=mh.parse_record_text(renv['text']), url=mh.normalize_url(link)))
+            except Paywall:
+                pass
+    caps = S.plan.caps()
+    out(json.dumps({'plan': mh.plan_label(caps), 'capabilities': caps}, ensure_ascii=False))
+    return mh.EXIT_OK
+
+
+def cmd_mirror(S, a):
+    with open(a.fs_sample, encoding='utf-8') as f:
+        sample = json.load(f)
+    found = agree = 0
+    compared = set()
+    for fs in sample:
+        given, sur = fs.get('given') or '', fs.get('surnames') or []
+        if not given and not sur:
+            given, sur = mh._split_name(fs.get('name', ''))
+        by = fs.get('year') if fs.get('event', 'birth') == 'birth' else None
+        dy = fs.get('year') if fs.get('event') == 'death' else None
+        env = S.capture(mh.search_url(given, sur, by, dy, collection=a.collection, exact=True, host=a.host),
+                        wait_graphql=True)
+        cands = mh.candidates_from_envelope(env)[0]
+        f_, ag, fields = mh.compare_mirror(fs, cands)
+        found += f_
+        agree += ag
+        compared.update(fields)
+    verdict = mh.mirror_verdict(len(sample), found, agree)
+    row = {'cid': a.collection, 'fs_collection': a.fs_collection, 'n': len(sample), 'found': found, 'agree': agree,
+           'date': datetime.date.today().isoformat(), 'verdict': verdict, 'plan': S.plan.label(),
+           'compared': ','.join(sorted(compared))}
+    new = not os.path.exists(a.out)
+    with open(a.out, 'a', encoding='utf-8') as f:
+        if new:
+            f.write('\t'.join(mh.MIRROR_COLUMNS) + '\n')
+        f.write('\t'.join(str(row[c]) for c in mh.MIRROR_COLUMNS) + '\n')
+    out('verdict\t%s (%d of %d found, %d agree, plan %s)' % (verdict, found, len(sample), agree, row['plan']))
+    out('source\t%s' % mh.mirror_slug(a.collection))
+    return mh.EXIT_OK
+
+
+# ---------------------------------------------------------------- main
+
+
+def parser():
+    p = argparse.ArgumentParser(prog='gwt-mh', description=__doc__.split('\n')[0],
+                                epilog=__doc__[__doc__.index('Exit codes:'):],
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument('--cdp', default=os.environ.get('GWT_MH_CDP', ''), help='CDP URL of the Chrome to attach to')
+    p.add_argument('--storage-state', default=os.environ.get('GWT_MH_STATE', ''),
+                   help="the account's saved login state (Playwright JSON, mode 600)")
+    p.add_argument('--account', default=os.environ.get('GWT_MH_ACCOUNT', 'default'))
+    p.add_argument('--cache-dir')
+    p.add_argument('--gate-dir')
+    p.add_argument('--lane', default=os.environ.get('GWT_AGENT', 'gwt-mh'))
+    p.add_argument('--host', default=mh.HOST)
+    p.add_argument('--rest-every', type=int, default=45, help='rest 2-4 min every N page loads (0 = never)')
+    p.add_argument('--refresh', action='store_true', help='skip the cache')
+    sub = p.add_subparsers(dest='cmd', required=True)
+    s = sub.add_parser('search')
+    s.add_argument('--given', default=''); s.add_argument('--surname', action='append', default=[])
+    s.add_argument('--by', type=int); s.add_argument('--dy', type=int)
+    s.add_argument('--spouse', default=''); s.add_argument('--father', default=''); s.add_argument('--mother', default='')
+    s.add_argument('--collection'); s.add_argument('--exact', action='store_true'); s.add_argument('--out', required=True)
+    r = sub.add_parser('record')
+    r.add_argument('url', nargs='?'); r.add_argument('--collection'); r.add_argument('--item'); r.add_argument('--out', required=True)
+    f = sub.add_parser('fetch')
+    f.add_argument('--collection', required=True); f.add_argument('--item', required=True)
+    f.add_argument('--search', help='the search envelope (DIR/<key>.json) the record came from')
+    f.add_argument('--out', required=True); f.add_argument('--no-rawstore', action='store_true')
+    m = sub.add_parser('matches')
+    m.add_argument('--site', required=True); m.add_argument('--person', required=True)
+    m.add_argument('--type', choices=('record', 'smart'), default='record')
+    m.add_argument('--status', choices=('pending', 'confirmed'), default='pending')
+    m.add_argument('--tree', default='1'); m.add_argument('--out', required=True)
+    c = sub.add_parser('collections')
+    c.add_argument('--out', required=True)
+    c.add_argument('--max-pages', type=int, default=0, help='stop after N pages (0 = all, about 35)')
+    pl = sub.add_parser('plan')
+    pl.add_argument('--probe', action='store_true', help='at most 2 gated page loads to gather plan evidence')
+    mc = sub.add_parser('mirror-check')
+    mc.add_argument('--collection', required=True); mc.add_argument('--fs-collection', default='')
+    mc.add_argument('--fs-sample', required=True); mc.add_argument('--out', required=True)
+    n = sub.add_parser('normalize')
+    n.add_argument('files', nargs='+')
+    return p
+
+
+COMMANDS = {'search': cmd_search, 'record': cmd_record, 'fetch': cmd_fetch, 'matches': cmd_matches,
+            'collections': cmd_collections, 'plan': cmd_plan, 'mirror-check': cmd_mirror}
+
+
+def main(argv=None):
+    a = parser().parse_args(argv)
+    if a.cmd == 'normalize':
+        return cmd_normalize(a)
+    mh.allow_host(a.host)
+    acct = mh.slug(a.account)
+    a.cache_dir = a.cache_dir or '~/.cache/gwt-mh-%s' % acct
+    a.gate_dir = a.gate_dir or '~/.cache/gwt-gate-mh-%s' % acct
+    if a.cmd == 'plan' and not a.probe:
+        caps = mh.PlanState(a.cache_dir).caps()
+        out(json.dumps({'plan': mh.plan_label(caps), 'capabilities': caps}))
+        return mh.EXIT_OK
+    if not a.cdp:
+        err('--cdp (or $GWT_MH_CDP) is required')
+        return 64
+    from gwt_mh_browser import Session, Stop
+    from gwt_gate import Paused
+    try:
+        with Session(a.cdp, a.account, a.cache_dir, a.gate_dir, a.lane, a.storage_state or None,
+                     a.rest_every, refresh=a.refresh) as S:
+            return COMMANDS[a.cmd](S, a)
+    except Stop as e:
+        err(str(e))
+        return e.exit_code
+    except Paused as e:
+        err('%s; do other work' % e)
+        return mh.EXIT_PAUSED
+
+
+if __name__ == '__main__':
+    sys.exit(main())
