@@ -42,6 +42,7 @@ gwt-apply changes.jsonl              # dry-run: prints the plan and the diff
 ## Documentation
 
 - [The research pipeline](docs/pipeline.md): how agents, verifiers, a judge and a writer share one tree
+- [The autonomous research loop](docs/agent-loop.md): the queue, leads, ledger, gate and cache wired into one loop an agent runs on its own
 - [Hard-won lessons](docs/hard-won.md): each failure that cost us time, data or an account, and the rule that followed
 - [gwt-apply](docs/apply.md), [gwt-check](docs/check.md), [gwt-import-excel](docs/import-excel.md), [gwt-fetch](docs/fetch.md), [gwt-ledger](docs/ledger.md), [gwt-queue](docs/queue.md), [gwt-leads](docs/leads.md), [gwt-fscache](docs/fscache.md), [gwt-gate](docs/gate.md), [gwt-rank](docs/rank.md), [gwt-rawstore](docs/rawstore.md), [gwt-spanish-poller](docs/spanish-poller.md), [ocr-bench](docs/ocr-bench.md)
 
