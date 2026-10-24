@@ -13,7 +13,7 @@ import datetime, hashlib, html, json, math, os, re, struct, unicodedata, urllib.
 from html.parser import HTMLParser
 
 HOST = 'https://www.myheritage.es'
-EXIT_OK, EXIT_EMPTY, EXIT_WALL, EXIT_DEAD, EXIT_PAYWALL = 0, 2, 3, 4, 5
+EXIT_OK, EXIT_EMPTY, EXIT_WALL, EXIT_DEAD, EXIT_PAYWALL, EXIT_PAUSED, EXIT_BUSY = 0, 2, 3, 4, 5, 6, 7
 DAY = 86400
 
 # Cache rules for gwt-fscache, first match wins, None = never expires.
@@ -758,26 +758,51 @@ def plan_fetch(caps, has_images=False, oldnews=False, thumbnail=False):
     return kinds
 
 
-_NOT_IMAGE_LINK = re.compile(r'/(?:paywall|app|apps|mobile|download-app|downloads?/?$|family-tree-builder|dna)\b|'
-                             r'subscription|\.(?:exe|dmg|apk|ged|zip)(?:\?|$)', re.I)
+# MyHeritage's own sites (myheritage.es, .com, .co.uk, .com.br, ...) and its image CDN, nothing else.
+_MH_HOST = re.compile(r'(?:^|\.)myheritage\.(?:com|[a-z]{2}|co\.[a-z]{2}|com\.[a-z]{2})$')
+_MH_IMAGE_HOST = re.compile(r'(?:^|\.)myheritageimages\.com$')
+_NOT_IMAGE_LINK = re.compile(r'(?<![a-z])(?:gedcom|export|subscribe|subscription|checkout|trial|paywall|app|apps|'
+                             r'install|installer|mobile|family-tree-builder|dna)(?![a-z])|'
+                             r'\.(?:exe|dmg|apk|ged|zip)(?:\?|$)', re.I)
+_IMAGE_PATH = re.compile(r'image|scan', re.I)
+_IMAGE_FILE = re.compile(r'\.(?:jpe?g|png|tiff?|gif|webp|pdf)$', re.I)
 
 
 def image_download_links(hrefs, limit=2):
-    """The record-image download links among a record page's hrefs: on MyHeritage's image CDN, or naming a
-    record image, never an app, paywall, GEDCOM or installer link. At most `limit`, since each one is a
+    """The record-image download links among a record page's hrefs. Only https on a MyHeritage site with
+    "image" or "scan" in the path, or an image file on MyHeritage's image CDN; never a GEDCOM export,
+    subscription, checkout, trial, paywall, app or installer link. At most `limit`, since each one is a
     gated fetch."""
     out = []
     for h in hrefs or []:
         p = urllib.parse.urlsplit(h)
-        if p.scheme not in ('http', 'https') or _NOT_IMAGE_LINK.search(p.path + '?' + p.query):
+        host = (p.hostname or '').lower()
+        if p.scheme != 'https' or _NOT_IMAGE_LINK.search(p.path + '?' + p.query):
             continue
-        host = p.netloc.lower()
-        if host.endswith('myheritageimages.com') or re.search(r'record|image|scan', p.path + p.query, re.I):
+        if (_MH_HOST.search(host) and _IMAGE_PATH.search(p.path)) or \
+                (_MH_IMAGE_HOST.search(host) and (_IMAGE_PATH.search(p.path) or _IMAGE_FILE.search(p.path))):
             if h not in out:
                 out.append(h)
         if len(out) >= limit:
             break
     return out
+
+
+def classify_bytes(url, status, ctype, data):
+    """'wall', 'dead' or 'ok' for one fetched URL (an image download). A page instead of bytes is read
+    like any page; a bare 403 or 429 is a wall and a bare 401 a dead session, even without a page."""
+    ctype = (ctype or '').lower()
+    head = (data or b'')[:512].lstrip().lower()
+    if ctype.startswith('text/') or 'html' in ctype or head.startswith((b'<!doctype', b'<html', b'<')):
+        page = (data or b'').decode('utf-8', 'replace')
+        st = classify(url, html_to_text(page), page)
+        if st in ('wall', 'dead'):
+            return st
+    if status in (403, 429):
+        return 'wall'
+    if status == 401:
+        return 'dead'
+    return 'ok'
 
 
 def image_size(data):

@@ -4,12 +4,13 @@
 It attaches to a Chrome over CDP (Playwright's connect_over_cdp, no browser download), always in a new
 context of its own built from the account's saved login state, so it never touches a context another
 tool or agent owns, and reads pages from inside that signed-in session. One session per account at a
-time: a second one on the same account stops with Busy (exit 3). Every page load waits for the account's gwt-gate slot plus a random
+time, whatever its gate dir: a second one on the same account stops with Busy (exit 7). Every page load waits for the account's gwt-gate slot plus a random
 0-8 s, rests 2-4 min every --rest-every loads, and goes through gwt-fscache, so a page already read is
 never loaded twice. It never clicks: it opens URLs and reads what they show.
 
-On a bot wall it reports a gate hit and raises Wall (exit 3); on a login wall, Dead (exit 4); on a
-paywall, Paywall (exit 5). None of the three is ever stored in the cache.
+On a bot wall or lockout, in a page or in an image download, it blocks the account's gate for 24 h and
+raises Wall (exit 3); on a login wall, Dead (exit 4); on a paywall, Paywall (exit 5). None of the three is
+ever stored in the cache.
 """
 import base64, fcntl, json, os, random, sys, time
 
@@ -25,6 +26,8 @@ import gwt_mh as mh  # noqa: E402
 
 GRAPHQL = '/web-family-graphql/search_in_historical_records'
 STATUS_FOR = {'wall': 403, 'dead': 401, 'paywall': 402}
+WALL_HOURS = 24      # no request on the account after a wall; a new login during it can extend the lockout
+LOCK_DIR = os.environ.get('GWT_MH_LOCK_DIR', '~/.cache/gwt-mh-locks')
 
 
 class Stop(Exception):
@@ -48,17 +51,18 @@ class Paywall(Stop):
 
 
 class Busy(Stop):
-    exit_code = mh.EXIT_WALL
+    exit_code = mh.EXIT_BUSY
 
 
 class Session:
     def __init__(self, cdp, account, cache_dir, gate_dir, lane, storage_state=None,
-                 rest_every=45, jitter=8.0, refresh=False, log=None):
+                 rest_every=45, jitter=8.0, refresh=False, log=None, lock_dir=None):
         self.cdp, self.account, self.lane = cdp, account, lane
         self.storage_state = os.path.expanduser(storage_state) if storage_state else None
         self.cache_dir = os.path.expanduser(cache_dir)
         self.gate = Gate(gate_dir, start=17, floor=10, ceil=60)
         self.gate_dir = os.path.expanduser(gate_dir)
+        self.lock_path = os.path.join(os.path.expanduser(lock_dir or LOCK_DIR), mh.slug(account) + '.lock')
         self.cache = FSCache(self.cache_dir, rules=mh.MYHERITAGE_RULES, methods=('GET',), vary=(mh.PLAN_HEADER,))
         self.plan = mh.PlanState(self.cache_dir)
         self.rest_every, self.jitter, self.refresh = rest_every, jitter, refresh
@@ -69,10 +73,11 @@ class Session:
     # ------------------------------------------------------------ lifecycle
 
     def acquire(self):
-        """Take the account's session lock (session.lock in its gate dir), or raise Busy. The kernel drops
-        the lock when the process dies, so a crashed run never leaves the account locked."""
-        os.makedirs(self.gate_dir, exist_ok=True)
-        f = open(os.path.join(self.gate_dir, 'session.lock'), 'a+')
+        """Take the account's session lock (<lock dir>/<account>.lock), or raise Busy. It is keyed on the
+        account, not the gate dir, so two runs with different gate dirs still cannot share an account. The
+        kernel drops the lock when the process dies, so a crashed run never leaves the account locked."""
+        os.makedirs(os.path.dirname(self.lock_path), exist_ok=True)
+        f = open(self.lock_path, 'a+')
         try:
             fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
@@ -195,35 +200,46 @@ class Session:
                                             refresh=self.refresh if refresh is None else refresh)
         env = json.loads(body)
         st = state.get('st', 'ok')
-        if st == 'wall':
-            self.gate.hit(self.lane, 'MyHeritage bot wall at ' + key_url)
-            raise Wall('bot wall or account lockout (Imperva, hCaptcha, unusual or irregular activity); gate paused, '
-                       'nothing clicked; do NOT log in again, wait at least 24 h and let a person look', env)
-        if st == 'dead':
-            self.gate.hit(self.lane, 'MyHeritage session dead at ' + key_url)
-            raise Dead('session is logged out; log in again once with the account login tool, '
-                       'and never after a wall (exit 3)', env)
+        self._stop(st, key_url, env)
         if st == 'paywall':
             self.plan.add(mh.record_observations(env['final_url'], url=key_url))
             raise Paywall('the plan does not open this page (%s)' % env['final_url'].split('?')[0], env)
         env['from_cache'] = 'env' not in state
         return env
 
+    def _stop(self, st, url, env=None):
+        """Raise Wall (after blocking the gate for 24 h) or Dead for a wall or dead answer; else return."""
+        if st == 'wall':
+            self.gate.hit(self.lane, 'MyHeritage bot wall at ' + url)
+            self.gate.block(WALL_HOURS, 'MyHeritage bot wall or lockout at %s; no request for %d h, never log in again'
+                            % (url, WALL_HOURS))
+            raise Wall('bot wall or account lockout (Imperva, hCaptcha, unusual or irregular activity); gate blocked '
+                       'for %d h, nothing clicked; do NOT log in again and let a person look' % WALL_HOURS, env)
+        if st == 'dead':
+            self.gate.hit(self.lane, 'MyHeritage session dead at ' + url)
+            raise Dead('session is logged out; log in again once with the account login tool, '
+                       'and never after a wall (exit 3)', env)
+
     def fetch_bytes(self, url):
         """(status, content type, bytes) of a URL, fetched from inside the page with the session's cookies.
         An image CDN on another origin refuses a credentialed in-page fetch (CORS), so that case goes
-        through the context's own request client, which sends the same cookies. (0, '', b'') on failure."""
+        through the context's own request client, which sends the same cookies; that retry is a request of
+        its own and takes its own gate slot. Every answer is read like a page: a wall or lockout raises Wall
+        and blocks the gate, a logged-out answer raises Dead. (0, '', b'') on failure."""
         self._slot(url)
         try:
-            return self._page_fetch(url)
+            got = self._page_fetch(url)
         except Exception as exc:
             self.log('in-page fetch failed (%s); retrying with the context client' % str(exc).split('\n')[0][:80])
-        try:
-            r = self._ctx.request.get(url, headers={'referer': self.page.url}, timeout=60000)
-            return r.status, r.headers.get('content-type', ''), r.body()
-        except Exception as exc:
-            self.log('fetch failed: %s' % str(exc).split('\n')[0][:120])
-            return 0, '', b''
+            self._slot(url + ' (context client)')
+            try:
+                r = self._ctx.request.get(url, headers={'referer': self.page.url}, timeout=60000)
+                got = r.status, r.headers.get('content-type', ''), r.body()
+            except Exception as exc:
+                self.log('fetch failed: %s' % str(exc).split('\n')[0][:120])
+                return 0, '', b''
+        self._stop(mh.classify_bytes(url, *got), mh.normalize_url(url))
+        return got
 
     def _page_fetch(self, url):
         out = self.page.evaluate("""async (u) => {

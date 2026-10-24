@@ -1,16 +1,18 @@
 """Tests for gwt-mh's pure logic. Synthetic fixtures only (invented people and ids; public collection ids),
 no network, no browser. Run: cd myheritage && python3 -m unittest -v test_gwt_mh"""
-import copy, json, os, subprocess, sys, tempfile, unittest
+import argparse, base64, contextlib, copy, io, json, os, subprocess, sys, tempfile, types, unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FIX = os.path.join(HERE, 'fixtures')
-for sub in ('ledger', 'fscache', 'rank'):
+for sub in ('ledger', 'fscache', 'rank', 'gate'):
     sys.path.insert(0, os.path.join(HERE, '..', sub))
 sys.path.insert(0, HERE)
 
 import gwt_mh as mh  # noqa: E402
 import gwt_ledger  # noqa: E402
 from gwt_fscache import FSCache  # noqa: E402
+from gwt_gate import Paused  # noqa: E402
+import gwt_mh_browser as b  # noqa: E402
 
 try:
     import gwt_rank
@@ -166,6 +168,8 @@ class Walls(unittest.TestCase):
         self.assertEqual(mh.classify(mh.HOST + '/research?x', mh.html_to_text(page), page), 'wall')
         self.assertEqual(mh.classify(mh.HOST + '/research?x', 'CONTROL DE SEGURIDAD'), 'wall')
         self.assertEqual(mh.classify(mh.HOST + '/research?x', '', '<iframe src="https://hcaptcha.com/x">'), 'wall')
+
+    def test_dead_paywall_and_signed_in_pages(self):
         self.assertEqual(mh.EXIT_FOR['dead'], 4)
         self.assertEqual(mh.classify(load('paywall_final_url.txt').strip(), 'Opciones de cuenta'), 'paywall')
         self.assertEqual(mh.EXIT_FOR['paywall'], 5)
@@ -290,6 +294,42 @@ class FetchPlan(unittest.TestCase):
         self.assertEqual(got, ['https://cf.myheritageimages.com/records/full/x_INVENTED.jpg?download=1',
                                'https://www.myheritage.es/research/record-image/download?itemId=1'])
 
+    def test_download_links_reject_other_hosts_and_non_image_paths(self):
+        for bad in ('https://www.myheritage.es/FP/API/export-gedcom?include_images=1&download=1',
+                    'https://evil.example/record.jpg?download',
+                    'https://www.myheritage.es/subscribe?plan=data&download=record',
+                    'https://www.myheritage.es.evil.example/research/record-image/x.jpg',
+                    'https://myheritageimages.com.evil.example/records/x.jpg',
+                    'http://www.myheritage.es/research/record-image/download?itemId=1',
+                    'https://www.myheritage.es/research/record/download?itemId=1'):
+            self.assertEqual(mh.image_download_links([bad]), [], bad)
+        self.assertEqual(mh.image_download_links(['https://www.myheritage.com/research/scan/download?itemId=1',
+                                                  'https://www.myheritage.co.uk/research/record-image/x']),
+                         ['https://www.myheritage.com/research/scan/download?itemId=1',
+                          'https://www.myheritage.co.uk/research/record-image/x'])
+
+    def test_download_links_deny_list_is_what_stops_these(self):
+        """On a MyHeritage host with image in the path, only the deny-list keeps these out."""
+        for bad in ('https://www.myheritage.es/research/record-image/export-gedcom?itemId=1',
+                    'https://www.myheritage.es/paywall/record-image?itemId=1',
+                    'https://www.myheritage.es/research/record-image/checkout?itemId=1',
+                    'https://www.myheritage.es/research/record-image?plan=trial',
+                    'https://www.myheritage.es/image/subscription/download',
+                    'https://www.myheritage.es/research/record-image/download-app',
+                    'https://www.myheritage.es/scan/install'):
+            self.assertEqual(mh.image_download_links([bad]), [], bad)
+
+    def test_bytes_answer_is_classified(self):
+        img = slurp(os.path.join(FIX, 'tiny.png'), 'rb')
+        u = 'https://cf.myheritageimages.com/records/full/x.jpg'
+        self.assertEqual(mh.classify_bytes(u, 200, 'image/png', img), 'ok')
+        self.assertEqual(mh.classify_bytes(u, 200, 'text/html', load('imperva.html').encode()), 'wall')
+        self.assertEqual(mh.classify_bytes(u, 200, '', load('lockout_es.html').encode()), 'wall')
+        self.assertEqual(mh.classify_bytes(u, 403, 'image/png', b''), 'wall')
+        self.assertEqual(mh.classify_bytes(u, 401, '', b''), 'dead')
+        self.assertEqual(mh.classify_bytes(u, 200, 'text/html', load('login_wall.html').encode()), 'dead')
+        self.assertEqual(mh.classify_bytes(u, 404, 'image/png', b''), 'ok', 'a missing image is no wall')
+
     def test_paid_with_images_plans_image(self):
         caps = mh.capabilities([{'signal': 'records', 'value': True}, {'signal': 'images', 'value': True}])
         self.assertIn('image', mh.plan_fetch(caps, has_images=True))
@@ -300,17 +340,250 @@ class FetchPlan(unittest.TestCase):
 
 class SessionLock(unittest.TestCase):
     def test_second_session_on_one_account_is_busy(self):
-        import gwt_mh_browser as b
         with tempfile.TemporaryDirectory() as d:
-            mk = lambda lane: b.Session('', 'ana', os.path.join(d, 'c'), os.path.join(d, 'g'), lane, log=lambda m: None)
+            mk = lambda lane: b.Session('', 'ana', os.path.join(d, 'c'), os.path.join(d, 'g'), lane, log=lambda m: None,
+                                          lock_dir=os.path.join(d, 'locks'))
             one, two = mk('a'), mk('b')
             one.acquire()
             with self.assertRaises(b.Busy) as cm:
                 two.acquire()
-            self.assertEqual(cm.exception.exit_code, mh.EXIT_WALL)
+            self.assertEqual(cm.exception.exit_code, mh.EXIT_BUSY)
             one.release()
             two.acquire()
             two.release()
+
+    def test_lock_is_keyed_on_the_account_not_the_gate_dir(self):
+        with tempfile.TemporaryDirectory() as d:
+            mk = lambda acct, gate: b.Session('', acct, os.path.join(d, 'c'), os.path.join(d, gate), 'l',
+                                              log=lambda m: None, lock_dir=os.path.join(d, 'locks'))
+            one = mk('ana', 'g1')
+            one.acquire()
+            with self.assertRaises(b.Busy):
+                mk('ana', 'g2').acquire()
+            other = mk('luis', 'g1')
+            other.acquire()
+            other.release()
+            one.release()
+
+    def test_exit_codes_are_distinct(self):
+        codes = [mh.EXIT_OK, mh.EXIT_EMPTY, mh.EXIT_WALL, mh.EXIT_DEAD, mh.EXIT_PAYWALL, mh.EXIT_PAUSED, mh.EXIT_BUSY]
+        self.assertEqual(len(set(codes)), len(codes))
+        self.assertEqual((b.Wall.exit_code, b.Busy.exit_code), (mh.EXIT_WALL, mh.EXIT_BUSY))
+        h = subprocess.run([sys.executable, os.path.join(HERE, 'gwt-mh'), '--help'], capture_output=True, text=True).stdout
+        for line in ('3 bot wall', '6 the account', '7 another'):
+            self.assertIn(line, ' '.join(h.split()))
+
+
+class Clock:
+    def __init__(self, t=1_000_000.0):
+        self.t = t
+
+    def __call__(self):
+        return self.t
+
+    def sleep(self, s):
+        self.t += s
+
+
+class FakePage:
+    """A record page: its links, and the answer an in-page fetch gets for each URL."""
+    url = mh.HOST + '/research/collection-40001/x?itemId=9000002&action=showRecord'
+
+    def __init__(self, hrefs=(), answers=None):
+        self.hrefs, self.answers, self.fetched, self.shots = list(hrefs), answers or {}, [], []
+
+    def eval_on_selector_all(self, sel, js):
+        return list(self.hrefs)
+
+    def evaluate(self, js, url):
+        self.fetched.append(url)
+        st, ctype, data = self.answers.get(url, (404, 'text/plain', b''))
+        return {'status': st, 'type': ctype, 'b64': base64.b64encode(data).decode()}
+
+    def screenshot(self, path):
+        self.shots.append(path)
+        with open(path, 'wb') as f:
+            f.write(b'png')
+
+
+def offline_session(d, page, load_env=None):
+    """A real Session (real gate, cache and plan state) on a fake clock and a fake page; no browser."""
+    S = b.Session('', 'ana', os.path.join(d, 'c'), os.path.join(d, 'g'), 'lane', rest_every=0, jitter=0,
+                  log=lambda m: None, lock_dir=os.path.join(d, 'locks'))
+    clk = Clock()
+    S.gate.clock, S.gate.sleep = clk, clk.sleep
+    S.page = page
+    if load_env is not None:
+        S._load = lambda url, wait_graphql=False: dict(load_env, url=url, captured_at=mh.now_iso(), plan=S.plan.label())
+    return S, clk
+
+
+def record_env(text=None):
+    text = text if text is not None else mh.html_to_text(load('record_es.html'))
+    return {'final_url': FakePage.url, 'text': text, 'html': '<html><body>record</body></html>', 'graphql': []}
+
+
+class WallBlocks(unittest.TestCase):
+    def test_wall_blocks_the_gate_for_24_hours(self):
+        with tempfile.TemporaryDirectory() as d:
+            lock = load('lockout_es.html')
+            S, clk = offline_session(d, FakePage(), dict(record_env(mh.html_to_text(lock)), final_url=mh.HOST + '/login', html=lock))
+            t0 = clk.t
+            with self.assertRaises(b.Wall):
+                S.capture(mh.record_url('40001', '9000002'))
+            for later in (1201, 6 * 3600, 23.9 * 3600):
+                clk.t = t0 + later
+                with self.assertRaises(Paused, msg='%d s after a wall' % later):
+                    S.gate.wait('another-lane')
+            clk.t = t0 + 24 * 3600 + 1
+            S.gate.wait('another-lane')
+
+    def test_wall_in_an_image_download_stops_the_fetch(self):
+        """cmd_fetch: the filter picks the links, a wall on the first stops everything after it."""
+        good = 'https://cf.myheritageimages.com/records/full/x_INVENTED.jpg?download=1'
+        nxt = 'https://www.myheritage.es/research/record-image/download?itemId=9000002'
+        page = FakePage(hrefs=['https://evil.example/record.jpg?download', good, nxt],
+                        answers={good: (403, 'text/html', load('imperva.html').encode()),
+                                 nxt: (200, 'image/png', slurp(os.path.join(FIX, 'tiny.png'), 'rb'))})
+        with tempfile.TemporaryDirectory() as d:
+            S, clk = offline_session(d, page, record_env())
+            a = fetch_args(d)
+            t0 = clk.t
+            with self.assertRaises(b.Wall):
+                CLI.cmd_fetch(S, a)
+            self.assertEqual(page.fetched, [good], 'nothing after the wall, never the other host, never the thumbnail')
+            self.assertEqual(page.shots, [])
+            clk.t = t0 + 23 * 3600
+            with self.assertRaises(Paused):
+                S.gate.wait('lane')
+
+    def test_login_page_for_an_image_is_dead(self):
+        good = 'https://cf.myheritageimages.com/records/full/x_INVENTED.jpg?download=1'
+        page = FakePage(hrefs=[good], answers={good: (200, 'text/html', load('login_wall.html').encode())})
+        with tempfile.TemporaryDirectory() as d:
+            S, _ = offline_session(d, page, record_env())
+            with self.assertRaises(b.Dead):
+                CLI.cmd_fetch(S, fetch_args(d))
+
+
+def _load_cli():
+    import importlib.machinery, importlib.util
+    loader = importlib.machinery.SourceFileLoader('gwt_mh_cli', os.path.join(HERE, 'gwt-mh'))
+    spec = importlib.util.spec_from_loader('gwt_mh_cli', loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+CLI = _load_cli()
+
+
+def fetch_args(d):
+    doc = copy.deepcopy(load('graphql_paid.json'))
+    for x in mh.graphql_records({'graphql': doc})[0]:
+        x['record']['collection']['has_images'] = True
+    search = os.path.join(d, 'search.json')
+    mh.write_json(search, {'graphql': doc})
+    return argparse.Namespace(collection='40001', item='9000002', search=search, out=os.path.join(d, 'out'),
+                              no_rawstore=True, host=mh.HOST)
+
+
+class FetchWiring(unittest.TestCase):
+    def test_fetch_keeps_the_image_and_records_its_collection(self):
+        good = 'https://www.myheritage.es/research/record-image/download?itemId=9000002'
+        bad = 'https://www.myheritage.es/FP/API/export-gedcom?include_images=1&download=1'
+        png = slurp(os.path.join(FIX, 'tiny.png'), 'rb')
+        page = FakePage(hrefs=[bad, 'https://evil.example/record.jpg?download', good],
+                        answers={good: (200, 'image/png', png), bad: (200, 'image/png', png)})
+        with tempfile.TemporaryDirectory() as d:
+            S, _ = offline_session(d, page, record_env())
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(CLI.cmd_fetch(S, fetch_args(d)), mh.EXIT_OK)
+            self.assertEqual(page.fetched[0], good, 'cmd_fetch must pass the page links through the filter')
+            self.assertNotIn(bad, page.fetched)
+            self.assertEqual(slurp(os.path.join(d, 'out', '40001', '9000002', 'image.png'), 'rb'), png)
+            imgs = [o for o in S.plan.observations() if o['signal'] == 'images']
+            self.assertEqual([(o['value'], o['collection']) for o in imgs], [(True, '40001')])
+
+
+@contextlib.contextmanager
+def fake_playwright(calls):
+    """playwright.sync_api replaced by a fake whose Chrome already has another tool's context open."""
+    class Ctx:
+        def __init__(self, name):
+            self.name = name
+
+        def new_page(self):
+            calls.append(('new_page', self.name))
+            return types.SimpleNamespace(on=lambda *x: None, close=lambda: None)
+
+        def close(self):
+            calls.append(('close', self.name))
+
+    class Browser:
+        contexts = [Ctx('theirs')]
+
+        def new_context(self, **kw):
+            calls.append(('new_context',))
+            return Ctx('ours')
+
+    pw = types.SimpleNamespace(chromium=types.SimpleNamespace(connect_over_cdp=lambda url: Browser()),
+                               stop=lambda: calls.append(('stop',)))
+    api = types.ModuleType('playwright.sync_api')
+    api.sync_playwright = lambda: types.SimpleNamespace(start=lambda: pw)
+    saved = {k: sys.modules.get(k) for k in ('playwright', 'playwright.sync_api')}
+    sys.modules['playwright'], sys.modules['playwright.sync_api'] = types.ModuleType('playwright'), api
+    try:
+        yield
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
+
+
+class NewContext(unittest.TestCase):
+    def test_session_opens_its_own_context_never_an_existing_one(self):
+        calls = []
+        with fake_playwright(calls), tempfile.TemporaryDirectory() as d:
+            with b.Session('http://cdp.invalid', 'ana', os.path.join(d, 'c'), os.path.join(d, 'g'), 'l',
+                           log=lambda m: None, lock_dir=os.path.join(d, 'locks')) as S:
+                self.assertEqual(S._ctx.name, 'ours')
+        self.assertIn(('new_page', 'ours'), calls)
+        self.assertFalse([c for c in calls if 'theirs' in c], "another tool's context is never used or closed")
+
+    def test_blocked_gate_exits_6_before_any_page_load(self):
+        calls = []
+        with fake_playwright(calls), tempfile.TemporaryDirectory() as d:
+            g = os.path.join(d, 'g')
+            b.Gate(g).block(24, 'a wall')
+            old, b.LOCK_DIR = b.LOCK_DIR, os.path.join(d, 'locks')
+            try:
+                with contextlib.redirect_stderr(io.StringIO()):
+                    code = CLI.main(['--cdp', 'http://cdp.invalid', '--gate-dir', g, '--cache-dir', os.path.join(d, 'c'),
+                                     'search', '--given', 'Ana', '--surname', 'Zorvalo', '--out', d])
+            finally:
+                b.LOCK_DIR = old
+        self.assertEqual(code, mh.EXIT_PAUSED)
+
+
+class Retry(unittest.TestCase):
+    def test_context_client_retry_takes_its_own_gate_slot(self):
+        url = 'https://cf.myheritageimages.com/records/full/x_INVENTED.jpg'
+        png = slurp(os.path.join(FIX, 'tiny.png'), 'rb')
+
+        class CorsPage(FakePage):
+            def evaluate(self, js, u):
+                raise RuntimeError('TypeError: Failed to fetch')
+
+        with tempfile.TemporaryDirectory() as d:
+            S, _ = offline_session(d, CorsPage())
+            S._ctx = types.SimpleNamespace(request=types.SimpleNamespace(
+                get=lambda u, **kw: types.SimpleNamespace(status=200, headers={'content-type': 'image/png'}, body=lambda: png)))
+            self.assertEqual(S.fetch_bytes(url), (200, 'image/png', png))
+            calls = [ln for ln in S.gate.last_calls(50) if ' call ' in ln]
+            self.assertEqual(len(calls), 2, 'the in-page fetch and the retry each wait for a slot')
 
 
 class Slugs(unittest.TestCase):

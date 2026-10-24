@@ -82,31 +82,41 @@ Every capture adds observations `{at, signal, value, url}` to `plan.json` in the
 |---|---|---|
 | `records` | a non-free collection outside OldNews shows a day or a place in an event, or a non-free `showRecord` opens | any masked field on a search page, or a `showRecord` ending at `/paywall` |
 | `images` | the record page of a collection with images gives a download link or an image | it gives none |
-
-`images` is kept per collection (`collection` in the observation) and the capability is only a summary. It never decides whether `fetch` tries an image: on a plan with `records` true, every record of a collection with images gets the image step. One index-only collection therefore never switches images off for the others.
 | `oldnews_pages` | the record page says the full page is "incluido en su plan" / "included in your plan" | only the blurred page is served |
 | `tree_review` | (not observed yet) | a review ends at `/paywall?...reason=178` |
+
+`images` is kept per collection (`collection` in the observation) and the capability is only a summary. It never decides whether `fetch` tries an image: on a plan with `records` true, every record of a collection with images gets the image step. One index-only collection therefore never switches images off for the others.
 
 The label is `basic` (records false), `data+` (records true), `omni` (records and OldNews pages), else `unknown`, which behaves as Basic. It goes into every manifest row and into the cache key, so a masked Basic answer is never served to a paid account. OldNews results are excluded from the positive signal because they show places even on Basic.
 
 ## 6. Safe use
 
-- One session per account, one gate per account (`--gate-dir`, default `~/.cache/gwt-gate-mh-<account>`). The session takes `session.lock` in the gate dir; a second session on the same account stops with exit 3. The kernel drops the lock when the process dies.
+- One session per account, one gate per account (`--gate-dir`, default `~/.cache/gwt-gate-mh-<account>`). The session takes `<account>.lock` in `~/.cache/gwt-mh-locks` (`$GWT_MH_LOCK_DIR`), keyed on the account and not on the gate dir, so two runs with different `--gate-dir` still cannot share an account; the second one stops with exit 7. The kernel drops the lock when the process dies.
 - A random 10-25 s between page loads (the gate's 17 s start, down to 10 s after an hour without a hit, plus 0-8 s), and a 2-4 min rest every `--rest-every` loads (default 45). An Omni account searched 148 times at that pace with no wall.
-- On a wall, stop. The Imperva texts (`_Incapsula_Resource`, `Incapsula incident ID`, `Security check`, the Spanish `Control de Seguridad`, an hCaptcha), "actividad inusual" / "unusual activity", and the account lockout ("El acceso se ha desactivado temporalmente ... actividad irregular" / "temporarily disabled ... irregular activity") become a gate hit and exit 3. They are matched without regard to case and before the `/login` test, because the lockout is served on `/login`. A logged-out page (`/login`, a verification-code prompt, `Iniciar sesión` with no account menu) becomes exit 4. The tool never clicks anything on a wall; a person looks.
-- **Never log in again after a wall.** The lockout lasts 24 h, and each new login attempt from the same account or address during it can extend it. Three logins in one day from one address got a free account locked and the address an Imperva hCaptcha. After exit 3, make no request on that account or from that address for at least 24 h. Exit 4 allows one new login, never a retry loop.
+- On a wall, stop. The Imperva texts (`_Incapsula_Resource`, `Incapsula incident ID`, `Security check`, the Spanish `Control de Seguridad`, an hCaptcha), "actividad inusual" / "unusual activity", and the account lockout ("El acceso se ha desactivado temporalmente ... actividad irregular" / "temporarily disabled ... irregular activity") stop the run with exit 3 and block the account's gate for 24 h (`gwt-gate block 24`), so every later run on that account stops with exit 6 before it requests anything. An image download is read the same way: a 403 or 429, or a page with those texts instead of image bytes, is a wall, and a 401 or a login page is exit 4; the run stops there and fetches no other link and no thumbnail. They are matched without regard to case and before the `/login` test, because the lockout is served on `/login`. A logged-out page (`/login`, a verification-code prompt, `Iniciar sesión` with no account menu) becomes exit 4. The tool never clicks anything on a wall; a person looks.
+- **Never log in again after a wall.** The lockout lasts 24 h, and each new login attempt from the same account or address during it can extend it. Three logins in one day from one address got a free account locked and the address an Imperva hCaptcha. After exit 3, make no request on that account or from that address for at least 24 h; the gate enforces the account half, the address half is the caller's. Exit 4 allows one new login, never a retry loop.
 - Read only. The tool opens URLs and reads them. It has no code path that saves a record, confirms or rejects a match, uploads, sends a message, starts a trial or buys. `matches` lists cards and never opens a review.
 - Never share, export or copy a session or its cookies between accounts or tools.
 - Session tokens never reach disk. The page HTML carries several (`fgToken`, `webClientFgToken`, `mhXsrfToken`, `csrf_token`) besides the search's `bearer_token`; every envelope is scrubbed before it is cached or written.
 
-Exit codes: 0 ok, 2 nothing parsed, 3 wall, lockout, gate paused or another session on the account, 4 session logged out, 5 paywall (recorded as plan evidence; nothing else saved unless `fetch --search` has the search record).
+Exit codes (also in `gwt-mh --help`):
+
+| Code | Meaning |
+|---|---|
+| 0 | ok |
+| 2 | nothing parsed |
+| 3 | a wall or lockout, in a page or an image download; the gate is now blocked for 24 h |
+| 4 | session logged out |
+| 5 | paywall (recorded as plan evidence; nothing else saved unless `fetch --search` has the search record) |
+| 6 | the account's gate is paused, for example during the 24 h after a wall; nothing was requested |
+| 7 | another gwt-mh session is open on the account; nothing was requested |
 
 ## 7. Storage: the most we can keep
 
 `fetch` writes `DIR/<collection>/<item>/` and a `manifest.tsv` with `file kind url sha256 size width height plan original fetched_at collection_id item_id`. Kinds, in the order tried:
 
 1. `record-html`, `record-text`, `record-json` (every field parsed from the page), `normalized` (the `gwt-rank` record), `citation`, `collection` (name, record count, description, provider). On Basic, where the record page is paywalled, `record-json` is the search record itself, the citation is built from it, and `collection` comes from the search's collection block.
-2. `image`: the record page's image download link fetched with the session (at most two links, only ones on MyHeritage's image CDN or naming a record image or scan; app, paywall, GEDCOM and installer links are skipped), or else the largest image the page loaded, by pixel area. Tried on every record of a collection with images once `records` is true.
+2. `image`: the record page's image download link fetched with the session (at most two links, https only: on a MyHeritage site (`myheritage.<tld>`) with `image` or `scan` in the path, or an image file on MyHeritage's image CDN (`myheritageimages.com`); any other host, and GEDCOM export, subscription, checkout, trial, paywall, app and installer links, are skipped), or else the largest image the page loaded, by pixel area. Tried on every record of a collection with images once `records` is true.
 3. `oldnews-page` and `oldnews-ocr`: the unblurred page from OldNews.com and its text, only when `oldnews_pages` is true. The blurred page Basic gets is never saved; it adds nothing to the thumbnail.
 4. `thumbnail`: the search thumbnail, `original=no`.
 5. `screenshot-fallback`: only when step 2 or 3 fails on a plan that allows it, `original=no`.
@@ -143,7 +153,8 @@ FamilySearch gives original images for many collections at no cost; some are lim
 
 - OldNews search results show places on a free account. Counting them as paid evidence labelled a free account `data+`.
 - The record page puts the place on its own line under the date, starting with a space and a no-break space.
-- A credentialed in-page `fetch` to the image CDN fails on CORS; image bytes fall back to the context's request client, which sends the same cookies.
+- A credentialed in-page `fetch` to the image CDN fails on CORS; image bytes fall back to the context's request client, which sends the same cookies. That retry is a second request and takes its own gate slot.
+- A wall used to be a gate hit only, which pauses 20 min, while the lockout lasts 24 h, and an image download that met a wall was skipped as "not an image" and the next link was tried. Both now block the gate for 24 h and stop the run.
 - The catalogue cards show no region or years; the site filters those through the page, and the tool does not guess that filter's parameters.
 
 ## Tests
@@ -152,4 +163,4 @@ FamilySearch gives original images for many collections at no cost; some are lim
 cd myheritage && python3 -m unittest -v test_gwt_mh
 ```
 
-Synthetic fixtures only, no network, no browser. They cover the normalizer (checked against `gwt_rank._bad_record`), plan inference and its precedence, walls, the cache key and token scrubbing, image paths and headers, the manifest, fetch planning, ledger slugs, the mirror verdict, the record page from saved HTML and from page text, match cards and the catalogue.
+Synthetic fixtures only, no network, no browser; the session runs against a fake page, context and Playwright on a fake clock. They cover the 24 h gate block after a wall, walls and logged-out answers in image downloads, the download filter as `fetch` uses it, the account lock, the new context, the exit codes, the normalizer (checked against `gwt_rank._bad_record`), plan inference and its precedence, walls, the cache key and token scrubbing, image paths and headers, the manifest, fetch planning, ledger slugs, the mirror verdict, the record page from saved HTML and from page text, match cards and the catalogue.

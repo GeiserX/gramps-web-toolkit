@@ -15,8 +15,11 @@ Global options: --cdp URL (the Chrome to attach to), --storage-state FILE (the a
 tool always opens its own new context from it), --account NAME, --cache-dir, --gate-dir, --lane, --host,
 --rest-every N, --refresh.
 
-Exit codes: 0 ok, 2 nothing parsed, 3 bot wall, account lockout, gate paused or another session on the
-account (stop; nothing was clicked; never log in again after it), 4 session logged out, 5 paywall (the plan does not open that page; recorded as plan evidence).
+Exit codes: 0 ok, 2 nothing parsed, 3 bot wall or account lockout, in a page or an image download (the
+account's gate is now blocked for 24 h; nothing was clicked; never log in again after it), 4 session logged
+out, 5 paywall (the plan does not open that page; recorded as plan evidence), 6 the account's gate is paused
+(after a wall, until its 24 h end; nothing was requested), 7 another gwt-mh session is open on the account
+(nothing was requested; do other work).
 Read only: no code path saves, confirms, uploads, messages, starts a trial or buys.
 """
 import argparse, datetime, json, os, subprocess, sys
@@ -347,6 +350,7 @@ def cmd_mirror(S, a):
 
 def parser():
     p = argparse.ArgumentParser(prog='gwt-mh', description=__doc__.split('\n')[0],
+                                epilog=__doc__[__doc__.index('Exit codes:'):],
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--cdp', default=os.environ.get('GWT_MH_CDP', ''), help='CDP URL of the Chrome to attach to')
     p.add_argument('--storage-state', default=os.environ.get('GWT_MH_STATE', ''),
@@ -417,7 +421,7 @@ def main(argv=None):
         return e.exit_code
     except Paused as e:
         err('%s; do other work' % e)
-        return mh.EXIT_WALL
+        return mh.EXIT_PAUSED
 
 
 if __name__ == '__main__':
