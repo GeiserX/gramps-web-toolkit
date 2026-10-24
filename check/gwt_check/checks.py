@@ -74,6 +74,7 @@ CHECKS = {
     "missing-object": "object of the earlier tree that is gone",
     "ahnentafel-lost": "Ahnentafel number of the earlier tree that is gone",
     "ahnentafel-changed": "Ahnentafel number that now holds another person",
+    "ahnentafel-truncated": "pedigree too large to compare whole; only the generations named were compared",
 }
 
 
