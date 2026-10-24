@@ -35,9 +35,10 @@ flowchart LR
    while row=$(gwt-queue claim --lane "$GWT_AGENT"); do
        id=$(cut -f1 <<<"$row"); person=$(cut -f2 <<<"$row"); query=$(cut -f6 <<<"$row")
        source=$(cut -f5 <<<"$row"); token=$(cut -f17 <<<"$row")
+       kind=$(cut -f4 <<<"$row"); lsrc=$source; [ "$kind" = search ] || lsrc="$source-$kind"   # a verify is not a search
 
        # the best ledger row for this search: score, person, label, source, query, date, RESULT, EVIDENCE, ...
-       prior=$(gwt-ledger check --person "$person" --source "$source" --query "$query" | head -1)
+       prior=$(gwt-ledger check --person "$person" --source "$lsrc" --query "$query" | head -1)
        case "$(cut -f7 <<<"$prior")" in
            hit|none|partial|denied)       # a finished search: carry its result and evidence over unchanged
                gwt-queue done --id "$id" --token "$token" --result "$(cut -f7 <<<"$prior")" \
@@ -47,10 +48,12 @@ flowchart LR
        gwt-gate wait "$GWT_AGENT" || { gwt-queue release --id "$id" --token "$token"; sleep 600; continue; }
        # ... search through gwt-fscache or gwt-fetch, write ev/$id.txt, set $result to what the search found:
        # hit, none or partial. On a block: gwt-gate hit, gwt-queue fail, and go on to the next task.
-       gwt-ledger add --person "$person" --source "$source" --query "$query" --result "$result" --evidence ev/$id.txt
+       gwt-ledger add --person "$person" --source "$lsrc" --query "$query" --result "$result" --evidence ev/$id.txt
        gwt-queue done --id "$id" --token "$token" --result "$result" --evidence ev/$id.txt
    done
    ```
+
+   The ledger has no task-kind column, so the loop gives each kind its own ledger source (`familysearch` for a search, `familysearch-verify` for a verify). Without it a `verify` task shares the row of a `search` task on the same person, source and query, and closes with a result nobody checked.
 
    A ledger row only saves a search that finished. Its result and evidence go into the task unchanged: a `hit` stays a `hit`, `partial` stays `partial`, and a `blocked` row is not a search at all, so the lane runs it. Nothing here turns a block into an absence.
 
