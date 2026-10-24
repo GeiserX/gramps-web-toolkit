@@ -3,27 +3,33 @@
 
 One TSV file, one row per task: who to research, what kind of task, where, with what query, at what
 priority, and who claimed it. A planner (or gwt-leads) seeds the queue; every lane `claim`s its next
-task, then `done` or `fail` it. A claim left stale by a dead lane reopens on its own.
+task, then `done` or `fail` it. Every claim carries a lease; a claim whose lease ran out (its lane died)
+reopens on its own, and counts as a failed attempt.
 
   gwt-queue add --person KEY --label "..." --kind sweep --source SRC --query "..." --priority 100
-  gwt-queue claim --lane LANE [--kind K] [--source S]   exit 0 and print the task (last column = its token), 1 if none is due
+  gwt-queue add --jsonl - [--dedupe]                     many tasks, one per JSON line, under one lock and one write
+  gwt-queue claim --lane LANE [--kind K] [--source S]   exit 0 and print the task (column 17 = its token), 1 if none is due
+  gwt-queue renew --id ID --token T                      push the lease out again during a long task
   gwt-queue done --id ID --token T --result hit [--evidence F]
-  gwt-queue fail --id ID --token T [--note why]          back off, or park the task after --max-tries
-  gwt-queue release --id ID --token T                    give a claimed task back, no penalty
+  gwt-queue fail --id ID --token T [--note why]          back off, or park the task after --max-tries attempts
+  gwt-queue release --id ID --token T [--retry-after M]  nothing ran (a gate pause, a shutdown): give the try back
   gwt-queue list [--status S] [--person KEY] [--lane L]
   gwt-queue report [--limit N]                           the open-leads report: what is due, by priority
   gwt-queue stats
 
-The queue path comes from --queue, else $GWT_QUEUE, else ./cola.tsv. Standard library only.
+The queue path comes from --queue, else $GWT_QUEUE, else ./cola.tsv. Keep the file untracked and on one
+host: every command rewrites it whole under a local flock, which does not hold across clones or machines.
+Standard library only.
 """
-import argparse, collections, datetime, fcntl, os, re, sys, unicodedata, uuid
+import argparse, collections, datetime, fcntl, json, os, re, sys, unicodedata, uuid
 
 COLUMNS = ('id', 'person_key', 'person_label', 'kind', 'source', 'query', 'priority', 'status',
-           'lane', 'claimed_at', 'done_at', 'result', 'evidence', 'tries', 'next_at', 'note', 'token')
+           'lane', 'claimed_at', 'done_at', 'result', 'evidence', 'tries', 'next_at', 'note', 'token',
+           'lease_until', 'dedupe_key')
 RESULTS = ('hit', 'none', 'partial', 'blocked', 'denied')  # same words as gwt-ledger
 KINDS = ('search', 'sweep', 'verify', 'followup')
 STATUS = ('open', 'claimed', 'done', 'failed')
-DEFAULT_STALE_MINUTES = 120
+DEFAULT_LEASE_MINUTES = 120
 DEFAULT_MAX_TRIES = 5
 DEFAULT_BACKOFF_MINUTES = 60
 
@@ -47,25 +53,37 @@ def now_iso():
     return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
+def utc_iso(when):
+    return when.astimezone(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
 def parse_iso(value):
-    """ISO instant as written by now_iso (or a bare date); empty or invalid -> None."""
+    """ISO instant or bare date, read as UTC when it names no zone; empty or invalid -> None."""
     if not value:
         return None
     try:
-        return datetime.datetime.fromisoformat(value.replace('Z', '+00:00'))
+        when = datetime.datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
     except ValueError:
-        try:
-            return datetime.datetime.fromisoformat(value + 'T00:00:00+00:00')
-        except ValueError:
-            return None
+        return None
+    return when.replace(tzinfo=datetime.timezone.utc) if when.tzinfo is None else when
+
+
+def as_int(value):
+    """A number from the file; a hand-edited value that is not one counts as 0 instead of stopping every lane."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def parse_rows(text):
     rows = []
     for n, line in enumerate(text.splitlines()):
+        if not line.strip():
+            continue
         parts = line.split('\t')
         if n == 0 and parts[0] == COLUMNS[0]:
-            continue  # header; a file from before `token` has one column fewer and reads the same
+            continue  # header
         if len(parts) < len(COLUMNS):
             parts += [''] * (len(COLUMNS) - len(parts))
         rows.append(dict(zip(COLUMNS, parts)))
@@ -127,21 +145,32 @@ def new_id(rows):
     return 'q%d' % (top + 1)
 
 
-def reopen_stale(rows, stale_minutes):
-    """Claims older than stale_minutes go back to open: their lane died without done/fail."""
+def lease_end(r):
+    """When the claim on r runs out: its own lease_until, else claimed_at plus the default lease."""
+    until = parse_iso(r['lease_until'])
+    if until:
+        return until
+    claimed = parse_iso(r['claimed_at'])
+    return claimed + datetime.timedelta(minutes=DEFAULT_LEASE_MINUTES) if claimed else None
+
+
+def reopen_stale(rows, max_tries):
+    """Claims past their own lease go back to open: their lane died without done/fail/release. The dead
+    attempt keeps its try, so a task that kills every lane that takes it parks as failed after max_tries."""
     now = datetime.datetime.now(datetime.timezone.utc)
     n = 0
     for r in rows:
         if r['status'] == 'claimed':
-            claimed = parse_iso(r['claimed_at'])
-            if claimed and (now - claimed).total_seconds() > stale_minutes * 60:
-                r['status'], r['lane'], r['claimed_at'], r['token'] = 'open', '', '', ''
+            end = lease_end(r)
+            if end and now > end:
+                r['status'] = 'failed' if as_int(r['tries']) >= max_tries else 'open'
+                r['lane'], r['claimed_at'], r['token'], r['lease_until'] = '', '', '', ''
                 n += 1
     return n
 
 
 def print_row(r):
-    sys.stdout.write('\t'.join(r.get(c, '') for c in COLUMNS) + '\n')
+    sys.stdout.write('\t'.join(clean(r.get(c)) for c in COLUMNS) + '\n')
 
 
 def claimable(r, now, kind=None, source=None):
@@ -158,12 +187,9 @@ def claimable(r, now, kind=None, source=None):
 
 
 def by_priority(r):
-    """Higher priority first, then the older task; a negative priority never beats zero."""
-    try:
-        p = int(r['priority'])
-    except ValueError:
-        p = 0
-    return (-p, r['id'])
+    """Higher priority first, then the older task (q2 before q10); a negative priority never beats zero."""
+    m = re.fullmatch(r'q(\d+)', r['id'])
+    return (-as_int(r['priority']), 0 if m else 1, int(m.group(1)) if m else 0, r['id'])
 
 
 def owned(rows, task_id, token, action):
@@ -187,43 +213,135 @@ def find_row(rows, task_id):
 
 
 def iso_or_empty(value):
-    return parse_iso(value).strftime('%Y-%m-%dT%H:%M:%SZ') if parse_iso(value) else ''
+    """An --next-at value as a UTC instant; a value that does not parse is an error, never 'now'."""
+    if not (value or '').strip():
+        return ''
+    when = parse_iso(value)
+    if when is None:
+        raise argparse.ArgumentTypeError('not an ISO date or instant: %r' % value)
+    return utc_iso(when)
+
+
+def dedupe_match(rows, row, retry_failed):
+    """The existing row that stands for the same task, or None. A row matches on its dedupe_key when either
+    side has one, else on person + kind + source + query. Done rows match (the search already ran), and
+    failed rows too unless retry_failed."""
+    statuses = ('open', 'claimed', 'done') if retry_failed else ('open', 'claimed', 'done', 'failed')
+    for r in rows:
+        if r['status'] not in statuses:
+            continue
+        if r['dedupe_key'] or row['dedupe_key']:
+            if r['dedupe_key'] == row['dedupe_key']:
+                return r
+        elif (r['person_key'] == row['person_key'] and r['kind'] == row['kind'] and r['source'] == row['source']
+              and normalize(r['query']) == row['query']):
+            return r
+    return None
+
+
+def new_row(rows, person, label='', kind='search', source='', query='', priority=None, note='', next_at='',
+            dedupe_key=''):
+    if kind not in KINDS:
+        raise ValueError('kind must be one of %s, not %r' % (', '.join(KINDS), kind))
+    return {'id': new_id(rows), 'person_key': key(person), 'person_label': clean(label), 'kind': kind,
+            'source': key(source), 'query': normalize(query),
+            'priority': '' if priority is None else str(int(priority)), 'status': 'open',
+            'lane': '', 'claimed_at': '', 'done_at': '', 'result': '', 'evidence': '', 'tries': '0',
+            'next_at': iso_or_empty(next_at), 'note': clean(note), 'token': '', 'lease_until': '',
+            'dedupe_key': clean(dedupe_key)}
+
+
+def add_rows(rows, wanted, dedupe, retry_failed):
+    """Append each wanted row unless dedupe finds it already queued. A hit on an open row refreshes its note,
+    label and priority, so a re-seed carries the latest gaps instead of the first seed's. Returns the rows
+    to print, one per wanted row."""
+    shown = []
+    for row in wanted:
+        hit = dedupe_match(rows, row, retry_failed) if dedupe else None
+        if hit is None:
+            row['id'] = new_id(rows)
+            row['priority'] = row['priority'] or '0'
+            rows.append(row)
+            shown.append(row)
+            continue
+        if hit['status'] == 'open':
+            for col in ('person_label', 'priority', 'note'):
+                if row[col]:
+                    hit[col] = row[col]
+        shown.append(hit)
+    return shown
+
+
+def read_jsonl(stream, rows):
+    """Rows from JSON lines: {"person", "label", "kind", "source", "query", "priority", "note", "next_at",
+    "dedupe_key"}; only person is required. A bad line stops the whole batch before anything is written."""
+    out = []
+    for n, line in enumerate(stream, 1):
+        if not line.strip():
+            continue
+        try:
+            obj = json.loads(line)
+            if not isinstance(obj, dict) or not str(obj.get('person') or '').strip():
+                raise ValueError('needs an object with a "person"')
+            out.append(new_row(rows, obj['person'], obj.get('label', ''), obj.get('kind', 'search'),
+                               obj.get('source', ''), obj.get('query', ''), obj.get('priority'),
+                               obj.get('note', ''), obj.get('next_at', ''), obj.get('dedupe_key', '')))
+        except (ValueError, TypeError, argparse.ArgumentTypeError) as e:
+            raise ValueError('line %d: %s' % (n, e))
+    return out
 
 
 def main(argv=None):
     p = argparse.ArgumentParser(prog='gwt-queue', description=__doc__.split('\n')[0])
     p.add_argument('--queue', default=os.environ.get('GWT_QUEUE', 'cola.tsv'))
-    p.add_argument('--stale-minutes', type=int, default=DEFAULT_STALE_MINUTES,
-                   help='a claim this old reopens on the next claim/report (default %(default)s)')
+    p.add_argument('--max-tries', type=int, default=DEFAULT_MAX_TRIES,
+                   help='attempts not given back by release before a task parks as failed: a fail or a lease '
+                        'that ran out each count one (default %(default)s)')
     sub = p.add_subparsers(dest='cmd', required=True)
+    token_help = 'column 17 of the row `claim` printed'
 
-    a = sub.add_parser('add', help='seed a task (safe with concurrent writers)')
-    a.add_argument('--person', required=True); a.add_argument('--label', default='')
+    a = sub.add_parser('add', help='seed a task, or many with --jsonl (safe with concurrent writers)')
+    a.add_argument('--person'); a.add_argument('--label', default='')
     a.add_argument('--kind', default='search', choices=KINDS)
     a.add_argument('--source', default=''); a.add_argument('--query', default='')
-    a.add_argument('--priority', type=int, default=0,
-                   help='higher goes first; suggested: 100 direct ancestor, 50 their sibling, 10 collateral')
+    a.add_argument('--priority', type=int,
+                   help='higher goes first (default 0); suggested: 100 direct ancestor, 50 their sibling, 10 collateral')
     a.add_argument('--note', default=''); a.add_argument('--next-at', default='', type=iso_or_empty,
-                   help='not claimable before this ISO instant, e.g. a rate-limit cool-down')
+                   help='not claimable before this ISO instant (UTC when no zone is given), e.g. a cool-down')
+    a.add_argument('--dedupe-key', default='',
+                   help='match duplicates on this key instead of person+kind+source+query')
+    a.add_argument('--jsonl', metavar='FILE',
+                   help='read tasks as JSON lines from FILE (- for stdin) and add them under one lock')
     a.add_argument('--dedupe', action='store_true',
-                   help='skip if an open or claimed task already has this person+kind+source+query')
+                   help='skip a task already queued, running or done (same dedupe key, else same '
+                        'person+kind+source+query); an open match gets the new label, note and priority')
+    a.add_argument('--retry-failed', action='store_true', help='with --dedupe, queue again a task that parked as failed')
 
     c = sub.add_parser('claim', help='take the best due task for a lane; exit 1 if none is due')
     c.add_argument('--lane', required=True, help='lane name; recorded on the row')
     c.add_argument('--kind', choices=KINDS); c.add_argument('--source')
+    c.add_argument('--lease-minutes', type=int, default=DEFAULT_LEASE_MINUTES,
+                   help='the claim reopens if neither renewed nor finished by then (default %(default)s)')
+
+    n = sub.add_parser('renew', help='push the lease of a claimed task out again')
+    n.add_argument('--id', required=True); n.add_argument('--token', required=True, help=token_help)
+    n.add_argument('--lease-minutes', type=int, default=DEFAULT_LEASE_MINUTES)
 
     d = sub.add_parser('done', help='mark a claimed task finished')
-    d.add_argument('--id', required=True); d.add_argument('--token', required=True, help='the last column `claim` printed'); d.add_argument('--result', required=True, choices=RESULTS)
+    d.add_argument('--id', required=True); d.add_argument('--token', required=True, help=token_help)
+    d.add_argument('--result', required=True, choices=RESULTS)
     d.add_argument('--evidence', default=''); d.add_argument('--note', default='')
 
-    f = sub.add_parser('fail', help='the task could not run now: back it off, or park it for good')
-    f.add_argument('--id', required=True); f.add_argument('--token', required=True, help='the last column `claim` printed'); f.add_argument('--note', default='')
-    f.add_argument('--backoff-minutes', type=int, default=DEFAULT_BACKOFF_MINUTES)
-    f.add_argument('--max-tries', type=int, default=DEFAULT_MAX_TRIES,
-                   help='after this many claims the task becomes failed instead of reopening')
+    f = sub.add_parser('fail', help='the attempt ran and could not finish: back it off, or park it for good')
+    f.add_argument('--id', required=True); f.add_argument('--token', required=True, help=token_help)
+    f.add_argument('--note', default='')
+    f.add_argument('--backoff-minutes', type=int, default=DEFAULT_BACKOFF_MINUTES,
+                   help='wait this many minutes per attempt so far before the task is due again')
 
-    r = sub.add_parser('release', help='give a claimed task back to open, no penalty')
-    r.add_argument('--id', required=True); r.add_argument('--token', required=True, help='the last column `claim` printed')
+    r = sub.add_parser('release', help='nothing ran (a gate pause, a shutdown): reopen the task and give its try back')
+    r.add_argument('--id', required=True); r.add_argument('--token', required=True, help=token_help)
+    r.add_argument('--retry-after', type=int, default=0, metavar='MINUTES',
+                   help='not claimable again for this many minutes, so a paused lane does not re-claim it at once')
 
     l = sub.add_parser('list', help='rows, optionally filtered')
     l.add_argument('--status', choices=STATUS); l.add_argument('--person'); l.add_argument('--lane')
@@ -234,51 +352,75 @@ def main(argv=None):
     sub.add_parser('stats', help='counts by status, kind, source and lane')
     args = p.parse_args(argv)
 
+    def refuse(rows, why):
+        sys.stderr.write('gwt-queue: %s\n' % why)
+        return rows, 2
+
     if args.cmd == 'add':
+        if bool(args.jsonl) == bool(args.person):
+            p.error('add needs exactly one of --person and --jsonl')
+        if args.retry_failed and not args.dedupe:
+            p.error('--retry-failed only means something with --dedupe')
+        batch = None
+        if args.jsonl:
+            try:
+                stream = sys.stdin if args.jsonl == '-' else open(args.jsonl, encoding='utf-8')
+                with stream:
+                    batch = stream.readlines()
+            except OSError as e:
+                p.error('cannot read %s: %s' % (args.jsonl, e))
+
         def add_fn(rows):
-            if args.dedupe and any(r['status'] in ('open', 'claimed') and key(r['person_key']) == key(args.person)
-                                   and r['kind'] == args.kind and key(r['source']) == key(args.source)
-                                   and normalize(r['query']) == normalize(args.query) for r in rows):
-                print_row(next(r for r in rows if r['status'] in ('open', 'claimed')
-                               and key(r['person_key']) == key(args.person) and r['kind'] == args.kind
-                               and key(r['source']) == key(args.source) and normalize(r['query']) == normalize(args.query)))
-                return rows, 0
-            row = {'id': new_id(rows), 'person_key': key(args.person), 'person_label': args.label,
-                   'kind': args.kind, 'source': key(args.source), 'query': normalize(args.query),
-                   'priority': str(args.priority), 'status': 'open', 'lane': '', 'claimed_at': '',
-                   'done_at': '', 'result': '', 'evidence': '', 'tries': '0',
-                   'next_at': args.next_at, 'note': args.note, 'token': ''}
-            rows.append(row)
-            print_row(row)
+            try:
+                if batch is not None:
+                    wanted = read_jsonl(batch, rows)
+                else:
+                    wanted = [new_row(rows, args.person, args.label, args.kind, args.source, args.query,
+                                      args.priority, args.note, args.next_at, args.dedupe_key)]
+            except ValueError as e:
+                return refuse(rows, str(e))
+            for row in add_rows(rows, wanted, args.dedupe, args.retry_failed):
+                print_row(row)
             return rows, 0
         return with_queue(args.queue, add_fn)
 
     if args.cmd == 'claim':
         def claim_fn(rows):
-            reopen_stale(rows, args.stale_minutes)
+            reopen_stale(rows, args.max_tries)
             now = datetime.datetime.now(datetime.timezone.utc)
             due = sorted((r for r in rows if claimable(r, now, args.kind, args.source)), key=by_priority)
             if not due:
                 return rows, 1
             r = due[0]
-            r['status'], r['lane'], r['claimed_at'] = 'claimed', args.lane, now_iso()
+            r['status'], r['lane'], r['claimed_at'] = 'claimed', clean(args.lane), utc_iso(now)
+            r['lease_until'] = utc_iso(now + datetime.timedelta(minutes=args.lease_minutes))
             r['token'] = uuid.uuid4().hex[:12]
-            r['tries'] = str(int(r['tries'] or '0') + 1)
+            r['tries'] = str(as_int(r['tries']) + 1)
             print_row(r)
             return rows, 0
         return with_queue(args.queue, claim_fn)
+
+    if args.cmd == 'renew':
+        def renew_fn(rows):
+            r, why = owned(rows, args.id, args.token, 'renew')
+            if r is None:
+                return refuse(rows, why)
+            r['lease_until'] = utc_iso(datetime.datetime.now(datetime.timezone.utc)
+                                       + datetime.timedelta(minutes=args.lease_minutes))
+            print_row(r)
+            return rows, 0
+        return with_queue(args.queue, renew_fn)
 
     if args.cmd == 'done':
         def done_fn(rows):
             r, why = owned(rows, args.id, args.token, 'done')
             if r is None:
-                sys.stderr.write('gwt-queue: %s\n' % why)
-                return rows, 2
-            r['status'], r['done_at'], r['result'], r['token'] = 'done', now_iso(), args.result, ''
+                return refuse(rows, why)
+            r['status'], r['done_at'], r['result'], r['token'], r['lease_until'] = 'done', now_iso(), args.result, '', ''
             if args.evidence:
-                r['evidence'] = args.evidence
+                r['evidence'] = clean(args.evidence)
             if args.note:
-                r['note'] = args.note
+                r['note'] = clean(args.note)
             print_row(r)
             return rows, 0
         return with_queue(args.queue, done_fn)
@@ -287,20 +429,18 @@ def main(argv=None):
         def fail_fn(rows):
             r, why = owned(rows, args.id, args.token, 'fail')
             if r is None:
-                sys.stderr.write('gwt-queue: %s\n' % why)
-                return rows, 2
-            tries = int(r['tries'] or '0')
+                return refuse(rows, why)
+            tries = as_int(r['tries'])
             if tries >= args.max_tries:
                 r['status'] = 'failed'
                 r['next_at'] = ''
             else:
                 r['status'] = 'open'
-                until = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
-                    minutes=args.backoff_minutes * tries)
-                r['next_at'] = until.strftime('%Y-%m-%dT%H:%M:%SZ')
-            r['lane'], r['claimed_at'], r['token'] = '', '', ''
+                r['next_at'] = utc_iso(datetime.datetime.now(datetime.timezone.utc)
+                                       + datetime.timedelta(minutes=args.backoff_minutes * tries))
+            r['lane'], r['claimed_at'], r['token'], r['lease_until'] = '', '', '', ''
             if args.note:
-                r['note'] = args.note
+                r['note'] = clean(args.note)
             print_row(r)
             return rows, 0
         return with_queue(args.queue, fail_fn)
@@ -309,20 +449,21 @@ def main(argv=None):
         def release_fn(rows):
             r, why = owned(rows, args.id, args.token, 'release')
             if r is None:
-                sys.stderr.write('gwt-queue: %s\n' % why)
-                return rows, 2
-            r['status'], r['lane'], r['claimed_at'], r['token'] = 'open', '', '', ''
+                return refuse(rows, why)
+            r['status'], r['lane'], r['claimed_at'], r['token'], r['lease_until'] = 'open', '', '', '', ''
             # the claim counted as a try, but nothing ran: give it back so pauses cannot park a task
-            r['tries'] = str(max(0, int(r['tries'] or '0') - 1))
+            r['tries'] = str(max(0, as_int(r['tries']) - 1))
+            r['next_at'] = utc_iso(datetime.datetime.now(datetime.timezone.utc)
+                                   + datetime.timedelta(minutes=args.retry_after)) if args.retry_after > 0 else ''
             print_row(r)
             return rows, 0
         return with_queue(args.queue, release_fn)
 
-    # read-only commands: a stale claim is reopened and saved first, so report and stats tell the truth
+    # read-only commands: a claim past its lease is reopened and saved first, so report and stats tell the truth
     holder = {'rows': []}
 
     def read_only(rows):
-        reopen_stale(rows, args.stale_minutes)
+        reopen_stale(rows, args.max_tries)
         holder['rows'] = rows
         return rows, 0
     if os.path.exists(args.queue):
@@ -333,7 +474,7 @@ def main(argv=None):
         for r in rows:
             if args.status and r['status'] != args.status:
                 continue
-            if args.person and key(r['person_key']) != key(args.person):
+            if args.person and r['person_key'] != key(args.person):
                 continue
             if args.lane and r['lane'] != args.lane:
                 continue

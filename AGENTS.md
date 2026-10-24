@@ -18,6 +18,7 @@ tool with its own tests; `docs/` has one page per tool, plus `pipeline.md` (how 
 | `fscache/` | `gwt-fscache`, HTTP cache | Python standard library |
 | `gate/` | `gwt-gate`, shared request pace | Python standard library |
 | `rawstore/` | `gwt-rawstore`, images in S3, manifest in git | Python standard library |
+| `queue/` | `gwt-queue`, search tasks handed out to lanes | Python standard library |
 | `spanish-poller/` | `gwt-spanish-poller`, Spain-only sede and DEHú watcher | Node 18+, Playwright |
 | `ocr-bench/` | OCR, HTR and LLM reading benchmark | Python, one venv per engine |
 
@@ -41,6 +42,7 @@ cd ledger && python3 -m unittest test_gwt_ledger
 cd fscache && python3 -m unittest test_gwt_fscache
 cd gate && python3 -m unittest test_gwt_gate
 cd rawstore && python3 -m unittest test_gwt_rawstore
+cd queue && python3 -m unittest test_gwt_queue
 cd spanish-poller && node --test
 ```
 
