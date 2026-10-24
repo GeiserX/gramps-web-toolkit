@@ -326,7 +326,8 @@ class FetchPlan(unittest.TestCase):
     def test_userinfo_and_port(self):
         for bad in ('https://evil.io@www.myheritage.es/research/record-image/download?itemId=1',
                     'https://evil.io@cf.myheritageimages.com/records/full/x.jpg',
-                    'https://evil.io\\@www.myheritage.es/research/record-image/download?itemId=1'):
+                    'https://evil.io\\@www.myheritage.es/research/record-image/download?itemId=1',
+                    'https://evil.io\\.myheritage.es/image/x.jpg'):
             self.assertEqual(mh.image_download_links([bad]), [], bad)
             self.assertFalse(mh.is_mh_image_host(bad), bad)
         self.assertFalse(mh.is_oldnews_link('https://evil.io@www.oldnews.com/x'))
