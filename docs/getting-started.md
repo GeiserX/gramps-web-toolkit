@@ -5,7 +5,7 @@ The toolkit is a set of separate command-line tools, one per folder. You install
 ## What you need
 
 - Python 3.11 or newer for `gwt-apply`, `gwt-check`, `gwt-fetch` and `gwt-mh`. The other Python tools run on 3.8 or newer.
-- A Gramps Web server and a user of the tree you want to work on, for `gwt-apply` and the live reads of `gwt-check`. Every other tool works without a server.
+- A Gramps Web server and a user of the tree you want to work on, for `gwt-apply` and the live reads of `gwt-check`. No other tool talks to Gramps Web.
 - Node 18 or newer with Playwright, only for `gwt-spanish-poller`.
 - Python Playwright and a Chrome reachable over CDP, only for `gwt-mh`.
 
@@ -18,7 +18,7 @@ python3 -m pip install -e check      # gwt-check, standard library only
 python3 -m pip install -e fetch      # gwt-fetch, needs requests
 ```
 
-The other tools are single scripts. Run them from the clone, or symlink them onto your `PATH`:
+The other tools run from their folders in the clone; symlink them onto your `PATH` if you like. A few need more than Python:
 
 | Tool | Run it as | Needs |
 |---|---|---|

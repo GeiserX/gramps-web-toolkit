@@ -78,8 +78,9 @@ jobs:
           path: site
 
   deploy:
-    # Runs on push to main only, after the build job has passed.
-    if: github.event_name != 'pull_request'
+    # Runs on push to main only, after the build job has passed. The ref check
+    # keeps a manual run from another branch from publishing it.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     permissions:

@@ -6,19 +6,19 @@ Each folder is one tool with its own tests. A change touches one folder, its pag
 
 ```sh
 python3 -m pip install requests pytest
-cd apply && python3 -m pytest -q
-cd check && python3 -m pytest -q && python3 -m gwt_check selftest
-cd fetch && python3 -m pytest -q
-cd ledger && python3 -m unittest test_gwt_ledger
-cd fscache && python3 -m unittest test_gwt_fscache
-cd gate && python3 -m unittest test_gwt_gate
-cd rank && python3 -m unittest test_gwt_rank
-cd myheritage && python3 -m unittest test_gwt_mh
-cd rawstore && python3 -m unittest test_gwt_rawstore
-cd importxl && python3 -m unittest test_gwt_import_excel test_end_to_end
-cd queue && python3 -m unittest test_gwt_queue
-cd leads && python3 -m unittest test_gwt_leads
-cd spanish-poller && node --test
+(cd apply && python3 -m pytest -q)
+(cd check && python3 -m pytest -q && python3 -m gwt_check selftest)
+(cd fetch && python3 -m pytest -q)
+(cd ledger && python3 -m unittest test_gwt_ledger)
+(cd fscache && python3 -m unittest test_gwt_fscache)
+(cd gate && python3 -m unittest test_gwt_gate)
+(cd rank && python3 -m unittest test_gwt_rank)
+(cd myheritage && python3 -m unittest test_gwt_mh)
+(cd rawstore && python3 -m unittest test_gwt_rawstore)
+(cd importxl && python3 -m unittest test_gwt_import_excel test_end_to_end)
+(cd queue && python3 -m unittest test_gwt_queue)
+(cd leads && python3 -m unittest test_gwt_leads)
+(cd spanish-poller && node --test)
 ```
 
 CI runs the same commands on every pull request ([ci.yml](https://github.com/GeiserX/gramps-web-toolkit/blob/main/.github/workflows/ci.yml)). Its first step fails when a folder has tests that CI does not run, so a new tool needs its own CI step.
@@ -30,10 +30,10 @@ No test needs a Gramps Web server or a FamilySearch or MyHeritage account. The `
 ```sh
 python3 -m pip install -r docs/requirements-docs.txt
 mkdocs serve            # http://127.0.0.1:8000, rebuilds on save
-mkdocs build --strict   # what CI runs
+mkdocs build --strict   # the build CI runs
 ```
 
-The build is strict: a broken link, a link to a missing heading, a page left out of the nav, or a link that leaves `docs/` fails it. Link a file outside `docs/` by its GitHub URL. A push to `main` that changes the docs publishes the site.
+The build is strict: a broken link, a link to a missing heading, a page left out of the nav, or a link that leaves `docs/` fails it. Link a file outside `docs/` by its GitHub URL. MkDocs logs a link to an excluded file (a capitalised `.md`) only as `INFO`, which `--strict` lets through, so CI also fails the build when the log says `which is excluded from the built site`. A push to `main` that changes the docs publishes the site.
 
 ## Rules for a change
 
