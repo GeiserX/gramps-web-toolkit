@@ -5,10 +5,11 @@ A search by name returns thousands of rows, and a lane that stops at "N results"
 This reads the rows and puts the ones that agree with what the tree already knows first. It never
 hides a row: every row is printed with a tier, so a page with no strong row is still a list of leads.
 
-The input is the FamilySearch search JSON (GEDCOM X, the body `gwt-fscache` stores for a
-`/service/search/hr/` URL). It carries no language, marks the principal of each record and names
-each spouse and parent explicitly. A file that is not JSON is read as the visible text of a results
-page (MyHeritage, other sites), with Spanish or English labels.
+Every source is first turned into one normalized candidate record per row (see record() and
+docs/rank.md), and the scorer reads only that record. Inputs: the FamilySearch search JSON (GEDCOM X,
+the body `gwt-fscache` stores for a `/service/search/hr/` URL), already normalized records
+(`{"candidates": [...]}`, what another site's normalizer writes), or, as the fallback, the visible
+text of a results page with Spanish or English labels.
 
   gwt-rank FILE... --given "Maria del Carmen" --surname Perez [--surname Lopez]
            [--facts "by=1901 bp=Madrid dy=1970 dp=Murcia"] [--spouse "Juan Ruiz"] [--format tsv|json]
@@ -66,9 +67,22 @@ def years(text):
     return (min(ys), max(ys)) if ys else None
 
 
-def candidate(name, role, principal, given=None, surname=None):
-    return {'name': name, 'role': role, 'principal': principal, 'given': given, 'surname': surname,
-            'by': None, 'bp': '', 'dy': None, 'dp': '', 'spouses': [], 'id': ''}
+def record(source, rid, name, role, principal, given=None, surnames=None):
+    """The normalized candidate record, the only thing the scorer reads. given and surnames are None
+    when the source gives only the full name. Each event is {'year', 'year_to', 'place'}."""
+    return {'source': source, 'id': rid, 'name': name, 'role': role, 'principal': principal,
+            'given': given, 'surnames': surnames, 'events': {}, 'relatives': []}
+
+
+def _set_event(r, kind, yr, place):
+    if yr or place:
+        r['events'][kind] = {'year': yr and yr[0], 'year_to': yr and yr[1], 'place': place or ''}
+
+
+def _year_range(event):
+    if not event or event.get('year') is None:
+        return None
+    return int(event['year']), int(event.get('year_to') or event['year'])
 
 
 # --- GEDCOM X search JSON -------------------------------------------------------------------------
@@ -80,7 +94,7 @@ def _name(person):
             sur = [p.get('value', '') for p in form.get('parts') or [] if p.get('type') == GX + 'Surname']
             full = form.get('fullText') or ' '.join(given + sur)
             if full:
-                return full, (norm(' '.join(given)) if given or sur else None), (norm(' '.join(sur)) if given or sur else None)
+                return full, (' '.join(given) if given or sur else None), (sur if given or sur else None)
     return (person.get('display') or {}).get('name', ''), None, None
 
 
@@ -103,7 +117,7 @@ def _event(facts, types):
 
 
 def gedcomx_rows(doc):
-    """One candidate per entry: the persona the search matched, with only its own facts."""
+    """One record per entry: the persona the search matched, with only its own facts."""
     rows = []
     for e in doc.get('entries') or []:
         g = (e.get('content') or {}).get('gedcomx') or {}
@@ -115,21 +129,45 @@ def gedcomx_rows(doc):
         for p in hit or [p for p in persons if p.get('principal')]:
             full, given, sur = _name(p)
             role = (p.get('display') or {}).get('role') or ('Principal' if p.get('principal') else '')
-            c = candidate(full, role, bool(p.get('principal')), given, sur)
+            c = record('familysearch', eid, full, role, bool(p.get('principal')), given, sur)
             facts = p.get('facts') or []
-            c['by'], c['bp'] = _event(facts, BIRTH_TYPES)
-            c['dy'], c['dp'] = _event(facts, DEATH_TYPES)
+            _set_event(c, 'birth', *_event(facts, BIRTH_TYPES))
+            _set_event(c, 'death', *_event(facts, DEATH_TYPES))
             ref = '#' + p.get('id', '')
             for r in g.get('relationships') or []:
-                if r.get('type') != GX + 'Couple':
-                    continue
                 ends = [(r.get('person1') or {}).get('resource'), (r.get('person2') or {}).get('resource')]
-                if ref in ends:
-                    other = by_ref.get(ends[1] if ends[0] == ref else ends[0])
-                    if other:
-                        c['spouses'].append(_name(other)[0])
-            c['id'] = eid
+                if ref not in ends:
+                    continue
+                other = by_ref.get(ends[1] if ends[0] == ref else ends[0])
+                if not other:
+                    continue
+                if r.get('type') == GX + 'Couple':
+                    rel = 'spouse'
+                elif r.get('type') == GX + 'ParentChild' and ends[1] == ref:   # person1 is the parent
+                    rel = {GX + 'Male': 'father', GX + 'Female': 'mother'}.get((other.get('gender') or {}).get('type'), 'parent')
+                elif r.get('type') == GX + 'ParentChild':
+                    rel = 'child'
+                else:
+                    rel = 'other'
+                c['relatives'].append({'role': rel, 'name': _name(other)[0]})
             rows.append(c)
+    return rows
+
+
+def normalized_rows(doc):
+    """Records another normalizer already wrote, checked for the fields the scorer reads."""
+    rows = []
+    for n, r in enumerate(doc.get('candidates') or []):
+        if not isinstance(r, dict) or not isinstance(r.get('name'), str) or not isinstance(r.get('events', {}), dict):
+            raise ValueError('candidate %d: needs a name string and an events object' % (n + 1))
+        c = record(r.get('source', ''), str(r.get('id', '')), r['name'], r.get('role', ''), bool(r.get('principal')),
+                   r.get('given'), r.get('surnames'))
+        for kind in ('birth', 'death'):
+            e = (r.get('events') or {}).get(kind)
+            if e:
+                _set_event(c, kind, _year_range(e), e.get('place'))
+        c['relatives'] = [{'role': x.get('role', ''), 'name': x.get('name', '')} for x in r.get('relatives') or []]
+        rows.append(c)
     return rows
 
 
@@ -155,7 +193,8 @@ def text_rows(text):
     rows = []
     for n, i in enumerate(starts):
         body = [l for l, _ in lines[i + 2:(starts[n + 1] if n + 1 < len(starts) else len(lines))]]
-        c = candidate(lines[i][0], lines[i + 1][0], key[i + 1] in PRINCIPAL)
+        c = record('text', '', lines[i][0], lines[i + 1][0], key[i + 1] in PRINCIPAL)
+        ev = {}
         j = 1   # body[0] is the collection title: 'Baptism Register 1850-1900' is not an event
         while j < len(body):
             line = body[j]
@@ -163,17 +202,19 @@ def text_rows(text):
             if kind:
                 # the year sits on the event line, or on the next line when the date is on its own line
                 k = j if years(line) else (j + 1 if j + 1 < len(body) and years(body[j + 1]) else None)
-                if k is not None and c[kind + 'y'] is None:
-                    c[kind + 'y'] = years(body[k])
-                    if k + 1 < len(body) and not NOT_A_PLACE.match(body[k + 1]):
-                        c[kind + 'p'] = body[k + 1]
+                if k is not None and kind not in ev:
+                    place = body[k + 1] if k + 1 < len(body) and not NOT_A_PLACE.match(body[k + 1]) else ''
+                    ev[kind] = (years(body[k]), place)
                     j = k
             m = re.match(SPOUSE_LABEL + r'\s*:?\s*(.*)$', line, re.I)
             if m:
                 value = m.group(2) or (body[j + 1] if j + 1 < len(body) else '')
-                c['spouses'] += [s for s in re.split(r'\s*[,;]\s*|\s+(?:and|y)\s+', value) if s.strip()]
+                c['relatives'] += [{'role': 'spouse', 'name': s} for s in re.split(r'\s*[,;]\s*|\s+(?:and|y)\s+', value) if s.strip()]
                 j += 0 if m.group(2) else 1
             j += 1
+        for kind, name in (('b', 'birth'), ('d', 'death')):
+            if kind in ev:
+                _set_event(c, name, *ev[kind])
         rows.append(c)
     return rows
 
@@ -223,8 +264,9 @@ def _spouse_match(want, spouses):
 def score(c, given, surnames, facts, spouse='', window=3):
     """(tier, points, reasons) for one row. Never drops a row: a rejection is a tier, not a cut."""
     rn = norm(c['name'])
-    rg = c['given'] if c['given'] is not None else rn
-    rs = c['surname'] if c['surname'] is not None else rn
+    rg = norm(c['given']) if c.get('given') is not None else rn
+    rs = norm(' '.join(c['surnames'])) if c.get('surnames') is not None else rn
+    ev = c.get('events') or {}
     sur = [norm(s) for s in surnames if norm(s)]
     g = [w for w in norm(given) if w not in NAME_PARTICLES]
     pts, why, agree, conflict = 0, [], 0, False
@@ -251,8 +293,8 @@ def score(c, given, surnames, facts, spouse='', window=3):
     else:
         why.append('given differs' if g else 'no given name to check')
 
-    for key in ('by', 'dy'):
-        want, have = years(facts.get(key, '')), c[key]
+    for key, kind in (('by', 'birth'), ('dy', 'death')):
+        want, have = years(facts.get(key, '')), _year_range(ev.get(kind))
         if not want or not have:
             continue
         w = want[0]
@@ -261,11 +303,12 @@ def score(c, given, surnames, facts, spouse='', window=3):
             pts += 3 if exact else 2; why.append('%s %s%s%s' % (key, have[0], '=' if exact else '~', w))
         else:
             conflict = True; why.append('%s %s contradicts %s' % (key, have[0], w))
-    for key in ('bp', 'dp'):   # each place against its own event: birth place to birth, death place to death
-        if facts.get(key) and c[key] and _place_match(facts[key], c[key]):
+    for key, kind in (('bp', 'birth'), ('dp', 'death')):   # each place against its own event, never across
+        have = (ev.get(kind) or {}).get('place')
+        if facts.get(key) and have and _place_match(facts[key], have):
             agree += 1; pts += 2; why.append('%s %s' % (key, facts[key]))
     if spouse:
-        m = _spouse_match(spouse, c['spouses'])
+        m = _spouse_match(spouse, [x['name'] for x in c.get('relatives') or [] if x.get('role') == 'spouse'])
         if m is None:
             why.append('spouse needs a given name and a surname')
         elif m:
@@ -286,14 +329,16 @@ def score(c, given, surnames, facts, spouse='', window=3):
 
 
 def load(path):
-    """Rows from one file ('-' for stdin): GEDCOM X search JSON when it parses, else page text."""
+    """Records from one file ('-' for stdin): search JSON or normalized records when it parses, else page text."""
     text = sys.stdin.read() if path == '-' else open(path, encoding='utf-8').read()
     try:
         doc = json.loads(text)
     except ValueError:
         return text_rows(text)
+    if isinstance(doc, dict) and 'candidates' in doc:
+        return normalized_rows(doc)
     if not isinstance(doc, dict) or 'entries' not in doc:
-        raise ValueError('%s is JSON but not a FamilySearch search result' % path)
+        raise ValueError('%s is JSON but neither a FamilySearch search result nor {"candidates": [...]}' % path)
     return gedcomx_rows(doc)
 
 
@@ -301,9 +346,10 @@ def rank(rows, given, surnames, facts, spouse=''):
     out = []
     for i, c in enumerate(rows):
         tier, pts, why = score(c, given, surnames, facts, spouse)
-        out.append({'tier': tier, 'score': pts, 'name': c['name'], 'role': c['role'], 'id': c['id'],
-                    'by': c['by'] and c['by'][0], 'bp': c['bp'], 'dy': c['dy'] and c['dy'][0], 'dp': c['dp'],
-                    'spouses': c['spouses'], 'why': why, 'n': i + 1})
+        b, d = c['events'].get('birth') or {}, c['events'].get('death') or {}
+        out.append({'tier': tier, 'score': pts, 'source': c['source'], 'name': c['name'], 'role': c['role'], 'id': c['id'],
+                    'by': b.get('year'), 'bp': b.get('place', ''), 'dy': d.get('year'), 'dp': d.get('place', ''),
+                    'relatives': c['relatives'], 'why': why, 'n': i + 1})
     out.sort(key=lambda r: (TIERS.index(r['tier']), -r['score'], r['n']))
     return out
 

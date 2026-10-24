@@ -104,6 +104,19 @@ class GedcomX(unittest.TestCase):
         r = R.rank(rows(doc), 'Ana', ['Perez'], R.parse_facts('by=1901 dy=1971'))[0]
         self.assertEqual((r['by'], r['dy'], r['tier']), (1901, 1970, 'strong'))
 
+    def test_converts_to_the_normalized_record(self):
+        kid = person('p1', 'Ana', 'Perez Lopez', True, facts=[('Birth', '1901', 'Villazul'), ('Burial', '1970', '')], ark='A1')
+        dad = person('f1', 'Luis', 'Perez', role='Father')
+        dad['gender'] = {'type': GX + 'Male'}
+        pc = {'type': GX + 'ParentChild', 'person1': {'resource': '#f1'}, 'person2': {'resource': '#p1'}}
+        doc = search(entry('A1', [kid, dad, person('s1', 'Juan', 'Ruiz', role='Spouse')], [pc, couple('p1', 's1')]))
+        self.assertEqual(rows(doc), [{
+            'source': 'familysearch', 'id': 'A1', 'name': 'Ana Perez Lopez', 'role': 'Principal', 'principal': True,
+            'given': 'Ana', 'surnames': ['Perez Lopez'],
+            'events': {'birth': {'year': 1901, 'year_to': 1901, 'place': 'Villazul'},
+                       'death': {'year': 1970, 'year_to': 1970, 'place': ''}},
+            'relatives': [{'role': 'father', 'name': 'Luis Perez'}, {'role': 'spouse', 'name': 'Juan Ruiz'}]}])
+
     def test_a_fact_without_a_plain_year_does_not_crash(self):
         doc = search(entry('A1', [person('p1', 'Ana', 'Perez', True, facts=[('Birth', '1880', '')])]))
         self.assertIn('by 1880=1880', R.rank(rows(doc), 'Ana', ['Perez'], R.parse_facts('by=abt1880 dy=?'))[0]['why'])
@@ -136,8 +149,9 @@ class PageText(unittest.TestCase):
     def test_spanish_page(self):
         rs = R.text_rows(TEXT_ES)
         self.assertEqual([r['name'] for r in rs], ['Ana Perez Lopez', 'Ana Perez', 'Ana Maria Perez'])
-        self.assertEqual((rs[0]['by'], rs[0]['bp'], rs[0]['spouses']), ((1901, 1901), 'Villazul, Murcia, España', ['Juan Ruiz']))
-        self.assertEqual((rs[1]['by'], rs[1]['bp']), ((1903, 1903), ''))   # the title's 1850 is not an event; Residencia is no place
+        self.assertEqual(rs[0]['events'], {'birth': {'year': 1901, 'year_to': 1901, 'place': 'Villazul, Murcia, España'}})
+        self.assertEqual(rs[0]['relatives'], [{'role': 'spouse', 'name': 'Juan Ruiz'}])
+        self.assertEqual(rs[1]['events'], {'birth': {'year': 1903, 'year_to': 1903, 'place': ''}})   # the title's 1850 is not an event; Residencia is no place
         self.assertEqual([r['principal'] for r in rs], [True, True, False])
         res = R.rank(rs, 'Ana', ['Perez', 'Lopez'], R.parse_facts('by=1901 bp=Villazul'), spouse='Juan Ruiz')
         self.assertEqual([r['tier'] for r in res], ['strong', 'possible', 'weak'])
@@ -148,6 +162,28 @@ class PageText(unittest.TestCase):
         self.assertEqual(r['tier'], 'possible')       # a given-name variant is never strong
         self.assertIn('given variant', r['why'])
         self.assertFalse(any(w.startswith('spouse ') for w in r['why']))
+
+
+class Normalized(unittest.TestCase):
+    RECS = {'candidates': [
+        {'source': 'othersite', 'id': 'r1', 'name': 'Ana Perez', 'role': 'Principal', 'principal': True,
+         'given': 'Ana', 'surnames': ['Perez', 'Lopez'], 'events': {'birth': {'year': 1901, 'place': 'Villazul, Spain'}},
+         'relatives': [{'role': 'spouse', 'name': 'Juan Ruiz'}, {'role': 'father', 'name': 'Juan Ruiz'}]},
+        {'source': 'othersite', 'id': 'r2', 'name': 'Ana Perez', 'events': {}}]}
+
+    def test_another_source_feeds_the_same_scorer(self):
+        res = R.rank(R.normalized_rows(self.RECS), 'Ana', ['Perez'], R.parse_facts('by=1901'), spouse='Juan Ruiz')
+        self.assertEqual([(r['id'], r['tier'], r['source']) for r in res], [('r1', 'strong', 'othersite'), ('r2', 'weak', 'othersite')])
+
+    def test_only_a_spouse_relative_counts_as_spouse(self):
+        recs = json.loads(json.dumps(self.RECS))
+        recs['candidates'][0]['relatives'] = [{'role': 'father', 'name': 'Juan Ruiz'}]
+        r = R.rank(R.normalized_rows(recs), 'Ana', ['Perez'], R.parse_facts('by=1901'), spouse='Juan Ruiz')[0]
+        self.assertEqual(r['tier'], 'possible')
+
+    def test_a_bad_record_is_an_error_not_a_row(self):
+        with self.assertRaises(ValueError):
+            R.normalized_rows({'candidates': [{'events': {}}]})
 
 
 class Cli(unittest.TestCase):
@@ -171,6 +207,9 @@ class Cli(unittest.TestCase):
         self.assertEqual(self.run_cli(json.dumps(search()), '--given', 'Ana').returncode, 2)
         self.assertEqual(self.run_cli('{"persons": []}', '--given', 'Ana').returncode, 2)
         self.assertEqual(self.run_cli('nothing here', '--given', 'Ana').returncode, 2)
+        recs = json.dumps(Normalized.RECS)
+        self.assertEqual(self.run_cli(recs, '--given', 'Ana', '--surname', 'Perez', '--facts', 'by=1901 bp=Villazul').returncode, 0)
+        self.assertEqual(self.run_cli('{"candidates": [{"events": {}}]}', '--given', 'Ana').returncode, 2)
 
 
 if __name__ == '__main__':

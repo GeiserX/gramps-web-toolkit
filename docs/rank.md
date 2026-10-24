@@ -11,8 +11,44 @@ gwt-rank results.txt --given Ana --surname Perez               # page text, for 
 
 ## Input
 
+Every input is first turned into the normalized candidate record below, one per row, and the scorer reads only that record. Three inputs are accepted, told apart by content:
+
+- **Normalized records**, a JSON object `{"candidates": [...]}` holding records in the shape below. This is what a normalizer for another site (MyHeritage, for one) writes.
 - **FamilySearch search JSON**, the GEDCOM X body of a `/service/search/hr/` request, as [gwt-fscache](fscache.md) stores it. It has no language, so the web UI can stay in any language. Each entry gives the persona the search matched: the principal of the record, or a relative (Father, Mother, Spouse, Other). Only that persona's own facts are scored, never another person's in the same record. Spouses come from the record's Couple relationships.
 - **Page text**, the fallback for pages with no JSON (MyHeritage, other sites): the visible text of a results page, with Spanish or English labels (`Principal` or `Persona principal`, `Birth` or `Nacimiento`, `Baptism` or `Bautismo`, `Spouse` or `Cónyuge`). A row starts at a name line followed by a role line. When the page puts a blank line between them, only that shape starts a row, so a `Cónyuge` label inside a row is read as a field. The first line of a row is the collection title and is never read as an event. Text layouts vary, so a JSON source is always better.
+
+## The candidate record
+
+```json
+{
+  "source": "familysearch",
+  "id": "ABCD-123",
+  "name": "Ana Perez Lopez",
+  "role": "Principal",
+  "principal": true,
+  "given": "Ana",
+  "surnames": ["Perez Lopez"],
+  "events": {
+    "birth": {"year": 1901, "year_to": 1901, "place": "Villazul, Murcia, Spain"},
+    "death": {"year": 1970, "year_to": 1972, "place": ""}
+  },
+  "relatives": [{"role": "spouse", "name": "Juan Ruiz"}, {"role": "father", "name": "Luis Perez"}]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `source` | Where the row came from: `familysearch`, `text`, or the normalizer's own name. Printed, never scored |
+| `id` | The source's record id, so the row can be opened again. May be empty |
+| `name` | Full name as indexed. Required. Used for matching when `given` or `surnames` is missing |
+| `role` | The candidate's role in the record, as the source words it (Principal, Father, Mother, Spouse, Other) |
+| `principal` | `true` only when the candidate is the record's main person. Only a principal can be strong |
+| `given` | Given name(s) as one string, or `null` when the source gives only the full name |
+| `surnames` | List of surname strings, or `null`. One entry may hold both surnames (`"Perez Lopez"`): each tree surname is matched against every token |
+| `events.birth`, `events.death` | The candidate's own birth and death, each optional. `year` and `year_to` give a range (equal for a plain year), `place` the place as written. A normalizer picks the stand-in itself: baptism or christening for birth, burial or cremation for death |
+| `relatives` | People named in the record with the candidate's relation to them: `spouse`, `father`, `mother`, `parent`, `child`, `other`. Only `spouse` is scored today |
+
+A record must carry only the candidate's own facts. A child's baptism year in a record where the candidate is the father belongs to the child, never to the candidate. A record that lacks `name` or has a non-object `events` makes the run exit 2.
 
 ## The person
 
