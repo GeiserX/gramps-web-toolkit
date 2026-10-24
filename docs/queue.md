@@ -1,4 +1,4 @@
-# gwt-queue: what to search next, for every lane at once
+# gwt-queue
 
 [gwt-ledger](ledger.md) remembers what was already searched. Nothing remembered what comes **next**: each lane picked its own targets, the planner's priorities lived in a brief nobody else could read, and a lane that died mid-task took its claimed work to the grave. `gwt-queue` is one TSV file that holds the pending research tasks, hands them out to lanes one at a time, and reopens the ones a dead lane dropped.
 
@@ -49,13 +49,15 @@ done
 - `done` works only on a task that is `claimed` under your token. A lane whose claim went stale and was handed to another lane holds a dead token: its `done`, `fail` and `release` are refused (exit 2) and change nothing. `fail` and `release` follow the same rule, so a finished task is never reopened. `done` closes the task with a result and the evidence file. Mirror the row into `gwt-ledger` so the negative (or the hit) is never searched twice: the queue tracks the work, the ledger tracks the search.
 - `fail` is for an attempt that ran and could not finish: a site block mid-search, a missing login. The task reopens with a back-off of `--backoff-minutes` (default 60) per attempt so far. After `--max-tries` attempts (a top-level option, default 5) it becomes `failed` and waits for a person to read it.
 - `release` is only for "nothing ran": the gate was paused, the lane is shutting down before it searched. It reopens the task and gives the try back. `--retry-after MINUTES` keeps it unclaimable for a while, so a lane that keeps finding the gate paused does not re-claim the same task at once. Anything that touched the source must `fail` instead.
-- `report` is the open-leads list: what is due now, by priority, then how much waits and how much failed. Read it at the start of a round; the judge reads it too.
+- `claim --kind KIND` and `claim --source SOURCE` take only tasks of that kind or for that source, so a lane signed in to one site claims only that site's work.
+- `report` is the open-leads list: what is due now, by priority (the first 20; `--limit N` for more), then how much waits and how much failed. Read it at the start of a round; the judge reads it too.
+- `list` prints the rows, filtered with `--status`, `--person` and `--lane`.
 
 Two lanes never receive the same task: every command runs under an exclusive lock on `<queue>.lock`, and the queue file is replaced atomically (temp file, fsync, rename), so a crash leaves the old queue or the new one, never a half-written file. Keep the `.lock` file next to the queue; do not delete it while lanes run. A lane that dies holding a claim loses it when the claim's own lease runs out: the next `claim`, `report` or `stats` reopens the task. The lease is stored on the row, so no caller can revoke a live claim early. The dead attempt keeps its try, so a task that kills every lane that takes it parks as `failed` after `--max-tries`, like one that keeps failing, and shows up in `report` and `stats`.
 
 ## Seeding
 
-`add` one task, or many with `--jsonl FILE` (`-` for stdin): one JSON object per line with `person` and any of `label`, `kind`, `source`, `query`, `priority`, `note`, `next_at` and `dedupe_key`. A batch runs under one lock and one write, and a bad line stops it before anything is written.
+`add` one task (`--person`, `--label`, `--kind`, `--source`, `--query`, `--priority`, `--note`, `--next-at` for a task not claimable before that instant, `--dedupe-key`), or many with `--jsonl FILE` (`-` for stdin): one JSON object per line with `person` and any of `label`, `kind`, `source`, `query`, `priority`, `note`, `next_at` and `dedupe_key`. A batch runs under one lock and one write, and a bad line stops it before anything is written.
 
 `--dedupe` skips a task that is already queued, running or done: the same `dedupe_key` when either side has one, else the same person, kind, source and query. A done task counts only when its search ran (`hit`, `none` or `partial`); one closed as `blocked` or `denied` does not stop a re-seed. A `failed` match is skipped too, unless `--retry-failed` is given. On an open match the new label, query, note and priority replace the old ones, so a re-seed carries the latest picture.
 

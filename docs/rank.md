@@ -1,4 +1,4 @@
-# gwt-rank: order search results by how well they fit
+# gwt-rank
 
 A search by name returns thousands of rows, and a lane that stops at "N results" has found nothing. `gwt-rank` reads the rows and puts first the ones that agree with what the tree already knows. It only orders. Every row is printed, so a page with no strong row is still a list of leads to read.
 

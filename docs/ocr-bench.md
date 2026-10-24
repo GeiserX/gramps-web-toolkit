@@ -1,4 +1,4 @@
-# ocr-bench: what each OCR engine actually reads
+# ocr-bench
 
 Genealogy research produces piles of page images: parish books, civil registers, notarial deeds, old newspapers. Before someone reads a page closely, it helps to know what is on it. `ocr-bench` runs several free OCR and handwriting (HTR) engines over the same pages and scores each one against a reference transcription, so you can see which engine, if any, is good enough to tell you which pages deserve a close read.
 
@@ -8,11 +8,11 @@ The score that matters most for genealogy is **names found**: of the person and 
 
 | File | What it does |
 |---|---|
-| [`setup.sh`](../ocr-bench/setup.sh) | Builds one virtualenv per engine and downloads the models, all under `$BENCH_HOME`. |
-| [`stage.py`](../ocr-bench/stage.py) | Copies each reference's page image to `PAGES/<page id>.<ext>`. |
-| [`run.sh`](../ocr-bench/run.sh) | Runs the engines over `PAGES`, writing `OUT/<engine>/<page id>.txt` and `timing.tsv`. |
+| [`setup.sh`](https://github.com/GeiserX/gramps-web-toolkit/blob/main/ocr-bench/setup.sh) | Builds one virtualenv per engine and downloads the models, all under `$BENCH_HOME`. |
+| [`stage.py`](https://github.com/GeiserX/gramps-web-toolkit/blob/main/ocr-bench/stage.py) | Copies each reference's page image to `PAGES/<page id>.<ext>`. |
+| [`run.sh`](https://github.com/GeiserX/gramps-web-toolkit/blob/main/ocr-bench/run.sh) | Runs the engines over `PAGES`, writing `OUT/<engine>/<page id>.txt` and `timing.tsv`. |
 | `engines/` | One small adapter per engine, plus `llm_cli.sh` for an LLM reading. |
-| [`score.py`](../ocr-bench/score.py) | Scores every folder in `OUT` against the references and prints the tables. |
+| [`score.py`](https://github.com/GeiserX/gramps-web-toolkit/blob/main/ocr-bench/score.py) | Scores every folder in `OUT` against the references and prints the tables. |
 | `samples/` | Two public pages with references, to try the whole loop. |
 
 ## Engines

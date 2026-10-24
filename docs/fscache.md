@@ -1,4 +1,4 @@
-# gwt-fscache: an HTTP cache for rate-limited genealogy APIs
+# gwt-fscache
 
 FamilySearch and similar sites block an account or an IP address after too many requests. Research agents ask for the same record, image or film listing again and again. `gwt-fscache` keeps every good answer on disk, so a repeated request costs zero network calls and does not use up the rate limit.
 
@@ -56,6 +56,8 @@ fscache/gwt-fscache get --offline <url>     # cache only; exit 4 on a miss (usef
 fscache/gwt-fscache get --refresh <url>     # ignore the cache, fetch, store again
 fscache/gwt-fscache stats
 ```
+
+The cache directory is `--dir`, else `$GWT_FSCACHE_DIR`, else `~/.cache/gwt-fscache`. `-H`/`--header` adds a request header and `-o`/`--output` writes the body to a file instead of stdout.
 
 stderr says `HTTP 200 HIT` or `HTTP 200 MISS`. The exit code is 0 for a 2xx and 1 otherwise. The token is only read on a miss.
 

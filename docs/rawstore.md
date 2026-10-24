@@ -1,4 +1,4 @@
-# gwt-rawstore: source images in S3, a manifest in git
+# gwt-rawstore
 
 A research repo that commits every scanned page grows to gigabytes of packs. Clones get slow, and a partial clone fetches blobs one at a time and can hang the machine. `gwt-rawstore` keeps the bytes in an S3-compatible bucket (Garage, MinIO, AWS) and keeps only a small text manifest in git.
 
@@ -38,12 +38,12 @@ garage bucket allow --read --write my-raw --key <key id>
 ```sh
 gwt-rawstore put <files or dirs> [--remove] [--all] [-j 4]
 ```
-Uploads files and records them. A directory is walked for binary extensions (images, PDF, archives, audio, video); `--all` takes every file. An object already in the bucket with the right size is not uploaded again. `--remove` deletes each local file once the store confirms it.
+Uploads files and records them. A directory is walked for binary extensions (images, PDF, archives, audio, video); `--all` takes every file. `-j`/`--jobs` sets how many uploads run at once (default 4). An object already in the bucket with the right size is not uploaded again. `--remove` deletes each local file once the store confirms it.
 
 ```sh
 gwt-rawstore get <path|sha> [...] [-o TARGET]
 ```
-Resolves a path through the `rawstore.tsv` beside it, or a sha256 (8 or more hex characters) through a bucket listing. Downloads into the cache, checks the sha256, and prints the cached path; `-o` copies it to a file or directory. A corrupt cache entry is fetched again. A download that does not hash right is deleted and the command fails.
+Resolves a path through the `rawstore.tsv` beside it, or a sha256 (8 or more hex characters) through a bucket listing. Downloads into the cache, checks the sha256, and prints the cached path; `-o`/`--output` copies it to a file, or to a directory when several refs are given. A corrupt cache entry is fetched again. A download that does not hash right is deleted and the command fails.
 
 ```sh
 gwt-rawstore verify [dirs] [--deep]

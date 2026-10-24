@@ -1,4 +1,4 @@
-# gwt-leads: turn the gaps of a tree into queue tasks
+# gwt-leads
 
 [gwt-queue](queue.md) holds what to search next. Somebody has to decide what that is. In the pipeline the judge did it by reading weak-points tables and branch depth by hand, every round. `gwt-leads` reads a tree dump offline and lists the gaps, ranked, ready to seed the queue. It never touches the tree.
 

@@ -1,4 +1,4 @@
-# gwt-ledger: the "already searched" ledger
+# gwt-ledger
 
 When several research agents work the same tree at once, they repeat each other's searches. A negative search costs as much as a positive one and leaves nothing in the tree, so nobody sees it was done. `gwt-ledger` is one TSV file every agent reads before a search and appends to after it.
 
@@ -46,6 +46,8 @@ gwt-ledger due            # rows whose next_date is today or earlier; --on YYYY-
 ```
 
 A ledger written with the older 8 columns needs no upgrade: its rows read with an empty `next_date`, and new rows are appended with the ninth column.
+
+`add` records the lane from `--agent` (default `$GWT_AGENT`) and the date from `--date` (default today).
 
 In a script: `gwt-ledger check ... >/dev/null && echo "already done, skip"`.
 

@@ -1,4 +1,4 @@
-# gwt-gate: one request pace shared by every lane on a machine
+# gwt-gate
 
 FamilySearch and similar sites block an account or an IP address after too many requests, and the block lasts a day. When several agents and scripts call the same site from one machine, each one pacing itself is not enough: together they cross the limit. `gwt-gate` gives them one common pace. Every lane asks the gate before each request, and the gate hands out one slot at a time for all of them together.
 

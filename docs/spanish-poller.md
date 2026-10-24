@@ -1,10 +1,10 @@
-# gwt-spanish-poller: watch Spanish civil-registry requests and the DEHú inbox
+# gwt-spanish-poller
 
 Certificates requested from Spanish civil registries through the Ministerio de Justicia sede come back slowly, and sometimes only through DEHú (Dirección Electrónica Habilitada única). The mail notice just says «Nueva comunicación electrónica», and «Estado de mis expedientes» drops a refused case without a word. Checking all of that by hand gets skipped, and a reply can sit unseen for days.
 
 `gwt-spanish-poller` logs in as each configured person with their client certificate, takes a snapshot of their sede cases and their DEHú inbox, and compares it with the previous snapshot. It prints what changed and tells you through the exit code.
 
-Node 18 or newer with Playwright (`npm install` in `spanish-poller/`, or point `NODE_PATH` at an existing `node_modules` that has `playwright`). Run it as [`spanish-poller/gwt-spanish-poller`](../spanish-poller/gwt-spanish-poller). The code is in [`spanish-poller/gwt_spanish_poller.js`](../spanish-poller/gwt_spanish_poller.js). Tests: `cd spanish-poller && node --test`.
+Node 18 or newer with Playwright (`npm install` in `spanish-poller/`, or point `NODE_PATH` at an existing `node_modules` that has `playwright`). Run it as [`spanish-poller/gwt-spanish-poller`](https://github.com/GeiserX/gramps-web-toolkit/blob/main/spanish-poller/gwt-spanish-poller). The code is in [`spanish-poller/gwt_spanish_poller.js`](https://github.com/GeiserX/gramps-web-toolkit/blob/main/spanish-poller/gwt_spanish_poller.js). Tests: `cd spanish-poller && node --test`.
 
 ```
 gwt-spanish-poller --config FILE [--only ID] [--dump DIR]    # or set GWT_SPANISH_POLLER_CONFIG
