@@ -18,7 +18,7 @@ MyHeritage sits behind Imperva. A logged-out browser context from our addresses 
 
 Searches are read from the site's own search JSON, not from the page text. Opening a `/research?...action=query` URL makes the page call `POST /web-family-graphql/search_in_historical_records_split/`, and the tool captures that answer with a response listener. It never builds GraphQL calls and never handles the bearer token. The answer is structured: id, name, link, collection (`is_free`, `has_images`, record count), thumbnail and the display fields. The server already hides what the plan does not cover. A hidden value comes back as a link to `/paywall?...subscription_type=data` with the word `Día`, `Mes` or `Lugar`. The letters the page shows in its place are decoration, so text scraping would read nonsense.
 
-Logging in is per account and private (vault, a code mailed to the owner, which box), so it is not in the toolkit. A login script writes the account's Playwright state file (mode 600), and `gwt-mh --context new --storage-state FILE` opens a fresh context from it. `--context existing` uses the browser's own first context instead, for a Chrome that one account already owns. A session is never copied to another account or tool.
+Logging in is per account and private (vault, a code mailed to the owner, which box), so it is not in the toolkit. A login script writes the account's Playwright state file (mode 600), and `gwt-mh --storage-state FILE` opens a fresh context of its own from it. It never attaches to a context already open in that Chrome, because that context may belong to another tool or agent. A session is never copied to another account or tool.
 
 | File | What it is |
 |---|---|
@@ -46,7 +46,7 @@ The monthly tree backup ("Copia de seguridad") is a separate add-on at 5 EUR a m
 
 ## 3. Free vs paid
 
-*Observed* means we saw it on an account with that plan in October 2026: Basic on a free account, Omni on a paid one. *Documented* means MyHeritage's pricing page or help says so and we did not see it. Premium, PremiumPlus, Data and Complete were not observed directly.
+*Observed* means we saw it on an account with that plan in October 2026: Basic on a free account, Omni on a paid one. *Documented* means MyHeritage's pricing page or help says so and we did not see it. Premium, PremiumPlus, Data and Complete were not observed directly. The Basic observations come from a single run on one free account on 2026-10-24; a second check of the original-image and OldNews rows is still due, and that account was locked for 24 h by the attempt to make it (see Traps).
 
 | Feature | Basic | Premium, PremiumPlus | Data | Complete | Omni |
 |---|---|---|---|---|---|
@@ -82,6 +82,8 @@ Every capture adds observations `{at, signal, value, url}` to `plan.json` in the
 |---|---|---|
 | `records` | a non-free collection outside OldNews shows a day or a place in an event, or a non-free `showRecord` opens | any masked field on a search page, or a `showRecord` ending at `/paywall` |
 | `images` | the record page of a collection with images gives a download link or an image | it gives none |
+
+`images` is kept per collection (`collection` in the observation) and the capability is only a summary. It never decides whether `fetch` tries an image: on a plan with `records` true, every record of a collection with images gets the image step. One index-only collection therefore never switches images off for the others.
 | `oldnews_pages` | the record page says the full page is "incluido en su plan" / "included in your plan" | only the blurred page is served |
 | `tree_review` | (not observed yet) | a review ends at `/paywall?...reason=178` |
 
@@ -89,21 +91,22 @@ The label is `basic` (records false), `data+` (records true), `omni` (records an
 
 ## 6. Safe use
 
-- One session per account, one gate per account (`--gate-dir`, default `~/.cache/gwt-gate-mh-<account>`).
+- One session per account, one gate per account (`--gate-dir`, default `~/.cache/gwt-gate-mh-<account>`). The session takes `session.lock` in the gate dir; a second session on the same account stops with exit 3. The kernel drops the lock when the process dies.
 - A random 10-25 s between page loads (the gate's 17 s start, down to 10 s after an hour without a hit, plus 0-8 s), and a 2-4 min rest every `--rest-every` loads (default 45). An Omni account searched 148 times at that pace with no wall.
-- On a wall, stop. The Imperva texts (`_Incapsula_Resource`, `Incapsula incident ID`, `Security check`) and "actividad inusual" / "unusual activity" become a gate hit and exit 3. A logged-out page (`/login`, a verification-code prompt, `Iniciar sesión` with no account menu) becomes exit 4. The tool never clicks anything on a wall; a person looks.
+- On a wall, stop. The Imperva texts (`_Incapsula_Resource`, `Incapsula incident ID`, `Security check`, the Spanish `Control de Seguridad`, an hCaptcha), "actividad inusual" / "unusual activity", and the account lockout ("El acceso se ha desactivado temporalmente ... actividad irregular" / "temporarily disabled ... irregular activity") become a gate hit and exit 3. They are matched without regard to case and before the `/login` test, because the lockout is served on `/login`. A logged-out page (`/login`, a verification-code prompt, `Iniciar sesión` with no account menu) becomes exit 4. The tool never clicks anything on a wall; a person looks.
+- **Never log in again after a wall.** The lockout lasts 24 h, and each new login attempt from the same account or address during it can extend it. Three logins in one day from one address got a free account locked and the address an Imperva hCaptcha. After exit 3, make no request on that account or from that address for at least 24 h. Exit 4 allows one new login, never a retry loop.
 - Read only. The tool opens URLs and reads them. It has no code path that saves a record, confirms or rejects a match, uploads, sends a message, starts a trial or buys. `matches` lists cards and never opens a review.
 - Never share, export or copy a session or its cookies between accounts or tools.
 - Session tokens never reach disk. The page HTML carries several (`fgToken`, `webClientFgToken`, `mhXsrfToken`, `csrf_token`) besides the search's `bearer_token`; every envelope is scrubbed before it is cached or written.
 
-Exit codes: 0 ok, 2 nothing parsed, 3 wall or gate paused, 4 session logged out, 5 paywall (recorded as plan evidence; nothing else saved unless `fetch --search` has the search record).
+Exit codes: 0 ok, 2 nothing parsed, 3 wall, lockout, gate paused or another session on the account, 4 session logged out, 5 paywall (recorded as plan evidence; nothing else saved unless `fetch --search` has the search record).
 
 ## 7. Storage: the most we can keep
 
 `fetch` writes `DIR/<collection>/<item>/` and a `manifest.tsv` with `file kind url sha256 size width height plan original fetched_at collection_id item_id`. Kinds, in the order tried:
 
 1. `record-html`, `record-text`, `record-json` (every field parsed from the page), `normalized` (the `gwt-rank` record), `citation`, `collection` (name, record count, description, provider). On Basic, where the record page is paywalled, `record-json` is the search record itself, the citation is built from it, and `collection` comes from the search's collection block.
-2. `image`: the record page's download link fetched with the session, or else the largest image the page loaded, by pixel area. Only when the plan is known to show images.
+2. `image`: the record page's image download link fetched with the session (at most two links, only ones on MyHeritage's image CDN or naming a record image or scan; app, paywall, GEDCOM and installer links are skipped), or else the largest image the page loaded, by pixel area. Tried on every record of a collection with images once `records` is true.
 3. `oldnews-page` and `oldnews-ocr`: the unblurred page from OldNews.com and its text, only when `oldnews_pages` is true. The blurred page Basic gets is never saved; it adds nothing to the thumbnail.
 4. `thumbnail`: the search thumbnail, `original=no`.
 5. `screenshot-fallback`: only when step 2 or 3 fails on a plan that allows it, `original=no`.
@@ -135,6 +138,8 @@ Only `equivalent` lets MyHeritage go first for that collection, under `myheritag
 FamilySearch gives original images for many collections at no cost; some are limited to signed-in users, affiliate libraries or FamilySearch centers. Our FamilySearch tools download images ([gwt-fetch](fetch.md)) but do not yet keep the image, the record JSON and the citation in rawstore with a manifest like this one. Aligning them is a follow-up.
 
 ## Traps
+
+- MyHeritage's 24 h lockout ("El acceso se ha desactivado temporalmente ... actividad irregular") appears on `/login` after a password is sent. Read as "logged out" it invited another login, which keeps the lock going. It is a wall now. Repeated logins from one address in one day also bring an Imperva hCaptcha on every page; a re-check belongs on another day, from an address that has not just logged in.
 
 - OldNews search results show places on a free account. Counting them as paid evidence labelled a free account `data+`.
 - The record page puts the place on its own line under the date, starting with a space and a no-break space.

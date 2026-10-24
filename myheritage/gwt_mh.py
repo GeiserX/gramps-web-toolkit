@@ -146,8 +146,11 @@ def ids_from_link(link):
 # ---------------------------------------------------------------- page classification
 
 
-WALL_MARKERS = ('_Incapsula_Resource', 'Incapsula incident ID', 'Security check', 'actividad inusual',
-                'unusual activity')
+# Bot walls and account lockouts. Matched case-insensitively, and before the /login test: the 24 h lockout
+# is served on /login, and reading it as "logged out" invites the new login that keeps the lock going.
+WALL_MARKERS = ('_Incapsula_Resource', 'Incapsula incident ID', 'Security check', 'Control de Seguridad',
+                'hCaptcha', 'actividad inusual', 'unusual activity', 'actividad irregular', 'irregular activity',
+                'desactivado temporalmente', 'temporarily disabled')
 LOGIN_MARKERS = ('Verifique su correo', 'Verify your email', 'Ingrese el código', 'Enter the code')
 SIGNED_IN_MARKERS = ('Opciones de cuenta', 'Account options')
 
@@ -155,7 +158,8 @@ SIGNED_IN_MARKERS = ('Opciones de cuenta', 'Account options')
 def classify(final_url, text='', html_text=''):
     """'wall' (bot check: stop, exit 3), 'dead' (logged out: exit 4), 'paywall' (exit 5) or 'ok'."""
     blob = (text or '') + '\n' + (html_text or '')
-    if any(m in blob for m in WALL_MARKERS):
+    low = blob.lower()
+    if any(m.lower() in low for m in WALL_MARKERS):
         return 'wall'
     path = urllib.parse.urlsplit(final_url or '').path.lower()
     if '/login' in path or any(m in (text or '') for m in LOGIN_MARKERS):
@@ -646,8 +650,9 @@ def search_observations(items, url=''):
     return [{'signal': 'records', 'value': value, 'url': url}]
 
 
-def record_observations(final_url, collection_free=None, parsed=None, has_images=None, viewer=None, url=''):
-    """Plan evidence from opening a showRecord page."""
+def record_observations(final_url, collection_free=None, parsed=None, has_images=None, viewer=None, url='',
+                        collection=None):
+    """Plan evidence from opening a showRecord page. An image observation belongs to one collection."""
     obs = []
     state = classify(final_url, '')
     q = urllib.parse.parse_qs(urllib.parse.urlsplit(final_url or '').query)
@@ -660,19 +665,33 @@ def record_observations(final_url, collection_free=None, parsed=None, has_images
     if collection_free is False:
         obs.append({'signal': 'records', 'value': True, 'url': url})
     if has_images and viewer is not None:
-        obs.append({'signal': 'images', 'value': bool(viewer), 'url': url})
+        obs.append({'signal': 'images', 'value': bool(viewer), 'url': url, 'collection': str(collection or '')})
     if parsed and parsed.get('oldnews_link') and parsed.get('oldnews_included'):
         obs.append({'signal': 'oldnews_pages', 'value': True, 'url': url})
     return obs
 
 
+def image_collections(observations):
+    """{collection id: whether its record page gave an original image}, newest observation per collection."""
+    seen = {}
+    for _, o in sorted(enumerate(observations), key=lambda x: (x[1].get('at', ''), x[0])):
+        if o.get('signal') == 'images':
+            seen[str(o.get('collection') or '')] = bool(o['value'])
+    return seen
+
+
 def capabilities(observations):
-    """The newest observation of each signal wins (a plan can lapse or be renewed)."""
+    """The newest observation of each signal wins (a plan can lapse or be renewed). `images` is a summary
+    only: true when any collection gave an original, false when every one tried gave none. It never gates
+    a fetch, because whether an image exists is a fact of each collection, not of the plan."""
     caps = {k: None for k in CAPABILITIES}
     for o in sorted(enumerate(observations), key=lambda x: (x[1].get('at', ''), x[0])):
         o = o[1]
-        if o.get('signal') in caps:
+        if o.get('signal') in caps and o['signal'] != 'images':
             caps[o['signal']] = bool(o['value'])
+    per = image_collections(observations)
+    if per:
+        caps['images'] = any(per.values())
     return caps
 
 
@@ -726,16 +745,39 @@ RAWSTORE_KINDS = {'record-html', 'image', 'oldnews-page', 'oldnews-ocr-pdf', 'th
 
 
 def plan_fetch(caps, has_images=False, oldnews=False, thumbnail=False):
-    """The kinds `fetch` tries, in order, for one record on this plan. An image only when the plan is
-    known to show images; on basic or unknown, the thumbnail stands in and is marked not original."""
+    """The kinds `fetch` tries, in order, for one record on this plan. The image is tried on every record of
+    a collection with images once the plan is known to open records; on basic or unknown, the thumbnail
+    stands in and is marked not original."""
     kinds = list(RECORD_KINDS)
-    if caps.get('images') and has_images:
+    if caps.get('records') and has_images:
         kinds.append('image')
     if caps.get('oldnews_pages') and oldnews:
         kinds += ['oldnews-page', 'oldnews-ocr']
     if thumbnail:
         kinds.append('thumbnail')
     return kinds
+
+
+_NOT_IMAGE_LINK = re.compile(r'/(?:paywall|app|apps|mobile|download-app|downloads?/?$|family-tree-builder|dna)\b|'
+                             r'subscription|\.(?:exe|dmg|apk|ged|zip)(?:\?|$)', re.I)
+
+
+def image_download_links(hrefs, limit=2):
+    """The record-image download links among a record page's hrefs: on MyHeritage's image CDN, or naming a
+    record image, never an app, paywall, GEDCOM or installer link. At most `limit`, since each one is a
+    gated fetch."""
+    out = []
+    for h in hrefs or []:
+        p = urllib.parse.urlsplit(h)
+        if p.scheme not in ('http', 'https') or _NOT_IMAGE_LINK.search(p.path + '?' + p.query):
+            continue
+        host = p.netloc.lower()
+        if host.endswith('myheritageimages.com') or re.search(r'record|image|scan', p.path + p.query, re.I):
+            if h not in out:
+                out.append(h)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def image_size(data):

@@ -153,6 +153,19 @@ class Walls(unittest.TestCase):
         self.assertEqual(mh.EXIT_FOR['wall'], 3)
         self.assertEqual(mh.classify(mh.HOST + '/research', mh.html_to_text(load('login_wall.html'))), 'dead')
         self.assertEqual(mh.classify(mh.HOST + '/login?x=1', 'x'), 'dead')
+
+    def test_lockout_on_login_page_is_a_wall_not_dead(self):
+        page = load('lockout_es.html')
+        self.assertEqual(mh.classify(mh.HOST + '/login', mh.html_to_text(page), page), 'wall')
+        self.assertEqual(mh.classify(mh.HOST + '/login', mh.html_to_text(page)), 'wall')
+        en = 'Access temporarily disabled. Your access has been temporarily disabled due to irregular activity.'
+        self.assertEqual(mh.classify(mh.HOST + '/login', en), 'wall')
+
+    def test_spanish_imperva_hcaptcha_is_a_wall(self):
+        page = load('imperva_es.html')
+        self.assertEqual(mh.classify(mh.HOST + '/research?x', mh.html_to_text(page), page), 'wall')
+        self.assertEqual(mh.classify(mh.HOST + '/research?x', 'CONTROL DE SEGURIDAD'), 'wall')
+        self.assertEqual(mh.classify(mh.HOST + '/research?x', '', '<iframe src="https://hcaptcha.com/x">'), 'wall')
         self.assertEqual(mh.EXIT_FOR['dead'], 4)
         self.assertEqual(mh.classify(load('paywall_final_url.txt').strip(), 'Opciones de cuenta'), 'paywall')
         self.assertEqual(mh.EXIT_FOR['paywall'], 5)
@@ -246,12 +259,58 @@ class FetchPlan(unittest.TestCase):
         self.assertEqual(kinds[-1], 'thumbnail')
         self.assertNotIn('image', mh.plan_fetch(mh.capabilities([]), has_images=True))
 
+    def test_records_plan_tries_image_without_any_image_observation(self):
+        caps = mh.capabilities([{'signal': 'records', 'value': True}])
+        self.assertIsNone(caps['images'])
+        self.assertIn('image', mh.plan_fetch(caps, has_images=True))
+
+    def test_one_collection_without_image_does_not_turn_images_off_elsewhere(self):
+        obs = [{'signal': 'records', 'value': True, 'at': '1'},
+               {'signal': 'images', 'value': True, 'collection': '10', 'at': '2'},
+               {'signal': 'images', 'value': False, 'collection': '20', 'at': '3'}]
+        caps = mh.capabilities(obs)
+        self.assertTrue(caps['images'])
+        self.assertEqual(mh.image_collections(obs), {'10': True, '20': False})
+        self.assertIn('image', mh.plan_fetch(caps, has_images=True))
+        caps2 = mh.capabilities(obs[:1] + obs[2:])
+        self.assertFalse(caps2['images'])
+        self.assertIn('image', mh.plan_fetch(caps2, has_images=True))
+        o = mh.record_observations(mh.HOST + '/research/collection-20/x?itemId=1', has_images=True, viewer=False,
+                                   collection='20')
+        self.assertEqual(o, [{'signal': 'images', 'value': False, 'url': '', 'collection': '20'}])
+
+    def test_download_links_keep_record_images_only(self):
+        hrefs = ['https://www.myheritage.es/download-app', 'https://www.myheritage.es/paywall?x=download',
+                 'https://www.myheritage.es/FP/download.php?x=1', 'https://example.invalid/app.dmg?download=1',
+                 'https://cf.myheritageimages.com/records/full/x_INVENTED.jpg?download=1',
+                 'https://www.myheritage.es/research/record-image/download?itemId=1',
+                 'https://www.myheritage.es/research/record-image/download?itemId=2',
+                 'https://www.myheritage.es/research/record-image/download?itemId=3', 'javascript:void(0)']
+        got = mh.image_download_links(hrefs)
+        self.assertEqual(got, ['https://cf.myheritageimages.com/records/full/x_INVENTED.jpg?download=1',
+                               'https://www.myheritage.es/research/record-image/download?itemId=1'])
+
     def test_paid_with_images_plans_image(self):
         caps = mh.capabilities([{'signal': 'records', 'value': True}, {'signal': 'images', 'value': True}])
         self.assertIn('image', mh.plan_fetch(caps, has_images=True))
         self.assertNotIn('image', mh.plan_fetch(caps, has_images=False))
         caps['oldnews_pages'] = True
         self.assertEqual(mh.plan_fetch(caps, oldnews=True)[-2:], ['oldnews-page', 'oldnews-ocr'])
+
+
+class SessionLock(unittest.TestCase):
+    def test_second_session_on_one_account_is_busy(self):
+        import gwt_mh_browser as b
+        with tempfile.TemporaryDirectory() as d:
+            mk = lambda lane: b.Session('', 'ana', os.path.join(d, 'c'), os.path.join(d, 'g'), lane, log=lambda m: None)
+            one, two = mk('a'), mk('b')
+            one.acquire()
+            with self.assertRaises(b.Busy) as cm:
+                two.acquire()
+            self.assertEqual(cm.exception.exit_code, mh.EXIT_WALL)
+            one.release()
+            two.acquire()
+            two.release()
 
 
 class Slugs(unittest.TestCase):

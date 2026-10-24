@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """gwt_mh_browser: the only gwt-mh module that drives a browser.
 
-It attaches to a Chrome over CDP (Playwright's connect_over_cdp, no browser download), in a new context
-built from the account's saved login state or in the browser's existing context, and reads pages from
-inside that signed-in session. Every page load waits for the account's gwt-gate slot plus a random
+It attaches to a Chrome over CDP (Playwright's connect_over_cdp, no browser download), always in a new
+context of its own built from the account's saved login state, so it never touches a context another
+tool or agent owns, and reads pages from inside that signed-in session. One session per account at a
+time: a second one on the same account stops with Busy (exit 3). Every page load waits for the account's gwt-gate slot plus a random
 0-8 s, rests 2-4 min every --rest-every loads, and goes through gwt-fscache, so a page already read is
 never loaded twice. It never clicks: it opens URLs and reads what they show.
 
 On a bot wall it reports a gate hit and raises Wall (exit 3); on a login wall, Dead (exit 4); on a
 paywall, Paywall (exit 5). None of the three is ever stored in the cache.
 """
-import base64, json, os, random, sys, time
+import base64, fcntl, json, os, random, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 for sub in ('gate', 'fscache'):
@@ -46,10 +47,14 @@ class Paywall(Stop):
     exit_code = mh.EXIT_PAYWALL
 
 
+class Busy(Stop):
+    exit_code = mh.EXIT_WALL
+
+
 class Session:
-    def __init__(self, cdp, account, cache_dir, gate_dir, lane, context='new', storage_state=None,
+    def __init__(self, cdp, account, cache_dir, gate_dir, lane, storage_state=None,
                  rest_every=45, jitter=8.0, refresh=False, log=None):
-        self.cdp, self.account, self.lane, self.context_mode = cdp, account, lane, context
+        self.cdp, self.account, self.lane = cdp, account, lane
         self.storage_state = os.path.expanduser(storage_state) if storage_state else None
         self.cache_dir = os.path.expanduser(cache_dir)
         self.gate = Gate(gate_dir, start=17, floor=10, ceil=60)
@@ -58,40 +63,65 @@ class Session:
         self.plan = mh.PlanState(self.cache_dir)
         self.rest_every, self.jitter, self.refresh = rest_every, jitter, refresh
         self.log = log or (lambda m: print(m, file=sys.stderr))
-        self._pw = self._browser = self._ctx = self.page = None
+        self._pw = self._browser = self._ctx = self.page = self._lock = None
         self.images = []        # (url, bytes) of image responses during the last load
 
     # ------------------------------------------------------------ lifecycle
 
+    def acquire(self):
+        """Take the account's session lock (session.lock in its gate dir), or raise Busy. The kernel drops
+        the lock when the process dies, so a crashed run never leaves the account locked."""
+        os.makedirs(self.gate_dir, exist_ok=True)
+        f = open(os.path.join(self.gate_dir, 'session.lock'), 'a+')
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            f.close()
+            raise Busy('another gwt-mh session is open on account %s; one at a time, do other work' % self.account)
+        f.seek(0)
+        f.truncate()
+        f.write('%d %s %s\n' % (os.getpid(), self.lane, mh.now_iso()))
+        f.flush()
+        self._lock = f
+
+    def release(self):
+        if self._lock:
+            fcntl.flock(self._lock, fcntl.LOCK_UN)
+            self._lock.close()
+            self._lock = None
+
     def __enter__(self):
-        from playwright.sync_api import sync_playwright   # imported here so the pure module never needs it
-        self._pw = sync_playwright().start()
-        self._browser = self._pw.chromium.connect_over_cdp(self.cdp)
-        if self.context_mode == 'existing':
-            if not self._browser.contexts:
-                raise Stop('no existing context in that browser; use --context new --storage-state FILE')
-            self._ctx = self._browser.contexts[0]
-        else:
+        self.acquire()
+        try:
+            from playwright.sync_api import sync_playwright   # imported here so the pure module never needs it
+            self._pw = sync_playwright().start()
+            self._browser = self._pw.chromium.connect_over_cdp(self.cdp)
             kw = {'locale': 'es-ES', 'color_scheme': 'dark', 'viewport': {'width': 1400, 'height': 900}}
             if self.storage_state:
                 kw['storage_state'] = self.storage_state
             self._ctx = self._browser.new_context(**kw)
-        self.page = self._ctx.new_page()
-        self.page.on('response', self._on_response)
+            self.page = self._ctx.new_page()
+            self.page.on('response', self._on_response)
+        except BaseException:
+            self.__exit__()
+            raise
         return self
 
     def __exit__(self, *exc):
         try:
             if self.page:
                 self.page.close()
-            if self.context_mode == 'new' and self._ctx:
+            if self._ctx:
                 if self.storage_state:      # keep the account's own refreshed cookies, mode 600, never shared
                     self._ctx.storage_state(path=self.storage_state)
                     os.chmod(self.storage_state, 0o600)
                 self._ctx.close()
         finally:
-            if self._pw:
-                self._pw.stop()    # disconnects; never closes the remote Chrome itself
+            try:
+                if self._pw:
+                    self._pw.stop()    # disconnects; never closes the remote Chrome itself
+            finally:
+                self.release()
 
     # ------------------------------------------------------------ pace
 
@@ -167,10 +197,12 @@ class Session:
         st = state.get('st', 'ok')
         if st == 'wall':
             self.gate.hit(self.lane, 'MyHeritage bot wall at ' + key_url)
-            raise Wall('bot wall (Imperva or unusual activity); gate paused, nothing clicked', env)
+            raise Wall('bot wall or account lockout (Imperva, hCaptcha, unusual or irregular activity); gate paused, '
+                       'nothing clicked; do NOT log in again, wait at least 24 h and let a person look', env)
         if st == 'dead':
             self.gate.hit(self.lane, 'MyHeritage session dead at ' + key_url)
-            raise Dead('session is logged out; log in again with the account login tool', env)
+            raise Dead('session is logged out; log in again once with the account login tool, '
+                       'and never after a wall (exit 3)', env)
         if st == 'paywall':
             self.plan.add(mh.record_observations(env['final_url'], url=key_url))
             raise Paywall('the plan does not open this page (%s)' % env['final_url'].split('?')[0], env)
