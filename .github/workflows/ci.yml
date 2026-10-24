@@ -39,6 +39,8 @@ jobs:
         run: cd importxl && python -m unittest -v test_gwt_import_excel test_end_to_end
       - name: queue
         run: cd queue && python -m unittest -v test_gwt_queue
+      - name: leads
+        run: cd leads && python -m unittest -v test_gwt_leads
 
   spanish-poller:
     runs-on: ubuntu-latest

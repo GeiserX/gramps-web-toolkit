@@ -21,6 +21,7 @@ The toolkit works for genealogy in any country. One module, `spanish-poller`, is
 - `gwt-fetch`: downloads archive images and text without a browser, with one manifest row per file: any IIIF archive, Europeana search, plus Spanish sources (DIGIBIB, the historical Gaceta de Madrid, CartoCiudad geocoding)
 - `gwt-ledger`: a shared "already searched" ledger, so parallel agents stop repeating each other's negative searches
 - `gwt-queue`: a durable "what to search next" queue that hands prioritized tasks to lanes, reopens the claims of dead lanes and backs off the tasks that keep failing
+- `gwt-leads`: reads a tree dump offline and lists the gaps (lines that stop, missing vitals, uncited facts), ranked with the root's direct ancestors first, as `gwt-queue` tasks
 - `gwt-fscache`: an on-disk HTTP cache for rate-limited genealogy APIs that never stores a block or an auth header
 - `gwt-rank`: orders record-search results by how well they fit a person in the tree, from the cached FamilySearch JSON or from page text, and never hides a row
 - `gwt-gate`: one request pace shared by every agent on a machine, which backs off on a block and lets priority lanes go first
@@ -36,13 +37,13 @@ python3 -m pip install -e apply      # Python 3.11+, needs only requests
 gwt-apply changes.jsonl              # dry-run: prints the plan and the diff
 ```
 
-`gwt-check`, the ledger, queue, cache, rank and rawstore tools need only the Python standard library and run from their folders (`check/gwt-check`, `importxl/gwt-import-excel`, `ledger/gwt-ledger`, `queue/gwt-queue`, `fscache/gwt-fscache`, `gate/gwt-gate`, `rank/gwt-rank`, `rawstore/gwt-rawstore`). `gwt-spanish-poller` needs Node 18+ and Playwright.
+`gwt-check`, the ledger, queue, cache, rank and rawstore tools need only the Python standard library and run from their folders (`check/gwt-check`, `importxl/gwt-import-excel`, `ledger/gwt-ledger`, `queue/gwt-queue`, `leads/gwt-leads`, `fscache/gwt-fscache`, `gate/gwt-gate`, `rank/gwt-rank`, `rawstore/gwt-rawstore`). `gwt-spanish-poller` needs Node 18+ and Playwright.
 
 ## Documentation
 
 - [The research pipeline](docs/pipeline.md): how agents, verifiers, a judge and a writer share one tree
 - [Hard-won lessons](docs/hard-won.md): each failure that cost us time, data or an account, and the rule that followed
-- [gwt-apply](docs/apply.md), [gwt-check](docs/check.md), [gwt-import-excel](docs/import-excel.md), [gwt-fetch](docs/fetch.md), [gwt-ledger](docs/ledger.md), [gwt-queue](docs/queue.md), [gwt-fscache](docs/fscache.md), [gwt-gate](docs/gate.md), [gwt-rank](docs/rank.md), [gwt-rawstore](docs/rawstore.md), [gwt-spanish-poller](docs/spanish-poller.md), [ocr-bench](docs/ocr-bench.md)
+- [gwt-apply](docs/apply.md), [gwt-check](docs/check.md), [gwt-import-excel](docs/import-excel.md), [gwt-fetch](docs/fetch.md), [gwt-ledger](docs/ledger.md), [gwt-queue](docs/queue.md), [gwt-leads](docs/leads.md), [gwt-fscache](docs/fscache.md), [gwt-gate](docs/gate.md), [gwt-rank](docs/rank.md), [gwt-rawstore](docs/rawstore.md), [gwt-spanish-poller](docs/spanish-poller.md), [ocr-bench](docs/ocr-bench.md)
 
 ## License
 
