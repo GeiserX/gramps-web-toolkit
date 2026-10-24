@@ -636,3 +636,85 @@ def test_repos_reads_odd_names_and_types_and_refuses_a_backup(tmp_path, capsys):
     backup.write_bytes(_to_xml(selftest.clean_tree()))
     assert main(["repos", str(backup)]) == 2
     assert "no repository details" in capsys.readouterr().err
+
+
+def _diamond(depth):
+    """Two people per generation, both children of the previous couple: 1 + 2*depth people
+    whose Ahnentafel expansion fills every position of every generation (pedigree collapse)."""
+    people = {"r": {"handle": "r", "gramps_id": "I_R", "parent_family_list": []}}
+    families = {}
+    prev = ("r", "r")
+    for g in range(1, depth + 1):
+        fa, mo, fam = f"f{g}", f"m{g}", f"fam{g}"
+        families[fam] = {"handle": fam, "father_handle": prev[0], "mother_handle": prev[1],
+                         "child_ref_list": [{"ref": fa}, {"ref": mo}]}
+        people[fa] = {"handle": fa, "gramps_id": f"I_F{g}", "parent_family_list": [fam]}
+        people[mo] = {"handle": mo, "gramps_id": f"I_M{g}", "parent_family_list": [fam]}
+        prev = (fa, mo)
+    data = {t: [] for t in ("events", "places", "citations", "sources", "media", "notes", "repositories", "tags")}
+    data["people"] = list(people.values())
+    data["families"] = list(families.values())
+    return data
+
+
+def test_ahnentafel_collapse_bounded_and_honest(monkeypatch):
+    from gwt_check import compare
+    from gwt_check.tree import Tree
+    monkeypatch.setattr(compare, "MAX_POSITIONS", 200)
+    data = _diamond(12)  # full expansion would be 8191 positions over 12 generations
+    old = Tree(copy.deepcopy(data), source="old")
+    new = Tree(data, source="new")
+    # identical trees: the cap is said out loud, nothing is lost or changed
+    found, info = compare.compare_ahnentafel(old, new, "I_F12")
+    assert [f["check"] for f in found] == ["ahnentafel-truncated"]
+    limit = info["compared up to generation"]
+    assert 0 < limit < 12
+    assert info["before"]["numbers"] == info["after"]["numbers"] == 200
+    # a change inside the compared generations is still found
+    changed = copy.deepcopy(data)
+    next(f for f in changed["families"] if f["handle"] == "fam12")["mother_handle"] = "r"
+    found, _ = compare.compare_ahnentafel(Tree(copy.deepcopy(data), source="old"),
+                                          Tree(changed, source="new"), "I_F12")
+    assert ("ahnentafel-changed", "3 I_M11") in {(f["check"], f["key"]) for f in found}
+    # a loss deeper than the compared generations is not claimed either
+    lost_deep = copy.deepcopy(data)
+    next(f for f in lost_deep["families"] if f["handle"] == "fam2")["father_handle"] = ""
+    found, _ = compare.compare_ahnentafel(Tree(copy.deepcopy(data), source="old"),
+                                          Tree(lost_deep, source="new"), "I_F12")
+    assert [f["check"] for f in found] == ["ahnentafel-truncated"]
+
+
+def test_ahnentafel_cycle_is_bounded(monkeypatch):
+    from gwt_check import compare
+    from gwt_check.tree import Tree
+    monkeypatch.setattr(compare, "MAX_POSITIONS", 200)
+    # someone is their own parent: without the cap the walk never ends
+    data = {t: [] for t in ("events", "places", "citations", "sources", "media", "notes", "repositories", "tags")}
+    data["people"] = [{"handle": "x", "gramps_id": "I_X", "parent_family_list": ["fx"]}]
+    data["families"] = [{"handle": "fx", "father_handle": "x", "mother_handle": "x",
+                         "child_ref_list": [{"ref": "x"}]}]
+    out = compare.ahnentafel(Tree(data, source="t"), "I_X")
+    assert len(out) == 200 and out.complete_depth == 6
+
+
+def test_ahnentafel_normal_tree_is_not_truncated():
+    from gwt_check import compare
+    from gwt_check.tree import Tree
+    clean = selftest.clean_tree()
+    out = compare.ahnentafel(Tree(clean, source="t"), "I0001")
+    assert out and out.complete_depth is None
+
+
+def test_root_only_report_says_when_ahnentafel_is_truncated(tmp_path, capsys, monkeypatch):
+    from gwt_check import compare
+    monkeypatch.setattr(compare, "MAX_POSITIONS", 200)
+    dump = _write(tmp_path, "diamond.json", _diamond(12))
+    main(["check", dump, "--root", "I_F12"])  # the bare diamond trips other checks; only the print matters
+    out = capsys.readouterr().out
+    assert "truncated" in out and "200 numbers" in out
+
+
+def test_root_only_report_quiet_when_ahnentafel_is_complete(tmp_path, capsys):
+    dump = _write(tmp_path, "clean.json", selftest.clean_tree())
+    assert main(["check", dump, "--root", "I0001"]) == 0
+    assert "truncated" not in capsys.readouterr().out

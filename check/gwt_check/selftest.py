@@ -320,6 +320,24 @@ def p_ahnentafel_changed(d):
     _get(d, "people", "I0004")["family_list"] = []
 
 
+def p_ahnentafel_truncated(d):
+    # every couple shares the previous couple as both pairs of parents: positions double per
+    # generation until they pass MAX_POSITIONS, and the comparison must say how far it looked
+    kids = ["I0004", "I0005", "I0006", "I0007"]  # the four grandparents share the first couple
+    for k in range(15):
+        fa, mo, fam = f"I{200 + 2 * k}", f"I{201 + 2 * k}", f"F{200 + k}"
+        f = copy.deepcopy(_get(d, "families", "F0003"))
+        f.update(handle="h" + fam, gramps_id=fam, father_handle="h" + fa, mother_handle="h" + mo,
+                 child_ref_list=[_ref("h" + c, frel="Birth", mrel="Birth") for c in kids],
+                 event_ref_list=[], tag_list=[])
+        d["families"].append(f)
+        for c in kids:
+            _get(d, "people", c)["parent_family_list"].append("h" + fam)
+        _new_person(d, fa, f"Pascual{k}", "Colapso", family="h" + fam)
+        _new_person(d, mo, f"Petronila{k}", "Colapso", family="h" + fam)
+        kids = [fa, mo]
+
+
 # (plant, check that must fire, key it must carry, needs the clean tree as --since and I0001 as root)
 PLANTS = [
     (p_orphan_event, "orphan-event", "E0102", False),
@@ -358,6 +376,7 @@ PLANTS = [
     (p_object_removed, "missing-object", "notes N0001", True),
     (p_ahnentafel_lost, "ahnentafel-lost", "6 I0006", True),
     (p_ahnentafel_changed, "ahnentafel-changed", "4 I0004", True),
+    (p_ahnentafel_truncated, "ahnentafel-truncated", "root I0001", True),
 ]
 
 

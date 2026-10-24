@@ -10,6 +10,7 @@ import time
 
 from .checks import CHECKS, run_checks
 from .client import ApiError, Client
+from . import compare
 from .compare import ahnentafel, compare_ahnentafel, diff
 from .tree import BadInput, Tree, load, save
 
@@ -131,6 +132,8 @@ def check(tree: Tree, *, since: Tree | None = None, tag: str | None = None, root
         if not a:
             raise BadInput(f"--root {root}: no such person")
         report["ahnentafel"] = {"numbers": len(a), "people": len(set(a.values()))}
+        if a.complete_depth is not None:
+            report["ahnentafel"]["truncated"] = f"over {compare.MAX_POSITIONS} positions; walked up to generation {a.complete_depth}"
     known = dict.fromkeys(known, "") if isinstance(known, set) else (known or {})
     ignore = ignore or set()
     check_names(ignore)
@@ -188,7 +191,8 @@ def print_report(report: dict, limit: int) -> None:
             print(f"Ahnentafel: {a['before']['numbers']} numbers / {a['before']['people']} people before, "
                   f"{a['after']['numbers']} / {a['after']['people']} after, {len(a['new numbers'])} new numbers")
         else:
-            print(f"Ahnentafel: {a['numbers']} numbers, {a['people']} people")
+            print(f"Ahnentafel: {a['numbers']} numbers, {a['people']} people"
+                  + (f" (truncated: {a['truncated']})" if "truncated" in a else ""))
     for name, count in report.get("ignored", {}).items():
         print(f"ignored {name}: {count} finding(s), not counted (--ignore-check)")
     n = len(report["new"])
