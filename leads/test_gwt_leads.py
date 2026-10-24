@@ -109,6 +109,22 @@ class LeadsTest(unittest.TestCase):
             rows = subprocess.run([qcli, '--queue', q, 'list'], capture_output=True, text=True).stdout.splitlines()
             self.assertEqual(len(rows), 3)
 
+    def test_queue_groups_gaps_per_person_and_sets_source(self):
+        rows = L.leads(tree(), 'I1')
+        tasks = L.group_by_person(rows)
+        keys = [(t['person'], t['task']) for t in tasks]
+        self.assertEqual(len(keys), len(set(keys)))
+        self.assertLessEqual(len(tasks), len(rows))
+        for t in tasks:
+            self.assertEqual(t['query'] if 'query' in t else t['label'], t['label'])
+            self.assertEqual(t['priority'], max(r['priority'] for r in rows if r['person'] == t['person']))
+        multi = [t for t in tasks if len(t['gaps']) > 1]
+        if multi:
+            self.assertIn('; ', L.as_queue_line(multi[0]))
+        line = L.as_queue_line(tasks[0], 'familysearch')
+        self.assertIn("--source familysearch", line)
+        self.assertNotIn('--source', L.as_queue_line(tasks[0]))
+
     # --- the real `gwt-check dump` shape, and honest dates ---
 
     def real_dump(self, td, mutate=None):

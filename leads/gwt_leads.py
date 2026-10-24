@@ -151,13 +151,33 @@ def leads(T, root_gid=None, kinds=KINDS):
     return out
 
 
-def as_queue_line(r):
-    kind = 'search' if r['kind'] != 'uncited' else 'verify'
-    query = '%s %s' % (r['label'], r['what'])
-    note = '%s; %s' % (r['kind'], r['what'])
-    return ' '.join(['gwt-queue add --person', shlex.quote(r['person']), '--label', shlex.quote(r['label']),
-                     '--kind', kind, '--query', shlex.quote(query), '--priority', str(r['priority']),
-                     '--note', shlex.quote(note), '--dedupe'])
+def group_by_person(rows):
+    """One task per person and task kind: the gaps of one person are one search, not one search per gap."""
+    groups = {}
+    for r in rows:
+        kind = 'search' if r['kind'] != 'uncited' else 'verify'
+        g = groups.setdefault((r['person'], kind), {'person': r['person'], 'label': r['label'], 'task': kind,
+                                                   'priority': r['priority'], 'gaps': []})
+        g['priority'] = max(g['priority'], r['priority'])
+        g['gaps'].append('%s: %s' % (r['kind'], r['what']))
+    out = list(groups.values())
+    out.sort(key=lambda g: (-g['priority'], g['person'], g['task']))
+    return out
+
+
+def as_queue_line(r, source=''):
+    if 'gaps' in r:
+        kind, query, note = r['task'], r['label'], '; '.join(r['gaps'])
+    else:
+        kind = 'search' if r['kind'] != 'uncited' else 'verify'
+        query = '%s %s' % (r['label'], r['what'])
+        note = '%s; %s' % (r['kind'], r['what'])
+    parts = ['gwt-queue add --person', shlex.quote(r['person']), '--label', shlex.quote(r['label']),
+             '--kind', kind, '--query', shlex.quote(query), '--priority', str(r['priority']),
+             '--note', shlex.quote(note)]
+    if source:
+        parts += ['--source', shlex.quote(source)]
+    return ' '.join(parts + ['--dedupe'])
 
 
 def main(argv=None):
@@ -167,6 +187,8 @@ def main(argv=None):
     p.add_argument('--kinds', default=','.join(KINDS))
     p.add_argument('--limit', type=int, default=0)
     p.add_argument('--format', choices=('queue', 'tsv', 'json'), default='tsv')
+    p.add_argument('--source', default='', help='source name to put on every queue task (queue format)')
+    p.add_argument('--per-gap', action='store_true', help='queue format: one task per gap instead of one per person')
     args = p.parse_args(argv)
     kinds = tuple(k for k in args.kinds.split(',') if k)
     bad = [k for k in kinds if k not in KINDS]
@@ -177,11 +199,13 @@ def main(argv=None):
     except BadInput as exc:
         print('gwt-leads: %s' % exc, file=sys.stderr)
         return 2
+    if args.format == 'queue' and not args.per_gap:
+        rows = group_by_person(rows)
     if args.limit:
         rows = rows[:args.limit]
     for r in rows:
         if args.format == 'queue':
-            print(as_queue_line(r))
+            print(as_queue_line(r, args.source))
         elif args.format == 'json':
             print(json.dumps(r, ensure_ascii=False))
         else:

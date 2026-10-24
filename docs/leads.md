@@ -22,12 +22,12 @@ With `--root I0001` (a Gramps id), the root's ancestors rank first: 100 minus on
 
 - `--format tsv` (default): `priority`, person id, label, kind, what.
 - `--format json`: one JSON object per line.
-- `--format queue`: one `gwt-queue add ... --dedupe` line per gap, with the person's Gramps id as key and every value shell-quoted. Because of `--dedupe` it can run after every round:
+- `--format queue`: one `gwt-queue add ... --dedupe` line per person and task kind (`search` or `verify`), query = the person's name, the gaps listed in the note, priority = the best of the gaps. Several gaps of one person are one search, not one per gap. `--per-gap` gives the old one-line-per-gap output; `--source NAME` puts a source on every task so the ledger key is complete. Each line has the person's Gramps id as key and every value shell-quoted. Because of `--dedupe` it can run after every round:
 
 ```bash
 gwt-check dump tree.json.gz
-gwt-leads --root I0001 --format queue --limit 200 tree.json.gz | sh
+gwt-leads --root I0001 --source SRC --format queue --limit 200 tree.json.gz | sh
 gwt-queue report
 ```
 
-`--limit N` keeps the N highest-priority gaps. Run it against a fresh dump after each apply: a gap that was filled stops appearing, and the queue's `--dedupe` skips the ones already waiting.
+`--limit N` keeps the N highest-priority gaps (tasks, in queue format). Run it against a fresh dump after each apply: a gap that was filled stops appearing, and the queue's `--dedupe` skips the ones already waiting.
