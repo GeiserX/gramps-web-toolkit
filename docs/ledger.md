@@ -27,7 +27,8 @@ The path comes from `--ledger`, else `$GWT_LEDGER`, else `./buscado.tsv`. The ag
 ```sh
 export GWT_LEDGER=research/buscado.tsv GWT_AGENT=lane-7
 
-# Before a search. Exit 0 and the matching rows (score first) if it was done; exit 1 if not.
+# Before a search. Exit 0 and the matching rows (best score first, newest first among equals) if it was done;
+# exit 1 if not; exit 2 on a usage error.
 gwt-ledger check --person "Ana Peiro Toledo" --source familysearch \
   --query "Villanueva del Campo baptisms 1801-1850 Ana Peiro"
 
@@ -61,6 +62,23 @@ Queries match fuzzily. The score is the best of three measures:
 Before any of that, every word of the new query must already be in the logged one. Particles (`de`, `la`, `y`, `the`…) don't count, and a word of five letters or more may differ by one inserted, dropped or changed letter. Words with digits (years, film and catalogue numbers) must match exactly, and one logged word never covers two words of the new query. Without this gate, two searches of one catalogue that share a long prefix and differ in one surname (`Real Chancilleria de Granada: Toledo` after `Real Chancilleria de Granada: Peiro Villanueva`) scored over 0.8, and the second search was skipped as already done.
 
 The default threshold is 0.75 (`--threshold` to change it). Reworded, reordered or re-accented queries still match. A different collection, place, name or date range does not.
+
+Rows with the same score come out newest first: by `date`, then the row logged last. So a first-row reader sees a recent `hit` before an old `none` for the same search.
+
+### Exact mode, for automatic reuse
+
+`check --exact` matches only rows of the given source whose normalized query is identical to the new one. It ignores `--threshold`, and it refuses to run without a non-empty `--source` (exit 2).
+
+```sh
+gwt-ledger check --exact --source familysearch --query "Villanueva del Campo baptisms 1801-1850 Ana Peiro"
+```
+
+The default fuzzy check is for a person deciding whether to search. Before a script reuses a logged result in place of searching, use `--exact`, for two reasons:
+
+- **An empty `--source` matches every source.** Leaving `--source` out, or passing an empty value such as an unset `$source`, looks across the whole ledger. A `none` from another site, or from a narrower search there, then answers the check, and the task closes without the search it needed. `--exact` turns that empty value into an error instead.
+- **A fuzzy match is not the same search.** A shorter query counts as done when a longer logged one covers it, and one typo is allowed, so the logged row can be a different search that happens to share the words.
+
+Also skip reuse when the row's `next_date` has arrived: that row asked to be searched again.
 
 ## Traps
 

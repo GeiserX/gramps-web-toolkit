@@ -8,8 +8,9 @@ import os
 import sys
 import time
 
-from .checks import CHECKS, run_checks
+from .checks import CHECKS, INFO_CHECKS, run_checks
 from .client import ApiError, Client
+from . import compare
 from .compare import ahnentafel, compare_ahnentafel, diff
 from .tree import BadInput, Tree, load, save
 
@@ -118,7 +119,7 @@ def check(tree: Tree, *, since: Tree | None = None, tag: str | None = None, root
         scope = set(tagged or ())
         if since is not None:
             scope |= {(t, h) for t, objs in tree.objs.items() for h in objs if h not in since.objs[t]}
-    findings, info = run_checks(tree, scope)
+    findings, info = run_checks(tree, scope, root)
     report = {"counts": tree.counts(), "scope": None if scope is None else len(scope), "info": info}
     if since is not None:
         f, report["diff"] = diff(since, tree, tagged)
@@ -131,6 +132,10 @@ def check(tree: Tree, *, since: Tree | None = None, tag: str | None = None, root
         if not a:
             raise BadInput(f"--root {root}: no such person")
         report["ahnentafel"] = {"numbers": len(a), "people": len(set(a.values()))}
+        if a.complete_depth is not None:
+            report["ahnentafel"]["truncated"] = f"over {compare.MAX_POSITIONS} positions; walked up to generation {a.complete_depth}"
+            findings.append({"check": "ahnentafel-truncated", "key": f"root {root}",
+                             "detail": report["ahnentafel"]["truncated"]})
     known = dict.fromkeys(known, "") if isinstance(known, set) else (known or {})
     ignore = ignore or set()
     check_names(ignore)
@@ -140,7 +145,9 @@ def check(tree: Tree, *, since: Tree | None = None, tag: str | None = None, root
         if known.get((f["check"], f["key"])):
             f["reason"] = known[(f["check"], f["key"])]
     report["findings"] = findings
-    report["new"] = [f for f in findings if not f["known"]]
+    for f in findings:
+        f["info"] = f["check"] in INFO_CHECKS
+    report["new"] = [f for f in findings if not f["known"] and not f["info"]]
     report["ignored"] = {c: sum(1 for f in findings if f["check"] == c) for c in sorted(ignore)}
     return report
 
@@ -164,7 +171,9 @@ def print_report(report: dict, limit: int) -> None:
         new = [f for f in fs if not f["known"]]
         if not fs:
             continue
-        print(f"\n{'FAIL' if new else 'known'} {name}: {len(new)} new, {len(fs) - len(new)} known  ({CHECKS[name]})")
+        counts = (f"{len(fs)} found ({len(fs) - len(new)} known)" if name in INFO_CHECKS
+                  else f"{len(new)} new, {len(fs) - len(new)} known")
+        print(f"\n{'info' if name in INFO_CHECKS else 'FAIL' if new else 'known'} {name}: {counts}  ({CHECKS[name]})")
         for f in [f for f in fs if f["known"] and f.get("reason")][:limit]:
             print(f"  known {f['key']}: {f['reason']}")
         for f in new[:limit]:
@@ -188,11 +197,14 @@ def print_report(report: dict, limit: int) -> None:
             print(f"Ahnentafel: {a['before']['numbers']} numbers / {a['before']['people']} people before, "
                   f"{a['after']['numbers']} / {a['after']['people']} after, {len(a['new numbers'])} new numbers")
         else:
-            print(f"Ahnentafel: {a['numbers']} numbers, {a['people']} people")
+            print(f"Ahnentafel: {a['numbers']} numbers, {a['people']} people"
+                  + (f" (truncated: {a['truncated']})" if "truncated" in a else ""))
     for name, count in report.get("ignored", {}).items():
         print(f"ignored {name}: {count} finding(s), not counted (--ignore-check)")
     n = len(report["new"])
-    print(f"\n{'FAIL' if n else 'OK'}: {n} new finding(s), {len(report['findings']) - n} known")
+    n_info = sum(1 for f in report["findings"] if f["info"] and not f["known"])
+    print(f"\n{'FAIL' if n else 'OK'}: {n} new finding(s), {len(report['findings']) - n - n_info} known"
+          + (f", {n_info} for information only" if n_info else ""))
 
 
 def mark_known(report_path: str, check_name: str, keys: list[str], reason: str, out: str) -> int:
@@ -318,7 +330,8 @@ def main(argv: list[str] | None = None) -> int:
             persistent: list[set] = []
 
             def settled(data):
-                seen.append({(f["check"], f["key"]) for f in run(Tree(data["objects"]))["findings"]})
+                # info findings never fail the run, so a satellite that comes and goes mid-write must not keep it reading
+                seen.append({(f["check"], f["key"]) for f in run(Tree(data["objects"]))["findings"] if not f["info"]})
                 if len(seen) >= SEEN_IN:
                     persistent.append(set.intersection(*seen[-SEEN_IN:]))
                 return len(persistent) >= 2 and persistent[-1] == persistent[-2]
@@ -333,7 +346,8 @@ def main(argv: list[str] | None = None) -> int:
             report["passes"] = data["passes"]
             if data.get("settled"):
                 unconfirmed = (seen[-1] & seen[-2]) - seen[-3]
-                keep = lambda fs: [f for f in fs if (f["check"], f["key"]) in persistent[-1] | unconfirmed]  # noqa: E731
+                keep = lambda fs: [f for f in fs if f["info"]  # noqa: E731
+                                   or (f["check"], f["key"]) in persistent[-1] | unconfirmed]
                 report["in_flight"] = len(report["findings"]) - len(keep(report["findings"]))
                 report["findings"], report["new"] = keep(report["findings"]), keep(report["new"])
                 for f in report["findings"]:
@@ -353,3 +367,7 @@ def main(argv: list[str] | None = None) -> int:
             with open(args.json, "w", encoding="utf-8") as fh:
                 json.dump(report, fh, ensure_ascii=False, indent=1)
     return 1 if report["new"] else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

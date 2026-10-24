@@ -16,6 +16,8 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      - name: every tested package has a CI step
+        run: python .github/scripts/ci_covers_every_package.py
       - run: python -m pip install requests pytest
       - name: apply
         run: cd apply && python -m pytest -q
@@ -29,8 +31,16 @@ jobs:
         run: cd fscache && python -m unittest -v test_gwt_fscache
       - name: gate
         run: cd gate && python -m unittest -v test_gwt_gate
+      - name: rank
+        run: cd rank && python -m unittest -v test_gwt_rank
       - name: rawstore
         run: cd rawstore && python -m unittest -v test_gwt_rawstore
+      - name: importxl
+        run: cd importxl && python -m unittest -v test_gwt_import_excel test_end_to_end
+      - name: queue
+        run: cd queue && python -m unittest -v test_gwt_queue
+      - name: leads
+        run: cd leads && python -m unittest -v test_gwt_leads
 
   spanish-poller:
     runs-on: ubuntu-latest

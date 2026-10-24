@@ -3,7 +3,10 @@ import copy
 import gzip
 import io
 import json
+import os
 import ssl
+import subprocess
+import sys
 import urllib.parse
 
 import pytest
@@ -559,6 +562,23 @@ def test_a_tree_whose_findings_never_settle_gives_up_with_exit_2(live, capsys):
     assert "kept changing" in capsys.readouterr().err
 
 
+def test_info_findings_that_keep_changing_do_not_stop_a_live_read_settling(live, tmp_path):
+    def satellites(server, t, q):  # every pass writes a new couple in no link to the tree, while writes go on
+        if q.get("keys") and t == "families":
+            n = len(server.data["families"])
+            selftest._new_person(server.data, f"I8{n}a", f"Uno{n}", f"Apartado{n}", family=f"hF8{n}")
+            selftest._new_person(server.data, f"I8{n}b", f"Dos{n}", f"Apartado{n}", family=f"hF8{n}")
+            selftest._new_family(server.data, f"F8{n}", f"hI8{n}a", f"hI8{n}b")
+        if q.get("keys") and t == "people":
+            busy_people(server)
+    live(selftest.clean_tree(), satellites)
+    report = str(tmp_path / "r.json")
+    assert main(["check", "--json", report]) == 0
+    r = json.load(open(report))
+    assert r["passes"] == 4 and r["new"] == []
+    assert r["findings"] and {f["check"] for f in r["findings"]} == {"unconnected"}
+
+
 def test_a_gwt_apply_snapshot_is_a_tree(tmp_path, capsys):
     from gwt_check.tree import APPLY_CLASSES
     data = selftest.clean_tree()
@@ -636,3 +656,241 @@ def test_repos_reads_odd_names_and_types_and_refuses_a_backup(tmp_path, capsys):
     backup.write_bytes(_to_xml(selftest.clean_tree()))
     assert main(["repos", str(backup)]) == 2
     assert "no repository details" in capsys.readouterr().err
+
+
+def _unconnected(found):
+    return [(f["key"], f["detail"]) for f in found if f["check"] == "unconnected"]
+
+
+def test_unconnected_flags_a_satellite_family_component():
+    from gwt_check.tree import Tree
+
+    d = selftest.clean_tree()
+    assert _unconnected(checks.run_checks(Tree(d, source="t"))[0]) == []
+
+    selftest.p_unconnected(d)
+    hits = _unconnected(checks.run_checks(Tree(d, source="t"))[0])
+    assert [k for k, _ in hits] == ["I9001"]
+    assert hits[0][1].startswith("2 people: I9001, I9002; main component (I0001) has ")
+
+
+def test_unconnected_scope_goes_through_the_component():
+    from gwt_check.tree import Tree
+
+    d = selftest.clean_tree()
+    selftest.p_unconnected(d)
+    tree = Tree(d, source="t")
+    keys = lambda scope: [k for k, _ in _unconnected(checks.run_checks(tree, scope=scope)[0])]  # noqa: E731
+    assert keys({("people", "hI0001")}) == []
+    assert keys({("people", "hI9002")}) == ["I9001"]
+    assert keys({("families", "hF9001")}) == ["I9001"]
+    assert keys({("events", "hE0001"), ("people", "nobody")}) == []
+
+
+def test_unconnected_leaves_out_people_in_no_family():
+    from gwt_check.tree import Tree
+
+    d = selftest.clean_tree()
+    selftest._new_person(d, "I9003", "Casimiro", "Solo")
+    assert _unconnected(checks.run_checks(Tree(d, source="t"))[0]) == []
+    assert _unconnected(checks.run_checks(Tree(d, source="t"), scope={("people", "hI9003")})[0]) == []
+
+
+def test_unconnected_godparent_link_does_not_connect():
+    """An event role joins nobody: a godparent couple with no family link to the tree is a satellite."""
+    from gwt_check.tree import Tree
+
+    d = selftest.clean_tree()
+    selftest.p_unconnected(d)
+    ev = next(e for e in d["events"] if e["gramps_id"] == "E0001")
+    for gid in ("I9001", "I9002"):
+        next(p for p in d["people"] if p["gramps_id"] == gid)["event_ref_list"] = [
+            {"ref": ev["handle"], "role": "Godfather", "private": False, "citation_list": [], "note_list": [],
+             "attribute_list": []}]
+    assert [k for k, _ in _unconnected(checks.run_checks(Tree(d, source="t"))[0])] == ["I9001"]
+
+
+def test_unconnected_main_is_the_root_component_then_the_largest_lowest_id_first():
+    from gwt_check.tree import Tree
+
+    d = selftest.clean_tree()
+    selftest.p_unconnected(d)
+    tree = Tree(d, source="t")
+    # rooted on the satellite, the main family becomes the satellite: it is keyed by its lowest ID
+    hits = _unconnected(checks.run_checks(tree, root="I9002")[0])
+    assert [k for k, _ in hits] == ["I0001"] and "main component (I9001) has 2" in hits[0][1]
+    # a root in no family, or unknown, falls back to the largest
+    assert [k for k, _ in _unconnected(checks.run_checks(tree, root="I_NONE")[0])] == ["I9001"]
+    # two components of one size: the one holding the numerically lowest ID is main, in any order
+    for order in (1, -1):
+        d = selftest.clean_tree()
+        d["people"], d["families"] = [], []
+        for n, (fa, mo) in enumerate([("I10000", "I10001"), ("I9000", "I9999")][::order]):
+            d["people"] += [{"handle": "h" + g, "gramps_id": g} for g in (fa, mo)]
+            d["families"].append({"handle": f"hF{n}", "gramps_id": f"F{n}", "father_handle": "h" + fa,
+                                  "mother_handle": "h" + mo, "child_ref_list": []})
+        assert [k for k, _ in _unconnected(checks.run_checks(Tree(d, source="t"))[0])] == ["I10000"]
+
+
+def test_unconnected_detail_and_key_order_are_numeric():
+    from gwt_check.tree import Tree
+
+    d = selftest.clean_tree()
+    kids = [f"I{n}" for n in (9010, 10010, 9005, 9100, 9007, 9006)]
+    for g in kids:
+        selftest._new_person(d, g, "Hijo", "Apartado", parent_family="hF9100")
+    selftest._new_family(d, "F9100", "", "", kids=["h" + g for g in kids])
+    hits = _unconnected(checks.run_checks(Tree(d, source="t"))[0])
+    assert hits == [("I9005", "6 people: I9005, I9006, I9007, I9010, I9100, ...; main component (I0001) has "
+                     + hits[0][1].rsplit(" ", 1)[1])]
+
+
+def test_unconnected_never_sets_the_exit_code(tmp_path, capsys):
+    d = selftest.clean_tree()
+    selftest.p_unconnected(d)
+    dump = _write(tmp_path, "sat.json", d)
+    report = tmp_path / "r.json"
+    assert main(["check", dump, "--json", str(report)]) == 0
+    out = capsys.readouterr().out
+    assert "info unconnected: 1 found (0 known)" in out and "OK: 0 new finding(s), 0 known, 1 for information only" in out
+    data = json.loads(report.read_text())
+    assert data["new"] == [] and [(f["check"], f["key"], f["info"]) for f in data["findings"]] == [
+        ("unconnected", "I9001", True)]
+    # with another, failing finding the run still fails, on that finding alone
+    selftest.p_orphan_note(d)
+    assert main(["check", _write(tmp_path, "both.json", d), "--json", str(report)]) == 1
+    assert [f["check"] for f in json.loads(report.read_text())["new"]] == ["orphan-note"]
+
+
+def test_unconnected_scoped_run_is_fast_on_a_large_tree():
+    """Thousands of people in no family and hundreds of satellites: a scoped run stays well under a second."""
+    import time
+    from gwt_check.tree import Tree
+
+    d = selftest.clean_tree()
+    for n in range(10000):
+        selftest._new_person(d, f"I{20000 + n}", f"Adn{n}", f"Coincidencia{n}")
+    for n in range(300):
+        a, b = f"I{40000 + 2 * n}", f"I{40001 + 2 * n}"
+        selftest._new_person(d, a, f"Uno{n}", f"Apartado{n}", family=f"hF{40000 + n}")
+        selftest._new_person(d, b, f"Dos{n}", f"Apartado{n}", family=f"hF{40000 + n}")
+        selftest._new_family(d, f"F{40000 + n}", "h" + a, "h" + b)
+    tree = Tree(d, source="t")
+    scope = {("people", p["handle"]) for p in d["people"][-3000:]}
+    t0 = time.monotonic()
+    found, _ = checks.run_checks(tree, scope=scope)
+    assert len(_unconnected(found)) == 300
+    assert time.monotonic() - t0 < 5
+
+
+def _diamond(depth):
+    """Two people per generation, both children of the previous couple: 1 + 2*depth people
+    whose Ahnentafel expansion fills every position of every generation (pedigree collapse)."""
+    people = {"r": {"handle": "r", "gramps_id": "I_R", "parent_family_list": []}}
+    families = {}
+    prev = ("r", "r")
+    for g in range(1, depth + 1):
+        fa, mo, fam = f"f{g}", f"m{g}", f"fam{g}"
+        families[fam] = {"handle": fam, "father_handle": prev[0], "mother_handle": prev[1],
+                         "child_ref_list": [{"ref": fa}, {"ref": mo}]}
+        people[fa] = {"handle": fa, "gramps_id": f"I_F{g}", "parent_family_list": [fam]}
+        people[mo] = {"handle": mo, "gramps_id": f"I_M{g}", "parent_family_list": [fam]}
+        prev = (fa, mo)
+    data = {t: [] for t in ("events", "places", "citations", "sources", "media", "notes", "repositories", "tags")}
+    data["people"] = list(people.values())
+    data["families"] = list(families.values())
+    return data
+
+
+def test_ahnentafel_collapse_bounded_and_honest(monkeypatch):
+    from gwt_check import compare
+    from gwt_check.tree import Tree
+    monkeypatch.setattr(compare, "MAX_POSITIONS", 200)
+    data = _diamond(12)  # full expansion would be 8191 positions over 12 generations
+    old = Tree(copy.deepcopy(data), source="old")
+    new = Tree(data, source="new")
+    # identical trees: the cap is said out loud, nothing is lost or changed
+    found, info = compare.compare_ahnentafel(old, new, "I_F12")
+    assert [f["check"] for f in found] == ["ahnentafel-truncated"]
+    limit = info["compared up to generation"]
+    assert 0 < limit < 12
+    assert info["before"]["numbers"] == info["after"]["numbers"] == 200
+    # a change inside the compared generations is still found
+    changed = copy.deepcopy(data)
+    next(f for f in changed["families"] if f["handle"] == "fam12")["mother_handle"] = "r"
+    found, _ = compare.compare_ahnentafel(Tree(copy.deepcopy(data), source="old"),
+                                          Tree(changed, source="new"), "I_F12")
+    assert ("ahnentafel-changed", "3 I_M11") in {(f["check"], f["key"]) for f in found}
+    # a loss deeper than the compared generations is not claimed either
+    lost_deep = copy.deepcopy(data)
+    next(f for f in lost_deep["families"] if f["handle"] == "fam2")["father_handle"] = ""
+    found, _ = compare.compare_ahnentafel(Tree(copy.deepcopy(data), source="old"),
+                                          Tree(lost_deep, source="new"), "I_F12")
+    assert [f["check"] for f in found] == ["ahnentafel-truncated"]
+
+
+def test_ahnentafel_new_parents_low_do_not_claim_deep_losses(monkeypatch):
+    from gwt_check import compare
+    from gwt_check.tree import Tree
+    monkeypatch.setattr(compare, "MAX_POSITIONS", 200)
+    data = _diamond(12)
+    # the old tree lacks m10's parents, so its walk reaches deeper before the cap than the new one,
+    # whose positions double from generation 2 again: those deeper old numbers were never compared
+    old = copy.deepcopy(data)
+    next(p for p in old["people"] if p["handle"] == "m10")["parent_family_list"] = []
+    a = compare.ahnentafel(Tree(copy.deepcopy(old), source="old"), "I_F12")
+    b = compare.ahnentafel(Tree(copy.deepcopy(data), source="new"), "I_F12")
+    assert a.complete_depth > b.complete_depth  # the setup the depth filter exists for
+    found, _ = compare.compare_ahnentafel(Tree(old, source="old"), Tree(data, source="new"), "I_F12")
+    assert [f["check"] for f in found] == ["ahnentafel-truncated"]
+
+
+def test_ahnentafel_cycle_is_bounded(monkeypatch):
+    from gwt_check import compare
+    from gwt_check.tree import Tree
+    monkeypatch.setattr(compare, "MAX_POSITIONS", 200)
+    # someone is their own parent: without the cap the walk never ends
+    data = {t: [] for t in ("events", "places", "citations", "sources", "media", "notes", "repositories", "tags")}
+    data["people"] = [{"handle": "x", "gramps_id": "I_X", "parent_family_list": ["fx"]}]
+    data["families"] = [{"handle": "fx", "father_handle": "x", "mother_handle": "x",
+                         "child_ref_list": [{"ref": "x"}]}]
+    out = compare.ahnentafel(Tree(data, source="t"), "I_X")
+    assert len(out) == 200 and out.complete_depth == 6
+
+
+def test_ahnentafel_normal_tree_is_not_truncated():
+    from gwt_check import compare
+    from gwt_check.tree import Tree
+    clean = selftest.clean_tree()
+    out = compare.ahnentafel(Tree(clean, source="t"), "I0001")
+    assert out and out.complete_depth is None
+
+
+def test_root_only_report_says_when_ahnentafel_is_truncated(tmp_path, capsys, monkeypatch):
+    from gwt_check import compare
+    monkeypatch.setattr(compare, "MAX_POSITIONS", 200)
+    dump = _write(tmp_path, "diamond.json", _diamond(12))
+    report = tmp_path / "r.json"
+    assert main(["check", dump, "--root", "I_F12", "--json", str(report)]) == 1
+    out = capsys.readouterr().out
+    assert "truncated" in out and "200 numbers" in out
+    # the truncation is a finding, so a root-only run fails on it like a --since run does
+    new = json.loads(report.read_text())["new"]
+    assert ("ahnentafel-truncated", "root I_F12") in {(f["check"], f["key"]) for f in new}
+    # and --known accepts it by its key
+    others = [{"check": f["check"], "key": f["key"]} for f in new if f["check"] != "ahnentafel-truncated"]
+    known = _write(tmp_path, "known.json", others + [{"check": "ahnentafel-truncated", "key": "root I_F12"}])
+    assert main(["check", dump, "--root", "I_F12", "--known", known]) == 0
+
+
+def test_cli_module_runs_selftest():
+    # `python -m gwt_check.cli selftest` must run the self-test, not import the module and exit 0
+    done = subprocess.run([sys.executable, "-m", "gwt_check.cli", "selftest"], capture_output=True, text=True,
+                          cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    assert done.returncode == 0 and "planted errors" in done.stdout
+
+
+def test_root_only_report_quiet_when_ahnentafel_is_complete(tmp_path, capsys):
+    dump = _write(tmp_path, "clean.json", selftest.clean_tree())
+    assert main(["check", dump, "--root", "I0001"]) == 0
+    assert "truncated" not in capsys.readouterr().out

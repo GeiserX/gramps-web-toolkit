@@ -74,7 +74,12 @@ CHECKS = {
     "missing-object": "object of the earlier tree that is gone",
     "ahnentafel-lost": "Ahnentafel number of the earlier tree that is gone",
     "ahnentafel-changed": "Ahnentafel number that now holds another person",
+    "ahnentafel-truncated": "pedigree too large to compare whole; only the generations named were compared",
+    "unconnected": "family component with no family link to the root's component (or the largest one)",
 }
+
+# Checks reported without failing: a finding of these is never new, so it never sets the exit code.
+INFO_CHECKS = {"unconnected"}
 
 
 # What gives away an identity document or a home address. Metadata only: the check cannot read pixels.
@@ -134,10 +139,17 @@ class Findings:
             self.items.append({"check": check, "key": key, "detail": detail})
 
 
-def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None) -> tuple[list[dict], dict]:
+def id_order(gid: str) -> list:
+    """Gramps IDs in numeric order: I9001 before I10000."""
+    return [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", gid)]
+
+
+def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
+               root: str | None = None) -> tuple[list[dict], dict]:
     """Structural checks over the whole tree; duplicate checks need one object of each pair in scope.
 
     `scope` is the set of (type, handle) a run created or changed; None means every object.
+    `root` is the Gramps ID whose family component is the main one; None means the largest.
     """
     T = tree.objs
     out = Findings()
@@ -479,5 +491,42 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None) -> tuple[l
             for s in n.get("surname_list", []):
                 if "[" in (s.get("surname") or ""):
                     out.add("surname-marker", f"{p['gramps_id']} {s['surname']}")
+
+    # family components: people joined by a family as father, mother or child. Godparents, witnesses and
+    # associations do not join anyone, and people in no family are left out: they are not a batch
+    parent: dict[str, str] = {}
+
+    def find(h: str) -> str:
+        while parent[h] != h:
+            parent[h] = parent[parent[h]]
+            h = parent[h]
+        return h
+
+    fam_member: dict[str, str] = {}
+    for f in F.values():
+        members = [f.get("father_handle"), f.get("mother_handle")]
+        members += [r.get("ref") for r in f.get("child_ref_list", []) if isinstance(r, dict)]
+        members = [m for m in members if m in P]
+        for m in members:
+            parent.setdefault(m, m)
+        for m in members[1:]:
+            parent[find(m)] = find(members[0])
+        if members:
+            fam_member[f["handle"]] = members[0]
+    comps: dict[str, list[str]] = defaultdict(list)
+    for h in parent:
+        comps[find(h)].append(h)
+    if len(comps) > 1:
+        lowest = {c: min((label("people", h) for h in hs), key=id_order) for c, hs in comps.items()}
+        root_h = next((h for h, p in P.items() if p.get("gramps_id") == root), None) if root else None
+        main = find(root_h) if root_h in parent else min(comps, key=lambda c: (-len(comps[c]), id_order(lowest[c])))
+        hit = set(comps) if scope is None else (
+            {find(h) for t, h in scope if t == "people" and h in parent}
+            | {find(fam_member[h]) for t, h in scope if t == "families" and h in fam_member})
+        for c in sorted(hit - {main}, key=lambda c: id_order(lowest[c])):
+            ids = sorted((label("people", h) for h in comps[c]), key=id_order)
+            out.add("unconnected", lowest[c],
+                    f"{len(ids)} people: {', '.join(ids[:5])}{', ...' if len(ids) > 5 else ''}; "
+                    f"main component ({lowest[main]}) has {len(comps[main])}")
 
     return out.items, info
