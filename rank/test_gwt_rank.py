@@ -202,6 +202,32 @@ class FullNameOnly(unittest.TestCase):
         self.assertIn('given differs', r['why'])
 
 
+    def page(self, name):
+        return "%s\n\nPrincipal\nSpain\nBirth  1901\nVillazul\nDeath  1970\n" % name
+
+    FACTS = R.parse_facts('by=1901 bp=Villazul dy=1970')
+
+    def test_the_last_comma_splits_off_the_given_name(self):
+        r = R.rank(R.text_rows(self.page('Garcia, Martin, Juan')), 'Juan', ['Garcia'], self.FACTS)[0]
+        self.assertEqual(r['tier'], 'strong')
+        r = R.rank(R.text_rows(self.page('Garcia, Martin, Juan')), 'Martin', ['Garcia'], self.FACTS)[0]
+        self.assertEqual(r['tier'], 'weak')        # Martin sits among the surnames, not in the given name
+
+    def test_a_suffix_after_the_comma_is_not_the_given_name(self):
+        for name in ('Garcia Martin, Juan, Jr', 'Garcia Martin, Juan, III', 'Garcia Martin, Juan, Sr.'):
+            r = R.rank(R.text_rows(self.page(name)), 'Juan', ['Garcia'], self.FACTS)[0]
+            self.assertEqual(r['tier'], 'strong', name)
+
+    def test_a_trailing_comma_keeps_the_given_name(self):
+        r = R.rank(R.text_rows(self.page('Juan Garcia,')), 'Juan', ['Garcia'], self.FACTS)[0]
+        self.assertEqual(r['tier'], 'strong')
+
+    def test_surnames_are_read_only_before_the_comma(self):
+        r = R.rank(R.text_rows(self.page('Garcia, Martin')), 'Martin', ['Martin'], self.FACTS)[0]
+        self.assertEqual(r['tier'], 'weak')
+        self.assertIn('surname differs', r['why'])
+
+
 class Normalized(unittest.TestCase):
     RECS = {'candidates': [
         {'source': 'othersite', 'id': 'r1', 'name': 'Ana Perez', 'role': 'Principal', 'principal': True,
