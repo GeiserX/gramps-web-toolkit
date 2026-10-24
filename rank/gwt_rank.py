@@ -39,6 +39,7 @@ PLACE_GENERIC = {'san', 'santa', 'santo', 'saint', 'sainte', 'st', 'ste', 'la', 
                  'de', 'del', 'du', 'des', 'sur', 'sous', 'en', 'y', 'and', 'of', 'the', 'villa', 'puerto', 'port',
                  'mont', 'monte', 'val', 'ville'}
 TIERS = ('strong', 'possible', 'weak', 'conflict')
+NAME_SUFFIXES = {'jr', 'sr', 'ii', 'iii', 'iv'}
 
 # Page-text labels, compared after norm(): English and Spanish FamilySearch, and the generic ones other sites use.
 PRINCIPAL = {'principal', 'persona principal', 'self'}
@@ -300,10 +301,13 @@ def score(c, given, surnames, facts, spouse='', window=3):
     rs = norm(' '.join(c['surnames'])) if c.get('surnames') is not None else rn
     ev = c.get('events') or {}
     sur = [norm(s) for s in surnames if norm(s)]
-    head, comma, tail = c['name'].partition(',')
+    parts = c['name'].split(',')
+    while len(parts) > 1 and all(w in NAME_SUFFIXES for w in norm(parts[-1])):   # 'Juan Garcia,' or ', Jr'
+        parts.pop()
+    head, comma, tail = ','.join(parts[:-1]), len(parts) > 1, parts[-1]
     if c.get('given') is not None:
         rg = norm(c['given'])
-    elif comma and norm(tail):   # surname first: 'Garcia Martin, Juan'
+    elif comma:   # surname first, split at the last comma: 'Garcia Martin, Juan', 'Garcia, Martin, Juan'
         rg = norm(tail)
         if c.get('surnames') is None:
             rs = norm(head)

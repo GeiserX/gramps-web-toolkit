@@ -27,9 +27,20 @@ A date counts as present when it has a structured year. A date with only text ("
 Every output format leaves out:
 
 - anyone marked private in Gramps, and
-- anyone who may be living: no Death, Burial or Cremation event (with or without a date), and born after `--living-after` or in a year the tree does not know. The default is this year minus 100. A baptism year counts as the birth year.
+- anyone who may be living: no Death, Burial or Cremation event (with or without a date), and no date that proves a birth in `--living-after` or earlier. The default is this year minus 100.
 
-Their Gramps ids, never their names, go to stderr in one line. `--include-living` turns the hold off; use it only for a private review on your own machine, never for a list that feeds searches on outside sites. Private events never feed the facts below.
+A birth is proven old by any of these, each one ending in `--living-after` or earlier:
+
+- the person's own birth, baptism or christening year, any of them;
+- the person's death year;
+- the marriage of a family the person heads. Other family events, such as a divorce, do not count;
+- any of those for anyone descending from the person, through any parent family. A grandchild baptised in 1890 proves every ancestor above was born before 1890, so a dated person anywhere below keeps the whole direct line above them on the list.
+
+For this test a date counts by its latest possible year: the end of a range or span, the year plus 10 for an "about" or estimated date, and no year at all for "after" or "from", which have no upper bound. A date with only text proves nothing.
+
+Their Gramps ids, never their names, go to stderr in one line. `--include-living` turns the hold off; use it only for a private review on your own machine, never for a list that feeds searches on outside sites. Private events never feed the facts, and their year and date text stay out of the gap text too.
+
+A death is asked (`no death or burial event`) of everyone proven old who has none.
 
 ## Priority
 
@@ -56,7 +67,7 @@ Write the seeds to a file and chain with `&&`: piped into another command, a bad
 
 - The **query** is what a lane types into a search: the name, the birth year and the birth place, `Ana Peiró 1850 Villa`.
 - The **note** lists the gaps by code, and starts with what the tree already knows: `facts: bp=San_Juan,_Villa by=<1860 dy=1933 | branch-end: no parents recorded`. Keys are `b`, `bap`, `d` or `bur` (birth, baptism, death, burial) plus `y` or `p`. A year is plain only for a regular, exact date. An "about", range or estimated year reads `~1860`, a "before" year `<1860`, an "after" year `>1860`. A place is the place and the one it sits in. Spaces become `_`, and `%`, `|`, `;`, `=` and `_` are percent-encoded, so the note can be split on ` | ` and `=` safely.
-- The **dedupe key** is the person, the task kind and `--source`, plus the gap code with `--per-gap`. The name is not part of it, so a corrected name does not make a second task. With `--dedupe`, `gwt-queue` skips a task that is already queued, running or done, and on an open one it takes the new label, note and priority, so a re-seed carries the latest gaps. Keep the same mode and `--source` across rounds: grouped and per-gap keys differ, and so do keys with different sources.
+- The **dedupe key** is the person, the task kind and `--source`, plus the gap code with `--per-gap`. The name is not part of it, so a corrected name does not make a second task. With `--dedupe`, `gwt-queue` skips a task that is already queued, running or done, and on an open one it takes the new label, query, note and priority, so a re-seed carries the latest gaps. Keep the same mode and `--source` across rounds: grouped and per-gap keys differ, and so do keys with different sources.
 - `--skip-weak` leaves out people with no given name or no surname (or none at all), unless they are the root or one of its ancestors. Their ids go to stderr. A thin name makes a poor outside search, but an ancestor stays on the list.
 
 `--source`, `--per-gap` and `--skip-weak` only apply to `--format queue`; with another format they are an error.
