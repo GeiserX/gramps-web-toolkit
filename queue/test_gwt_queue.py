@@ -88,6 +88,11 @@ class QueueTest(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual((rows[0]['note'], rows[0]['priority']), ('second round', '90'))
 
+    def test_dedupe_hit_on_an_open_task_refreshes_the_query(self):
+        self.add('--dedupe-key', 'i7:search:fs', query='Ana Peiro 1850')
+        self.add('--dedupe-key', 'i7:search:fs', '--dedupe', query='Ana Peiro Toledo 1850 Villa')
+        self.assertEqual(self.rows()[0]['query'], 'ana peiro toledo 1850 villa')
+
     def test_dedupe_hit_without_priority_keeps_the_old_one(self):
         self.add(priority=10)
         run('--queue', self.path, 'add', '--person', 'Ana Peiro Toledo', '--kind', 'sweep', '--source',

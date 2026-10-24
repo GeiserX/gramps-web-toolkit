@@ -110,6 +110,7 @@ class LeadsTest(unittest.TestCase):
         T['events']['eb2']['date'] = {'dateval': [0, 0, 1925, False]}
         self.assertIn(('I2', 'no death or burial event (birth 1925)'), what_of(T, living_after=1925))
         T['events']['eb2']['date'] = {'dateval': [0, 0, 1990, False]}
+        T['people'].pop('r')  # else his child, born 1890, proves him old
         rows = L.leads(T, None, ('missing-vital',), 1925, hold=False)[0]
         self.assertFalse([r for r in rows if r['person'] == 'I2' and 'no death' in r['what']])
 
@@ -197,6 +198,75 @@ class LeadsTest(unittest.TestCase):
         code, out, err = self.cli(path, '--include-living', '--living-after', '1925')
         self.assertIn('\tI2\t', out)
         self.assertNotIn('held back', err)
+
+    def test_a_dated_descendant_keeps_the_undated_direct_line(self):
+        T = tree()
+        for h in ('fa', 'mo', 'gm'):
+            T['people'][h]['event_ref_list'] = []
+        rows, held = L.leads(T, 'I1', ('branch-end', 'missing-vital'), 1925)
+        self.assertEqual(held, {})  # the root was born in 1890, so everyone above was born before
+        what = {(r['person'], r['what']) for r in rows}
+        self.assertIn(('I4', 'no death or burial event'), what)
+        self.assertIn(('I4', 'no parents recorded'), what)
+        T['events']['eb1']['date'] = {'dateval': [0, 0, 1990, False]}
+        T['events'].pop('ed1')
+        T['people']['r']['event_ref_list'] = [{'ref': 'eb1', 'role': 'Primary'}]
+        held = L.leads(T, 'I1', living_after=1925)[1]
+        self.assertEqual(set(held), {'I1', 'I2', 'I3', 'I4'})  # nothing below them is old enough
+
+    def test_a_marriage_more_than_the_cutoff_ago_proves_both_spouses_old(self):
+        T = tree()
+        for h in ('fa', 'mo', 'r'):
+            T['people'][h]['event_ref_list'] = []
+        T['events']['m1'] = event('m1', 'Marriage', 1910)
+        T['families']['f1']['event_ref_list'] = [{'ref': 'm1', 'role': 'Family'}]
+        held = L.leads(T, None, living_after=1925)[1]
+        self.assertNotIn('I2', held)
+        self.assertNotIn('I3', held)
+        self.assertIn('I1', held)  # the child of that marriage is not proven old by it
+
+    def test_the_living_test_uses_the_latest_possible_year(self):
+        def held_with(**date):
+            T = tree()
+            T['events']['eb2']['date'] = dict({'dateval': [0, 0, 1900, False, 0, 0, 1950, False]}, **date)
+            T['people'].pop('r')
+            return 'I2' in L.leads(T, None, living_after=1925)[1]
+        self.assertFalse(held_with())                         # plain 1900
+        self.assertTrue(held_with(modifier=4))                # between 1900 and 1950
+        self.assertTrue(held_with(modifier=2))                # after 1900: no upper bound
+        self.assertFalse(held_with(modifier=1))               # before 1900
+        self.assertFalse(held_with(modifier=3))               # about 1900: up to 1910
+        self.assertEqual(L.latest_year({'date': {'dateval': [0, 0, 1920, False], 'quality': 1}}), 1930)
+
+    def test_a_private_birth_never_shows_its_year_or_text(self):
+        T = tree()
+        T['events']['eb2']['private'] = True
+        what = {w for p, w in what_of(T) if p == 'I2'}
+        self.assertIn('no death or burial event', what)
+        self.assertFalse([w for w in what if '1860' in w])
+        T['events']['eb2']['date'] = {'dateval': [0, 0, 0, False], 'text': 'secret words'}
+        what = {w for p, w in what_of(T) if p == 'I2'}  # still proven old by the root, born 1890
+        self.assertIn('birth has date text without an interpretable year', what)
+        self.assertFalse([w for w in what if 'secret' in w])
+
+    def test_a_dated_baptism_stands_in_for_a_dateless_birth(self):
+        T = tree()
+        T['people'].pop('r')
+        T['events']['eb2']['date'] = {'dateval': [0, 0, 0, False]}
+        T['events']['bp2'] = event('bp2', 'Baptism', 1860, place='')
+        T['people']['fa']['event_ref_list'].append({'ref': 'bp2', 'role': 'Primary'})
+        rows, held = L.leads(T, None, ('missing-vital',), 1925)
+        self.assertNotIn('I2', held)
+        what = {r['what'] for r in rows if r['person'] == 'I2'}
+        self.assertIn('no death or burial event (baptism 1860)', what)
+        self.assertIn('birth has no date', what)
+        self.assertEqual(L.facts(T, T['people']['fa'])['bapy'], '1860')
+
+    def test_birth_ref_index_ignores_a_ref_that_is_not_primary(self):
+        T = tree()
+        T['people']['fa']['event_ref_list'] = [{'ref': 'eb9', 'role': 'Witness'}, {'ref': 'eb2', 'role': 'Primary'}]
+        T['people']['fa']['birth_ref_index'] = 0
+        self.assertEqual(L.birth(T, T['people']['fa'])['handle'], 'eb2')
 
     def test_living_after_defaults_to_a_hundred_years_ago(self):
         self.assertEqual(L.default_living_after(), __import__('datetime').date.today().year - 100)

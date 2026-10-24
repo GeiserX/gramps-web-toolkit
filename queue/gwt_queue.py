@@ -268,8 +268,8 @@ def new_row(rows, person, label='', kind='search', source='', query='', priority
 
 
 def add_rows(rows, wanted, dedupe, retry_failed):
-    """Append each wanted row unless dedupe finds it already queued. A hit on an open row refreshes its note,
-    label and priority, so a re-seed carries the latest gaps instead of the first seed's. Returns the rows
+    """Append each wanted row unless dedupe finds it already queued. A hit on an open row refreshes its label,
+    query, note and priority, so a re-seed carries the latest gaps instead of the first seed's. Returns the rows
     to print, one per wanted row."""
     shown = []
     for row in wanted:
@@ -281,7 +281,7 @@ def add_rows(rows, wanted, dedupe, retry_failed):
             shown.append(row)
             continue
         if hit['status'] == 'open':
-            for col in ('person_label', 'priority', 'note'):
+            for col in ('person_label', 'query', 'priority', 'note'):
                 if row[col]:
                     hit[col] = row[col]
         shown.append(hit)
@@ -330,7 +330,7 @@ def main(argv=None):
                    help='read tasks as JSON lines from FILE (- for stdin) and add them under one lock')
     a.add_argument('--dedupe', action='store_true',
                    help='skip a task already queued, running or done (same dedupe key, else same '
-                        'person+kind+source+query); an open match gets the new label, note and priority')
+                        'person+kind+source+query); an open match gets the new label, query, note and priority')
     a.add_argument('--retry-failed', action='store_true', help='with --dedupe, queue again a task that parked as failed')
 
     c = sub.add_parser('claim', help='take the best due task for a lane; exit 1 if none is due')

@@ -14,8 +14,8 @@ Gaps:
   uncited        a birth or death event (or its baptism or burial stand-in) with no citation
 
 Only the person's own events count: refs with role Primary, the birth and death the person points at first.
-People who may be living (no death, burial or cremation, and born after --living-after or in an unknown year)
-and people or events marked private are held back from every format; their Gramps ids go to stderr.
+People who may be living (no death, burial or cremation, and no date of theirs or of a descendant that proves a
+birth in --living-after or earlier) and people or events marked private are held back from every format; their Gramps ids go to stderr.
 
 `--format queue` prints one JSON line per task for `gwt-queue add --jsonl - --dedupe`. Standard library only.
 """
@@ -28,6 +28,7 @@ MARRIAGE_LIKE = ('Marriage',)
 FACT_KEYS = {'Birth': 'b', 'Baptism': 'bap', 'Christening': 'bap', 'Death': 'd', 'Burial': 'bur', 'Cremation': 'bur'}
 # Gramps date modifiers: 0 none, 1 before, 2 after, 3 about, 4 range, 5 span, 6 text only, 7 from, 8 to
 MODIFIER_MARK = {1: '<', 2: '>', 3: '~', 4: '~', 5: '~', 7: '>', 8: '<'}
+ABOUT_SLACK = 10  # an "about" or estimated year may be this many years early, for the living test
 
 
 class BadInput(Exception):
@@ -86,6 +87,24 @@ def year(ev):
     v = d.get('dateval') or []
     y = d.get('year') if isinstance(d.get('year'), int) and d.get('year') else None
     return y or (v[2] if len(v) > 2 and isinstance(v[2], int) and v[2] else None)
+
+
+def latest_year(ev):
+    """The latest year the event can be in, for the living test: the end of a range or span, the year plus
+    ABOUT_SLACK for an "about" or estimated date, None for "after" or "from" (no upper bound) or no year."""
+    y = year(ev) if ev else None
+    if not y:
+        return None
+    d = ev.get('date') or {}
+    m = d.get('modifier') or 0
+    if m in (2, 7):
+        return None
+    if m in (4, 5):
+        v = d.get('dateval') or []
+        return v[6] if len(v) > 6 and isinstance(v[6], int) and v[6] >= y else y
+    if m == 3 or (d.get('quality') or 0):
+        return y + ABOUT_SLACK
+    return y
 
 
 def year_text(ev):
@@ -201,23 +220,56 @@ def death(T, p):
     return vital(T, p, DEATH_LIKE, 'death_ref_index')
 
 
-def held_back(T, p, living_after):
-    """Why a person stays out of every output, or '': marked private, or may be living (no death, burial or
-    cremation, and born after living_after or in a year the tree does not know)."""
+def birth_dated(T, p):
+    """The birth event when it has a year, else the first own Baptism or Christening that has one."""
+    b = birth(T, p)
+    if b and year(b):
+        return b
+    return next((e for e in own_events(T, p) if etype(e) in BIRTH_LIKE[1:] and year(e)), b)
+
+
+def not_living(T, living_after):
+    """Handles of the people the dates prove were born in living_after or earlier: their own birth or baptism,
+    their death, or the marriage of a family they head ends by then, or so does that of anyone descending from
+    them. A descendant born in 1900 means every ancestor was born before 1900, so the direct line above any
+    dated person is never held back."""
+    def by_cutoff(e):
+        y = latest_year(e)
+        return y is not None and y <= living_after
+    seeds = {h for h, p in T['people'].items() if by_cutoff(birth_dated(T, p)) or by_cutoff(death(T, p))}
+    for f in T['families'].values():
+        if any(by_cutoff(T['events'].get(r.get('ref'))) and etype(T['events'][r['ref']]) in MARRIAGE_LIKE
+               for r in f.get('event_ref_list', []) if r.get('ref') in T['events']):
+            seeds.update(h for h in (f.get('father_handle'), f.get('mother_handle')) if h in T['people'])
+    old, queue = set(seeds), collections.deque(seeds)
+    while queue:
+        p = T['people'][queue.popleft()]
+        for fh in p.get('parent_family_list', []):
+            f = T['families'].get(fh) or {}
+            for h in (f.get('father_handle'), f.get('mother_handle')):
+                if h in T['people'] and h not in old:
+                    old.add(h)
+                    queue.append(h)
+    return old
+
+
+def held_back(T, p, living_after, old=None):
+    """Why a person stays out of every output, or '': marked private, or may be living: no death, burial or
+    cremation, and nothing in `old` (see not_living) proves a birth in living_after or earlier."""
     if p.get('private') is True:
         return 'private'
     if death(T, p):
         return ''
-    b = birth(T, p)
-    y = year(b) if b else None
-    return 'living' if y is None or y > living_after else ''
+    if old is None:
+        old = not_living(T, living_after)
+    return '' if p['handle'] in old else 'living'
 
 
 def facts(T, p):
     """What the tree knows about a person's birth and death, as search filters: {'by': '~1860', 'bp': 'Parish,
     Town', 'dy': ...}. A baptism or burial stand-in is keyed 'bap' or 'bur'. Private events say nothing."""
     out = {}
-    for e in (birth(T, p), death(T, p)):
+    for e in (birth_dated(T, p), death(T, p)):
         if not e or e.get('private') is True:
             continue
         k = FACT_KEYS[etype(e)]
@@ -240,6 +292,7 @@ def leads(T, root_gid=None, kinds=KINDS, living_after=None, hold=True):
             raise BadInput('no person %s in the dump' % root_gid)
         gen = generations(T, root)
     out, held = [], {}
+    old = not_living(T, living_after)
 
     def add(p, kind, gap, what):
         g = gen.get(p['handle'])
@@ -248,23 +301,28 @@ def leads(T, root_gid=None, kinds=KINDS, living_after=None, hold=True):
                     'what': what, 'priority': prio, 'generation': g, 'weak': weak_name(p), 'facts': facts(T, p)})
 
     for p in T['people'].values():
-        why = held_back(T, p, living_after) if hold else ''
+        why = held_back(T, p, living_after, old) if hold else ''
         if why:
             held[p.get('gramps_id', p['handle'])] = why
             continue
-        b, d = birth(T, p), death(T, p)
+        b, d, by = birth(T, p), death(T, p), birth_dated(T, p)
         if 'branch-end' in kinds and not parents(T, p):
             add(p, 'branch-end', 'branch-end', 'no parents recorded')
         if 'missing-vital' in kinds:
             if not b:
                 add(p, 'missing-vital', 'birth-missing', 'no birth or baptism event')
-            if not d and b and year(b) and year(b) <= living_after:
-                add(p, 'missing-vital', 'death-missing', 'no death or burial event (%s %d)' % (etype(b).lower(), year(b)))
+            if not d and p['handle'] in old:
+                shown = by and year(by) and by.get('private') is not True
+                add(p, 'missing-vital', 'death-missing', 'no death or burial event' +
+                    (' (%s %d)' % (etype(by).lower(), year(by)) if shown else ''))
             for code, e in (('birth', b), ('death', d)):
                 if not e:
                     continue
                 if date_gap(e):
-                    add(p, 'missing-vital', code + '-date', '%s %s' % (etype(e).lower(), date_gap(e)))
+                    gap = date_gap(e)
+                    if e.get('private') is True and gap != 'has no date':
+                        gap = 'has date text without an interpretable year'  # the text of a private date stays out
+                    add(p, 'missing-vital', code + '-date', '%s %s' % (etype(e).lower(), gap))
                 if not e.get('place'):
                     add(p, 'missing-vital', code + '-place', '%s has no place' % etype(e).lower())
         if 'uncited' in kinds:
@@ -277,7 +335,7 @@ def leads(T, root_gid=None, kinds=KINDS, living_after=None, hold=True):
                     etype(T['events'].get(r.get('ref'), {})) in MARRIAGE_LIKE for r in f.get('event_ref_list', [])):
                 for h in (f.get('father_handle'), f.get('mother_handle')):
                     p = T['people'].get(h)
-                    if p and not (hold and held_back(T, p, living_after)):
+                    if p and not (hold and held_back(T, p, living_after, old)):
                         add(p, 'missing-vital', 'marriage-missing-%s' % f.get('gramps_id', f['handle']),
                             'family %s has children but no marriage event' % f.get('gramps_id', ''))
                         break
@@ -345,8 +403,9 @@ def main(argv=None):
     p.add_argument('--limit', type=int, default=0, help='keep the N highest-priority rows (tasks, in queue format)')
     p.add_argument('--format', choices=('queue', 'tsv', 'json'), default='tsv')
     p.add_argument('--living-after', type=int, default=default_living_after(), metavar='YEAR',
-                   help='with no death, burial or cremation, someone born after YEAR (or in an unknown year) may be '
-                        'living and is held back from every format (default: this year minus 100, %(default)s)')
+                   help='with no death, burial or cremation, someone whose dates (or a descendant\'s) do not prove a '
+                        'birth in YEAR or earlier may be living and is held back from every format '
+                        '(default: this year minus 100, %(default)s)')
     p.add_argument('--include-living', action='store_true',
                    help='do not hold back the possibly living and the private: only for a local, private review')
     p.add_argument('--source', default='', help='queue format: the source of every task, part of its dedupe key')
