@@ -300,11 +300,16 @@ def score(c, given, surnames, facts, spouse='', window=3):
     rs = norm(' '.join(c['surnames'])) if c.get('surnames') is not None else rn
     ev = c.get('events') or {}
     sur = [norm(s) for s in surnames if norm(s)]
+    head, comma, tail = c['name'].partition(',')
     if c.get('given') is not None:
         rg = norm(c['given'])
-    else:   # only the full name: the given name is what comes before the first surname
+    elif comma and norm(tail):   # surname first: 'Garcia Martin, Juan'
+        rg = norm(tail)
+        if c.get('surnames') is None:
+            rs = norm(head)
+    else:   # only the full name: the given name is what comes before the first surname, at least one word
         at = [i for i in (_surname_at(x, rn) for x in sur) if i is not None]
-        rg = rn[:min(at)] if at else rn
+        rg = rn[:max(1, min(at))] if at else rn
     g = [w for w in norm(given) if w not in NAME_PARTICLES]
     pts, why, agree, conflict = 0, [], 0, False
 

@@ -185,6 +185,23 @@ class FullNameOnly(unittest.TestCase):
         self.assertEqual(r['tier'], 'weak')
 
 
+    def test_a_given_name_equal_to_the_first_surname_still_matches(self):
+        page = "Martin Martin Lopez\n\nPrincipal\nSpain\nBirth  1901\nVillazul\nDeath  1970\n"
+        r = R.rank(R.text_rows(page), 'Martin', ['Martin', 'Lopez'], R.parse_facts('by=1901 bp=Villazul dy=1970'))[0]
+        self.assertEqual(r['tier'], 'strong')
+        page = "Juan Garcia Martin\n\nPrincipal\nSpain\nBirth  1901\nVillazul\nDeath  1970\n"
+        r = R.rank(R.text_rows(page), 'Martin', ['Garcia'], R.parse_facts('by=1901 bp=Villazul dy=1970'))[0]
+        self.assertEqual(r['tier'], 'weak')
+
+    def test_surname_first_with_a_comma(self):
+        page = "Garcia Martin, Juan\n\nPrincipal\nSpain\nBirth  1901\nVillazul\nDeath  1970\n"
+        facts = R.parse_facts('by=1901 bp=Villazul dy=1970')
+        self.assertEqual(R.rank(R.text_rows(page), 'Juan', ['Garcia', 'Martin'], facts)[0]['tier'], 'strong')
+        r = R.rank(R.text_rows(page), 'Martin', ['Garcia'], facts)[0]
+        self.assertEqual(r['tier'], 'weak')
+        self.assertIn('given differs', r['why'])
+
+
 class Normalized(unittest.TestCase):
     RECS = {'candidates': [
         {'source': 'othersite', 'id': 'r1', 'name': 'Ana Perez', 'role': 'Principal', 'principal': True,
