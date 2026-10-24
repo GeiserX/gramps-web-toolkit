@@ -36,6 +36,10 @@ def tree():
             'families': {f['handle']: f for f in fams}}
 
 
+def etype_of(e):
+    return L.etype(e)
+
+
 class LeadsTest(unittest.TestCase):
     def test_generations_count_ancestors_only(self):
         g = L.generations(tree(), 'r')
@@ -130,6 +134,49 @@ class LeadsTest(unittest.TestCase):
                 {'person': 'I8', 'label': 'Ana Lopez', 'kind': 'branch-end', 'what': 'no parents recorded', 'priority': 98}]
         self.assertEqual([t['person'] for t in L.group_by_person(rows)], ['I8'])
         self.assertEqual([t['person'] for t in L.group_by_person(rows, keep_weak=True)], ['I9', 'I8'])
+
+    def test_facts_carry_year_and_place_into_the_task_note(self):
+        T = tree()
+        T['places'] = {'pl1': {'handle': 'pl1', 'name': {'value': 'Tours'}}}
+        for e in T['events'].values():
+            if etype_of(e) == 'Birth':
+                e['place'] = 'pl1'
+        rows = L.leads(T, 'I1')
+        with_facts = [r for r in rows if r['facts']]
+        self.assertTrue(with_facts)
+        task = L.group_by_person(with_facts)[0]
+        line = L.as_queue_line(task)
+        self.assertIn('facts:', line)
+        self.assertIn('bp=Tours', line)
+        self.assertNotIn('facts:', L.as_queue_line({'person': 'I1', 'label': 'A B', 'task': 'search', 'priority': 1,
+                                                    'gaps': ['x'], 'facts': {}}))
+
+    def _dump(self, td, objects):
+        path = os.path.join(td, 'd.json')
+        with open(path, 'w') as f:
+            json.dump({'objects': objects}, f)
+        return path
+
+    def test_malformed_records_are_rejected_not_filtered(self):
+        with tempfile.TemporaryDirectory() as td:
+            ok = {'handle': 'p1', 'gramps_id': 'I1'}
+            for objects in ({'people': [{}], 'families': [], 'events': []},
+                            {'people': [ok, 'x'], 'families': [], 'events': []},
+                            {'people': [ok], 'families': [{'gramps_id': 'F1'}], 'events': []},
+                            {'people': [ok], 'families': [], 'events': [None]},
+                            {'people': [ok], 'families': [], 'events': [], 'places': [{'title': 'x'}]},
+                            {'people': [ok], 'families': [], 'events': [], 'places': 'x'}):
+                with self.assertRaises(L.BadInput):
+                    L.load(self._dump(td, objects))
+                r = subprocess.run([sys.executable, CLI, self._dump(td, objects)], capture_output=True, text=True)
+                self.assertEqual(r.returncode, 2, objects)
+
+    def test_places_are_optional_and_read_when_present(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = {'people': [{'handle': 'p1', 'gramps_id': 'I1'}], 'families': [], 'events': []}
+            self.assertEqual(L.load(self._dump(td, base))['places'], {})
+            base['places'] = [{'handle': 'pl1', 'name': {'value': 'Tours'}}]
+            self.assertIn('pl1', L.load(self._dump(td, base))['places'])
 
     # --- the real `gwt-check dump` shape, and honest dates ---
 

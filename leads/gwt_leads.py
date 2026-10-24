@@ -46,7 +46,17 @@ def load(path):
         raise BadInput('%s: no %s list: is this a gwt-check dump?' % (path, ', '.join(bad)))
     if not data['people']:
         raise BadInput('%s: the dump holds no people' % path)
-    return {t: {o['handle']: o for o in data[t]} for t in ('people', 'families', 'events')}
+    out = {}
+    for t in ('people', 'families', 'events'):
+        bad = [o for o in data[t] if not isinstance(o, dict) or 'handle' not in o]
+        if bad:
+            raise BadInput('%s: %d %s records are not objects with a handle: is this a gwt-check dump?' % (path, len(bad), t))
+        out[t] = {o['handle']: o for o in data[t]}
+    places = data.get('places', [])
+    if not isinstance(places, list) or any(not isinstance(o, dict) or 'handle' not in o for o in places):
+        raise BadInput('%s: places must be a list of objects with a handle' % path)
+    out['places'] = {o['handle']: o for o in places}
+    return out
 
 
 def etype(ev):
@@ -67,6 +77,27 @@ def date_gap(ev):
         return ''
     text = ((ev.get('date') or {}).get('text') or '').strip()
     return 'has date text without an interpretable year (%s)' % text if text else 'has no date'
+
+
+def place_name(T, ev):
+    pl = T.get('places', {}).get((ev or {}).get('place')) or {}
+    n = pl.get('name')
+    name = (n.get('value') if isinstance(n, dict) else n) or pl.get('title') or ''
+    return name.strip()
+
+
+def facts(T, p):
+    """What the tree already knows about a person's birth and death: the filters for a search."""
+    out = {}
+    evs = person_events(T, p)
+    for t, k in (('Birth', 'b'), ('Death', 'd')):
+        e = next((e for e in evs if etype(e) == t), None)
+        if e:
+            if year(e):
+                out[k + 'y'] = year(e)
+            if place_name(T, e):
+                out[k + 'p'] = place_name(T, e)
+    return out
 
 
 def label(p):
@@ -112,7 +143,7 @@ def leads(T, root_gid=None, kinds=KINDS):
         g = gen.get(p['handle'])
         prio = max(40, 100 - g) if g is not None else 10
         out.append({'person': p.get('gramps_id', p['handle']), 'label': label(p), 'kind': kind,
-                    'what': what, 'priority': prio, 'generation': g})
+                    'what': what, 'priority': prio, 'generation': g, 'facts': facts(T, p)})
 
     for p in T['people'].values():
         evs = person_events(T, p)
@@ -164,7 +195,7 @@ def group_by_person(rows, keep_weak=False):
             continue
         kind = 'search' if r['kind'] != 'uncited' else 'verify'
         g = groups.setdefault((r['person'], kind), {'person': r['person'], 'label': r['label'], 'task': kind,
-                                                   'priority': r['priority'], 'gaps': []})
+                                                   'priority': r['priority'], 'gaps': [], 'facts': r.get('facts') or {}})
         g['priority'] = max(g['priority'], r['priority'])
         g['gaps'].append('%s: %s' % (r['kind'], r['what']))
     out = list(groups.values())
@@ -175,6 +206,8 @@ def group_by_person(rows, keep_weak=False):
 def as_queue_line(r, source=''):
     if 'gaps' in r:
         kind, query, note = r['task'], r['label'], '; '.join(r['gaps'])
+        if r.get('facts'):
+            note = 'facts: %s | %s' % (' '.join('%s=%s' % (k, str(v).replace(' ', '_')) for k, v in sorted(r['facts'].items())), note)
     else:
         kind = 'search' if r['kind'] != 'uncited' else 'verify'
         query = '%s %s' % (r['label'], r['what'])
