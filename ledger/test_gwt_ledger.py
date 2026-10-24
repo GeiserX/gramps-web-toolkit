@@ -234,5 +234,21 @@ class LedgerTest(unittest.TestCase):
                 run('--ledger', self.path, 'check', *src, '--query', 'Ana Peiro bautismo 1850-1860', '--exact')
             self.assertEqual(e.exception.code, 2)
 
+    def test_an_unreadable_ledger_exits_2_not_1(self):
+        with tempfile.TemporaryDirectory() as td:
+            bad = os.path.join(td, 'buscado.tsv')
+            os.mkdir(bad)  # exists, but cannot be read as a file
+            for cmd in (['check', '--query', 'ana'], ['list', '--person', 'ana'], ['stats']):
+                err = io.StringIO()
+                with redirect_stderr(err):
+                    code, _ = run('--ledger', bad, *cmd)
+                self.assertEqual(code, 2, cmd)
+                self.assertIn('cannot read the ledger', err.getvalue())
+            with open(os.path.join(td, 'latin1.tsv'), 'wb') as f:
+                f.write(b'ana\tAna\tfs\tana\t2026-01-01\tnone\t\xe9\n')
+            with redirect_stderr(io.StringIO()):
+                code, _ = run('--ledger', os.path.join(td, 'latin1.tsv'), 'check', '--query', 'ana')
+            self.assertEqual(code, 2)
+
 if __name__ == '__main__':
     unittest.main()
