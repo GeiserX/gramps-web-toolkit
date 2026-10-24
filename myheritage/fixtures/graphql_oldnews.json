@@ -1,0 +1,98 @@
+[
+ {
+  "url": "https://www.myheritage.es/web-family-graphql/search_in_historical_records_split/",
+  "body": {
+   "data": {
+    "search_query_upload": {
+     "response": {
+      "results": {
+       "count": 1,
+       "data": [
+        {
+         "record_type": "record",
+         "user_info": {
+          "is_new": false,
+          "is_purchased": false,
+          "link": "https://www.myheritage.es/paywall?colId=12040&itemId=800001-"
+         },
+         "record": {
+          "id": "record-12040-800001-",
+          "name": "Tomás Quirell",
+          "translated_name": null,
+          "name_annotations": null,
+          "thumbnail": {
+           "url": "https://cf.myheritageimages.com/records/thumb/resize/converted_newspapers/pdf/newspapers2/spanish_newspapers/el_eco_inventado_1880/1892/06/04/1000001_jpg/0003_96x_ab12cd34.jpg"
+          },
+          "fallback_thumbnail": null,
+          "link": "https://www.myheritage.es/research/collection-12040/x?itemId=800001-&action=showRecord&recordTitle=Tomás+Quirell&perm_id=T_x",
+          "is_free": false,
+          "collection": {
+           "id": "collection-12040",
+           "name": "España, nombres e historias en periódicos de OldNews.com",
+           "thumbnail": {
+            "url": "https://cf.example.invalid/c.png"
+           },
+           "record_count": 1000,
+           "short_description": "Invented collection for tests.",
+           "link": "https://www.myheritage.es/research/collection-12040/x?perm_id=T_x",
+           "is_new": false,
+           "is_free": false,
+           "is_temporary_free": false,
+           "is_updated": false,
+           "is_in_color": false,
+           "has_images": true,
+           "is_consolidated": false
+          },
+          "related_photos": null,
+          "hidden_fields": null,
+          "display_fields": [
+           {
+            "name": "death",
+            "label": "Fallecimiento",
+            "value": "Villazul, España"
+           },
+           {
+            "name": "text",
+            "label": "Texto",
+            "value": "...se arrienda una casa; darán razón <span class=\"highlighted-text\">Tomás Quirell</span> calle Mayor número 10..."
+           },
+           {
+            "name": "occupation",
+            "label": "Ocupación",
+            "value": "Fabricante de toldos<br>Villazul, España"
+           },
+           {
+            "name": "publication-title",
+            "label": "Periódico",
+            "value": "El Eco Inventado"
+           },
+           {
+            "name": "publication",
+            "label": "Publicación",
+            "value": "4 de junio de 1892 - Villazul, Murcia, Spain"
+           },
+           {
+            "name": "article-summary",
+            "label": "Resumen del artículo",
+            "value": "Anuncio del negocio de toldos de Tomás Quirell."
+           }
+          ]
+         },
+         "cursor": "1"
+        }
+       ]
+      },
+      "summary": {
+       "category_counts": [],
+       "total": {
+        "category_name": "Todas",
+        "count": "1",
+        "link": "https://www.myheritage.es/research?action=query"
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+]
