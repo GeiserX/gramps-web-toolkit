@@ -758,26 +758,47 @@ def plan_fetch(caps, has_images=False, oldnews=False, thumbnail=False):
     return kinds
 
 
-# MyHeritage's own sites (myheritage.es, .com, .co.uk, .com.br, ...) and its image CDN, nothing else.
-_MH_HOST = re.compile(r'(?:^|\.)myheritage\.(?:com|[a-z]{2}|co\.[a-z]{2}|com\.[a-z]{2})$')
+# MyHeritage's own sites and its image CDN, nothing else. The country sites are listed, not guessed.
+MH_TLDS = ('com', 'es', 'de', 'fr', 'nl', 'it', 'pt', 'se', 'no', 'dk', 'fi', 'pl', 'cz', 'hu', 'com.br', 'co.il')
+_MH_HOST = re.compile(r'(?:^|\.)myheritage\.(?:%s)$' % '|'.join(re.escape(t) for t in MH_TLDS))
 _MH_IMAGE_HOST = re.compile(r'(?:^|\.)myheritageimages\.com$')
-_NOT_IMAGE_LINK = re.compile(r'(?<![a-z])(?:gedcom|export|subscribe|subscription|checkout|trial|paywall|app|apps|'
-                             r'install|installer|mobile|family-tree-builder|dna)(?![a-z])|'
-                             r'\.(?:exe|dmg|apk|ged|zip)(?:\?|$)', re.I)
+# Matched on the unquoted, lowercased path and query. Plain substrings catch camelCase (exportGedcom,
+# imageExport, buyNow); the short words keep word edges so "application" or "scandal" stay allowed.
+_NOT_IMAGE_SUBSTR = ('gedcom', 'export', 'subscri', 'checkout', 'purchase', 'upgrade', 'buy', 'paywall', 'install',
+                     'family-tree-builder')
+_NOT_IMAGE_WORD = re.compile(r'(?<![a-z])(?:apps?|dna|trial|mobile)(?![a-z])|\.(?:exe|dmg|apk|ged|zip)(?:\?|$)')
 _IMAGE_PATH = re.compile(r'image|scan', re.I)
 _IMAGE_FILE = re.compile(r'\.(?:jpe?g|png|tiff?|gif|webp|pdf)$', re.I)
+
+
+def _host(url):
+    p = urllib.parse.urlsplit(url or '')
+    return p.scheme, (p.hostname or '').lower(), p
+
+
+def is_mh_image_host(url):
+    """True for https on a MyHeritage site or its image CDN: where a download link, and its final URL after
+    redirects, may point."""
+    scheme, host, _ = _host(url)
+    return scheme == 'https' and bool(_MH_HOST.search(host) or _MH_IMAGE_HOST.search(host))
+
+
+def is_oldnews_link(url):
+    """True for https on oldnews.com or one of its subdomains, read from the hostname, never a substring."""
+    scheme, host, _ = _host(url)
+    return scheme == 'https' and (host == 'oldnews.com' or host.endswith('.oldnews.com'))
 
 
 def image_download_links(hrefs, limit=2):
     """The record-image download links among a record page's hrefs. Only https on a MyHeritage site with
     "image" or "scan" in the path, or an image file on MyHeritage's image CDN; never a GEDCOM export,
-    subscription, checkout, trial, paywall, app or installer link. At most `limit`, since each one is a
-    gated fetch."""
+    subscription, checkout, purchase, upgrade, trial, paywall, app or installer link. At most `limit`,
+    since each one is a gated fetch."""
     out = []
     for h in hrefs or []:
-        p = urllib.parse.urlsplit(h)
-        host = (p.hostname or '').lower()
-        if p.scheme != 'https' or _NOT_IMAGE_LINK.search(p.path + '?' + p.query):
+        scheme, host, p = _host(h)
+        rest = urllib.parse.unquote(p.path + '?' + p.query).lower()
+        if scheme != 'https' or any(w in rest for w in _NOT_IMAGE_SUBSTR) or _NOT_IMAGE_WORD.search(rest):
             continue
         if (_MH_HOST.search(host) and _IMAGE_PATH.search(p.path)) or \
                 (_MH_IMAGE_HOST.search(host) and (_IMAGE_PATH.search(p.path) or _IMAGE_FILE.search(p.path))):

@@ -204,7 +204,7 @@ def cmd_fetch(S, a):
             env = S.capture(link, refresh=True)
         got = None
         for href in mh.image_download_links(S.links('a[download], a[href*="download"]')):
-            st, ctype, data = S.fetch_bytes(href)
+            st, ctype, data = S.fetch_bytes(href, final_ok=mh.is_mh_image_host)
             if st == 200 and (ctype.startswith('image/') or 'pdf' in ctype):
                 got = (href, data, ctype)
                 break
@@ -220,7 +220,7 @@ def cmd_fetch(S, a):
         else:
             fallback.append('image')
     if 'oldnews-page' in kinds:
-        hrefs = [h for h in S.links('a[href*="oldnews.com"]') if 'oldnews.com' in h]
+        hrefs = [h for h in S.links('a[href*="oldnews.com"]') if mh.is_oldnews_link(h)]
         if hrefs:
             on = S.capture(hrefs[0], refresh=True)
             big = S.largest_image()

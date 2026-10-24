@@ -1,6 +1,6 @@
 """Tests for gwt-mh's pure logic. Synthetic fixtures only (invented people and ids; public collection ids),
 no network, no browser. Run: cd myheritage && python3 -m unittest -v test_gwt_mh"""
-import argparse, base64, contextlib, copy, io, json, os, subprocess, sys, tempfile, types, unittest
+import argparse, base64, contextlib, copy, io, json, os, subprocess, sys, tempfile, time, types, unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FIX = os.path.join(HERE, 'fixtures')
@@ -301,12 +301,29 @@ class FetchPlan(unittest.TestCase):
                     'https://www.myheritage.es.evil.example/research/record-image/x.jpg',
                     'https://myheritageimages.com.evil.example/records/x.jpg',
                     'http://www.myheritage.es/research/record-image/download?itemId=1',
-                    'https://www.myheritage.es/research/record/download?itemId=1'):
+                    'https://www.myheritage.es/research/record/download?itemId=1',
+                    'https://evilmyheritage.es/research/record-image/download?itemId=1',
+                    'https://evilmyheritageimages.com/records/x.jpg',
+                    'https://www.myheritage.es@evil.io/research/record-image/download?itemId=1',
+                    'https://www.myheritage.zz/research/record-image/download?itemId=1',
+                    'https://www.myheritage.co.zz/research/record-image/download?itemId=1'):
             self.assertEqual(mh.image_download_links([bad]), [], bad)
         self.assertEqual(mh.image_download_links(['https://www.myheritage.com/research/scan/download?itemId=1',
-                                                  'https://www.myheritage.co.uk/research/record-image/x']),
+                                                  'https://www.myheritage.com.br/research/record-image/x']),
                          ['https://www.myheritage.com/research/scan/download?itemId=1',
-                          'https://www.myheritage.co.uk/research/record-image/x'])
+                          'https://www.myheritage.com.br/research/record-image/x'])
+
+    def test_hosts_by_hostname(self):
+        self.assertTrue(mh.is_mh_image_host('https://cf.myheritageimages.com/x.jpg'))
+        self.assertTrue(mh.is_mh_image_host('https://www.myheritage.de/research/record-image/x'))
+        for bad in ('https://evil.example/x.jpg', 'https://www.myheritage.es@evil.io/x', 'http://www.myheritage.es/x',
+                    'https://myheritage.es.evil.io/x', 'https://www.myheritage.zz/x'):
+            self.assertFalse(mh.is_mh_image_host(bad), bad)
+        self.assertTrue(mh.is_oldnews_link('https://www.oldnews.com/newspapers/x/page/1'))
+        self.assertTrue(mh.is_oldnews_link('https://oldnews.com/x'))
+        for bad in ('https://evil.example/?u=oldnews.com', 'https://oldnews.com.evil.io/x', 'https://evil.example/oldnews.com/x',
+                    'https://www.oldnews.com@evil.io/x', 'https://notoldnews.com/x', 'http://www.oldnews.com/x'):
+            self.assertFalse(mh.is_oldnews_link(bad), bad)
 
     def test_download_links_deny_list_is_what_stops_these(self):
         """On a MyHeritage host with image in the path, only the deny-list keeps these out."""
@@ -318,6 +335,15 @@ class FetchPlan(unittest.TestCase):
                     'https://www.myheritage.es/research/record-image/download-app',
                     'https://www.myheritage.es/scan/install'):
             self.assertEqual(mh.image_download_links([bad]), [], bad)
+
+    def test_download_links_deny_camel_case_and_quoted(self):
+        for path in ('/image/exportGedcom', '/imageExport/x', '/record-image/x?returnUrl=/FP/exportGedcom',
+                     '/record-image/x?returnUrl=%2FFP%2FexportGedcom', '/record-image/x?next=%2FFP%2F%65xport%47edcom', '/images/buy-now?download',
+                     '/scanner/purchase?download=1', '/record-image/upgradePlan', '/image/subscriptionOffer',
+                     '/image/CheckOut'):
+            self.assertEqual(mh.image_download_links(['https://www.myheritage.es' + path]), [], path)
+        self.assertEqual(mh.image_download_links(['https://www.myheritage.es/research/record-image/application-form']),
+                         ['https://www.myheritage.es/research/record-image/application-form'], 'app keeps its word edges')
 
     def test_bytes_answer_is_classified(self):
         img = slurp(os.path.join(FIX, 'tiny.png'), 'rb')
@@ -397,24 +423,28 @@ class FakePage:
 
     def evaluate(self, js, url):
         self.fetched.append(url)
-        st, ctype, data = self.answers.get(url, (404, 'text/plain', b''))
-        return {'status': st, 'type': ctype, 'b64': base64.b64encode(data).decode()}
+        st, ctype, data, *final = self.answers.get(url, (404, 'text/plain', b''))
+        return {'status': st, 'type': ctype, 'b64': base64.b64encode(data).decode(), 'url': final[0] if final else url}
 
-    def screenshot(self, path):
+    def screenshot(self, path, full_page=False):
         self.shots.append(path)
         with open(path, 'wb') as f:
             f.write(b'png')
 
 
-def offline_session(d, page, load_env=None):
+def offline_session(d, page, load_env=None, t=1_000_000.0):
     """A real Session (real gate, cache and plan state) on a fake clock and a fake page; no browser."""
     S = b.Session('', 'ana', os.path.join(d, 'c'), os.path.join(d, 'g'), 'lane', rest_every=0, jitter=0,
                   log=lambda m: None, lock_dir=os.path.join(d, 'locks'))
-    clk = Clock()
-    S.gate.clock, S.gate.sleep = clk, clk.sleep
+    clk = Clock(t)
+    S.gate.clock, S.gate.sleep, S.clock = clk, clk.sleep, clk
     S.page = page
+    S.loaded = []
     if load_env is not None:
-        S._load = lambda url, wait_graphql=False: dict(load_env, url=url, captured_at=mh.now_iso(), plan=S.plan.label())
+        def _load(url, wait_graphql=False):
+            S.loaded.append(url)
+            return dict(load_env, url=url, captured_at=mh.now_iso(), plan=S.plan.label())
+        S._load = _load
     return S, clk
 
 
@@ -580,10 +610,77 @@ class Retry(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             S, _ = offline_session(d, CorsPage())
             S._ctx = types.SimpleNamespace(request=types.SimpleNamespace(
-                get=lambda u, **kw: types.SimpleNamespace(status=200, headers={'content-type': 'image/png'}, body=lambda: png)))
+                get=lambda u, **kw: types.SimpleNamespace(status=200, headers={'content-type': 'image/png'}, body=lambda: png, url=u)))
             self.assertEqual(S.fetch_bytes(url), (200, 'image/png', png))
             calls = [ln for ln in S.gate.last_calls(50) if ' call ' in ln]
             self.assertEqual(len(calls), 2, 'the in-page fetch and the retry each wait for a slot')
+
+
+
+class AccountWall(unittest.TestCase):
+    def test_wall_blocks_the_account_whatever_the_gate_dir(self):
+        calls = []
+        with fake_playwright(calls), tempfile.TemporaryDirectory() as d:
+            lock = load('lockout_es.html')
+            S, clk = offline_session(d, FakePage(), dict(record_env(mh.html_to_text(lock)), final_url=mh.HOST + '/login',
+                                                         html=lock), t=time.time())
+            with self.assertRaises(b.Wall):
+                S.capture(mh.record_url('40001', '9000002'))
+            old, b.LOCK_DIR = b.LOCK_DIR, os.path.join(d, 'locks')
+            try:
+                with contextlib.redirect_stderr(io.StringIO()):
+                    code = CLI.main(['--cdp', 'http://cdp.invalid', '--account', 'ana', '--gate-dir', os.path.join(d, 'other-gate'),
+                                     '--cache-dir', os.path.join(d, 'c'), 'search', '--given', 'Ana', '--surname', 'Zorvalo',
+                                     '--out', d])
+            finally:
+                b.LOCK_DIR = old
+            self.assertEqual(code, mh.EXIT_PAUSED)
+            self.assertEqual(calls, [], 'no browser is even attached')
+            later = b.Session('', 'ana', os.path.join(d, 'c'), os.path.join(d, 'g3'), 'l', log=lambda m: None,
+                              lock_dir=os.path.join(d, 'locks'))
+            later.clock = lambda: clk.t + 23.9 * 3600
+            with self.assertRaises(Paused):
+                later.acquire()
+            later.clock = lambda: clk.t + 24 * 3600 + 1
+            later.acquire()
+            later.release()
+            other = b.Session('', 'luis', os.path.join(d, 'c'), os.path.join(d, 'g4'), 'l', log=lambda m: None,
+                              lock_dir=os.path.join(d, 'locks'))
+            other.acquire()
+            other.release()
+
+
+class Redirects(unittest.TestCase):
+    def test_download_redirected_off_the_allowed_hosts_is_dropped(self):
+        first = 'https://www.myheritage.es/research/record-image/download?itemId=1'
+        second = 'https://cf.myheritageimages.com/records/full/x_INVENTED.jpg?download=1'
+        png = slurp(os.path.join(FIX, 'tiny.png'), 'rb')
+        page = FakePage(hrefs=[first, second], answers={first: (200, 'image/png', b'EVIL' + png, 'https://evil.example/x.png'),
+                                                        second: (200, 'image/png', png)})
+        with tempfile.TemporaryDirectory() as d:
+            S, _ = offline_session(d, page, record_env())
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(CLI.cmd_fetch(S, fetch_args(d)), mh.EXIT_OK)
+            self.assertEqual(page.fetched[:2], [first, second])
+            self.assertEqual(slurp(os.path.join(d, 'out', '40001', '9000002', 'image.png'), 'rb'), png)
+
+
+class OldNewsLink(unittest.TestCase):
+    def test_fetch_opens_only_an_oldnews_host(self):
+        good = 'https://www.oldnews.com/newspapers/el-eco/page/3'
+        page = FakePage(hrefs=['https://evil.example/?u=oldnews.com', 'https://oldnews.com.evil.io/x', good])
+        with tempfile.TemporaryDirectory() as d:
+            S, _ = offline_session(d, page, dict(record_env(mh.html_to_text(load('record_en.html'))),
+                                                 final_url=mh.HOST + '/research/collection-12040/x?itemId=800001-&action=showRecord'))
+            S.plan.add([{'signal': 'records', 'value': True}, {'signal': 'oldnews_pages', 'value': True}])
+            search = os.path.join(d, 'search.json')
+            mh.write_json(search, {'graphql': load('graphql_oldnews.json')})
+            a = argparse.Namespace(collection='12040', item='800001-', search=search, out=os.path.join(d, 'out'),
+                                   no_rawstore=True, host=mh.HOST)
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                CLI.cmd_fetch(S, a)
+            self.assertIn(good, S.loaded)
+            self.assertFalse([u for u in S.loaded if 'evil' in u], S.loaded)
 
 
 class Slugs(unittest.TestCase):

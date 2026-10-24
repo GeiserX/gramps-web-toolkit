@@ -20,7 +20,7 @@ for sub in ('gate', 'fscache'):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from gwt_gate import Gate  # noqa: E402
+from gwt_gate import Gate, Paused  # noqa: E402
 from gwt_fscache import FSCache  # noqa: E402
 import gwt_mh as mh  # noqa: E402
 
@@ -63,6 +63,8 @@ class Session:
         self.gate = Gate(gate_dir, start=17, floor=10, ceil=60)
         self.gate_dir = os.path.expanduser(gate_dir)
         self.lock_path = os.path.join(os.path.expanduser(lock_dir or LOCK_DIR), mh.slug(account) + '.lock')
+        self.wall_path = self.lock_path[:-len('.lock')] + '.wall'    # the 24 h block, whatever the gate dir
+        self.clock = time.time
         self.cache = FSCache(self.cache_dir, rules=mh.MYHERITAGE_RULES, methods=('GET',), vary=(mh.PLAN_HEADER,))
         self.plan = mh.PlanState(self.cache_dir)
         self.rest_every, self.jitter, self.refresh = rest_every, jitter, refresh
@@ -75,7 +77,9 @@ class Session:
     def acquire(self):
         """Take the account's session lock (<lock dir>/<account>.lock), or raise Busy. It is keyed on the
         account, not the gate dir, so two runs with different gate dirs still cannot share an account. The
-        kernel drops the lock when the process dies, so a crashed run never leaves the account locked."""
+        kernel drops the lock when the process dies, so a crashed run never leaves the account locked.
+        Raises Paused while the account's wall block (<lock dir>/<account>.wall) has time left."""
+        self.check_wall()
         os.makedirs(os.path.dirname(self.lock_path), exist_ok=True)
         f = open(self.lock_path, 'a+')
         try:
@@ -88,6 +92,21 @@ class Session:
         f.write('%d %s %s\n' % (os.getpid(), self.lane, mh.now_iso()))
         f.flush()
         self._lock = f
+
+    def check_wall(self):
+        try:
+            with open(self.wall_path) as f:
+                w = json.load(f)
+        except (OSError, ValueError):
+            return
+        left = float(w.get('until', 0)) - self.clock()
+        if left > 0:
+            raise Paused(left, w.get('why', 'MyHeritage wall on account %s' % self.account))
+
+    def block_account(self, why):
+        os.makedirs(os.path.dirname(self.wall_path), exist_ok=True)
+        mh.write_json(self.wall_path, {'until': self.clock() + WALL_HOURS * 3600, 'why': why, 'lane': self.lane,
+                                       'at': mh.now_iso()})
 
     def release(self):
         if self._lock:
@@ -210,9 +229,10 @@ class Session:
     def _stop(self, st, url, env=None):
         """Raise Wall (after blocking the gate for 24 h) or Dead for a wall or dead answer; else return."""
         if st == 'wall':
+            why = 'MyHeritage bot wall or lockout at %s; no request for %d h, never log in again' % (url, WALL_HOURS)
             self.gate.hit(self.lane, 'MyHeritage bot wall at ' + url)
-            self.gate.block(WALL_HOURS, 'MyHeritage bot wall or lockout at %s; no request for %d h, never log in again'
-                            % (url, WALL_HOURS))
+            self.gate.block(WALL_HOURS, why)
+            self.block_account(why)
             raise Wall('bot wall or account lockout (Imperva, hCaptcha, unusual or irregular activity); gate blocked '
                        'for %d h, nothing clicked; do NOT log in again and let a person look' % WALL_HOURS, env)
         if st == 'dead':
@@ -220,12 +240,13 @@ class Session:
             raise Dead('session is logged out; log in again once with the account login tool, '
                        'and never after a wall (exit 3)', env)
 
-    def fetch_bytes(self, url):
+    def fetch_bytes(self, url, final_ok=None):
         """(status, content type, bytes) of a URL, fetched from inside the page with the session's cookies.
         An image CDN on another origin refuses a credentialed in-page fetch (CORS), so that case goes
         through the context's own request client, which sends the same cookies; that retry is a request of
         its own and takes its own gate slot. Every answer is read like a page: a wall or lockout raises Wall
-        and blocks the gate, a logged-out answer raises Dead. (0, '', b'') on failure."""
+        and blocks the gate, a logged-out answer raises Dead. With final_ok, an answer whose final URL after
+        redirects fails it is dropped. (0, '', b'') on failure."""
         self._slot(url)
         try:
             got = self._page_fetch(url)
@@ -234,12 +255,16 @@ class Session:
             self._slot(url + ' (context client)')
             try:
                 r = self._ctx.request.get(url, headers={'referer': self.page.url}, timeout=60000)
-                got = r.status, r.headers.get('content-type', ''), r.body()
+                got = r.status, r.headers.get('content-type', ''), r.body(), r.url
             except Exception as exc:
                 self.log('fetch failed: %s' % str(exc).split('\n')[0][:120])
                 return 0, '', b''
-        self._stop(mh.classify_bytes(url, *got), mh.normalize_url(url))
-        return got
+        st, ctype, data, final = got
+        self._stop(mh.classify_bytes(final or url, st, ctype, data), mh.normalize_url(url))
+        if final_ok and not final_ok(final or url):
+            self.log('dropped %s: redirected off the allowed hosts to %s' % (url, (final or '').split('?')[0]))
+            return 0, '', b''
+        return st, ctype, data
 
     def _page_fetch(self, url):
         out = self.page.evaluate("""async (u) => {
@@ -247,9 +272,9 @@ class Session:
             const buf = new Uint8Array(await r.arrayBuffer());
             let s = '';
             for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
-            return {status: r.status, type: r.headers.get('content-type') || '', b64: btoa(s)};
+            return {status: r.status, type: r.headers.get('content-type') || '', b64: btoa(s), url: r.url};
         }""", url)
-        return out['status'], out['type'], base64.b64decode(out['b64'])
+        return out['status'], out['type'], base64.b64decode(out['b64']), out.get('url') or url
 
     def links(self, selector):
         """href attributes of matching elements; read only, never clicked."""
