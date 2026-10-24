@@ -1356,3 +1356,200 @@ def test_since_refuses_a_snapshot_of_another_tree(fake, tmp_path, env, monkeypat
     assert main(["--save-snapshot", str(tmp_path / "new.json.gz"), "--since", str(old)]) == 2
     assert "tree-test" in capsys.readouterr().err
     assert not (tmp_path / "new.json.gz").exists()
+
+
+# ---- corrections: update_note, update_citation, update_family, update_child_ref, detach
+
+
+def _note(fake, handle, text, ntype="Research"):
+    return fake.add("notes", {"handle": handle, "type": ntype, "format": 0,
+                              "text": {"_class": "StyledText", "string": text, "tags": []}})
+
+
+def test_update_note_needs_the_old_text_and_never_overwrites_a_changed_note(fake):
+    n = _note(fake, "n1", "Father read as Denis (?)")
+    op = {"op": "update_note", "key": "u", "ruling": R, "note": n["gramps_id"],
+          "set": {"text": "Father read as Rene (?)"}, "expect": "Father read as Denis (?)"}
+    assert validate([{k: v for k, v in op.items() if k != "expect"}])  # a text change without expect is refused
+    assert run(fake, [op])[0].status == "done"
+    assert fake.store["notes"]["n1"]["text"]["string"] == "Father read as Rene (?)"
+    assert run(fake, [op])[0].status == "skip"  # already the new text
+    res = run(fake, [dict(op, key="u2", set={"text": "Something else"}, expect="Father read as Denis (?)")])
+    assert res[0].status == "conflict" and fake.store["notes"]["n1"]["text"]["string"] == "Father read as Rene (?)"
+
+
+def test_update_note_type_only_and_validation(fake):
+    n = _note(fake, "n1", "text", "General")
+    op = {"op": "update_note", "key": "u", "ruling": R, "note": n["gramps_id"], "set": {"type": "Research"}}
+    assert run(fake, [op])[0].status == "done" and fake.store["notes"]["n1"]["type"] == "Research"
+    assert run(fake, [op])[0].status == "skip"
+    for bad in ({}, {"colour": "red"}, {"text": ""}):
+        assert validate([dict(op, key="b", set=bad)]), bad
+    assert validate([dict(op, key="b", expect="x")])  # expect without set.text
+
+
+def test_update_citation_page_confidence_and_date(fake):
+    c = fake.add("citations", {"handle": "c1", "source_handle": "src1", "page": "folio 12", "confidence": 2})
+    op = {"op": "update_citation", "key": "u", "ruling": R, "citation": c["gramps_id"],
+          "set": {"page": "folio 12v, no. 40", "confidence": 3, "date": "1890-03-14"}, "expect": "folio 12"}
+    assert run(fake, [op])[0].status == "done"
+    got = fake.store["citations"]["c1"]
+    assert (got["page"], got["confidence"], got["date"]["dateval"]) == ("folio 12v, no. 40", 3, [14, 3, 1890, False])
+    assert run(fake, [op])[0].status == "skip"
+    assert run(fake, [dict(op, key="u2", set={"page": "other"}, expect="folio 99")])[0].status == "conflict"
+    assert validate([dict(op, key="b", expect=None)])
+    assert validate([dict(op, key="b", set={"confidence": 7})])
+    assert validate([dict(op, key="b", set={"source": "S0001"})])
+
+
+def test_update_family_type(fake):
+    f = fake.add("families", {"handle": "fam", "mother_handle": "anna", "type": "Unknown"})
+    op = {"op": "update_family", "key": "u", "ruling": R, "family": f["gramps_id"], "set": {"type": "Married"}}
+    assert run(fake, [op])[0].status == "done" and fake.store["families"]["fam"]["type"] == "Married"
+    assert run(fake, [op])[0].status == "skip"
+    assert validate([dict(op, key="b", set={"father": "I1"})]) and validate([dict(op, key="b", set={})])
+
+
+def test_update_child_ref_relations_and_confirming_a_probable_link(fake):
+    kid = fake.add("people", {"handle": "kid", "gender": 1, "primary_name": {"first_name": "Tom", "surname_list": [{"surname": "Example", "primary": True}]}})
+    fam = fake.add("families", {"handle": "fam", "mother_handle": "anna"})
+    link = {"op": "link_child", "key": "l", "ruling": R, "family": fam["gramps_id"], "child": kid["gramps_id"],
+            "probable": True, "probable_reason": "same names in the same parish"}
+    assert run(fake, [link])[0].status == "done"
+    op = {"op": "update_child_ref", "key": "c", "ruling": R, "family": fam["gramps_id"], "child": kid["gramps_id"],
+          "confirm_probable": "the 1890 baptism names both parents", "set": {"mrel": "Adopted"}}
+    assert run(fake, [op])[0].status == "done"
+    ref = fake.store["families"]["fam"]["child_ref_list"][0]
+    assert ref["mrel"] == "Adopted"
+    assert fake.store["notes"][ref["note_list"][0]]["text"]["string"] == (
+        "[confirmed] the 1890 baptism names both parents (was: [probable] same names in the same parish)")
+    assert run(fake, [op])[0].status == "skip"  # settled once
+    # a link that was never probable cannot be "confirmed"
+    kid2 = fake.add("people", {"handle": "kid2", "gender": 1, "primary_name": {"first_name": "Sam", "surname_list": [{"surname": "Example", "primary": True}]}})
+    run(fake, [{"op": "link_child", "key": "l2", "ruling": R, "family": fam["gramps_id"], "child": kid2["gramps_id"]}])
+    assert run(fake, [dict(op, key="c2", child=kid2["gramps_id"], set={})])[0].status == "conflict"
+    for bad in ({"set": {}}, {"set": {"colour": "x"}}, {"expect": "x", "confirm_probable": None}):
+        base = {k: v for k, v in op.items() if k not in ("set", "confirm_probable")}
+        assert validate([dict(base, key="b", **bad)]), bad
+
+
+def test_detach_takes_a_reference_off_and_keeps_the_object(fake):
+    n = _note(fake, "n1", "stray")
+    fake.store["people"]["anna"]["note_list"] = ["n1"]
+    fake.store["people"]["anna"]["media_list"] = []
+    op = {"op": "detach", "key": "d", "ruling": R, "target": {"person": "I0001"}, "object": {"note": n["gramps_id"]}}
+    assert run(fake, [op])[0].status == "done"
+    assert fake.store["people"]["anna"]["note_list"] == [] and "n1" in fake.store["notes"]
+    assert run(fake, [op])[0].status == "skip"
+    # the way back is attach_existing
+    back = {"op": "attach_existing", "key": "a", "ruling": R, "object": {"note": n["gramps_id"]}, "attach": [{"person": "I0001"}]}
+    assert run(fake, [back])[0].status == "done" and fake.store["people"]["anna"]["note_list"] == ["n1"]
+    assert validate([dict(op, key="b", object={"person": "I0001"})])
+    assert validate([dict(op, key="b", target={"source": "S0001"}, object={"note": "N0001"}, )]) == []  # a source carries notes
+
+
+# ---- --revert: undo a run from its log and the pre-run copy
+
+
+def _pre_copy(fake, path):
+    """What `--save-snapshot` or `gwt-check dump` would hold: every object, by class."""
+    from gwt_apply.client import NAMESPACE
+    objs = {ns: [json.loads(json.dumps(o)) for o in fake.store[ns].values()] for ns in NAMESPACE.values() if ns in fake.store}
+    import gzip
+    with gzip.open(path, "wt") as fh:
+        json.dump({"tree": "tree-test", "objects": objs}, fh)
+
+
+def _revert(fake, tmp_path, log, pre, *, apply):
+    from gwt_apply import revert
+    client = Client("https://gw.example", "u", "s3cret-pw", tree="tree-test", dry_run=False, session=fake)
+    client.login()
+    steps = revert.plan(revert.read_log(log), revert.load_pre(pre), lambda c, h: client.get_live(c, h))
+    problems = revert.execute(client, [s for s in steps if s["action"] in ("restore", "delete")], revert.load_pre(pre)) if apply else []
+    return steps, problems
+
+
+def test_revert_undoes_a_run_and_leaves_what_changed_since(fake, tmp_path):
+    n = _note(fake, "n1", "Father read as Denis (?)")
+    fam = fake.add("families", {"handle": "fam", "mother_handle": "anna", "type": "Unknown"})
+    pre = str(tmp_path / "pre.json.gz")
+    _pre_copy(fake, pre)
+    ops = [
+        {"op": "update_note", "key": "u", "ruling": R, "note": n["gramps_id"], "set": {"text": "Father read as Rene (?)"},
+         "expect": "Father read as Denis (?)"},
+        {"op": "update_family", "key": "f", "ruling": R, "family": fam["gramps_id"], "set": {"type": "Married"}},
+        {"op": "add_note", "key": "new", "ruling": R, "text": "A note this run made", "attach": [{"family": fam["gramps_id"]}]},
+    ]
+    log = str(tmp_path / "run.jsonl")
+    client = Client("https://gw.example", "u", "s3cret-pw", tree="tree-test", dry_run=False, log_path=log, session=fake)
+    client.login()
+    assert [r.status for r in Applier(client, retries=1, retry_wait=0).run(ops)] == ["done", "done", "done"]
+    # someone edits the family after the run: the revert must not overwrite that
+    fake.store["families"]["fam"]["type"] = "Civil Union"
+    steps, _ = _revert(fake, tmp_path, log, pre, apply=False)
+    by = {(s["cls"], s["handle"]): s for s in steps}
+    assert by[("Family", "fam")]["action"] == "skip" and "changed since" in by[("Family", "fam")]["why"]
+    assert by[("Note", "n1")]["action"] == "restore"
+    # the family changed since and still lists the run's new note, so that note is kept too
+    new = [s for s in steps if s["cls"] == "Note" and s["handle"] != "n1"]
+    assert [s["action"] for s in new] == ["skip"] and "still points at it" in new[0]["why"]
+    # a plan writes nothing
+    assert fake.store["notes"]["n1"]["text"]["string"] == "Father read as Rene (?)"
+    _, problems = _revert(fake, tmp_path, log, pre, apply=True)
+    assert problems == []
+    assert fake.store["notes"]["n1"]["text"]["string"] == "Father read as Denis (?)"
+    assert fake.store["families"]["fam"]["type"] == "Civil Union"  # untouched
+    assert len(fake.store["notes"]) == 2  # nothing the changed family points at is deleted
+    again, _ = _revert(fake, tmp_path, log, pre, apply=False)
+    assert all(s["action"] in ("skip", "manual") for s in again)
+
+
+def test_revert_sends_people_merges_and_deletes_to_the_backup(fake, tmp_path):
+    from gwt_apply import revert
+    entries = [
+        {"method": "POST", "path": "/objects/", "status": 201, "body": [{"_class": "Person", "handle": "p9"}]},
+        {"method": "POST", "path": "/people/a/merge", "status": 200, "body": {}},
+        {"method": "DELETE", "path": "/notes/n1", "status": 200},
+        {"method": "PUT", "path": "/notes/n2", "status": None, "body": {}},   # a failed write is not a write
+        {"method": "PUT", "path": "/notes/n3", "status": 200, "body": {"handle": "n3"}, "dry_run": True},
+    ]
+    log = tmp_path / "log.jsonl"
+    log.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
+    steps = revert.plan(revert.read_log(str(log)), {}, lambda c, h: None)
+    assert [s["action"] for s in steps] == ["manual", "manual", "manual"]
+    assert any("merge" in s["why"] for s in steps) and any("restore the backup" in s["why"] for s in steps)
+
+
+def test_revert_cli_needs_pre_and_stands_alone(capsys):
+    for argv in (["--revert", "x.jsonl"], ["--revert", "x.jsonl", "--pre", "p.gz", "changes.json"], ["--pre", "p.gz"]):
+        with pytest.raises(SystemExit):
+            main(argv)
+
+
+def test_revert_deletes_what_the_run_made_when_nothing_points_at_it_from_a_changed_object(fake, tmp_path):
+    fam = fake.add("families", {"handle": "fam", "mother_handle": "anna", "type": "Unknown"})
+    pre = str(tmp_path / "pre.json.gz")
+    _pre_copy(fake, pre)
+    log = str(tmp_path / "run.jsonl")
+    client = Client("https://gw.example", "u", "s3cret-pw", tree="tree-test", dry_run=False, log_path=log, session=fake)
+    client.login()
+    op = {"op": "add_note", "key": "new", "ruling": R, "text": "made by the run", "attach": [{"family": fam["gramps_id"]}]}
+    Applier(client, retries=1, retry_wait=0).run([op])
+    assert len(fake.store["notes"]) == 1
+    _, problems = _revert(fake, tmp_path, log, pre, apply=True)
+    assert problems == [] and fake.store["notes"] == {} and fake.store["families"]["fam"]["note_list"] == []
+
+
+def test_revert_compares_what_the_server_keeps_not_its_defaults(tmp_path):
+    from gwt_apply import revert
+    written = {"handle": "n1", "text": {"_class": "StyledText", "string": "x", "tags": []}, "change": 1, "gramps_id": ""}
+    live = {"handle": "n1", "text": {"string": "x", "tags": []}, "change": 9, "gramps_id": "N0007", "private": False}
+    assert revert._same(live, written)
+    assert not revert._same(dict(live, text={"string": "y", "tags": []}), written)
+    log = tmp_path / "l.jsonl"
+    log.write_text("\n".join(json.dumps(e) for e in [
+        {"method": "POST", "path": "/token/", "status": 200},
+        {"method": "DELETE", "path": "/notes/" + revert.LOCK_HANDLE, "status": 200},
+        {"method": "POST", "path": "/objects/", "status": 201, "body": [{"_class": "Note", "handle": revert.LOCK_HANDLE}]},
+    ]) + "\n")
+    assert revert.read_log(str(log)) == []  # login and lock note are not changes to the tree
