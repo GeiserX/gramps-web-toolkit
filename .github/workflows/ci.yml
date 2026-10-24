@@ -35,6 +35,8 @@ jobs:
         run: cd rawstore && python -m unittest -v test_gwt_rawstore
       - name: queue
         run: cd queue && python -m unittest -v test_gwt_queue
+      - name: leads
+        run: cd leads && python -m unittest -v test_gwt_leads
 
   spanish-poller:
     runs-on: ubuntu-latest
