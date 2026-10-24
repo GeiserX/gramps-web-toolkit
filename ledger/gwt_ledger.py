@@ -192,7 +192,11 @@ def main(argv=None):
                        'result': args.result, 'evidence': args.evidence, 'agent': args.agent,
                        'next_date': args.next_date})
         return 0
-    rows = [r for path in ledger_paths(args.ledger, args.ledger_dir) for r in read_rows(path)]
+    try:
+        rows = [r for path in ledger_paths(args.ledger, args.ledger_dir) for r in read_rows(path)]
+    except (OSError, UnicodeDecodeError) as exc:  # an unreadable ledger is an error, never "not searched yet"
+        sys.stderr.write('gwt-ledger: cannot read the ledger: %s\n' % exc)
+        return 2
     if args.cmd == 'check':
         if args.exact and not key(args.source or ''):
             p.error('check --exact needs a non-empty --source')
