@@ -66,95 +66,194 @@ def make_native(path):
     z.close()
 
 
-HEAD = ['Given', 'Surname', 'Sex', 'Born', 'Birth place', 'Died', 'Death place', 'Source', 'Page']
+HEAD = ['Given', 'Surname', 'Sex', 'Born', 'Birth place', 'Died', 'Death place', 'Source', 'Page', 'Why apart', 'Birth place id']
 MAP = {'ruling': 'R-1', 'sheets': [{'sheet': 'People', 'header_row': 1, 'columns': {
     'first_name': 'Given', 'surname': 'Surname', 'gender': 'Sex', 'birth_date': 'Born', 'birth_place': 'Birth place',
-    'death_date': 'Died', 'death_place': 'Death place', 'source': 'Source', 'page': 'Page'}}]}
+    'death_date': 'Died', 'death_place': 'Death place', 'source': 'Source', 'page': 'Page',
+    'namesake_reason': 'Why apart', 'birth_place_id': 'Birth place id'}}]}
+HERE = os.path.dirname(os.path.abspath(__file__))
+YEAR = 2026
 
 
-def run(rows, people=(), mapping=MAP, inline=False):
+def row(first, sur, sex='', born='', bplace='', died='', dplace='', src='Book', page='p', why='', bplace_id=''):
+    return [first, sur, sex, born, bplace, died, dplace, src, page, why, bplace_id]
+
+
+def run(rows, tree=None, mapping=MAP, inline=False, batch='b', **kw):
     with tempfile.TemporaryDirectory() as d:
         p = os.path.join(d, 'b.xlsx')
         make_xlsx(p, {'People': [HEAD] + rows}, inline)
-        return X.import_rows(X.read_workbook(p), mapping, list(people))
+        return X.import_rows(X.read_workbook(p), mapping, tree, batch=batch, this_year=YEAR, **kw)
+
+
+def tree_of(people=(), places=()):
+    """What read_tree returns, for (gramps id, first, surname) and (gramps id, place name)."""
+    full, lo, pl = {}, {}, {}
+    for pid, first, sur in people:
+        full.setdefault((X.fold(first), X.fold(sur)), []).append(pid)
+        lo.setdefault(X.loose(first, sur), []).append(pid)
+    for pid, name in places:
+        pl.setdefault(X.fold(name), []).append(pid)
+    return {'full': full, 'loose': lo}, pl
+
+
+def of(ops, kind):
+    return [o for o in ops if o['op'] == kind]
 
 
 class T(unittest.TestCase):
     def test_reads_shared_and_inline_strings(self):
         for inline in (False, True):
-            ops, rep = run([['Ana', 'Perez', 'F', '1901', 'Madrid', '', '', 'Parish book', 'f 3']], inline=inline)
+            ops, rep = run([row('Ana', 'Perez', 'F', '1901', 'Madrid', '', '', 'Parish book', 'f 3')], inline=inline)
             self.assertEqual(rep['people'], 1)
             self.assertEqual(ops[0]['first_name'], 'Ana')
 
     def test_dates_are_never_guessed(self):
         self.assertEqual(X.parse_date('1901-03-14')[0], '1901-03-14')
         self.assertEqual(X.parse_date('14/03/1901')[0], '1901-03-14')
+        self.assertEqual(X.parse_date('14-03-1901')[0], '1901-03-14')
         self.assertEqual(X.parse_date('c. 1860')[0], 'abt 1860')
         self.assertEqual(X.parse_date('Mar 1901')[0], '1901-03')
         self.assertEqual(X.parse_date('?'), (None, None))
         self.assertEqual(X.parse_date('31/02/19xx')[0], None)
         self.assertEqual(X.parse_date('13/13/1901'), (None, 'impossible date'))
+        self.assertEqual(X.parse_date('14/03-1901'), (None, 'unreadable date'))     # mixed separators
         self.assertEqual(X.parse_date('spring of the war'), (None, 'unreadable date'))
 
+    def test_spanish_and_french_month_names_whole_words_only(self):
+        for text, want in (('14 enero 1901', '1901-01-14'), ('3 abril 1901', '1901-04-03'), ('5 agosto 1901', '1901-08-05'),
+                           ('9 diciembre 1901', '1901-12-09'), ('14 de marzo de 1901', '1901-03-14'), ('Setiembre 1901', '1901-09'),
+                           ('1er janvier 1901', '1901-01-01'), ('3 février 1901', '1901-02-03'), ('15 août 1901', '1901-08-15'),
+                           ('2 juillet 1901', '1901-07-02'), ('7 décembre 1901', '1901-12-07'), ('mai 1901', '1901-05'),
+                           ('hacia 1860', 'abt 1860'), ('antes de 1900', 'bef 1900'), ('après 1900', 'aft 1900'),
+                           ('14 March 1901', '1901-03-14'), ('Sept. 1901', '1901-09')):
+            self.assertEqual(X.parse_date(text), (want, None), text)
+        for text in ('marble 1901', 'decimo 1901', 'junk 1901', 'enerox 1901'):
+            self.assertEqual(X.parse_date(text), (None, 'unreadable date'), text)
+        self.assertEqual(X.parse_date('31 abril 1901'), (None, 'impossible date'))
+
+    def test_ambiguous_day_and_month_are_reported(self):
+        ops, rep = run([row('Ana', 'Perez', 'F', '03/04/1901'), row('Luis', 'Gil', 'M', '14/04/1901'), row('Eva', 'Sanz', 'F', '04/04/1901')])
+        self.assertEqual(rep['day_first_assumed'], [{'row': 'People!2', 'event': 'Birth', 'text': '03/04/1901', 'read_as': '1901-04-03'}])
+
     def test_unreadable_date_is_kept_as_text_not_as_a_date(self):
-        ops, rep = run([['Ana', 'Perez', 'F', 'spring of the war', '', '', '', 'Book', 'p1']])
-        ev = [o for o in ops if o['op'] == 'add_event'][0]
+        ops, rep = run([row('Ana', 'Perez', 'F', 'spring of the war')])
+        ev = of(ops, 'add_event')[0]
         self.assertNotIn('date', ev)
         self.assertEqual(ev['description'], 'Date as written: spring of the war')
         self.assertEqual(rep['date_problems'][0]['reason'], 'unreadable date')
 
+    def test_question_mark_makes_no_event(self):
+        ops, rep = run([row('Ana', 'Perez', 'F', '?', '', '?', '')])
+        self.assertEqual(of(ops, 'add_event'), [])
+        self.assertEqual(rep['date_problems'], [])
+
     def test_row_without_source_gets_a_note_and_is_reported(self):
-        ops, rep = run([['Ana', 'Perez', 'F', '1901', '', '', '', '', '']])
+        ops, rep = run([row('Ana', 'Perez', 'F', '1901', src='', page='')])
         self.assertEqual(rep['no_source'], ['People!2'])
         self.assertTrue(any(o['op'] == 'add_note' and o['text'].startswith('[no source]') for o in ops))
-        self.assertFalse(any(o['op'] == 'add_citation' for o in ops))
+        self.assertFalse(of(ops, 'add_citation'))
 
     def test_source_becomes_citation_on_person_and_events(self):
-        ops, _ = run([['Ana', 'Perez', 'F', '1901', 'Madrid', '1970', 'Madrid', 'Parish book', 'f 3'],
-                      ['Luis', 'Gil', 'M', '1899', 'Madrid', '', '', 'Parish book', 'f 4']])
-        self.assertEqual(len([o for o in ops if o['op'] == 'add_source']), 1)   # one source, two citations
-        cit = [o for o in ops if o['op'] == 'add_citation']
+        ops, _ = run([row('Ana', 'Perez', 'F', '1901', 'Madrid', '1970', 'Madrid', 'Parish book', 'f 3'),
+                      row('Luis', 'Gil', 'M', '1899', 'Madrid', '', '', 'Parish book', '')])
+        self.assertEqual(len(of(ops, 'add_source')), 1)   # one source, two citations
+        cit = of(ops, 'add_citation')
         self.assertEqual(len(cit), 2)
         self.assertEqual(len(cit[0]['attach']), 3)
-        self.assertEqual(len([o for o in ops if o['op'] == 'add_place']), 1)
+        self.assertEqual(cit[1]['page'], '(no page in workbook, row People!3)')   # an empty page never shares a citation
 
-    def test_possible_duplicates_are_left_out_not_merged(self):
-        tree = [{'id': 'P000007', 'name': 'ana perez', 'by': 1900}]
-        ops, rep = run([['Ana', 'Pérez', 'F', '1901', '', '', '', 'Book', 'p'], ['Ana', 'Perez', 'F', '1950', '', '', '', 'Book', 'p']], tree)
-        self.assertEqual(rep['duplicates'][0]['tree_ids'], ['P000007'])    # accent and 1 year apart
-        self.assertEqual(rep['people'], 1)                                  # 1950 is a different person
-        self.assertEqual(len([o for o in ops if o['op'] == 'add_person']), 1)
+    def test_gender_values_in_spanish_and_french(self):
+        sexes = ['V', 'varón', 'Masculino', 'H', 'homme', 'M', 'F', 'mujer', 'Hembra', 'femme', 'Féminin', '', '?', 'xx']
+        ops, rep = run([row('P%d' % i, 'Q', s, '1800') for i, s in enumerate(sexes)])
+        self.assertEqual([o['gender'] for o in of(ops, 'add_person')], list('MMMMMMFFFFFUUU'))
+        self.assertEqual(rep['gender_unread'], [{'row': 'People!15', 'text': 'xx'}])
 
-    def test_same_row_twice_in_the_workbook(self):
-        ops, rep = run([['Ana', 'Perez', 'F', '1901', '', '', '', 'B', 'p'], ['Ana', 'Perez', 'F', '1901', '', '', '', 'B', 'p']])
-        self.assertEqual(rep['people'], 1)
-        self.assertEqual(rep['duplicates'][0]['same_as_row'], 'People!2')
+    def test_maybe_living_people_are_held(self):
+        rows = [row('Ana', 'Perez', 'F', '1950'), row('Luis', 'Gil', 'M', '1950', died='2001'),
+                row('Eva', 'Sanz', 'F', '1925'), row('Rosa', 'Mora', 'F', '1940', died='?'), row('Pio', 'Vila', 'M', '')]
+        ops, rep = run(rows)
+        self.assertEqual([h['name'] for h in rep['living_held']], ['Ana Perez', 'Rosa Mora'])
+        self.assertEqual(sorted(o['first_name'] for o in of(ops, 'add_person')), ['Eva', 'Luis', 'Pio'])
+        ops, rep = run(rows, allow_living=True)
+        self.assertEqual((rep['living_held'], rep['people']), ([], 5))
+
+    def test_keys_are_namespaced_by_batch_sheet_row_and_name(self):
+        same = [row('Luis', 'Gil', 'M', '1899')]
+        a, _ = run(same, batch='cousin-a')
+        b, _ = run(same, batch='archive-b')
+        self.assertFalse({o['key'] for o in a} & {o['key'] for o in b})
+        moved, _ = run([row('Ana', 'Perez', 'F', '1901')] + same, batch='cousin-a')   # a row inserted above
+        self.assertFalse({o['key'] for o in a} & {o['key'] for o in moved if o['op'] != 'add_source'})
+        self.assertTrue(of(a, 'add_person')[0]['key'].startswith('xl-cousin-a-people-r2-luis-gil-'))
+        ops, _ = run([row('Ana', 'Perez', 'F', '1901', 'Madrid', '1970', 'Madrid', 'B', 'p'), row('Ana', 'Perez', 'F', '1901', src='B', page='q')])
+        keys = [o['key'] for o in ops]
+        self.assertEqual(len(keys), len(set(keys)))
+        self.assertTrue(all(o['ruling'] == 'R-1' for o in ops))
+
+    def test_namesakes_are_reported_and_only_a_reason_lets_them_through(self):
+        tree = tree_of([('I0007', 'Ana', 'Pérez'), ('I0008', 'Ana María', 'Perez Gil')])
+        ops, rep = run([row('Ana', 'Perez', 'F', '1901'),                                  # namesake of I0007, loose of I0008
+                        row('ana', 'PEREZ', 'F', '1950', died='2000', why='born 1950, married in Lyon'),
+                        row('Luis', 'Gil', 'M', '1800', why='no reason needed')], tree)
+        p1, p2, p3 = of(ops, 'add_person')
+        self.assertNotIn('allow_namesake', p1)                   # no reason: left for gwt-apply preflight to refuse
+        self.assertEqual(rep['namesakes'][0], {'row': 'People!2', 'name': 'Ana Perez', 'tree_ids': ['I0007', 'I0008'], 'rows': [], 'reason': None})
+        self.assertEqual(p2['allow_namesake'], True)
+        self.assertEqual(p2['namesake_reason'], 'born 1950, married in Lyon')
+        self.assertEqual(p2['namesake_of'], ['I0007', 'I0008', 'key:' + p1['key']])
+        self.assertNotIn('allow_namesake', p3)
+        self.assertEqual(rep['namesake_reason_unused'], [{'row': 'People!4', 'name': 'Luis Gil'}])
+
+    def test_places_come_from_ids_or_one_tree_match_never_new(self):
+        tree = tree_of(places=[('P0001', 'Springfield'), ('P0002', 'San Juan'), ('P0003', 'San Juan')])
+        ops, rep = run([row('Ana', 'Perez', 'F', '1901', 'springfield', '1970', 'Otherton'),
+                        row('Luis', 'Gil', 'M', '1899', 'San Juan', '1960', 'San  Juan'),
+                        row('Eva', 'Sanz', 'F', '1890', 'whatever', bplace_id='P0003'),
+                        row('Pio', 'Vila', 'M', '1890', 'whatever', bplace_id='P0099'),
+                        row('Rosa', 'Mora', 'F', '1890', bplace_id='a handle')], tree)
+        self.assertEqual(of(ops, 'add_place'), [])
+        ev = {o['key'].split('-r', 1)[1]: o for o in of(ops, 'add_event')}
+        place = lambda r, e: next(v for k, v in ev.items() if k.startswith('%d-' % r) and k.endswith(e))
+        self.assertEqual(place(2, 'birth')['place'], 'P0001')
+        self.assertNotIn('place', place(2, 'death'))
+        self.assertEqual(place(2, 'death')['description'], 'Place as written: Otherton')
+        self.assertNotIn('place', place(3, 'birth'))
+        self.assertEqual(place(4, 'birth')['place'], 'P0003')
+        self.assertNotIn('place', place(5, 'birth'))
+        self.assertEqual(rep['places_unmatched'], [{'row': 'People!2', 'event': 'Death', 'text': 'Otherton'}])
+        self.assertEqual([a['tree_ids'] for a in rep['places_ambiguous']], [['P0002', 'P0003']] * 2)
+        self.assertEqual([u['id'] for u in rep['place_ids_unknown']], ['P0099', 'a handle'])
+        ops, rep = run([row('Ana', 'Perez', 'F', '1901', 'Springfield', bplace_id='P0042')])   # no tree: the id is trusted to gwt-apply
+        self.assertEqual(of(ops, 'add_event')[0]['place'], 'P0042')
 
     def test_incomplete_name_is_skipped_with_reason(self):
-        ops, rep = run([['Ana', '', 'F', '1901', '', '', '', 'B', 'p']])
+        ops, rep = run([row('Ana', '', 'F', '1901')])
         self.assertEqual(ops, [])
         self.assertEqual(rep['skipped'][0]['reason'], 'name incomplete')
 
-    def test_missing_column_names_the_column(self):
+    def test_missing_or_repeated_column_names_the_column(self):
         bad = json.loads(json.dumps(MAP)); bad['sheets'][0]['columns']['source'] = 'Fuente'
-        with self.assertRaises(X.ImportError_) as c:
-            run([['Ana', 'Perez', 'F', '1901', '', '', '', 'B', 'p']], mapping=bad)
+        with self.assertRaises(X.MappingError) as c:
+            run([row('Ana', 'Perez', 'F', '1901')], mapping=bad)
         self.assertIn('Fuente', str(c.exception))
-
-    def test_every_op_has_a_ruling_and_unique_key(self):
-        ops, _ = run([['Ana', 'Perez', 'F', '1901', 'Madrid', '1970', 'Madrid', 'B', 'p'], ['Luis', 'Gil', 'M', '1899', 'Madrid', '', '', 'B', 'q']])
-        self.assertTrue(all(o['ruling'] == 'R-1' for o in ops))
-        keys = [o['key'] for o in ops]
-        self.assertEqual(len(keys), len(set(keys)))
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, 'b.xlsx')
+            make_xlsx(p, {'People': [HEAD[:-1] + ['Born'], row('Ana', 'Perez', 'F', '1901')]})
+            with self.assertRaises(X.MappingError) as c:
+                X.import_rows(X.read_workbook(p), MAP, None)
+            self.assertIn("'Born'", str(c.exception))
 
     def test_output_passes_gwt_apply_validation(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'apply'))
+        sys.path.insert(0, os.path.join(HERE, '..', 'apply'))
         try:
             from gwt_apply.ops import validate
         except ImportError:
             self.skipTest('gwt-apply not importable (needs requests)')
-        ops, _ = run([['Ana', 'Perez', 'F', '1901', 'Madrid', '1970', 'Madrid', 'Parish book', 'f 3'],
-                      ['Luis', 'Gil', 'M', 'spring', '', '', '', '', '']])
+        ops, _ = run([row('Ana', 'Perez', 'F', '1901', 'Madrid', '1970', 'Madrid', 'Parish book', 'f 3'),
+                      row('Luis', 'Gil', 'M', 'spring', src='', page=''),
+                      row('Luis', 'Gil', 'M', '1890', why='another baptism book')], tree_of([('I0001', 'Luis', 'Gil')]))
+        self.assertTrue(of(ops, 'add_person')[2]['allow_namesake'])
         self.assertEqual(validate(ops), [])
 
     def test_impossible_calendar_dates_are_refused(self):
@@ -166,19 +265,12 @@ class T(unittest.TestCase):
         self.assertEqual(X.parse_date('circa 1901')[0], 'abt 1901')
         self.assertEqual(X.parse_date('ca. 1901')[0], 'abt 1901')
 
-    def test_places_and_sources_that_slug_alike_keep_their_own_keys(self):
-        ops, _ = run([['Ana', 'Perez', 'F', '1901', 'A-B', '', '', 'Register A-B', 'f1'],
-                      ['Luis', 'Gil', 'M', '1899', 'A B', '', '', 'Register A B', 'f2']])
-        places = [o for o in ops if o['op'] == 'add_place']
-        srcs = [o for o in ops if o['op'] == 'add_source']
-        self.assertEqual(sorted(p['name'] for p in places), ['A B', 'A-B'])
+    def test_sources_that_slug_alike_keep_their_own_keys(self):
+        ops, _ = run([row('Ana', 'Perez', 'F', '1901', src='Register A-B', page='f1'),
+                      row('Luis', 'Gil', 'M', '1899', src='Register A B', page='f2')])
+        srcs = of(ops, 'add_source')
         self.assertEqual(sorted(s['title'] for s in srcs), ['Register A B', 'Register A-B'])
-        ev = {o['person']: o['place'] for o in ops if o['op'] == 'add_event'}
-        self.assertEqual(len(set(ev.values())), 2)
-        cit = {o['attach'][0]['person']: o['source'] for o in ops if o['op'] == 'add_citation'}
-        self.assertEqual(len(set(cit.values())), 2)
-        keys = [o['key'] for o in ops]
-        self.assertEqual(len(keys), len(set(keys)))
+        self.assertEqual(len({o['source'] for o in of(ops, 'add_citation')}), 2)
 
     def test_native_excel_dates_formulas_and_errors(self):
         with tempfile.TemporaryDirectory() as d:
@@ -198,27 +290,25 @@ class T(unittest.TestCase):
                 self.assertEqual(rows[r][3], '1')
                 self.assertEqual(meta[('People', r + 1, 3)], {'time'})
             self.assertEqual(rows[11][3], '1901-03-14')  # "mmm yyyy" is a date format
-            ops, rep = X.import_rows(book, MAP, [], meta)
+            m = {'ruling': 'R-1', 'sheets': [{'sheet': 'People', 'columns': {'first_name': 'Given', 'surname': 'Surname', 'birth_date': 'Born'}}]}
+            ops, rep = X.import_rows(book, m, None, meta, this_year=YEAR)
             self.assertEqual(rep['time_cells'], ['People!%d:Born' % r for r in (8, 9, 10, 11)])
             self.assertFalse(any(o.get('date') == '1900-01-01' for o in ops))
             self.assertEqual(rep['excel_dates'], 4)
             self.assertEqual(rep['formula_cells'], ['People!6:Born', 'People!7:Born'])   # a date-styled formula is still a formula
             self.assertEqual(meta[('People', 7, 3)], {'formula', 'date'})
             self.assertEqual(rep['error_cells'], ['People!5:Born'])
-            by = {o['person']: o.get('date') for o in ops if o['op'] == 'add_event'}
-            self.assertEqual(sorted(v for v in by.values() if v), ['1901', '1901-03-14', '1901-03-14', '1901-03-14', '1901-03-14', '1950'])
+            by = {o['person']: o.get('date') for o in of(ops, 'add_event')}
+            self.assertEqual(sorted(v for v in by.values() if v), ['1901', '1901-03-14', '1901-03-14', '1901-03-14', '1901-03-14'])
+            self.assertEqual([h['born'] for h in rep['living_held']], ['1950'])
 
     def test_time_cell_that_looks_like_a_year_is_not_a_year(self):
-        meta = {('People', 2, 3): {'time'}, ('People', 3, 3): {'time'}}
+        meta = {('People', 2, 3): {'time'}}
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, 'b.xlsx')
-            make_xlsx(p, {'People': [HEAD, ['Ana', 'Perez', 'F', '1901', '', '', '', 'B', 'p'], ['Ana', 'Perez', 'F', '1950', '', '', '', 'B', 'p']]})
-            tree = [{'id': 'P1', 'name': 'luis gil', 'by': 1901}]
-            ops, rep = X.import_rows(X.read_workbook(p), MAP, tree, meta)
-        self.assertEqual(rep['people'], 1)                      # the 1901 in a time cell gives no birth year: key says nd, not 1901
-        self.assertEqual(len(rep['duplicates']), 1)             # the second is the same name with no year, reported not merged
-        self.assertTrue(all('nd' in o['key'] for o in ops if o['op'] == 'add_person'))
-        ev = [o for o in ops if o['op'] == 'add_event']
+            make_xlsx(p, {'People': [HEAD, row('Ana', 'Perez', 'F', '1901')]})
+            ops, rep = X.import_rows(X.read_workbook(p), MAP, None, meta, this_year=YEAR)
+        ev = of(ops, 'add_event')
         self.assertTrue(ev and all('date' not in e for e in ev))
         self.assertEqual(ev[0]['description'], 'Time/duration value as written: 1901')
         self.assertEqual(rep['date_problems'][0]['reason'], 'time or duration format, not a date')
@@ -247,50 +337,91 @@ class T(unittest.TestCase):
         self.assertEqual(X.serial_to_iso('0', True), '1904-01-01')
         self.assertEqual(X.serial_to_iso('1461', True), '1908-01-01')
 
-    def test_real_dump_dates_use_dateval(self):
-        def dump(dv, **extra):
-            d = {'dateval': dv}
-            d.update(extra)
-            return {'objects': {'people': [{'gramps_id': 'P1', 'primary_name': {'first_name': 'Ana', 'surname_list': [{'surname': 'Perez'}]},
-                                            'birth_ref_index': 0, 'event_ref_list': [{'ref': 'h1'}]}], 'events': [{'handle': 'h1', 'date': d}]}}
-        with tempfile.TemporaryDirectory() as dd:
-            def tree(dv, **extra):
-                p = os.path.join(dd, 't.json')
-                json.dump(dump(dv, **extra), open(p, 'w'))
-                return X.tree_people(p)
-            t1800 = tree([14, 3, 1800, False])                       # no 'year' key at all, as in a bare dump
-            self.assertEqual(t1800[0]['by'], 1800)
-            _, rep = run([['Ana', 'Perez', 'F', '1950', '', '', '', 'B', 'p']], t1800)
-            self.assertEqual((rep['people'], rep['duplicates']), (1, []))                # 1800 vs 1950 imports
-            t1900 = tree([0, 0, 1900, False])
-            _, rep = run([['Ana', 'Perez', 'F', '1901', '', '', '', 'B', 'p']], t1900)
-            self.assertEqual(rep['duplicates'][0]['tree_ids'], ['P1'])                   # 1900 vs 1901 is a possible duplicate
-            self.assertEqual(tree([1, 2, 1850, False, 3, 4, 1860, False])[0]['by'], 1850)  # range: first year
-            for bad in ([], [1, 2], [1, 2, 'x', False], [1, 2, 0, False], [1, 2, True, False], None):
-                self.assertIsNone(tree(bad)[0]['by'], bad)
-            self.assertEqual(tree(None, year=1800)[0]['by'], 1800)   # no dateval: fall back to year
-
-    def test_tree_dump_reader(self):
-        dump = {'objects': {'people': [{'gramps_id': 'P1', 'primary_name': {'first_name': 'Ana', 'surname_list': [{'surname': 'Perez'}]},
-                                        'birth_ref_index': 0, 'event_ref_list': [{'ref': 'h1'}]}],
-                            'events': [{'handle': 'h1', 'date': {'dateval': [14, 3, 1901, False], 'year': 1901}}]}}
+    def test_cells_and_rows_without_r_take_the_next_position(self):
         with tempfile.TemporaryDirectory() as d:
-            p = os.path.join(d, 't.json.gz')
-            with gzip.open(p, 'wt') as f:
-                json.dump(dump, f)
-            self.assertEqual(X.tree_people(p), [{'id': 'P1', 'name': 'ana perez', 'by': 1901}])
+            p = os.path.join(d, 'b.xlsx')
+            raw_sheet(p, '<row><c t="inlineStr"><is><t>a</t></is></c><c t="inlineStr"><is><t>b</t></is></c></row>'
+                         '<row r="4"><c r="C4" t="inlineStr"><is><t>c</t></is></c><c t="inlineStr"><is><t>d</t></is></c></row>'
+                         '<row><c t="inlineStr"><is><t>e</t></is></c></row>')
+            self.assertEqual(X.read_workbook(p)['S'], [['a', 'b'], (), (), ['', '', 'c', 'd'], ['e']])
+
+    def test_absurd_rows_and_zip_bombs_are_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, 'b.xlsx')
+            raw_sheet(p, '<row r="1000000000"><c r="A1000000000"><v>1</v></c></row>')
+            with self.assertRaisesRegex(X.MappingError, 'row numbered 1000000000'):
+                X.read_workbook(p)
+            raw_sheet(p, '<row r="1"><c r="ZZZZ1"><v>1</v></c></row>')
+            with self.assertRaisesRegex(X.MappingError, 'past column'):
+                X.read_workbook(p)
+            raw_sheet(p, '<row r="1"><c r="A1"><v>%s</v></c></row>' % ('0' * 5000))
+            old = X.MAX_MEMBER
+            X.MAX_MEMBER = 4000
+            try:
+                with self.assertRaisesRegex(X.MappingError, 'unpacks to more than'):
+                    X.read_workbook(p)
+            finally:
+                X.MAX_MEMBER = old
+
+    def test_read_tree_takes_a_check_dump_or_an_apply_snapshot(self):
+        person = {'gramps_id': 'I0001', 'handle': 'h1', 'primary_name': {'first_name': 'Ana María', 'surname_list': [{'surname': 'Pérez'}, {'surname': 'Gil'}]}}
+        place = {'gramps_id': 'P0001', 'handle': 'h2', 'name': {'value': 'Springfield'}}
+        with tempfile.TemporaryDirectory() as d:
+            for name, objs in (('dump.json.gz', {'people': [person], 'places': [place]}),
+                               ('snap.json', {'Person': [person], 'Place': [place]})):
+                p = os.path.join(d, name)
+                with (gzip.open if name.endswith('.gz') else open)(p, 'wt', encoding='utf-8') as f:
+                    json.dump({'objects': objs}, f)
+                people, places = X.read_tree(p)
+                self.assertEqual(people['full'], {('ana maria', 'perez gil'): ['I0001']})
+                self.assertEqual(people['loose'], {('ana', 'perez'): ['I0001']})
+                self.assertEqual(places, {'springfield': ['P0001']})
 
     def test_cli_writes_jsonl_and_never_touches_a_tree(self):
         with tempfile.TemporaryDirectory() as d:
             b, m, o = (os.path.join(d, n) for n in ('b.xlsx', 'm.json', 'o.jsonl'))
-            make_xlsx(b, {'People': [HEAD, ['Ana', 'Perez', 'F', '1901', 'Madrid', '', '', 'B', 'p']]})
-            json.dump(MAP, open(m, 'w'))
-            r = subprocess.run([sys.executable, CLI, b, '--mapping', m, '--out', o], capture_output=True, text=True)
+            make_xlsx(b, {'People': [HEAD, row('Ana', 'Perez', 'F', '1901', 'Madrid')]})
+            with open(m, 'w') as f:
+                json.dump(MAP, f)
+            cli = lambda *extra: subprocess.run([sys.executable, CLI, b, '--mapping', m, '--out', o] + list(extra), capture_output=True, text=True)
+            r = cli('--batch', 'cousin-a')
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertIn('people 1', r.stdout)
-            self.assertEqual(json.loads(open(o).readline())['op'], 'add_person')
-            r = subprocess.run([sys.executable, CLI, b, '--mapping', os.path.join(d, 'nope.json')], capture_output=True, text=True)
+            with open(o) as f:
+                self.assertEqual(json.loads(f.readline())['op'], 'add_person')
+            r = cli('--batch', 'cousin-a')
             self.assertEqual(r.returncode, 2)
+            self.assertIn('exists', r.stderr)
+            self.assertEqual(cli('--batch', 'cousin-a', '--force').returncode, 0)
+            r = cli('--batch', 'Bad Name', '--force')
+            self.assertEqual(r.returncode, 2)
+            self.assertIn('--batch', r.stderr)
+            r = subprocess.run([sys.executable, CLI, b, '--mapping', os.path.join(d, 'nope.json'), '--batch', 'x', '--out', o, '--force'], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 2)
+
+    def test_cli_turns_broken_workbooks_into_exit_2(self):
+        with tempfile.TemporaryDirectory() as d:
+            b, m, o = (os.path.join(d, n) for n in ('b.xlsx', 'm.json', 'o.jsonl'))
+            with open(m, 'w') as f:
+                json.dump(MAP, f)
+            for body, shared in (('<row r="1"><c r="A1" t="s"><v>7</v></c></row>', True),      # IndexError
+                                 ('<row r="1"><c r="A1"', False),                                # ET.ParseError
+                                 ('<row r="1"><c r="A1" t="s"><v>x</v></c></row>', True)):       # ValueError
+                raw_sheet(b, body, shared=shared)
+                r = subprocess.run([sys.executable, CLI, b, '--mapping', m, '--batch', 'x', '--out', o, '--force'], capture_output=True, text=True)
+                self.assertEqual(r.returncode, 2, body)
+                self.assertNotIn('Traceback', r.stderr)
+
+
+def raw_sheet(path, rows_xml, shared=False):
+    """A one-sheet workbook named S whose sheetData is rows_xml as given."""
+    ns = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+    with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as z:
+        z.writestr('xl/workbook.xml', '<workbook %s xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="S" sheetId="1" r:id="rId1"/></sheets></workbook>' % ns)
+        z.writestr('xl/_rels/workbook.xml.rels', '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>')
+        if shared:
+            z.writestr('xl/sharedStrings.xml', '<sst %s><si><t>only</t></si></sst>' % ns)
+        z.writestr('xl/worksheets/sheet1.xml', '<worksheet %s><sheetData>%s</sheetData></worksheet>' % (ns, rows_xml))
 
 
 if __name__ == '__main__':
