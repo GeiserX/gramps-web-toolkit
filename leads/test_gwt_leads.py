@@ -125,6 +125,12 @@ class LeadsTest(unittest.TestCase):
         self.assertIn("--source familysearch", line)
         self.assertNotIn('--source', L.as_queue_line(tasks[0]))
 
+    def test_one_word_names_are_not_queued_unless_asked(self):
+        rows = [{'person': 'I9', 'label': 'Antonio', 'kind': 'branch-end', 'what': 'no parents recorded', 'priority': 99},
+                {'person': 'I8', 'label': 'Ana Lopez', 'kind': 'branch-end', 'what': 'no parents recorded', 'priority': 98}]
+        self.assertEqual([t['person'] for t in L.group_by_person(rows)], ['I8'])
+        self.assertEqual([t['person'] for t in L.group_by_person(rows, keep_weak=True)], ['I9', 'I8'])
+
     # --- the real `gwt-check dump` shape, and honest dates ---
 
     def real_dump(self, td, mutate=None):

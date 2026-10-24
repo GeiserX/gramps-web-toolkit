@@ -151,10 +151,17 @@ def leads(T, root_gid=None, kinds=KINDS):
     return out
 
 
-def group_by_person(rows):
+def weak_label(label):
+    """A name of one word (a given name alone) cannot be searched: it matches thousands of people."""
+    return len(label.replace('(', ' ').replace(')', ' ').split()) < 2
+
+
+def group_by_person(rows, keep_weak=False):
     """One task per person and task kind: the gaps of one person are one search, not one search per gap."""
     groups = {}
     for r in rows:
+        if not keep_weak and weak_label(r['label']):
+            continue
         kind = 'search' if r['kind'] != 'uncited' else 'verify'
         g = groups.setdefault((r['person'], kind), {'person': r['person'], 'label': r['label'], 'task': kind,
                                                    'priority': r['priority'], 'gaps': []})
@@ -188,6 +195,7 @@ def main(argv=None):
     p.add_argument('--limit', type=int, default=0)
     p.add_argument('--format', choices=('queue', 'tsv', 'json'), default='tsv')
     p.add_argument('--source', default='', help='source name to put on every queue task (queue format)')
+    p.add_argument('--keep-weak', action='store_true', help='queue format: also queue people whose name is a single word')
     p.add_argument('--per-gap', action='store_true', help='queue format: one task per gap instead of one per person')
     args = p.parse_args(argv)
     kinds = tuple(k for k in args.kinds.split(',') if k)
@@ -200,7 +208,11 @@ def main(argv=None):
         print('gwt-leads: %s' % exc, file=sys.stderr)
         return 2
     if args.format == 'queue' and not args.per_gap:
-        rows = group_by_person(rows)
+        skipped = {r['person'] for r in rows if weak_label(r['label'])} if not args.keep_weak else set()
+        rows = group_by_person(rows, args.keep_weak)
+        if skipped:
+            print('gwt-leads: skipped %d people whose name is one word (research them by hand, or --keep-weak)' % len(skipped),
+                  file=sys.stderr)
     if args.limit:
         rows = rows[:args.limit]
     for r in rows:

@@ -22,7 +22,7 @@ With `--root I0001` (a Gramps id), the root's ancestors rank first: 100 minus on
 
 - `--format tsv` (default): `priority`, person id, label, kind, what.
 - `--format json`: one JSON object per line.
-- `--format queue`: one `gwt-queue add ... --dedupe` line per person and task kind (`search` or `verify`), query = the person's name, the gaps listed in the note, priority = the best of the gaps. Several gaps of one person are one search, not one per gap. `--per-gap` gives the old one-line-per-gap output; `--source NAME` puts a source on every task so the ledger key is complete. Each line has the person's Gramps id as key and every value shell-quoted. Because of `--dedupe` it can run after every round:
+- `--format queue`: one `gwt-queue add ... --dedupe` line per person and task kind (`search` or `verify`), query = the person's name, the gaps listed in the note, priority = the best of the gaps. Several gaps of one person are one search, not one per gap. `--keep-weak` also queues people whose name is one word (a given name alone matches thousands of people, so they are skipped by default and counted on stderr). `--per-gap` gives the old one-line-per-gap output; `--source NAME` puts a source on every task so the ledger key is complete. Each line has the person's Gramps id as key and every value shell-quoted. Because of `--dedupe` it can run after every round:
 
 ```bash
 gwt-check dump tree.json.gz
