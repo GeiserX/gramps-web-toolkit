@@ -41,6 +41,8 @@ LIVING_YEARS = 100                   # born this recently, or never, with no dea
 GRAMPS_ID = re.compile(r'^[A-Za-z]+\d+(?:-[A-Za-z0-9]+)?$')   # as gwt-apply accepts them
 EVENTS = (('birth', 'Birth'), ('baptism', 'Baptism'), ('christening', 'Christening'),
           ('death', 'Death'), ('burial', 'Burial'))     # mapping columns <event>_date, _place, _place_id
+FIELDS = {'first_name', 'surname', 'gender', 'source', 'page', 'namesake_reason'} | {
+    ev + part for ev, _ in EVENTS for part in ('_date', '_place', '_place_id')}   # what a mapping may name
 BIRTHLIKE = ('birth', 'baptism', 'christening')
 DEATHLIKE = ('death', 'burial')
 BATCH = re.compile(r'^[a-z0-9][a-z0-9-]{0,39}$')
@@ -347,6 +349,9 @@ def import_rows(book, mapping, tree=None, meta=None, batch='b', this_year=None, 
         names = list(header.values())
         dup = sorted({h for h in names if names.count(h) > 1})
         cols = spec['columns']
+        unknown = sorted(set(cols) - FIELDS)
+        if unknown:                                  # a misspelled field would be dropped without a word
+            raise MappingError('sheet %r maps unknown field(s) %s; known: %s' % (spec['sheet'], ', '.join(unknown), ', '.join(sorted(FIELDS))))
         if dup and any(h in dup for h in cols.values()):
             raise MappingError('sheet %r has the column %s more than once' % (spec['sheet'], ', '.join(map(repr, dup))))
         idx = {h: i for i, h in header.items()}

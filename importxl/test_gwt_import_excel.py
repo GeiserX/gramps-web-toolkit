@@ -271,6 +271,20 @@ class T(unittest.TestCase):
         self.assertEqual(ops, [])
         self.assertEqual(rep['skipped'][0]['reason'], 'name incomplete')
 
+    def test_unknown_mapping_field_stops_the_run(self):
+        bad = json.loads(json.dumps(MAP)); bad['sheets'][0]['columns']['bautismo_date'] = 'Born'
+        with self.assertRaisesRegex(X.MappingError, "unknown field.*bautismo_date"):
+            run([row('Ana', 'Perez', 'F', '1901')], mapping=bad)
+        with tempfile.TemporaryDirectory() as d:
+            b, m, o = (os.path.join(d, n) for n in ('b.xlsx', 'm.json', 'o.jsonl'))
+            make_xlsx(b, {'People': [HEAD, row('Ana', 'Perez', 'F', '1901')]})
+            with open(m, 'w') as f:
+                json.dump(bad, f)
+            r = subprocess.run([sys.executable, CLI, b, '--mapping', m, '--batch', 'x', '--out', o], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 2)
+            self.assertIn('bautismo_date', r.stderr)
+            self.assertFalse(os.path.exists(o))
+
     def test_missing_or_repeated_column_names_the_column(self):
         bad = json.loads(json.dumps(MAP)); bad['sheets'][0]['columns']['source'] = 'Fuente'
         with self.assertRaises(X.MappingError) as c:
