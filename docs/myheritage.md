@@ -22,9 +22,9 @@ Logging in is per account and private (vault, a code mailed to the owner, which 
 
 | File | What it is |
 |---|---|
-| `myheritage/gwt_mh.py` | Pure logic, standard library: URLs, cache key, search JSON and record page parsers, walls, plan inference, image headers, manifest, slugs, mirror verdict |
-| `myheritage/gwt_mh_browser.py` | The only module that imports Playwright: gated, cached page capture, byte fetches, screenshots |
-| `myheritage/gwt-mh` | The CLI |
+| [`myheritage/gwt_mh.py`](../myheritage/gwt_mh.py) | Pure logic, standard library: URLs, cache key, search JSON and record page parsers, walls, plan inference, image headers, manifest, slugs, mirror verdict |
+| [`myheritage/gwt_mh_browser.py`](../myheritage/gwt_mh_browser.py) | The only module that imports Playwright: gated, cached page capture, byte fetches, screenshots |
+| [`myheritage/gwt-mh`](../myheritage/gwt-mh) | The CLI |
 
 It reuses [gwt-gate](gate.md) (one gate per account, `start=17 floor=10 ceil=60`, plus a random 0-8 s), [gwt-fscache](fscache.md) (cache key with the plan in it), [gwt-rank](rank.md) (it writes the `{"candidates": [...]}` shape), [gwt-ledger](ledger.md) and [gwt-rawstore](rawstore.md), without changing any of them.
 
@@ -132,7 +132,7 @@ Only `equivalent` lets MyHeritage go first for that collection, under `myheritag
 
 ## 10. FamilySearch, for a follow-up
 
-FamilySearch gives original images for many collections at no cost; some are limited to signed-in users, affiliate libraries or FamilySearch centers. Our FamilySearch tools download images (`gwt-fetch`) but do not yet keep the image, the record JSON and the citation in rawstore with a manifest like this one. Aligning them is a follow-up.
+FamilySearch gives original images for many collections at no cost; some are limited to signed-in users, affiliate libraries or FamilySearch centers. Our FamilySearch tools download images ([gwt-fetch](fetch.md)) but do not yet keep the image, the record JSON and the citation in rawstore with a manifest like this one. Aligning them is a follow-up.
 
 ## Traps
 
