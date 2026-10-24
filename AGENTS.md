@@ -17,6 +17,7 @@ tool with its own tests; `docs/` has one page per tool, plus `pipeline.md` (how 
 | `ledger/` | `gwt-ledger`, shared search ledger | Python standard library |
 | `fscache/` | `gwt-fscache`, HTTP cache | Python standard library |
 | `gate/` | `gwt-gate`, shared request pace | Python standard library |
+| `rank/` | `gwt-rank`, orders search results | Python standard library |
 | `rawstore/` | `gwt-rawstore`, images in S3, manifest in git | Python standard library |
 | `importxl/` | `gwt-import-excel`, workbook to change list | Python standard library (its end-to-end test needs `requests`) |
 | `queue/` | `gwt-queue`, search tasks handed out to lanes | Python standard library |
@@ -42,6 +43,7 @@ cd fetch && python3 -m pytest -q
 cd ledger && python3 -m unittest test_gwt_ledger
 cd fscache && python3 -m unittest test_gwt_fscache
 cd gate && python3 -m unittest test_gwt_gate
+cd rank && python3 -m unittest test_gwt_rank
 cd rawstore && python3 -m unittest test_gwt_rawstore
 cd importxl && python3 -m unittest test_gwt_import_excel test_end_to_end
 cd queue && python3 -m unittest test_gwt_queue
