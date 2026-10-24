@@ -12,7 +12,7 @@ One row per search, tab-separated, with a header line:
 |---|---|
 | `person_key` | slug of the person searched, e.g. `ana-peiro-toledo` (or a tree id) |
 | `person_label` | readable name |
-| `source` | slug of where: `familysearch`, `gaceta`, `ad33`, `newspapers` |
+| `source` | slug of where: `familysearch`, `gaceta`, `ad33`, `newspapers`. Names ending in `-verify`, `-sweep` or `-followup` are reserved for the [research loop](agent-loop.md), which logs those task kinds apart from plain searches; `any` stands for a task with no source |
 | `query` | the search, normalized: lowercase, no accents, no punctuation |
 | `date` | ISO date of the search |
 | `result` | `hit`, `none`, `partial`, `blocked` (could not search: a site block, or an authorization you lack; the evidence file says which) or `denied` (the office refused the request) |
