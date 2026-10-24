@@ -97,6 +97,7 @@ gwt-check repos dump.json.gz --json                   # repositories with their 
 | `surname-marker` | A surname containing `[`, such as `Vidal [¿?]` |
 | `missing-object` | With `--since`: an object of the earlier tree that is gone |
 | `ahnentafel-lost`, `ahnentafel-changed` | With `--since` and `--root`: a number that disappeared, or holds another person |
+| `ahnentafel-truncated` | With `--root`: the pedigree passes 100,000 Ahnentafel positions (pedigree collapse, or someone made their own ancestor), so the walk stopped there. With `--since`, only the generations both trees walked in full are compared. It fails the run, in a `--since --root` run and a `--root` run alike; accept it with `--known` and the key `root <ID>` |
 
 Names are compared lowercased, without accents, with b/v and i/y folded and the particle "de" dropped. `dup-person-fuzzy` also drops "del", "la", "las", "los" and "y", and matches "Pedro Lasa" with "Pedro José Lasa Ibarra". For a pair to count, at least one side must be in scope, or belong to a family that is. That covers an old person the run gave a new spouse or new parents. A different spelling of the same word ("Lasa" against "Lassa") is still not matched. A run that allowed namesakes still needs its homonyms read one by one.
 
