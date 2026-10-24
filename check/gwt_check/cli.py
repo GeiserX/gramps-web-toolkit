@@ -8,7 +8,7 @@ import os
 import sys
 import time
 
-from .checks import CHECKS, run_checks
+from .checks import CHECKS, INFO_CHECKS, run_checks
 from .client import ApiError, Client
 from . import compare
 from .compare import ahnentafel, compare_ahnentafel, diff
@@ -119,7 +119,7 @@ def check(tree: Tree, *, since: Tree | None = None, tag: str | None = None, root
         scope = set(tagged or ())
         if since is not None:
             scope |= {(t, h) for t, objs in tree.objs.items() for h in objs if h not in since.objs[t]}
-    findings, info = run_checks(tree, scope)
+    findings, info = run_checks(tree, scope, root)
     report = {"counts": tree.counts(), "scope": None if scope is None else len(scope), "info": info}
     if since is not None:
         f, report["diff"] = diff(since, tree, tagged)
@@ -145,7 +145,9 @@ def check(tree: Tree, *, since: Tree | None = None, tag: str | None = None, root
         if known.get((f["check"], f["key"])):
             f["reason"] = known[(f["check"], f["key"])]
     report["findings"] = findings
-    report["new"] = [f for f in findings if not f["known"]]
+    for f in findings:
+        f["info"] = f["check"] in INFO_CHECKS
+    report["new"] = [f for f in findings if not f["known"] and not f["info"]]
     report["ignored"] = {c: sum(1 for f in findings if f["check"] == c) for c in sorted(ignore)}
     return report
 
@@ -169,7 +171,7 @@ def print_report(report: dict, limit: int) -> None:
         new = [f for f in fs if not f["known"]]
         if not fs:
             continue
-        print(f"\n{'FAIL' if new else 'known'} {name}: {len(new)} new, {len(fs) - len(new)} known  ({CHECKS[name]})")
+        print(f"\n{'info' if name in INFO_CHECKS else 'FAIL' if new else 'known'} {name}: {len(new)} new, {len(fs) - len(new)} known  ({CHECKS[name]})")
         for f in [f for f in fs if f["known"] and f.get("reason")][:limit]:
             print(f"  known {f['key']}: {f['reason']}")
         for f in new[:limit]:
@@ -198,7 +200,9 @@ def print_report(report: dict, limit: int) -> None:
     for name, count in report.get("ignored", {}).items():
         print(f"ignored {name}: {count} finding(s), not counted (--ignore-check)")
     n = len(report["new"])
-    print(f"\n{'FAIL' if n else 'OK'}: {n} new finding(s), {len(report['findings']) - n} known")
+    n_info = sum(1 for f in report["findings"] if f["info"] and not f["known"])
+    print(f"\n{'FAIL' if n else 'OK'}: {n} new finding(s), {len(report['findings']) - n - n_info} known"
+          + (f", {n_info} for information only" if n_info else ""))
 
 
 def mark_known(report_path: str, check_name: str, keys: list[str], reason: str, out: str) -> int:

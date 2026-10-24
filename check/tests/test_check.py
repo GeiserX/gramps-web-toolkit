@@ -641,6 +641,131 @@ def test_repos_reads_odd_names_and_types_and_refuses_a_backup(tmp_path, capsys):
     assert "no repository details" in capsys.readouterr().err
 
 
+def _unconnected(found):
+    return [(f["key"], f["detail"]) for f in found if f["check"] == "unconnected"]
+
+
+def test_unconnected_flags_a_satellite_family_component():
+    from gwt_check.tree import Tree
+
+    d = selftest.clean_tree()
+    assert _unconnected(checks.run_checks(Tree(d, source="t"))[0]) == []
+
+    selftest.p_unconnected(d)
+    hits = _unconnected(checks.run_checks(Tree(d, source="t"))[0])
+    assert [k for k, _ in hits] == ["I9001"]
+    assert hits[0][1].startswith("2 people: I9001, I9002; main component (I0001) has ")
+
+
+def test_unconnected_scope_goes_through_the_component():
+    from gwt_check.tree import Tree
+
+    d = selftest.clean_tree()
+    selftest.p_unconnected(d)
+    tree = Tree(d, source="t")
+    keys = lambda scope: [k for k, _ in _unconnected(checks.run_checks(tree, scope=scope)[0])]  # noqa: E731
+    assert keys({("people", "hI0001")}) == []
+    assert keys({("people", "hI9002")}) == ["I9001"]
+    assert keys({("families", "hF9001")}) == ["I9001"]
+    assert keys({("events", "hE0001"), ("people", "nobody")}) == []
+
+
+def test_unconnected_leaves_out_people_in_no_family():
+    from gwt_check.tree import Tree
+
+    d = selftest.clean_tree()
+    selftest._new_person(d, "I9003", "Casimiro", "Solo")
+    assert _unconnected(checks.run_checks(Tree(d, source="t"))[0]) == []
+    assert _unconnected(checks.run_checks(Tree(d, source="t"), scope={("people", "hI9003")})[0]) == []
+
+
+def test_unconnected_godparent_link_does_not_connect():
+    """An event role joins nobody: a godparent couple with no family link to the tree is a satellite."""
+    from gwt_check.tree import Tree
+
+    d = selftest.clean_tree()
+    selftest.p_unconnected(d)
+    ev = next(e for e in d["events"] if e["gramps_id"] == "E0001")
+    for gid in ("I9001", "I9002"):
+        next(p for p in d["people"] if p["gramps_id"] == gid)["event_ref_list"] = [
+            {"ref": ev["handle"], "role": "Godfather", "private": False, "citation_list": [], "note_list": [],
+             "attribute_list": []}]
+    assert [k for k, _ in _unconnected(checks.run_checks(Tree(d, source="t"))[0])] == ["I9001"]
+
+
+def test_unconnected_main_is_the_root_component_then_the_largest_lowest_id_first():
+    from gwt_check.tree import Tree
+
+    d = selftest.clean_tree()
+    selftest.p_unconnected(d)
+    tree = Tree(d, source="t")
+    # rooted on the satellite, the main family becomes the satellite: it is keyed by its lowest ID
+    hits = _unconnected(checks.run_checks(tree, root="I9002")[0])
+    assert [k for k, _ in hits] == ["I0001"] and "main component (I9001) has 2" in hits[0][1]
+    # a root in no family, or unknown, falls back to the largest
+    assert [k for k, _ in _unconnected(checks.run_checks(tree, root="I_NONE")[0])] == ["I9001"]
+    # two components of one size: the one holding the numerically lowest ID is main, in any order
+    for order in (1, -1):
+        d = selftest.clean_tree()
+        d["people"], d["families"] = [], []
+        for n, (fa, mo) in enumerate([("I10000", "I10001"), ("I9000", "I9999")][::order]):
+            d["people"] += [{"handle": "h" + g, "gramps_id": g} for g in (fa, mo)]
+            d["families"].append({"handle": f"hF{n}", "gramps_id": f"F{n}", "father_handle": "h" + fa,
+                                  "mother_handle": "h" + mo, "child_ref_list": []})
+        assert [k for k, _ in _unconnected(checks.run_checks(Tree(d, source="t"))[0])] == ["I10000"]
+
+
+def test_unconnected_detail_and_key_order_are_numeric():
+    from gwt_check.tree import Tree
+
+    d = selftest.clean_tree()
+    kids = [f"I{n}" for n in (9010, 10010, 9005, 9100, 9007, 9006)]
+    for g in kids:
+        selftest._new_person(d, g, "Hijo", "Apartado", parent_family="hF9100")
+    selftest._new_family(d, "F9100", "", "", kids=["h" + g for g in kids])
+    hits = _unconnected(checks.run_checks(Tree(d, source="t"))[0])
+    assert hits == [("I9005", "6 people: I9005, I9006, I9007, I9010, I9100, ...; main component (I0001) has "
+                     + hits[0][1].rsplit(" ", 1)[1])]
+
+
+def test_unconnected_never_sets_the_exit_code(tmp_path, capsys):
+    d = selftest.clean_tree()
+    selftest.p_unconnected(d)
+    dump = _write(tmp_path, "sat.json", d)
+    report = tmp_path / "r.json"
+    assert main(["check", dump, "--json", str(report)]) == 0
+    out = capsys.readouterr().out
+    assert "info unconnected: 1 new" in out and "OK: 0 new finding(s), 0 known, 1 for information only" in out
+    data = json.loads(report.read_text())
+    assert data["new"] == [] and [(f["check"], f["key"], f["info"]) for f in data["findings"]] == [
+        ("unconnected", "I9001", True)]
+    # with another, failing finding the run still fails, on that finding alone
+    selftest.p_orphan_note(d)
+    assert main(["check", _write(tmp_path, "both.json", d), "--json", str(report)]) == 1
+    assert [f["check"] for f in json.loads(report.read_text())["new"]] == ["orphan-note"]
+
+
+def test_unconnected_scoped_run_is_fast_on_a_large_tree():
+    """Thousands of people in no family and hundreds of satellites: a scoped run stays well under a second."""
+    import time
+    from gwt_check.tree import Tree
+
+    d = selftest.clean_tree()
+    for n in range(10000):
+        selftest._new_person(d, f"I{20000 + n}", f"Adn{n}", f"Coincidencia{n}")
+    for n in range(300):
+        a, b = f"I{40000 + 2 * n}", f"I{40001 + 2 * n}"
+        selftest._new_person(d, a, f"Uno{n}", f"Apartado{n}", family=f"hF{40000 + n}")
+        selftest._new_person(d, b, f"Dos{n}", f"Apartado{n}", family=f"hF{40000 + n}")
+        selftest._new_family(d, f"F{40000 + n}", "h" + a, "h" + b)
+    tree = Tree(d, source="t")
+    scope = {("people", p["handle"]) for p in d["people"][-3000:]}
+    t0 = time.monotonic()
+    found, _ = checks.run_checks(tree, scope=scope)
+    assert len(_unconnected(found)) == 300
+    assert time.monotonic() - t0 < 5
+
+
 def _diamond(depth):
     """Two people per generation, both children of the previous couple: 1 + 2*depth people
     whose Ahnentafel expansion fills every position of every generation (pedigree collapse)."""
