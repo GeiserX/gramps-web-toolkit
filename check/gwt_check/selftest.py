@@ -342,15 +342,15 @@ def p_ahnentafel_truncated(d):
 SELFTEST_POSITIONS = 1_000  # MAX_POSITIONS while the self-test runs; the clean tree has 7
 
 
-# (plant, check that must fire, key it must carry, needs the clean tree as --since and I0001 as root)
 def p_unconnected(d):
     _new_person(d, "I9001", "Aníbal", "Apartado", family="hF9001")
     _new_person(d, "I9002", "Berta", "Apartado", family="hF9001")
     _new_family(d, "F9001", "hI9001", "hI9002")
 
 
+# (plant, check that must fire, key it must carry, needs the clean tree as --since and I0001 as root)
 PLANTS = [
-    (p_unconnected, "unconnected", "I9001,I9002", False),
+    (p_unconnected, "unconnected", "I9001", False),
     (p_orphan_event, "orphan-event", "E0102", False),
     (p_orphan_citation, "orphan-citation", "C0099", False),
     (p_orphan_note, "orphan-note", "N0099", False),

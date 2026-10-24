@@ -20,7 +20,7 @@ Without installing, run `check/gwt-check` from a clone.
 
 Settings come from the environment, or from a `KEY=VALUE` file passed with `--config`, the same as [`gwt-apply`](apply.md): `GWT_URL`, `GWT_USERNAME`, `GWT_PASSWORD`, and `GWT_TREE`, the tree id the login must land in. If `GWT_TREE` is set and the token's `tree` claim differs, it stops. One login serves the whole run, and the password never reaches the output.
 
-It exits `0` with no new findings and `1` with new findings. It exits `2` on bad input, which covers a file that is not a dump, missing settings, a failed login, and a live tree that never settles (below).
+It exits `0` with no new findings and `1` with new findings. Findings of a check marked for information only, today `unconnected`, are printed as `info` and never count as new. It exits `2` on bad input, which covers a file that is not a dump, missing settings, a failed login, and a live tree that never settles (below).
 
 ## Reading a tree that is being written to
 
@@ -97,8 +97,8 @@ gwt-check repos dump.json.gz --json                   # repositories with their 
 | `surname-marker` | A surname containing `[`, such as `Vidal [¿?]` |
 | `missing-object` | With `--since`: an object of the earlier tree that is gone |
 | `ahnentafel-lost`, `ahnentafel-changed` | With `--since` and `--root`: a number that disappeared, or holds another person |
-| `unconnected` | A family component with no link to the largest one: one finding per satellite component, keyed by its people's Gramps IDs. The classic wrong-tree write — a batch that added someone outside the main family — shows up here. A research branch kept on purpose while a documentary bridge is found is accepted with `mark-known`. With `--since` or `--tag` it fires only for components holding a person or a family in scope. Honest limits: the largest component is a heuristic for "the main family", not a proof of anyone's descent, and a tree whose real main line is not the largest component needs `mark-known` here; two components of the same size are ordered arbitrarily; a person in no family is a one-person component and is flagged like any other satellite |
 | `ahnentafel-truncated` | With `--root`: the pedigree passes 100,000 Ahnentafel positions (pedigree collapse, or someone made their own ancestor), so the walk stopped there. With `--since`, only the generations both trees walked in full are compared. It fails the run, in a `--since --root` run and a `--root` run alike; accept it with `--known` and the key `root <ID>` |
+| `unconnected` | For information only, it never sets the exit code. A group of people joined to each other by families (as father, mother or child) with no family link to the main group. The main group is the `--root` person's, or without `--root` (or with a root in no family) the largest one, the one with the lowest Gramps ID on a tie. One finding per other group, keyed by its lowest Gramps ID in numeric order (`I9001` before `I10000`), with its size and first five IDs in the detail, so the key holds while the group grows. It finds a batch written with no link to the main family, such as a research branch waiting for a documentary bridge; it does not find a person written into the wrong tree and linked to one of its families, who joins the main group like anyone else. People in no family are left out. A link through an event role (a godparent, a witness) or an association does not count, so a couple tied to the tree only as godparents is its own group. With `--since` or `--tag` it reports only the groups holding a person or a family in scope |
 
 Names are compared lowercased, without accents, with b/v and i/y folded and the particle "de" dropped. `dup-person-fuzzy` also drops "del", "la", "las", "los" and "y", and matches "Pedro Lasa" with "Pedro José Lasa Ibarra". For a pair to count, at least one side must be in scope, or belong to a family that is. That covers an old person the run gave a new spouse or new parents. A different spelling of the same word ("Lasa" against "Lassa") is still not matched. A run that allowed namesakes still needs its homonyms read one by one.
 
@@ -106,7 +106,7 @@ The report also gives, without failing: events without a place (in the whole tre
 
 ## Self-test
 
-`gwt-check selftest` builds an invented three-generation tree, checks that it comes out clean (the positive control), then plants 36 errors, one at a time and then all together, and checks that each comes out as its finding. The test suite also silences each check in turn and requires the self-test to fail, so a check without a planted error cannot slip in.
+`gwt-check selftest` builds an invented three-generation tree, checks that it comes out clean (the positive control), then plants 38 errors, one at a time and then all together, and checks that each comes out as its finding. The test suite also silences each check in turn and requires the self-test to fail, so a check without a planted error cannot slip in.
 
 ## Speed
 
