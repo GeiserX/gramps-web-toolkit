@@ -39,6 +39,10 @@ MAX_TOTAL = 200 * 1024 * 1024        # bytes of all parts together
 MAX_ROW, MAX_COL = 1048576, 16384    # Excel's own limits
 LIVING_YEARS = 100                   # born this recently, or never, with no death: maybe alive, held unless --allow-living
 GRAMPS_ID = re.compile(r'^[A-Za-z]+\d+(?:-[A-Za-z0-9]+)?$')   # as gwt-apply accepts them
+EVENTS = (('birth', 'Birth'), ('baptism', 'Baptism'), ('christening', 'Christening'),
+          ('death', 'Death'), ('burial', 'Burial'))     # mapping columns <event>_date, _place, _place_id
+BIRTHLIKE = ('birth', 'baptism', 'christening')
+DEATHLIKE = ('death', 'burial')
 BATCH = re.compile(r'^[a-z0-9][a-z0-9-]{0,39}$')
 
 
@@ -275,7 +279,8 @@ def day_month_ambiguous(raw):
 
 
 def short_hash(text):
-    return hashlib.sha256(text.strip().encode('utf-8')).hexdigest()[:8]
+    """Hash of the text exactly as given: 'People' and 'People ' are two sheets."""
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()[:8]
 
 
 def exact_key(prefix, text):
@@ -388,12 +393,14 @@ def import_rows(book, mapping, tree=None, meta=None, batch='b', this_year=None, 
                 report['skipped'].append({'row': where, 'reason': 'name incomplete'})
                 continue
             name = first + ' ' + sur
-            dates = {ev: read_date(row, ev + '_date') for ev in ('birth', 'death')}
-            spots = {ev: (get(row, ev + '_place'), get(row, ev + '_place_id')) for ev in ('birth', 'death')}
-            by = re.search(r'\d{4}', dates['birth'][1]) if dates['birth'][1] else None
-            died = dates['death'][1] or dates['death'][2] or any(spots['death'])
+            dates = {ev: read_date(row, ev + '_date') for ev, _ in EVENTS}
+            spots = {ev: (get(row, ev + '_place'), get(row, ev + '_place_id')) for ev, _ in EVENTS}
+            # as the rest of the toolkit: a baptism or christening dates the birth, a burial proves the death
+            born = next((dates[ev][1] for ev in BIRTHLIKE if dates[ev][1]), None)
+            by = re.search(r'\d{4}', born) if born else None
+            died = any(dates[ev][1] or dates[ev][2] or any(spots[ev]) for ev in DEATHLIKE)
             if not died and not allow_living and (not by or int(by.group(0)) > this_year - LIVING_YEARS):
-                report['living_held'].append({'row': where, 'name': name, 'born': dates['birth'][1]})
+                report['living_held'].append({'row': where, 'name': name, 'born': born})
                 continue
             # one key per workbook batch, sheet, row and name: a row that moves gets a new key, never another's.
             # The hashes cover the exact sheet name and the whole name, so cutting the slugs short never joins two.
@@ -425,7 +432,7 @@ def import_rows(book, mapping, tree=None, meta=None, batch='b', this_year=None, 
             report['people'] += 1
             src, page = get(row, 'source'), get(row, 'page')
             created = []
-            for ev, label in (('birth', 'Birth'), ('death', 'Death')):
+            for ev, label in EVENTS:
                 raw, ds, why = dates[ev]
                 text, pid = spots[ev]
                 if why:
