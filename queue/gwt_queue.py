@@ -27,6 +27,7 @@ COLUMNS = ('id', 'person_key', 'person_label', 'kind', 'source', 'query', 'prior
            'lane', 'claimed_at', 'done_at', 'result', 'evidence', 'tries', 'next_at', 'note', 'token',
            'lease_until', 'dedupe_key')
 RESULTS = ('hit', 'none', 'partial', 'blocked', 'denied')  # same words as gwt-ledger
+SEARCHED = ('hit', 'none', 'partial')  # results of a search that ran
 KINDS = ('search', 'sweep', 'verify', 'followup')
 STATUS = ('open', 'claimed', 'done', 'failed')
 DEFAULT_LEASE_MINUTES = 120
@@ -78,12 +79,15 @@ def as_int(value):
 
 def parse_rows(text):
     rows = []
-    for n, line in enumerate(text.splitlines()):
+    first = True
+    for line in text.splitlines():
         if not line.strip():
             continue
         parts = line.split('\t')
-        if n == 0 and parts[0] == COLUMNS[0]:
-            continue  # header
+        if first and parts[0] == COLUMNS[0]:
+            first = False
+            continue  # the header: the first line that is not blank
+        first = False
         if len(parts) < len(COLUMNS):
             parts += [''] * (len(COLUMNS) - len(parts))
         rows.append(dict(zip(COLUMNS, parts)))
@@ -214,6 +218,8 @@ def find_row(rows, task_id):
 
 def iso_or_empty(value):
     """An --next-at value as a UTC instant; a value that does not parse is an error, never 'now'."""
+    if value is not None and not isinstance(value, str):
+        raise argparse.ArgumentTypeError('not an ISO date or instant: %r' % (value,))
     if not (value or '').strip():
         return ''
     when = parse_iso(value)
@@ -222,13 +228,23 @@ def iso_or_empty(value):
     return utc_iso(when)
 
 
+def at_least_one(value):
+    n = int(value)
+    if n < 1:
+        raise argparse.ArgumentTypeError('must be 1 or more, not %d' % n)
+    return n
+
+
 def dedupe_match(rows, row, retry_failed):
     """The existing row that stands for the same task, or None. A row matches on its dedupe_key when either
-    side has one, else on person + kind + source + query. Done rows match (the search already ran), and
-    failed rows too unless retry_failed."""
+    side has one, else on person + kind + source + query. A done row matches when its search ran (result hit,
+    none or partial); a done row that was blocked or denied does not stop a re-seed. Failed rows match too
+    unless retry_failed."""
     statuses = ('open', 'claimed', 'done') if retry_failed else ('open', 'claimed', 'done', 'failed')
     for r in rows:
         if r['status'] not in statuses:
+            continue
+        if r['status'] == 'done' and r['result'] not in SEARCHED:
             continue
         if r['dedupe_key'] or row['dedupe_key']:
             if r['dedupe_key'] == row['dedupe_key']:
@@ -320,12 +336,12 @@ def main(argv=None):
     c = sub.add_parser('claim', help='take the best due task for a lane; exit 1 if none is due')
     c.add_argument('--lane', required=True, help='lane name; recorded on the row')
     c.add_argument('--kind', choices=KINDS); c.add_argument('--source')
-    c.add_argument('--lease-minutes', type=int, default=DEFAULT_LEASE_MINUTES,
+    c.add_argument('--lease-minutes', type=at_least_one, default=DEFAULT_LEASE_MINUTES,
                    help='the claim reopens if neither renewed nor finished by then (default %(default)s)')
 
     n = sub.add_parser('renew', help='push the lease of a claimed task out again')
     n.add_argument('--id', required=True); n.add_argument('--token', required=True, help=token_help)
-    n.add_argument('--lease-minutes', type=int, default=DEFAULT_LEASE_MINUTES)
+    n.add_argument('--lease-minutes', type=at_least_one, default=DEFAULT_LEASE_MINUTES)
 
     d = sub.add_parser('done', help='mark a claimed task finished')
     d.add_argument('--id', required=True); d.add_argument('--token', required=True, help=token_help)

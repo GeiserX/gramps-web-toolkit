@@ -463,6 +463,57 @@ class QueueTest(unittest.TestCase):
         self.assertEqual(out.rstrip('\n').split('\t'), [stored[c] for c in Q.COLUMNS])
         self.assertEqual(stored['note'], 'two cells and a line')
 
+    def test_retry_failed_still_skips_done_tasks(self):
+        self.add()
+        run('--queue', self.path, 'claim', '--lane', 'l1')
+        run('--queue', self.path, 'done', '--id', 'q1', '--token', self.tok('q1'), '--result', 'none')
+        self.add('--dedupe', '--retry-failed')
+        self.assertEqual(len(self.rows()), 1)
+
+    def test_a_done_task_keeps_its_final_note_on_a_dedupe_hit(self):
+        self.add('--note', 'seeded')
+        run('--queue', self.path, 'claim', '--lane', 'l1')
+        run('--queue', self.path, 'done', '--id', 'q1', '--token', self.tok('q1'), '--result', 'hit',
+            '--note', 'found the act')
+        self.add('--dedupe', '--note', 'seeded again', priority=50)
+        r = self.rows()[0]
+        self.assertEqual((len(self.rows()), r['note'], r['priority']), (1, 'found the act', '0'))
+
+    def test_a_blocked_or_denied_done_task_can_be_seeded_again(self):
+        for result in ('blocked', 'denied'):
+            self.path = os.path.join(self.dir.name, result + '.tsv')
+            self.add()
+            run('--queue', self.path, 'claim', '--lane', 'l1')
+            run('--queue', self.path, 'done', '--id', 'q1', '--token', self.tok('q1'), '--result', result)
+            code, out, _ = self.add('--dedupe')
+            self.assertTrue(out.startswith('q2\t'), result)
+            self.assertEqual([r['status'] for r in self.rows()], ['done', 'open'])
+
+    def test_lease_minutes_must_be_at_least_one(self):
+        self.add()
+        for bad in ('0', '-5'):
+            with self.assertRaises(SystemExit):
+                run('--queue', self.path, 'claim', '--lane', 'l1', '--lease-minutes', bad)
+        self.assertEqual(self.rows()[0]['status'], 'open')
+
+    def test_jsonl_with_a_non_string_next_at_exits_2(self):
+        for value in (20300101, ['2030-01-01'], {'at': 1}):
+            code, _, err = self.jsonl(json.dumps({'person': 'I1', 'next_at': value}) + '\n')
+            self.assertEqual(code, 2, value)
+            self.assertIn('line 1', err)
+        self.assertEqual(self.rows(), [])
+
+    def test_a_blank_first_line_does_not_turn_the_header_into_a_task(self):
+        self.add()
+        with open(self.path) as f:
+            body = f.read()
+        with open(self.path, 'w') as f:
+            f.write('\n' + body)
+        code, out, _ = run('--queue', self.path, 'stats')
+        self.assertIn('rows\t1', out)
+        code, out, _ = run('--queue', self.path, 'claim', '--lane', 'l1')
+        self.assertTrue(out.startswith('q1\t'))
+
     def test_parallel_processes_never_share_a_task_across_atomic_replaces(self):
         # every write swaps the file's inode; the lock lives on a separate file, so claims still exclude each other
         for i in range(12):
