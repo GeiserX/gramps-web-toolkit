@@ -6,6 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/GeiserX/gramps-web-toolkit/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/GeiserX/gramps-web-toolkit/ci.yml?style=flat-square&label=CI" alt="CI"></a>
+  <a href="https://geiserx.github.io/gramps-web-toolkit/"><img src="https://img.shields.io/badge/docs-site-e8b04a?style=flat-square" alt="Docs"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/GeiserX/gramps-web-toolkit?style=flat-square" alt="License"></a>
 </p>
 
@@ -38,14 +39,18 @@ python3 -m pip install -e apply      # Python 3.11+, needs only requests
 gwt-apply changes.jsonl              # dry-run: prints the plan and the diff
 ```
 
-`gwt-check`, the ledger, queue, cache, rank and rawstore tools need only the Python standard library and run from their folders (`check/gwt-check`, `importxl/gwt-import-excel`, `ledger/gwt-ledger`, `queue/gwt-queue`, `leads/gwt-leads`, `fscache/gwt-fscache`, `gate/gwt-gate`, `rank/gwt-rank`, `rawstore/gwt-rawstore`). `gwt-mh` (`myheritage/gwt-mh`) needs Python Playwright (`pip install playwright`) and a Chrome it reaches over CDP. `gwt-spanish-poller` needs Node 18+ and Playwright.
+`gwt-check`, the ledger, queue, cache, rank and rawstore tools need only the Python standard library and run from their folders (`check/gwt-check`, `importxl/gwt-import-excel`, `ledger/gwt-ledger`, `queue/gwt-queue`, `leads/gwt-leads`, `fscache/gwt-fscache`, `gate/gwt-gate`, `rank/gwt-rank`, `rawstore/gwt-rawstore`). `gwt-mh` (`myheritage/gwt-mh`) needs Python Playwright (`pip install playwright`) and a Chrome it reaches over CDP. `gwt-spanish-poller` needs Node 18+ and Playwright. [Getting started](https://geiserx.github.io/gramps-web-toolkit/getting-started/) has the full table and a first run against your tree.
 
 ## Documentation
 
-- [The research pipeline](docs/pipeline.md): how agents, verifiers, a judge and a writer share one tree
-- [The autonomous research loop](docs/agent-loop.md): the queue, leads, ledger, gate and cache wired into one loop an agent runs on its own
-- [Hard-won lessons](docs/hard-won.md): each failure that cost us time, data or an account, and the rule that followed
-- [gwt-apply](docs/apply.md), [gwt-check](docs/check.md), [gwt-import-excel](docs/import-excel.md), [gwt-fetch](docs/fetch.md), [gwt-ledger](docs/ledger.md), [gwt-queue](docs/queue.md), [gwt-leads](docs/leads.md), [gwt-fscache](docs/fscache.md), [gwt-gate](docs/gate.md), [gwt-rank](docs/rank.md), [gwt-mh](docs/myheritage.md), [gwt-rawstore](docs/rawstore.md), [gwt-spanish-poller](docs/spanish-poller.md), [ocr-bench](docs/ocr-bench.md)
+The full documentation is at https://geiserx.github.io/gramps-web-toolkit/
+
+- [Getting started](https://geiserx.github.io/gramps-web-toolkit/getting-started/): what each tool needs, install, connecting to a tree, a first dry run
+- [The research pipeline](https://geiserx.github.io/gramps-web-toolkit/pipeline/): how agents, verifiers, a judge and a writer share one tree
+- [The autonomous research loop](https://geiserx.github.io/gramps-web-toolkit/agent-loop/): the queue, leads, ledger, gate and cache wired into one loop an agent runs on its own
+- [Hard-won lessons](https://geiserx.github.io/gramps-web-toolkit/hard-won/): each failure that cost us time, data or an account, and the rule that followed
+- One page per tool: [gwt-apply](https://geiserx.github.io/gramps-web-toolkit/apply/), [gwt-check](https://geiserx.github.io/gramps-web-toolkit/check/), [gwt-import-excel](https://geiserx.github.io/gramps-web-toolkit/import-excel/), [gwt-leads](https://geiserx.github.io/gramps-web-toolkit/leads/), [gwt-queue](https://geiserx.github.io/gramps-web-toolkit/queue/), [gwt-ledger](https://geiserx.github.io/gramps-web-toolkit/ledger/), [gwt-rank](https://geiserx.github.io/gramps-web-toolkit/rank/), [gwt-fetch](https://geiserx.github.io/gramps-web-toolkit/fetch/), [gwt-mh](https://geiserx.github.io/gramps-web-toolkit/myheritage/), [gwt-rawstore](https://geiserx.github.io/gramps-web-toolkit/rawstore/), [ocr-bench](https://geiserx.github.io/gramps-web-toolkit/ocr-bench/), [gwt-spanish-poller](https://geiserx.github.io/gramps-web-toolkit/spanish-poller/), [gwt-gate](https://geiserx.github.io/gramps-web-toolkit/gate/), [gwt-fscache](https://geiserx.github.io/gramps-web-toolkit/fscache/)
+- [Development](https://geiserx.github.io/gramps-web-toolkit/development/): running the tests, building the site, the rules for a change
 
 ## License
 

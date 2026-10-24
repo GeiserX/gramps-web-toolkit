@@ -1,4 +1,4 @@
-# gwt-mh: MyHeritage records through a signed-in browser
+# gwt-mh
 
 `gwt-mh` searches MyHeritage's historical records, opens record pages, and keeps everything a record gives on our own storage: the record data, the citation, the collection's metadata and, where the plan allows it, the original image. It works on a free account and does more on a paid one. It finds out which plan the account has from what the pages show, never from a setting.
 
@@ -22,9 +22,9 @@ Logging in is per account and private (vault, a code mailed to the owner, which 
 
 | File | What it is |
 |---|---|
-| [`myheritage/gwt_mh.py`](../myheritage/gwt_mh.py) | Pure logic, standard library: URLs, cache key, search JSON and record page parsers, walls, plan inference, image headers, manifest, slugs, mirror verdict |
-| [`myheritage/gwt_mh_browser.py`](../myheritage/gwt_mh_browser.py) | The only module that imports Playwright: gated, cached page capture, byte fetches, screenshots |
-| [`myheritage/gwt-mh`](../myheritage/gwt-mh) | The CLI |
+| [`myheritage/gwt_mh.py`](https://github.com/GeiserX/gramps-web-toolkit/blob/main/myheritage/gwt_mh.py) | Pure logic, standard library: URLs, cache key, search JSON and record page parsers, walls, plan inference, image headers, manifest, slugs, mirror verdict |
+| [`myheritage/gwt_mh_browser.py`](https://github.com/GeiserX/gramps-web-toolkit/blob/main/myheritage/gwt_mh_browser.py) | The only module that imports Playwright: gated, cached page capture, byte fetches, screenshots |
+| [`myheritage/gwt-mh`](https://github.com/GeiserX/gramps-web-toolkit/blob/main/myheritage/gwt-mh) | The CLI |
 
 It reuses [gwt-gate](gate.md) (one gate per account, `start=17 floor=10 ceil=60`, plus a random 0-8 s), [gwt-fscache](fscache.md) (cache key with the plan in it), [gwt-rank](rank.md) (it writes the `{"candidates": [...]}` shape), [gwt-ledger](ledger.md) and [gwt-rawstore](rawstore.md), without changing any of them.
 
@@ -146,6 +146,33 @@ Only `equivalent` lets MyHeritage go first for that collection, under `myheritag
 ## 10. FamilySearch, for a follow-up
 
 FamilySearch gives original images for many collections at no cost; some are limited to signed-in users, affiliate libraries or FamilySearch centers. Our FamilySearch tools download images ([gwt-fetch](fetch.md)) but do not yet keep the image, the record JSON and the citation in rawstore with a manifest like this one. Aligning them is a follow-up.
+
+## Commands and options
+
+Global options go before the command:
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--cdp URL` | `$GWT_MH_CDP` | the Chrome to attach to over CDP |
+| `--storage-state FILE` | `$GWT_MH_STATE` | the account's saved login (Playwright JSON, mode 600); the tool opens its own new context from it |
+| `--account NAME` | `$GWT_MH_ACCOUNT`, else `default` | names the lock, the wall file, the cache and the gate |
+| `--cache-dir DIR` | `~/.cache/gwt-mh-<account>` | page cache and plan evidence |
+| `--gate-dir DIR` | `~/.cache/gwt-gate-mh-<account>` | the account's [gwt-gate](gate.md) state |
+| `--lane NAME` | `$GWT_AGENT`, else `gwt-mh` | the lane name the gate records |
+| `--host URL` | `https://www.myheritage.es` | the MyHeritage site to use |
+| `--rest-every N` | 45 | rest 2-4 min every N page loads; 0 never rests |
+| `--refresh` | off | skip the cache |
+
+| Command | What it does |
+|---|---|
+| `search --given G --surname S [--surname S2] [--by Y] [--dy Y] [--spouse "G S"] [--father "G S"] [--mother "G S"] [--collection CID] [--exact] --out DIR` | one record search; `--by` and `--dy` are the birth and death years; writes the envelope and the candidates ([section 8](#8-search-output-and-the-ledger)) |
+| `record URL --out DIR`, or `record --collection CID --item ITEM --out DIR` | one record page, parsed |
+| `fetch --collection CID --item ITEM [--search ENVELOPE.json] --out DIR [--no-rawstore]` | everything the plan gives for one record ([section 7](#7-storage-the-most-we-can-keep)); `--no-rawstore` keeps the files local |
+| `matches --site SITE --person N [--type {record,smart}] [--status {pending,confirmed}] [--tree T] --out DIR` | lists the match cards of one person in your tree; never opens a review |
+| `collections --out FILE.tsv [--max-pages N]` | the collection catalogue, 50 per page; `--max-pages 0` (the default) reads every page |
+| `plan [--probe]` | what this account's plan has been seen to allow; `--probe` makes at most 2 gated page loads to gather evidence |
+| `mirror-check --collection CID [--fs-collection FSID] --fs-sample sample.json --out mirrors.tsv` | the FamilySearch-mirror test ([section 9](#9-the-familysearch-mirror-test)) |
+| `normalize FILE...` | offline: an envelope or record file to `{"candidates": [...]}`; needs no browser |
 
 ## Traps
 

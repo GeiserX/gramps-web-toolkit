@@ -174,7 +174,7 @@ Format: what happened, why, and the rule.
 
 **What happened.** Lanes repeated each other's searches across rounds, because a negative result leaves nothing in the tree.
 
-**Rule.** Use a shared ledger ([`ledger/`](../ledger/)). Check it before every search, append to it after, negatives included.
+**Rule.** Use a shared ledger ([`ledger/`](https://github.com/GeiserX/gramps-web-toolkit/tree/main/ledger)). Check it before every search, append to it after, negatives included.
 
 ## Spanish civil registry (DICIREG) and e-notifications
 

@@ -115,12 +115,12 @@ The sweep's findings are verified like a lane's, judged row by row, and enter th
 
 Two shared files keep parallel agents from paying twice:
 
-- **The ledger** ([`ledger/`](../ledger/)): every agent checks it before a search and appends after, negatives included. A negative leaves nothing in the tree, so without the ledger nobody knows it was done.
-- **The cache** ([`fscache/`](../fscache/)): every good API answer is kept on disk. A repeated request costs no network call and no rate budget. Errors and blocks are never cached.
+- **The ledger** ([`ledger/`](https://github.com/GeiserX/gramps-web-toolkit/tree/main/ledger)): every agent checks it before a search and appends after, negatives included. A negative leaves nothing in the tree, so without the ledger nobody knows it was done.
+- **The cache** ([`fscache/`](https://github.com/GeiserX/gramps-web-toolkit/tree/main/fscache)): every good API answer is kept on disk. A repeated request costs no network call and no rate budget. Errors and blocks are never cached.
 
 ## Rate-limit gates
 
-Every lane that touches a rate-limited site goes through one shared gate ([`gate/`](../gate/), [gwt-gate](gate.md)):
+Every lane that touches a rate-limited site goes through one shared gate ([`gate/`](https://github.com/GeiserX/gramps-web-toolkit/tree/main/gate), [gwt-gate](gate.md)):
 
 - `wait <lane>` before **every** request: page, search or image. The gate hands out one common pace across all lanes, not one per lane.
 - `hit <lane> <what>` on any 429, 403, captcha or security notice. That pauses every lane and slows the pace.
