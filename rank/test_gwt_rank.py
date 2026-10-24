@@ -1,133 +1,176 @@
-import os, subprocess, sys, tempfile, unittest
+import io, json, os, subprocess, sys, tempfile, unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gwt_rank as R
 
-PAGE = """Historical Record Search Results (3)
+GX = 'http://gedcomx.org/'
+CLI = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gwt-rank')
+# Every name, place and id below is invented.
+
+
+def person(pid, given, surname, principal=False, role='Principal', facts=(), ark=None):
+    """A persona as the FamilySearch search JSON carries it. facts: (type, formal date, place)."""
+    return {'id': pid, 'principal': principal, 'display': {'name': '%s %s' % (given, surname), 'role': role},
+            'identifiers': {GX + 'Persistent': ['https://www.familysearch.org/ark:/61903/1:1:' + (ark or 'ZZ' + pid)]},
+            'names': [{'nameForms': [{'fullText': '%s %s' % (given, surname),
+                                      'parts': [{'type': GX + 'Given', 'value': given},
+                                                {'type': GX + 'Surname', 'value': surname}]}]}],
+            'facts': [{'type': GX + t, 'date': {'original': d, 'formal': '+' + d if d else ''},
+                       'place': {'original': pl}} for t, d, pl in facts]}
+
+
+def couple(a, b):
+    return {'type': GX + 'Couple', 'person1': {'resource': '#' + a}, 'person2': {'resource': '#' + b}}
+
+
+def entry(eid, persons, rels=()):
+    return {'id': eid, 'score': 1.0, 'content': {'gedcomx': {'persons': persons, 'relationships': list(rels)}}}
+
+
+def search(*entries):
+    return {'results': len(entries), 'index': 0, 'entries': list(entries)}
+
+
+def rows(doc):
+    return R.gedcomx_rows(doc)
+
+
+def by_id(res):
+    return {r['id']: r for r in res}
+
+
+class GedcomX(unittest.TestCase):
+    def test_principal_with_two_agreements_is_strong_and_comes_first(self):
+        doc = search(entry('A1', [person('p1', 'Ana', 'Perez Lopez', True, facts=[('Birth', '1901-05-12', 'Villazul, Murcia, Spain')], ark='A1')]),
+                     entry('B2', [person('p2', 'Ana', 'Perez', True, facts=[('Birth', '1901', '')])]))
+        res = R.rank(rows(doc), 'Ana', ['Perez', 'Lopez'], R.parse_facts('by=1901 bp=Villazul,_Murcia'))
+        self.assertEqual([(r['id'], r['tier']) for r in res], [('A1', 'strong'), ('B2', 'possible')])
+        self.assertIn('surname1+2', res[0]['why'])
+
+    def test_first_surname_alone_matches_a_two_surname_tree_name(self):
+        doc = search(entry('A1', [person('p1', 'Juan', 'Fernandez', True, facts=[('Birth', '1880', 'Villazul'), ('Death', '1950', '')])]))
+        r = R.rank(rows(doc), 'Juan', ['Fernandez', 'Rubio'], R.parse_facts('by=1880 dy=1950'))[0]
+        self.assertEqual(r['tier'], 'strong')
+        r2 = R.rank(rows(doc), 'Juan', ['Rubio', 'Fernandez'], R.parse_facts('by=1880 dy=1950'))[0]
+        self.assertEqual(r2['tier'], 'possible')      # only the second surname matches: listed, never strong
+        self.assertIn('surname2 only', r2['why'])
+
+    def test_compound_given_name_matches_any_part(self):
+        doc = search(entry('A1', [person('p1', 'Carmen', 'Perez', True, facts=[('Birth', '1901', 'Villazul'), ('Death', '1970', '')])]))
+        r = R.rank(rows(doc), 'Maria del Carmen', ['Perez'], R.parse_facts('by=1901 dy=1970'))[0]
+        self.assertEqual((r['tier'], 'given (other part)' in r['why']), ('strong', True))
+
+    def test_name_plus_one_year_is_not_strong(self):
+        doc = search(entry('A1', [person('p1', 'Jose', 'Garcia', True, facts=[('Birth', '1879', 'Spain')])]))
+        r = R.rank(rows(doc), 'Jose', ['Garcia'], R.parse_facts('by=1882 bp=Villazul,_Murcia,_Spain'))[0]
+        self.assertEqual(r['tier'], 'possible')
+        self.assertFalse(any(w.startswith('bp') for w in r['why']))   # a country-only place never agrees
+
+    def test_non_principal_with_an_exact_year_is_not_scored_as_the_principal(self):
+        child = person('c1', 'Rosa', 'Ruiz', True, facts=[('Birth', '1901', 'Villazul')])
+        father = person('f1', 'Pedro', 'Ruiz', False, 'Father', facts=[('Birth', '1870', 'Villazul')], ark='F1')
+        doc = search(entry('F1', [child, father]))
+        res = R.rank(rows(doc), 'Pedro', ['Ruiz'], R.parse_facts('by=1870 bp=Villazul'))
+        self.assertEqual(len(res), 1)
+        self.assertEqual((res[0]['name'], res[0]['role'], res[0]['tier']), ('Pedro Ruiz', 'Father', 'possible'))
+        self.assertIn('matched as Father, not the principal', res[0]['why'])
+        # the child's facts never count for the father
+        res = R.rank(rows(doc), 'Pedro', ['Ruiz'], R.parse_facts('by=1901 bp=Villazul'))
+        self.assertEqual((res[0]['by'], res[0]['tier']), (1870, 'conflict'))
+
+    def test_spouse_tokens_match_within_one_spouse(self):
+        me = person('p1', 'Ana', 'Perez', True, facts=[('Birth', '1901', '')])
+        doc = search(entry('A1', [me, person('s1', 'Juan', 'Gomez', role='Spouse'), person('s2', 'Pedro', 'Ruiz', role='Spouse')],
+                           [couple('p1', 's1'), couple('s2', 'p1')]))
+        mixed = R.rank(rows(doc), 'Ana', ['Perez'], R.parse_facts('by=1901'), spouse='Juan Ruiz')[0]
+        self.assertEqual(mixed['tier'], 'possible')
+        self.assertFalse(any(w.startswith('spouse ') for w in mixed['why']))
+        one = R.rank(rows(doc), 'Ana', ['Perez'], R.parse_facts('by=1901'), spouse='Pedro Ruiz')[0]
+        self.assertEqual(one['tier'], 'strong')
+        self.assertIn('spouse Pedro Ruiz', one['why'])
+        bare = R.rank(rows(doc), 'Ana', ['Perez'], R.parse_facts('by=1901'), spouse='Juan')[0]
+        self.assertEqual(bare['tier'], 'possible')
+        self.assertIn('spouse needs a given name and a surname', bare['why'])
+
+    def test_nothing_is_discarded(self):
+        doc = search(entry('A1', [person('p1', 'Ana', 'Perez', True, facts=[('Birth', '1800', '')])]),
+                     entry('B2', [person('p2', 'Luis', 'Soto', True)]),
+                     entry('C3', [person('p3', 'Ana', 'Perez', True, facts=[('Birth', '1901', 'Villazul')])]))
+        res = R.rank(rows(doc), 'Ana', ['Perez'], R.parse_facts('by=1901 bp=Villazul'))
+        self.assertEqual([(r['id'], r['tier']) for r in res], [('C3', 'strong'), ('B2', 'weak'), ('A1', 'conflict')])
+
+    def test_baptism_and_burial_stand_in_and_ranges_count(self):
+        doc = search(entry('A1', [person('p1', 'Ana', 'Perez', True,
+                                         facts=[('Christening', '1901-06-01', 'Villazul'), ('Burial', '1970/+1972', '')])]))
+        r = R.rank(rows(doc), 'Ana', ['Perez'], R.parse_facts('by=1901 dy=1971'))[0]
+        self.assertEqual((r['by'], r['dy'], r['tier']), (1901, 1970, 'strong'))
+
+    def test_a_fact_without_a_plain_year_does_not_crash(self):
+        doc = search(entry('A1', [person('p1', 'Ana', 'Perez', True, facts=[('Birth', '1880', '')])]))
+        self.assertIn('by 1880=1880', R.rank(rows(doc), 'Ana', ['Perez'], R.parse_facts('by=abt1880 dy=?'))[0]['why'])
+
+
+TEXT_ES = """Resultados de la búsqueda de registros históricos (3)
 Ana Perez Lopez
 
-Principal
-Spain, Civil Registration, 1870-1950
-Birth  12 May 1901
-Madrid, Spain
-Death  1970
-Ana Perez Lopez
+Persona principal
+España, Registro Civil, 1870-1950
+Nacimiento  12 mayo 1901
+Villazul, Murcia, España
+Cónyuge
+Juan Ruiz
+Ana Perez
 
 Principal
-Mexico, Census, 1930
-Census  1930
-Puebla, Mexico
-Birth  1850
+Bautismos 1850-1900
+Bautismo  1903
+Residencia 1930
 Ana Maria Perez
 
-Spouse
-Spain, Marriages, 1900-1920
-Marriage  1925
-Madrid
+Cónyuge
+España, Matrimonios
+Matrimonio  1925
 """
 
 
-class T(unittest.TestCase):
-    def test_parses_records(self):
-        recs = R.records(PAGE)
-        self.assertEqual([r['name'] for r in recs], ['Ana Perez Lopez', 'Ana Perez Lopez', 'Ana Maria Perez'])
-        self.assertEqual(recs[0]['by'], 1901)
-        self.assertEqual(recs[0]['dy'], 1970)
+class PageText(unittest.TestCase):
+    def test_spanish_page(self):
+        rs = R.text_rows(TEXT_ES)
+        self.assertEqual([r['name'] for r in rs], ['Ana Perez Lopez', 'Ana Perez', 'Ana Maria Perez'])
+        self.assertEqual((rs[0]['by'], rs[0]['bp'], rs[0]['spouses']), ((1901, 1901), 'Villazul, Murcia, España', ['Juan Ruiz']))
+        self.assertEqual((rs[1]['by'], rs[1]['bp']), ((1903, 1903), ''))   # the title's 1850 is not an event; Residencia is no place
+        self.assertEqual([r['principal'] for r in rs], [True, True, False])
+        res = R.rank(rs, 'Ana', ['Perez', 'Lopez'], R.parse_facts('by=1901 bp=Villazul'), spouse='Juan Ruiz')
+        self.assertEqual([r['tier'] for r in res], ['strong', 'possible', 'weak'])
 
-    def test_year_and_place_pick_the_right_row(self):
-        res = R.rank(PAGE, 'Ana Perez', R.parse_facts('by=1901 bp=Madrid dy=1970'))
-        self.assertEqual(len(res), 1)
-        self.assertEqual(res[0]['by'], 1901)
-        self.assertGreaterEqual(res[0]['score'], 5)
+    def test_english_page_and_surname_split(self):
+        page = "Antoine Le Chat\n\nPrincipal\nFrance, Births\nBirth  1861\nVillebleu\nSpouses Rose Bellanger, Marie Roux\n"
+        r = R.rank(R.text_rows(page), 'Antonin', ['Lechat'], R.parse_facts('by=1860 bp=Villebleu'), spouse='Rose Roux')[0]
+        self.assertEqual(r['tier'], 'possible')       # a given-name variant is never strong
+        self.assertIn('given variant', r['why'])
+        self.assertFalse(any(w.startswith('spouse ') for w in r['why']))
 
-    def test_wrong_year_is_not_strong_and_non_principal_is_skipped(self):
-        res = R.rank(PAGE, 'Ana Perez', R.parse_facts('by=1850'))
-        self.assertEqual([r['by'] for r in res], [1850])
-        self.assertEqual(R.rank(PAGE, 'Ana Perez', R.parse_facts('by=1700')), [])
 
-    def test_spelling_variants_still_count(self):
-        page = "Antoine Ovide Le Chat\n\nPrincipal\nFrance, Births\nBirth  1861\nTours\n"
-        res = R.rank(page, 'Antonin Lechat', R.parse_facts('by=1860 bp=Tours'))
-        self.assertEqual(len(res), 1)
-        self.assertIn('given name variant', res[0]['why'])
+class Cli(unittest.TestCase):
+    def run_cli(self, body, *args, stdin=False):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, 'page')
+            with open(path, 'w') as f:
+                f.write(body)
+            target = '-' if stdin else path
+            return subprocess.run([sys.executable, CLI, target, *args], capture_output=True, text=True,
+                                  input=body if stdin else None)
 
-    def test_surname_must_be_a_whole_token_or_an_exact_split(self):
-        page = "Ana Lopez\n\nPrincipal\nSpain\nBirth  1901\nMadrid\n"
-        self.assertEqual(R.rank(page, 'Ana Pe', R.parse_facts('by=1901 bp=Madrid')), [])
-        self.assertEqual(R.rank(page, 'Ana Lop', R.parse_facts('by=1901 bp=Madrid')), [])
-        page2 = "Ana Le Pen\n\nPrincipal\nFrance\nBirth  1901\nTours\n"
-        self.assertEqual(len(R.rank(page2, 'Ana Lepen', R.parse_facts('by=1901 bp=Tours'))), 1)
-        self.assertEqual(R.rank(page2, 'Ana Epen', R.parse_facts('by=1901 bp=Tours')), [])
-
-    def test_a_contradicting_year_vetoes_even_with_everything_else_matching(self):
-        page = ("Ana Perez\n\nPrincipal\nSpain\nBirth  1800\nMadrid\nDeath  1970\nMadrid\n"
-                "Parents Pedro Gomez, Rosa Soto\nSpouse Juan Ruiz\n")
-        facts = R.parse_facts('by=1901 bp=Madrid dy=1970 dp=Madrid')
-        self.assertEqual(R.rank(page, 'Ana Perez', facts, spouse='Juan Ruiz'), [])
-        res = R.rank(page, 'Ana Perez', R.parse_facts('by=1800 bp=Madrid dy=1970'))
-        self.assertEqual(len(res), 1)
-        self.assertEqual(R.rank(page, 'Ana Perez', R.parse_facts('dy=1900 bp=Madrid')), [])
-
-    def test_multiline_events(self):
-        page = ("Ana Perez\n\nPrincipal\nSpain, Civil Registration\n\nBirth\n1901\nMadrid\n\nDeath\n1970\nMadrid\n")
-        rec = R.records(page)[0]
-        self.assertEqual((rec['by'], rec['dy']), (1901, 1970))
-        self.assertEqual(rec['places'], ['Madrid', 'Madrid'])
-        self.assertEqual(len(R.rank(page, 'Ana Perez', R.parse_facts('by=1901 bp=Madrid'))), 1)
-
-    def test_records_with_no_readable_event_are_unreadable_not_a_negative(self):
-        page = "Ana Perez\n\nPrincipal\nSpain, Civil Registration\nSomething else\n"
-        self.assertIsNone(R.rank(page, 'Ana Perez', R.parse_facts('by=1901')))
-
-    def test_place_needs_more_than_a_generic_shared_token(self):
-        for row, want in (('San Pedro', 'San Jose'), ('Saint Pierre', 'Saint Jean'), ('La Rochelle', 'La Coruna'), ('New York', 'New Orleans')):
-            page = "Ana Perez\n\nPrincipal\nSpain\nBirth  1901\n%s\n" % row
-            res = R.rank(page, 'Ana Perez', R.parse_facts('by=1901 bp=%s' % want.replace(' ', '_')))
-            self.assertFalse(any('bp ' in w for r in res for w in r['why']), (row, want))
-        page = "Ana Perez\n\nPrincipal\nSpain\nBirth  1901\nSan Jose, Cadiz\n"
-        res = R.rank(page, 'Ana Perez', R.parse_facts('by=1901 bp=San_Jose'))
-        self.assertIn('bp San Jose', res[0]['why'])
-
-    def test_places_belong_to_their_own_event(self):
-        page = "Ana Perez\n\nPrincipal\nSpain\nBirth  1901\nMadrid\nDeath  1970\nParis\n"
-        facts = R.parse_facts('by=1901 bp=Paris')       # the tree says born in Paris; the row says DIED in Paris
-        res = R.rank(page, 'Ana Perez', facts)
-        self.assertTrue(res == [] or not any('bp Paris' in r['why'] for r in res))
-        self.assertEqual([r['score'] for r in res], [4])   # name + exact year only: no place point for the wrong event
-        ok = R.rank(page, 'Ana Perez', R.parse_facts('by=1901 bp=Madrid dp=Paris'))
-        self.assertIn('bp Madrid', ok[0]['why'])
-        self.assertIn('dp Paris', ok[0]['why'])
-
-    def test_spouse_needs_a_spouse_line_not_parents(self):
-        page = "Ana Perez\n\nPrincipal\nSpain\nBirth  1901\nMadrid\nParents Ana Gomez, Pedro Perez\n"
-        res = R.rank(page, 'Ana Perez', R.parse_facts('by=1901'), spouse='Ana Gomez')
-        self.assertTrue(all('spouse' not in r['why'] for r in res))
-        self.assertEqual([r['score'] for r in res], [4])      # surname, given name, exact year: no spouse points
-        page2 = page.replace('Parents Ana Gomez, Pedro Perez', 'Spouses Ana Gomez')
-        res2 = R.rank(page2, 'Ana Perez', R.parse_facts('by=1901'), spouse='Ana Gomez')
-        self.assertIn('spouse', res2[0]['why'])
-
-    def test_accents_and_missing_surname(self):
-        self.assertEqual(R.norm('José Pérez'), ['jose', 'perez'])
-        self.assertEqual(R.rank(PAGE, 'Ana Gomez', {}), [])
-
-    def test_unparseable_page_is_not_a_negative(self):
-        self.assertIsNone(R.rank('Historical Record Search Results (0)\n', 'Ana Perez', {}))
-        with tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False) as f:
-            f.write('nothing here')
-        code = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gwt-rank'),
-                               f.name, '--name', 'Ana Perez'], capture_output=True).returncode
-        os.unlink(f.name)
-        self.assertEqual(code, 2)
-
-    def test_cli_exit_codes(self):
-        with tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False) as f:
-            f.write(PAGE)
-        cli = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gwt-rank')
-        ok = subprocess.run([cli, f.name, '--name', 'Ana Perez', '--facts', 'by=1901'], capture_output=True, text=True)
-        none = subprocess.run([cli, f.name, '--name', 'Ana Perez', '--facts', 'by=1700'], capture_output=True, text=True)
-        os.unlink(f.name)
-        self.assertEqual((ok.returncode, none.returncode), (0, 1))
-        self.assertIn('1901', ok.stdout)
+    def test_exit_codes(self):
+        doc = json.dumps(search(entry('A1', [person('p1', 'Ana', 'Perez', True, facts=[('Birth', '1901', 'Villazul')])])))
+        ok = self.run_cli(doc, '--given', 'Ana', '--surname', 'Perez', '--facts', 'by=1901 bp=Villazul')
+        self.assertEqual(ok.returncode, 0)
+        self.assertTrue(ok.stdout.startswith('strong\t'))
+        partial = self.run_cli(doc, '--given', 'Ana', '--surname', 'Perez', '--facts', 'by=1700', stdin=True)
+        self.assertEqual(partial.returncode, 1)
+        self.assertTrue(partial.stdout.startswith('conflict\t'))   # printed, not hidden
+        self.assertEqual(self.run_cli(json.dumps(search()), '--given', 'Ana').returncode, 2)
+        self.assertEqual(self.run_cli('{"persons": []}', '--given', 'Ana').returncode, 2)
+        self.assertEqual(self.run_cli('nothing here', '--given', 'Ana').returncode, 2)
 
 
 if __name__ == '__main__':

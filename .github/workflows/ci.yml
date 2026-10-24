@@ -31,6 +31,8 @@ jobs:
         run: cd fscache && python -m unittest -v test_gwt_fscache
       - name: gate
         run: cd gate && python -m unittest -v test_gwt_gate
+      - name: rank
+        run: cd rank && python -m unittest -v test_gwt_rank
       - name: rawstore
         run: cd rawstore && python -m unittest -v test_gwt_rawstore
 
