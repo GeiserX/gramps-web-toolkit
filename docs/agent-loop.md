@@ -38,15 +38,14 @@ flowchart LR
 
    ```bash
    gwt-check dump work/tree.json.gz &&
-   gwt-leads --root I0001 --source "$SRC" --format queue --limit 200 work/tree.json.gz > work/seeds.jsonl &&
+   gwt-leads --root I0001 --source "$SRC" --format queue --per-gap --limit 200 work/tree.json.gz > work/seeds.jsonl &&
    gwt-queue add --jsonl work/seeds.jsonl --dedupe
    ```
 
-   The queue now holds the lines that stop, the missing vitals and the uncited facts, direct ancestors first, one task per person and kind. People who may be living and private records are held back, their ids on stderr. `--dedupe` skips a task already queued, running or done, so a re-seed adds only new gaps and refreshes the notes of open tasks. See [gwt-leads](leads.md) and [gwt-queue](queue.md).
+   The queue now holds the lines that stop, the missing vitals and the uncited facts, direct ancestors first, one task per gap. People who may be living and private records are held back, their ids on stderr. `--dedupe` skips a task already queued, running or done. Seed with `--per-gap`: its dedupe key carries the gap code, so a gap that appears in a later round gets a task of its own. In the default grouped mode the key is only person, kind and source, and a new gap of a person whose task is already done folds into that done task and is never searched. See [gwt-leads](leads.md) and [gwt-queue](queue.md).
 3. **Each lane loops** until nothing is due:
 
    ```bash
-   set -o pipefail
    while :; do
        gwt-gate wait "$GWT_AGENT"; rc=$?
        if [ "$rc" -eq 3 ]; then sleep 300; continue; fi    # the site is paused: wait without holding a task
@@ -54,10 +53,13 @@ flowchart LR
        row=$(gwt-queue claim --lane "$GWT_AGENT" --source "$SRC") || break   # 1: nothing is due
        id=$(cut -f1 <<<"$row"); person=$(cut -f2 <<<"$row"); kind=$(cut -f4 <<<"$row")
        source=$(cut -f5 <<<"$row"); query=$(cut -f6 <<<"$row"); token=$(cut -f17 <<<"$row")
+       gap=$(cut -f19 <<<"$row" | cut -d: -f4-)                          # the gap code of a --per-gap task
        lsrc=${source:-any}; [ "$kind" = search ] || lsrc="$lsrc-$kind"   # a verify is not a search
+       lquery="$query $gap"                                               # one ledger row per gap searched
 
        # reuse a finished search only on an exact match: same source, identical query, newest row first
-       prior=$(gwt-ledger check --exact --person "$person" --source="$lsrc" --query "$query"); rc=$?
+       rc=1
+       [ -n "$source" ] && { prior=$(gwt-ledger check --exact --person "$person" --source="$lsrc" --query "$lquery"); rc=$?; }
        if [ "$rc" -gt 1 ]; then
            gwt-queue release --id "$id" --token "$token"; echo "gwt-ledger exit $rc" >&2; break
        fi
@@ -71,23 +73,26 @@ flowchart LR
            fi
        fi
        # ... search through gwt-fscache or gwt-fetch, write ev/$id.txt, set $result to hit, none or partial.
+       # Before every request that is not a cache hit: gwt-gate wait "$GWT_AGENT". Exit 3 there means the site
+       # paused mid-task: `gwt-queue fail` if anything was fetched, `release` if nothing was, then `continue`.
        # On a long task, call `gwt-queue renew --id "$id" --token "$token"` before the lease runs out.
        # On a block, see below, then `continue`.
-       gwt-ledger add --person "$person" --source="$lsrc" --query "$query" \
-           --result "$result" --evidence "ev/$id.txt" || break
+       gwt-ledger add --person "$person" --source="$lsrc" --query "$lquery" \
+           --result "$result" --evidence "ev/$id.txt" ||
+           { gwt-queue fail --id "$id" --token "$token" --note "gwt-ledger add failed"; break; }
        gwt-queue done --id "$id" --token "$token" --result "$result" --evidence "ev/$id.txt"
    done
    ```
 
-   The gate comes before the claim. A lane that finds the site paused sleeps without holding a task, so a long pause costs no tries. Exit 3 is the only pause; any other non-zero exit from `gwt-gate wait` is an error and stops the lane, and so does an error from `gwt-ledger` (exit 2). Exit 1 from `check` is a plain miss.
+   The gate is asked twice. Before the claim it is a probe: a lane that finds the site paused sleeps without holding a task, so a long pause costs no tries. Then the search step asks it again before every request that goes to the network. `gwt-fscache` and `gwt-fetch` never call the gate themselves, and one task can make many requests. A cache hit spends no request and needs no wait. Exit 3 is the only pause; any other non-zero exit from `gwt-gate wait` is an error and stops the lane, and so does an error from `gwt-ledger` (exit 2). Exit 1 from `check` is a plain miss. When `gwt-ledger add` fails after a search, the task is failed before the lane stops, so its result is searched again rather than closed with no ledger row.
 
-   The ledger has no task-kind column, so the loop gives each kind its own ledger source: `familysearch` for a search, `familysearch-verify`, `familysearch-sweep` and `familysearch-followup` for the others, and `any` in place of an empty source. Without that, a `verify` task would share the row of a `search` task on the same person, source and query, and close with a result nobody checked. The suffixes are reserved in [gwt-ledger](ledger.md). Pass the value as `--source="$lsrc"`, with the `=`, so it can never be read as a flag.
+   The ledger has no task-kind column, so the loop gives each kind its own ledger source: `familysearch` for a search, `familysearch-verify`, `familysearch-sweep` and `familysearch-followup` for the others, and `any` in place of an empty source. A task with no source logs its rows under `any` but never reuses one: the reuse step runs only when the task names its source. Without that, a `verify` task would share the row of a `search` task on the same person, source and query, and close with a result nobody checked. The suffixes are reserved in [gwt-ledger](ledger.md). Pass the value as `--source="$lsrc"`, with the `=`, so it can never be read as a flag.
 
-   A ledger row stands in for a search only when it is an exact match (`check --exact`: same source, identical normalized query), its result is not `blocked`, and its `next_date`, if any, is still in the future. `check` lists equal rows newest first, so a later `hit` wins over an older `none`. A fuzzy match is a hint for a person, never a result for a script: the search runs. A reused row's result and evidence go into the task unchanged. Nothing here turns a block into an absence.
+   The ledger query is the task's query plus its gap code, so each gap of a person has its own row: a `none` for "no parents recorded" does not close the "no death" task. A ledger row stands in for a search only when it is an exact match (`check --exact`: same source, identical normalized query), its result is not `blocked`, and its `next_date`, if any, is still in the future. `check` lists equal rows newest first, so a later `hit` wins over an older `none`. A fuzzy match is a hint for a person, never a result for a script: the search runs. A reused row's result and evidence go into the task unchanged. Nothing here turns a block into an absence.
 
-   **On a block** (a 429, a 403, a captcha): `gwt-gate hit "$GWT_AGENT" "<what>"` pauses every lane on that site; log the try with `gwt-ledger add ... --result blocked`, which no check ever reuses; then `gwt-queue fail`, so the task backs off and returns later. For an IP or account block that lasts hours, `gwt-gate block <hours> "<why>"` stops every lane on that gate for that long. On a 401, `gwt-gate dead` exits 4: the session is gone, so stop the lane. A "no result" from a site that was blocking is a `fail`, not a `none`. `gwt-queue release` is only for an attempt where nothing ran.
+   **On a block** (a 429, a 403, a captcha): `gwt-gate hit "$GWT_AGENT" "<what>"` pauses every lane on that site; log the try with `gwt-ledger add ... --result blocked`, a row the loop above skips when it looks for one to reuse; then `gwt-queue fail`, so the task backs off and returns later. For an IP or account block that lasts hours, `gwt-gate block <hours> "<why>"` stops every lane on that gate for that long. On a 401, `gwt-gate dead` exits 4: the session is gone, so stop the lane. A "no result" from a site that was blocking is a `fail`, not a `none`. `gwt-queue release` is only for an attempt where nothing ran.
 4. **Verify and judge.** The evidence files go to the verifier and then the judge exactly as in the [pipeline](pipeline.md). A `hit` creates a `followup` task (`gwt-queue add --kind followup`) for whatever it opens next: the parents named in an act, the parish of a marriage.
-5. **Apply and check.** The judge's rulings become a change list; `gwt-apply` writes it and `gwt-check` verifies the result. The next `gwt-check dump` is the next round's input: a gap that was filled no longer shows up in `gwt-leads`. A gap whose search came back `none` still shows up, and `--dedupe` keeps it from being queued again.
+5. **Apply and check.** The judge's rulings become a change list; `gwt-apply` writes it and `gwt-check` verifies the result. The next `gwt-check dump` is the next round's input: a gap that was filled no longer shows up in `gwt-leads`. A gap whose search came back `none` still shows up, and `--dedupe` keeps it from being queued again, while a gap that is new this round gets a task.
 
 ## What each tool prevents
 
