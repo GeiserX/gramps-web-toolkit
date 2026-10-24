@@ -54,6 +54,11 @@ References to other objects are either a **Gramps ID** (`I0042`, `P0007`, or wit
 | `add_event` | `type`, and `person` or `family` | `date`, `place`, `description`, `role`, `gramps_id` | New event, linked to the person (role `Primary` by default) or the family (role `Family`) |
 | `update_event` | `event`, `set` | | `set` takes only `type`, `date`, `place`, `description`: the way to correct an event instead of adding a second one |
 | `update_place` | `place`, `set` | | `set` takes only `lat` and `long`, given together: puts coordinates on a place the tree already has, for what `gwt-check` reports as `place-no-coords`. A place that already has those coordinates is skipped |
+| `update_note` | `note`, `set` | `expect` | `set` takes only `text` and `type`. A new `text` needs `expect`, the text the note has now: a note that changed since you read it is a conflict and is never overwritten. The old text stays in the log line. A note that already has the new values is skipped |
+| `update_citation` | `citation`, `set` | `expect` | `set` takes only `page`, `confidence` (0-4) and `date`. A new `page` needs `expect`, the page the citation has now, with the same conflict rule |
+| `update_family` | `family`, `set` | | `set` takes only `type` (for example `Married`) |
+| `update_child_ref` | `family`, `child` | `set`, `confirm_probable`, `expect` | `set` takes only `frel` and `mrel`. `confirm_probable` is the reason, the document that settles a `[probable]` link: the mark becomes `[confirmed] <reason> (was: [probable] <old reason>)`, so the doubt stays on the link. A link with no `[probable]` mark is a conflict, one already confirmed is skipped. `expect` is the mark's current text |
+| `detach` | `target`, `object` | | Takes a note, citation or media reference off a target (`{"note": "N0042"}`). The object stays in the tree, which `gwt-check` lists as an orphan, and `attach_existing` puts it back |
 | `add_family` | `father` or `mother` | `children`, `type`, `gramps_id` | New family, or the existing one with the same parents |
 | `link_child` | `family`, `child` | `frel`, `mrel` (default `Birth`), `probable: true` with `probable_reason` | Adds a child to a family. With `probable`, the link also gets a `Research` note on its child_ref that reads `[probable] <probable_reason>`; a link that is already there gets the note if it has none starting with `[probable]` |
 | `add_source` | `title` | `author`, `pubinfo`, `abbrev`, `gramps_id` | New source, or the existing one with the same title |
@@ -227,3 +232,24 @@ Ten rounds of LLM-driven applies on two trees, each followed by a verification p
 | The verifier's dump was older than the tree and reported false gaps | Verification: dump the tree after the apply, not before |
 
 Two habits from those rounds belong around every apply, with or without this tool: export a backup of the tree before writing (`POST /api/exporters/gramps/file`) and compare its checksum after copying it; and prove the verification script can fail by running it on a copy of the dump with errors injected.
+
+## Undo a run
+
+A backup restores the whole tree. When one run went wrong and the rest of the tree has moved on since, undo only that run:
+
+```bash
+gwt-check dump before.json.gz            # or gwt-apply --save-snapshot before.json.gz, before the run
+gwt-apply changes.jsonl --apply --log run.jsonl
+gwt-apply --revert run.<run id>.jsonl --pre before.json.gz           # plan: prints every step, writes nothing
+gwt-apply --revert run.<run id>.jsonl --pre before.json.gz --apply   # undo, then read each object back
+```
+
+`--revert` reads the real run's log (dry-run lines are ignored) and the pre-run copy, and goes through the writes newest first:
+
+| In the log | Step |
+|---|---|
+| PUT of an object that exists in the pre-run copy | `restore`: the object goes back to its pre-run copy, once, however many times the run wrote it |
+| POST of a note, citation, event, place, source, repository or tag | `delete` |
+| anything else: a person or family the run made, a merge, a delete, a media upload | `manual`: the server also edits the objects around these, so restore the backup |
+
+Nothing is overwritten that is no longer what the run left. A restore whose object changed since the run, and a delete of something a changed object still points at, are `skip` lines that say why. An object already as before the run is a `skip` too, so running the revert twice is safe. `--apply` takes the tree lock, then reads every restored object back and every deleted one again and reports a problem if it is not as expected. The exit code is 1 on a problem or when any `manual` step is left. The revert writes its own log, `gwt-apply-revert-<run id>.jsonl`.
