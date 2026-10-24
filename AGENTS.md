@@ -19,6 +19,8 @@ tool with its own tests; `docs/` has one page per tool, plus `pipeline.md` (how 
 | `gate/` | `gwt-gate`, shared request pace | Python standard library |
 | `rank/` | `gwt-rank`, orders search results | Python standard library |
 | `rawstore/` | `gwt-rawstore`, images in S3, manifest in git | Python standard library |
+| `importxl/` | `gwt-import-excel`, workbook to change list | Python standard library (its end-to-end test needs `requests`) |
+| `queue/` | `gwt-queue`, search tasks handed out to lanes | Python standard library |
 | `spanish-poller/` | `gwt-spanish-poller`, Spain-only sede and DEHú watcher | Node 18+, Playwright |
 | `ocr-bench/` | OCR, HTR and LLM reading benchmark | Python, one venv per engine |
 
@@ -43,6 +45,8 @@ cd fscache && python3 -m unittest test_gwt_fscache
 cd gate && python3 -m unittest test_gwt_gate
 cd rank && python3 -m unittest test_gwt_rank
 cd rawstore && python3 -m unittest test_gwt_rawstore
+cd importxl && python3 -m unittest test_gwt_import_excel test_end_to_end
+cd queue && python3 -m unittest test_gwt_queue
 cd spanish-poller && node --test
 ```
 
