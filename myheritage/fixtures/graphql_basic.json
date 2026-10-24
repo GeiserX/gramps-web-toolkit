@@ -1,0 +1,228 @@
+[
+ {
+  "url": "https://www.myheritage.es/web-family-graphql/search_in_historical_records_split/",
+  "body": {
+   "data": {
+    "search_query_upload": {
+     "response": {
+      "results": {
+       "count": 2,
+       "data": [
+        {
+         "record_type": "family-tree",
+         "user_info": {
+          "is_new": false,
+          "is_purchased": false,
+          "link": "https://www.myheritage.es/paywall?colId=40001&itemId=9000001"
+         },
+         "record": {
+          "id": "record-40001-9000001",
+          "name": "Ana Zorvalo Brineda",
+          "translated_name": null,
+          "name_annotations": null,
+          "thumbnail": {
+           "url": "https://sites-cf.example.invalid/t/1_96x96/.jpg"
+          },
+          "fallback_thumbnail": null,
+          "link": "https://www.myheritage.es/research/collection-40001/x?itemId=9000001&action=showRecord&recordTitle=Ana+Zorvalo+Brineda&perm_id=T_x",
+          "is_free": false,
+          "collection": {
+           "id": "collection-40001",
+           "name": "Invented tree collection",
+           "thumbnail": {
+            "url": "https://cf.example.invalid/c.png"
+           },
+           "record_count": 1000,
+           "short_description": "Invented collection for tests.",
+           "link": "https://www.myheritage.es/research/collection-40001/x?perm_id=T_x",
+           "is_new": false,
+           "is_free": false,
+           "is_temporary_free": false,
+           "is_updated": false,
+           "is_in_color": false,
+           "has_images": false,
+           "is_consolidated": false
+          },
+          "related_photos": null,
+          "hidden_fields": null,
+          "display_fields": [
+           {
+            "name": "birth",
+            "label": "Nacimiento",
+            "value": "<a href=\"https://www.myheritage.es/paywall?colId=40001&itemId=9000001&return_url=x&action=showPlans&subscription_type=data&context=SuperSearch.Search&perm_id=T_x\" class=\"nonFreeComponentLink\" target=\"_self\">Día</a>&nbsp;<a href=\"https://www.myheritage.es/paywall?colId=40001&itemId=9000001&return_url=x&action=showPlans&subscription_type=data&context=SuperSearch.Search&perm_id=T_x\" class=\"nonFreeComponentLink\" target=\"_self\">Mes</a>&nbsp;1851 - <a href=\"https://www.myheritage.es/paywall?colId=40001&itemId=9000001&return_url=x&action=showPlans&subscription_type=data&context=SuperSearch.Search&perm_id=T_x\" class=\"nonFreeComponentLink\" target=\"_self\">Lugar</a>"
+           },
+           {
+            "name": "death",
+            "label": "Fallecimiento",
+            "value": "<a href=\"https://www.myheritage.es/paywall?colId=40001&itemId=9000001&return_url=x&action=showPlans&subscription_type=data&context=SuperSearch.Search&perm_id=T_x\" class=\"nonFreeComponentLink\" target=\"_self\">Día</a>&nbsp;<a href=\"https://www.myheritage.es/paywall?colId=40001&itemId=9000001&return_url=x&action=showPlans&subscription_type=data&context=SuperSearch.Search&perm_id=T_x\" class=\"nonFreeComponentLink\" target=\"_self\">Mes</a>&nbsp;1910 - <a href=\"https://www.myheritage.es/paywall?colId=40001&itemId=9000001&return_url=x&action=showPlans&subscription_type=data&context=SuperSearch.Search&perm_id=T_x\" class=\"nonFreeComponentLink\" target=\"_self\">Lugar</a>"
+           },
+           {
+            "name": "parents",
+            "label": "Padres",
+            "value": "<a href=\"https://www.myheritage.es/paywall?colId=40001&itemId=9000001&return_url=x&action=showPlans&subscription_type=data&context=SuperSearch.Search&perm_id=T_x\" class=\"nonFreeComponentLink\" target=\"_self\">Nombres de ambos padres</a>"
+           },
+           {
+            "name": "spouse",
+            "label": "Esposo",
+            "value": "<a href=\"https://www.myheritage.es/paywall?colId=40001&itemId=9000001&return_url=x&action=showPlans&subscription_type=data&context=SuperSearch.Search&perm_id=T_x\" class=\"nonFreeComponentLink\" target=\"_self\">Nombre de esposo</a>"
+           },
+           {
+            "name": "children",
+            "label": "Hijos",
+            "value": " Luis Quirell Zorvalo  y <a href=\"https://www.myheritage.es/paywall?colId=40001&itemId=9000001&return_url=x&action=showPlans&subscription_type=data&context=SuperSearch.Search&perm_id=T_x\" class=\"nonFreeComponentLink\" target=\"_self\">nombre de 3 más hijos</a>"
+           }
+          ]
+         },
+         "cursor": "1"
+        }
+       ]
+      },
+      "summary": {
+       "category_counts": [],
+       "total": {
+        "category_name": "Todas",
+        "count": "2",
+        "link": "https://www.myheritage.es/research?action=query"
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ {
+  "url": "https://www.myheritage.es/web-family-graphql/search_in_historical_records_split/",
+  "body": {
+   "data": {
+    "search_query_upload": {
+     "response": {
+      "results": {
+       "count": 2,
+       "data": [
+        {
+         "record_type": "family-tree",
+         "user_info": {
+          "is_new": false,
+          "is_purchased": false,
+          "link": "https://www.myheritage.es/paywall?colId=40001&itemId=9000001"
+         },
+         "record": {
+          "id": "record-40001-9000001",
+          "name": "Ana Zorvalo Brineda",
+          "translated_name": null,
+          "name_annotations": null,
+          "thumbnail": {
+           "url": "https://sites-cf.example.invalid/t/1_96x96/.jpg"
+          },
+          "fallback_thumbnail": null,
+          "link": "https://www.myheritage.es/research/collection-40001/x?itemId=9000001&action=showRecord&recordTitle=Ana+Zorvalo+Brineda&perm_id=T_x",
+          "is_free": false,
+          "collection": {
+           "id": "collection-40001",
+           "name": "Invented tree collection",
+           "thumbnail": {
+            "url": "https://cf.example.invalid/c.png"
+           },
+           "record_count": 1000,
+           "short_description": "Invented collection for tests.",
+           "link": "https://www.myheritage.es/research/collection-40001/x?perm_id=T_x",
+           "is_new": false,
+           "is_free": false,
+           "is_temporary_free": false,
+           "is_updated": false,
+           "is_in_color": false,
+           "has_images": false,
+           "is_consolidated": false
+          },
+          "related_photos": null,
+          "hidden_fields": null,
+          "display_fields": [
+           {
+            "name": "birth",
+            "label": "Nacimiento",
+            "value": "<a href=\"https://www.myheritage.es/paywall?colId=40001&itemId=9000001&return_url=x&action=showPlans&subscription_type=data&context=SuperSearch.Search&perm_id=T_x\" class=\"nonFreeComponentLink\" target=\"_self\">Día</a>&nbsp;<a href=\"https://www.myheritage.es/paywall?colId=40001&itemId=9000001&return_url=x&action=showPlans&subscription_type=data&context=SuperSearch.Search&perm_id=T_x\" class=\"nonFreeComponentLink\" target=\"_self\">Mes</a>&nbsp;1851 - <a href=\"https://www.myheritage.es/paywall?colId=40001&itemId=9000001&return_url=x&action=showPlans&subscription_type=data&context=SuperSearch.Search&perm_id=T_x\" class=\"nonFreeComponentLink\" target=\"_self\">Lugar</a>"
+           },
+           {
+            "name": "death",
+            "label": "Fallecimiento",
+            "value": "<a href=\"https://www.myheritage.es/paywall?colId=40001&itemId=9000001&return_url=x&action=showPlans&subscription_type=data&context=SuperSearch.Search&perm_id=T_x\" class=\"nonFreeComponentLink\" target=\"_self\">Día</a>&nbsp;<a href=\"https://www.myheritage.es/paywall?colId=40001&itemId=9000001&return_url=x&action=showPlans&subscription_type=data&context=SuperSearch.Search&perm_id=T_x\" class=\"nonFreeComponentLink\" target=\"_self\">Mes</a>&nbsp;1910 - <a href=\"https://www.myheritage.es/paywall?colId=40001&itemId=9000001&return_url=x&action=showPlans&subscription_type=data&context=SuperSearch.Search&perm_id=T_x\" class=\"nonFreeComponentLink\" target=\"_self\">Lugar</a>"
+           },
+           {
+            "name": "parents",
+            "label": "Padres",
+            "value": "<a href=\"https://www.myheritage.es/paywall?colId=40001&itemId=9000001&return_url=x&action=showPlans&subscription_type=data&context=SuperSearch.Search&perm_id=T_x\" class=\"nonFreeComponentLink\" target=\"_self\">Nombres de ambos padres</a>"
+           },
+           {
+            "name": "spouse",
+            "label": "Esposo",
+            "value": "<a href=\"https://www.myheritage.es/paywall?colId=40001&itemId=9000001&return_url=x&action=showPlans&subscription_type=data&context=SuperSearch.Search&perm_id=T_x\" class=\"nonFreeComponentLink\" target=\"_self\">Nombre de esposo</a>"
+           },
+           {
+            "name": "children",
+            "label": "Hijos",
+            "value": " Luis Quirell Zorvalo  y <a href=\"https://www.myheritage.es/paywall?colId=40001&itemId=9000001&return_url=x&action=showPlans&subscription_type=data&context=SuperSearch.Search&perm_id=T_x\" class=\"nonFreeComponentLink\" target=\"_self\">nombre de 3 más hijos</a>"
+           }
+          ]
+         },
+         "cursor": "1"
+        },
+        {
+         "record_type": "record",
+         "user_info": {
+          "is_new": false,
+          "is_purchased": false,
+          "link": "https://www.myheritage.es/paywall?colId=10182&itemId=70001"
+         },
+         "record": {
+          "id": "record-10182-70001",
+          "name": "Ana Zorvalo",
+          "translated_name": null,
+          "name_annotations": null,
+          "thumbnail": {
+           "url": "https://sites-cf.example.invalid/t/1_96x96/.jpg"
+          },
+          "fallback_thumbnail": null,
+          "link": "https://www.myheritage.es/research/collection-10182/x?itemId=70001&action=showRecord&recordTitle=Ana+Zorvalo&perm_id=T_x",
+          "is_free": true,
+          "collection": {
+           "id": "collection-10182",
+           "name": "Sumarios inventados",
+           "thumbnail": {
+            "url": "https://cf.example.invalid/c.png"
+           },
+           "record_count": 1000,
+           "short_description": "Invented collection for tests.",
+           "link": "https://www.myheritage.es/research/collection-10182/x?perm_id=T_x",
+           "is_new": false,
+           "is_free": true,
+           "is_temporary_free": false,
+           "is_updated": false,
+           "is_in_color": false,
+           "has_images": false,
+           "is_consolidated": false
+          },
+          "related_photos": null,
+          "hidden_fields": null,
+          "display_fields": [
+           {
+            "name": "birth",
+            "label": "Nacimiento",
+            "value": "1 de junio de 1851 - Villazul, España"
+           },
+           {
+            "name": "death",
+            "label": "Fallecimiento",
+            "value": "2 de mayo de 1910 - Puertoalto"
+           }
+          ]
+         },
+         "cursor": "1"
+        }
+       ]
+      }
+     }
+    }
+   }
+  }
+ }
+]
