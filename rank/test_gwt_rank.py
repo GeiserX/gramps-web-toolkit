@@ -47,10 +47,10 @@ class GedcomX(unittest.TestCase):
         self.assertIn('surname1+2', res[0]['why'])
 
     def test_first_surname_alone_matches_a_two_surname_tree_name(self):
-        doc = search(entry('A1', [person('p1', 'Juan', 'Fernandez', True, facts=[('Birth', '1880', 'Villazul'), ('Death', '1950', '')])]))
-        r = R.rank(rows(doc), 'Juan', ['Fernandez', 'Rubio'], R.parse_facts('by=1880 dy=1950'))[0]
+        doc = search(entry('A1', [person('p1', 'Juan', 'Zorvalo', True, facts=[('Birth', '1880', 'Villazul'), ('Death', '1950', '')])]))
+        r = R.rank(rows(doc), 'Juan', ['Zorvalo', 'Brineda'], R.parse_facts('by=1880 dy=1950'))[0]
         self.assertEqual(r['tier'], 'strong')
-        r2 = R.rank(rows(doc), 'Juan', ['Rubio', 'Fernandez'], R.parse_facts('by=1880 dy=1950'))[0]
+        r2 = R.rank(rows(doc), 'Juan', ['Brineda', 'Zorvalo'], R.parse_facts('by=1880 dy=1950'))[0]
         self.assertEqual(r2['tier'], 'possible')      # only the second surname matches: listed, never strong
         self.assertIn('surname2 only', r2['why'])
 
@@ -117,6 +117,13 @@ class GedcomX(unittest.TestCase):
                        'death': {'year': 1970, 'year_to': 1970, 'place': ''}},
             'relatives': [{'role': 'father', 'name': 'Luis Perez'}, {'role': 'spouse', 'name': 'Juan Ruiz'}]}])
 
+    def test_a_generic_word_in_the_tree_place_is_not_required(self):
+        doc = search(entry('A1', [person('p1', 'Ana', 'Perez', True, facts=[('Birth', '1901', 'Velio, Murcia')])]))
+        r = R.rank(rows(doc), 'Ana', ['Perez'], R.parse_facts('by=1901 bp=San_Velio'))[0]
+        self.assertIn('bp San Velio', r['why'])
+        r = R.rank(rows(doc), 'Ana', ['Perez'], R.parse_facts('by=1901 bp=San_Ortuno'))[0]
+        self.assertFalse(any(w.startswith('bp') for w in r['why']))
+
     def test_a_fact_without_a_plain_year_does_not_crash(self):
         doc = search(entry('A1', [person('p1', 'Ana', 'Perez', True, facts=[('Birth', '1880', '')])]))
         self.assertIn('by 1880=1880', R.rank(rows(doc), 'Ana', ['Perez'], R.parse_facts('by=abt1880 dy=?'))[0]['why'])
@@ -164,6 +171,20 @@ class PageText(unittest.TestCase):
         self.assertFalse(any(w.startswith('spouse ') for w in r['why']))
 
 
+class FullNameOnly(unittest.TestCase):
+    def test_a_surname_token_is_never_the_given_name(self):
+        page = "Juan Garcia Martin\n\nPrincipal\nSpain\nBirth  1901\nVillazul\nDeath  1970\n"
+        r = R.rank(R.text_rows(page), 'Martin', ['Garcia'], R.parse_facts('by=1901 bp=Villazul dy=1970'))[0]
+        self.assertEqual(r['tier'], 'weak')
+        self.assertIn('given differs', r['why'])
+        r = R.rank(R.text_rows(page), 'Juan', ['Garcia'], R.parse_facts('by=1901 bp=Villazul dy=1970'))[0]
+        self.assertEqual(r['tier'], 'strong')
+        rec = {'candidates': [{'name': 'Juan Garcia Martin', 'principal': True, 'given': None, 'surnames': None,
+                               'events': {'birth': {'year': 1901, 'place': 'Villazul'}, 'death': {'year': 1970}}}]}
+        r = R.rank(R.normalized_rows(rec), 'Martin', ['Garcia'], R.parse_facts('by=1901 bp=Villazul dy=1970'))[0]
+        self.assertEqual(r['tier'], 'weak')
+
+
 class Normalized(unittest.TestCase):
     RECS = {'candidates': [
         {'source': 'othersite', 'id': 'r1', 'name': 'Ana Perez', 'role': 'Principal', 'principal': True,
@@ -182,8 +203,11 @@ class Normalized(unittest.TestCase):
         self.assertEqual(r['tier'], 'possible')
 
     def test_a_bad_record_is_an_error_not_a_row(self):
-        with self.assertRaises(ValueError):
-            R.normalized_rows({'candidates': [{'events': {}}]})
+        for bad in ({'events': {}}, {'name': 'Ana Perez', 'surnames': 'Perez'}, {'name': 'Ana', 'given': 5},
+                    {'name': 'Ana', 'relatives': ['Juan']}, {'name': 'Ana', 'events': {'birth': {'year': '1901'}}},
+                    {'name': 'Ana', 'events': {'birth': {'place': 3}}}):
+            with self.assertRaises(ValueError, msg=bad):
+                R.normalized_rows({'candidates': [bad]})
 
 
 class Cli(unittest.TestCase):
@@ -210,6 +234,25 @@ class Cli(unittest.TestCase):
         recs = json.dumps(Normalized.RECS)
         self.assertEqual(self.run_cli(recs, '--given', 'Ana', '--surname', 'Perez', '--facts', 'by=1901 bp=Villazul').returncode, 0)
         self.assertEqual(self.run_cli('{"candidates": [{"events": {}}]}', '--given', 'Ana').returncode, 2)
+
+    def test_malformed_input_exits_2_never_1(self):
+        bad_fact = search(entry('A1', [person('p1', 'Ana', 'Perez', True)]))
+        bad_fact['entries'][0]['content']['gedcomx']['persons'][0]['facts'] = [{'type': GX + 'Birth', 'place': 'Villazul'}]
+        num_name = search(entry('A1', [person('p1', 'Ana', 'Perez', True)]))
+        num_name['entries'][0]['content']['gedcomx']['persons'][0]['names'][0]['nameForms'][0]['fullText'] = 5
+        for body in ('{"entries": ["x"]}', json.dumps(bad_fact), json.dumps(num_name),
+                     '{"candidates": [{"name": "Ana", "given": 5}]}', '{"candidates": [{"name": "Ana", "relatives": ["Juan"]}]}',
+                     '{"candidates": [{"name": "Ana", "surnames": "Perez"}]}'):
+            res = self.run_cli(body, '--given', 'Ana', '--surname', 'Perez')
+            self.assertEqual(res.returncode, 2, (body, res.stderr))
+            self.assertNotIn('Traceback', res.stderr)
+
+    def test_tsv_fields_stay_on_one_line(self):
+        recs = {'candidates': [{'id': 'r1\tx', 'name': 'Ana\nPerez', 'role': 'Principal\r', 'principal': True,
+                                'events': {'birth': {'year': 1901, 'place': 'Villa\tazul'}}}]}
+        out = self.run_cli(json.dumps(recs), '--given', 'Ana', '--surname', 'Perez').stdout
+        self.assertEqual(out.count('\n'), 1)
+        self.assertEqual(len(out.rstrip('\n').split('\t')), 10)
 
 
 if __name__ == '__main__':

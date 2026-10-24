@@ -48,12 +48,12 @@ Every input is first turned into the normalized candidate record below, one per 
 | `events.birth`, `events.death` | The candidate's own birth and death, each optional. `year` and `year_to` give a range (equal for a plain year), `place` the place as written. A normalizer picks the stand-in itself: baptism or christening for birth, burial or cremation for death |
 | `relatives` | People named in the record with the candidate's relation to them: `spouse`, `father`, `mother`, `parent`, `child`, `other`. Only `spouse` is scored today |
 
-A record must carry only the candidate's own facts. A child's baptism year in a record where the candidate is the father belongs to the child, never to the candidate. A record that lacks `name` or has a non-object `events` makes the run exit 2.
+A record must carry only the candidate's own facts. A child's baptism year in a record where the candidate is the father belongs to the child, never to the candidate. A record that breaks this shape (no `name`, `surnames` as a string instead of a list, a year that is not a number, a relative that is a bare string) makes the run exit 2, and so does any other malformed input file. Exit 1 always means rows were read.
 
 ## The person
 
-- `--given` is the given name as in the tree. Any part counts: `Maria del Carmen` matches a row indexed as `Carmen`. A close spelling (Antonin and Antoine) is a variant: it is listed but never strong.
-- `--surname` is the first surname, and given again for the second. A match on the first surname counts as a surname match, so `Fernandez Rubio` matches a row indexed as `Fernandez`. A match on the second surname alone is noted and caps the row at `possible`. Surnames match as whole tokens or an exact split (`Le Chat` = `Lechat`), never as a substring.
+- `--given` is the given name as in the tree. Any part counts: `Maria del Carmen` matches a row indexed as `Carmen`. When a row has only a full name (page text, or a record with `given` null), only the words before the first surname are read as the given name, so the tree's `Martin Garcia` never matches the row `Juan Garcia Martin` on its second surname. A close spelling (Antonin and Antoine) is a variant: it is listed but never strong.
+- `--surname` is the first surname, and given again for the second. A match on the first surname counts as a surname match, so `Zorvalo Brineda` matches a row indexed as `Zorvalo`. A match on the second surname alone is noted and caps the row at `possible`. Surnames match as whole tokens or an exact split (`Le Chat` = `Lechat`), never as a substring.
 - `--facts` holds what the tree knows: `by` and `dy` years, `bp` and `dp` places, with `_` for spaces. A value with no plain year (`by=?`) is ignored, and `abt1880` reads as 1880. A Baptism or Christening stands in for a missing Birth, and a Burial or Cremation for a missing Death.
 - `--spouse` is the spouse's given name and surname. The given name and a surname must both appear in one spouse entry of the row. A given name alone never counts.
 
@@ -68,7 +68,7 @@ Each agreement beyond the name counts once: birth year within 3 years, death yea
 | `weak` | Everything else. Still a row worth reading |
 | `conflict` | A birth or death year more than 3 years from the tree's. Listed last, never hidden |
 
-Within a tier, rows go by points, then by the search's own order. TSV columns are tier, points, record id, name, role, birth year, birth place, death year, death place and the reasons. `--format json` prints one object per row with the spouses too. A summary of the counts per tier goes to stderr.
+Within a tier, rows go by points, then by the search's own order. Tabs and line breaks inside a field print as a space, so every row is one TSV line. TSV columns are tier, points, record id, name, role, birth year, birth place, death year, death place and the reasons. `--format json` prints one object per row with the spouses too. A summary of the counts per tier goes to stderr.
 
 ## Exit codes and the ledger
 

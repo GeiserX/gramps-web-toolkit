@@ -154,12 +154,36 @@ def gedcomx_rows(doc):
     return rows
 
 
+def _bad_record(r):
+    """Why a normalized record does not have the documented shape, or '' when it does."""
+    def strs(v):
+        return isinstance(v, list) and all(isinstance(x, str) for x in v)
+    if not isinstance(r, dict) or not isinstance(r.get('name'), str):
+        return 'needs a name string'
+    if r.get('given') is not None and not isinstance(r['given'], str):
+        return 'given must be a string or null'
+    if r.get('surnames') is not None and not strs(r['surnames']):
+        return 'surnames must be a list of strings or null'
+    if not isinstance(r.get('events', {}), dict):
+        return 'events must be an object'
+    for kind, e in (r.get('events') or {}).items():
+        if not isinstance(e, dict) or not isinstance(e.get('place', ''), str) or \
+                any(e.get(k) is not None and (isinstance(e[k], bool) or not isinstance(e[k], int)) for k in ('year', 'year_to')):
+            return 'events.%s must be {year, year_to, place}' % kind
+    rel = r.get('relatives') or []
+    if not isinstance(rel, list) or not all(isinstance(x, dict) and isinstance(x.get('name', ''), str)
+                                            and isinstance(x.get('role', ''), str) for x in rel):
+        return 'relatives must be a list of {role, name}'
+    return ''
+
+
 def normalized_rows(doc):
     """Records another normalizer already wrote, checked for the fields the scorer reads."""
     rows = []
     for n, r in enumerate(doc.get('candidates') or []):
-        if not isinstance(r, dict) or not isinstance(r.get('name'), str) or not isinstance(r.get('events', {}), dict):
-            raise ValueError('candidate %d: needs a name string and an events object' % (n + 1))
+        bad = _bad_record(r)
+        if bad:
+            raise ValueError('candidate %d: %s' % (n + 1, bad))
         c = record(r.get('source', ''), str(r.get('id', '')), r['name'], r.get('role', ''), bool(r.get('principal')),
                    r.get('given'), r.get('surnames'))
         for kind in ('birth', 'death'):
@@ -230,13 +254,22 @@ def parse_facts(s):
     return f
 
 
-def _surname_in(s, tokens):
-    """A whole surname: every significant token present, or an exact split (Le Chat = Lechat)."""
+def _surname_at(s, tokens):
+    """Index of the first token of a whole surname in tokens, or None: every significant token present,
+    or an exact split (Le Chat = Lechat), never a substring."""
     sig = [w for w in s if w not in NAME_PARTICLES] or s
     if s and all(w in tokens for w in sig):
-        return True
+        return min(tokens.index(w) for w in sig)
     joined = ''.join(s)
-    return any(''.join(tokens[i:j]) == joined for i in range(len(tokens)) for j in range(i + 1, min(len(tokens), i + 3) + 1))
+    for i in range(len(tokens)):
+        for j in range(i + 1, min(len(tokens), i + 3) + 1):
+            if ''.join(tokens[i:j]) == joined:
+                return i
+    return None
+
+
+def _surname_in(s, tokens):
+    return _surname_at(s, tokens) is not None
 
 
 def _place_match(want, have):
@@ -264,10 +297,14 @@ def _spouse_match(want, spouses):
 def score(c, given, surnames, facts, spouse='', window=3):
     """(tier, points, reasons) for one row. Never drops a row: a rejection is a tier, not a cut."""
     rn = norm(c['name'])
-    rg = norm(c['given']) if c.get('given') is not None else rn
     rs = norm(' '.join(c['surnames'])) if c.get('surnames') is not None else rn
     ev = c.get('events') or {}
     sur = [norm(s) for s in surnames if norm(s)]
+    if c.get('given') is not None:
+        rg = norm(c['given'])
+    else:   # only the full name: the given name is what comes before the first surname
+        at = [i for i in (_surname_at(x, rn) for x in sur) if i is not None]
+        rg = rn[:min(at)] if at else rn
     g = [w for w in norm(given) if w not in NAME_PARTICLES]
     pts, why, agree, conflict = 0, [], 0, False
 
@@ -366,21 +403,22 @@ def main(argv=None):
     if not a.given and not a.surname:
         p.error('give --given, --surname or both')
     rows = []
-    for f in a.files:
-        try:
+    try:
+        for f in a.files:
             rows += load(f)
-        except (OSError, ValueError, UnicodeDecodeError) as exc:
-            print('gwt-rank: %s' % exc, file=sys.stderr)
-            return 2
+        res = rank(rows, a.given, a.surname, parse_facts(a.facts), a.spouse)
+    except (OSError, ValueError, UnicodeDecodeError, TypeError, AttributeError, KeyError) as exc:
+        # a malformed file is "nothing read" (2), never "rows read, none strong" (1)
+        print('gwt-rank: %s: %s' % (type(exc).__name__, exc), file=sys.stderr)
+        return 2
     if not rows:
         print('gwt-rank: no rows to rank: 0 results, not a results page, or not loaded', file=sys.stderr)
         return 2
-    res = rank(rows, a.given, a.surname, parse_facts(a.facts), a.spouse)
     for r in res:
         if a.format == 'json':
             print(json.dumps(r, ensure_ascii=False))
         else:
-            print('\t'.join(str(v) for v in (r['tier'], r['score'], r['id'], r['name'], r['role'], r['by'] or '', r['bp'],
+            print('\t'.join(re.sub(r'[\t\r\n]+', ' ', str(v)) for v in (r['tier'], r['score'], r['id'], r['name'], r['role'], r['by'] or '', r['bp'],
                                             r['dy'] or '', r['dp'], '; '.join(r['why']))))
     counts = {t: sum(r['tier'] == t for r in res) for t in TIERS}
     print('gwt-rank: %d rows, %s' % (len(res), ', '.join('%d %s' % (counts[t], t) for t in TIERS)), file=sys.stderr)
