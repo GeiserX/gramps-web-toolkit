@@ -199,6 +199,37 @@ class T(unittest.TestCase):
         self.assertEqual(len(keys), len(set(keys)))
         self.assertTrue(all(o['ruling'] == 'R-1' for o in ops))
 
+    def test_baptism_dates_the_birth_and_burial_proves_the_death(self):
+        head = ['Given', 'Surname', 'Baptised', 'Christened', 'Buried', 'Burial place']
+        m = {'ruling': 'R-1', 'sheets': [{'sheet': 'Index', 'columns': {
+            'first_name': 'Given', 'surname': 'Surname', 'baptism_date': 'Baptised', 'christening_date': 'Christened',
+            'burial_date': 'Buried', 'burial_place': 'Burial place'}}]}
+        rows = [['Ana', 'Perez', '1850', '', '', ''],             # baptised 1850: not alive
+                ['Luis', 'Gil', '', '3 mayo 1851', '', ''],       # christened 1851: not alive
+                ['Eva', 'Sanz', '1950', '', '2001', ''],          # buried: dead
+                ['Pio', 'Vila', '', '', '', 'Springfield'],       # a burial place is enough
+                ['Rosa', 'Mora', '1950', '', '', ''],             # baptised 1950, no burial: maybe alive
+                ['Juan', 'Rey', '', '', '', '']]                  # nothing at all: maybe alive
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, 'b.xlsx')
+            make_xlsx(p, {'Index': [head] + rows})
+            ops, rep = X.import_rows(X.read_workbook(p), m, None, this_year=YEAR)
+        self.assertEqual([h['name'] for h in rep['living_held']], ['Rosa Mora', 'Juan Rey'])
+        self.assertEqual(rep['living_held'][0]['born'], '1950')
+        self.assertEqual(sorted(o['first_name'] for o in of(ops, 'add_person')), ['Ana', 'Eva', 'Luis', 'Pio'])
+        self.assertEqual(sorted((o['type'], o.get('date', '')) for o in of(ops, 'add_event')),
+                         [('Baptism', '1850'), ('Baptism', '1950'), ('Burial', ''), ('Burial', '2001'), ('Christening', '1851-05-03')])
+
+    def test_sheet_names_are_hashed_exactly_as_written(self):
+        keys = []
+        for sheet in ('People', 'People '):
+            m = json.loads(json.dumps(MAP)); m['sheets'][0]['sheet'] = sheet
+            with tempfile.TemporaryDirectory() as d:
+                p = os.path.join(d, 'b.xlsx')
+                make_xlsx(p, {sheet: [HEAD, row('Luis', 'Gil', 'M', '1899')]})
+                keys.append(of(X.import_rows(X.read_workbook(p), m, None, this_year=YEAR)[0], 'add_person')[0]['key'])
+        self.assertNotEqual(keys[0], keys[1])
+
     def test_namesakes_are_reported_and_only_a_reason_lets_them_through(self):
         tree = tree_of([('I0007', 'Ana', 'Pérez'), ('I0008', 'Ana María', 'Perez Gil')])
         ops, rep = run([row('Ana', 'Perez', 'F', '1901'),                                  # namesake of I0007, loose of I0008
