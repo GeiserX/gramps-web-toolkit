@@ -145,6 +145,18 @@ class QueueTest(unittest.TestCase):
         r = self.rows()[0]
         self.assertEqual(r['status'], 'open')
         self.assertEqual(r['next_at'], '')
+        self.assertEqual(r['tries'], '0')
+
+    def test_repeated_release_never_parks_a_task(self):
+        self.add()
+        for _ in range(8):  # a paused gate: claim, release, claim, release ...
+            run('--queue', self.path, 'claim', '--lane', 'l1')
+            run('--queue', self.path, 'release', '--id', 'q1', '--token', self.tok('q1'))
+        run('--queue', self.path, 'claim', '--lane', 'l1')
+        run('--queue', self.path, 'fail', '--id', 'q1', '--token', self.tok('q1'))
+        r = self.rows()[0]
+        self.assertEqual(r['status'], 'open')
+        self.assertEqual(r['tries'], '1')
 
     def test_stale_claim_reopens(self):
         self.add()

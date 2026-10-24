@@ -312,6 +312,8 @@ def main(argv=None):
                 sys.stderr.write('gwt-queue: %s\n' % why)
                 return rows, 2
             r['status'], r['lane'], r['claimed_at'], r['token'] = 'open', '', '', ''
+            # the claim counted as a try, but nothing ran: give it back so pauses cannot park a task
+            r['tries'] = str(max(0, int(r['tries'] or '0') - 1))
             print_row(r)
             return rows, 0
         return with_queue(args.queue, release_fn)
