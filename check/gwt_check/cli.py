@@ -134,6 +134,8 @@ def check(tree: Tree, *, since: Tree | None = None, tag: str | None = None, root
         report["ahnentafel"] = {"numbers": len(a), "people": len(set(a.values()))}
         if a.complete_depth is not None:
             report["ahnentafel"]["truncated"] = f"over {compare.MAX_POSITIONS} positions; walked up to generation {a.complete_depth}"
+            findings.append({"check": "ahnentafel-truncated", "key": f"root {root}",
+                             "detail": report["ahnentafel"]["truncated"]})
     known = dict.fromkeys(known, "") if isinstance(known, set) else (known or {})
     ignore = ignore or set()
     check_names(ignore)
@@ -357,3 +359,7 @@ def main(argv: list[str] | None = None) -> int:
             with open(args.json, "w", encoding="utf-8") as fh:
                 json.dump(report, fh, ensure_ascii=False, indent=1)
     return 1 if report["new"] else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

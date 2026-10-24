@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 
+from . import compare
 from .tree import Tree
 
 
@@ -338,6 +339,9 @@ def p_ahnentafel_truncated(d):
         kids = [fa, mo]
 
 
+SELFTEST_POSITIONS = 1_000  # MAX_POSITIONS while the self-test runs; the clean tree has 7
+
+
 # (plant, check that must fire, key it must carry, needs the clean tree as --since and I0001 as root)
 PLANTS = [
     (p_orphan_event, "orphan-event", "E0102", False),
@@ -401,6 +405,16 @@ def _run(data: dict, clean: dict):
 
 
 def selftest(verbose: bool = False) -> int:
+    # the collapse plant doubles positions per generation up to the cap; a small cap trips the same
+    # truncation in a fraction of the time, and no other plant comes near it
+    cap, compare.MAX_POSITIONS = compare.MAX_POSITIONS, min(compare.MAX_POSITIONS, SELFTEST_POSITIONS)
+    try:
+        return _selftest(verbose)
+    finally:
+        compare.MAX_POSITIONS = cap
+
+
+def _selftest(verbose: bool) -> int:
     clean = clean_tree()
     say = print if verbose else (lambda *a, **k: None)
     failed = 0

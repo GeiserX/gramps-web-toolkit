@@ -3,7 +3,10 @@ import copy
 import gzip
 import io
 import json
+import os
 import ssl
+import subprocess
+import sys
 import urllib.parse
 
 import pytest
@@ -684,6 +687,22 @@ def test_ahnentafel_collapse_bounded_and_honest(monkeypatch):
     assert [f["check"] for f in found] == ["ahnentafel-truncated"]
 
 
+def test_ahnentafel_new_parents_low_do_not_claim_deep_losses(monkeypatch):
+    from gwt_check import compare
+    from gwt_check.tree import Tree
+    monkeypatch.setattr(compare, "MAX_POSITIONS", 200)
+    data = _diamond(12)
+    # the old tree lacks m10's parents, so its walk reaches deeper before the cap than the new one,
+    # whose positions double from generation 2 again: those deeper old numbers were never compared
+    old = copy.deepcopy(data)
+    next(p for p in old["people"] if p["handle"] == "m10")["parent_family_list"] = []
+    a = compare.ahnentafel(Tree(copy.deepcopy(old), source="old"), "I_F12")
+    b = compare.ahnentafel(Tree(copy.deepcopy(data), source="new"), "I_F12")
+    assert a.complete_depth > b.complete_depth  # the setup the depth filter exists for
+    found, _ = compare.compare_ahnentafel(Tree(old, source="old"), Tree(data, source="new"), "I_F12")
+    assert [f["check"] for f in found] == ["ahnentafel-truncated"]
+
+
 def test_ahnentafel_cycle_is_bounded(monkeypatch):
     from gwt_check import compare
     from gwt_check.tree import Tree
@@ -709,9 +728,24 @@ def test_root_only_report_says_when_ahnentafel_is_truncated(tmp_path, capsys, mo
     from gwt_check import compare
     monkeypatch.setattr(compare, "MAX_POSITIONS", 200)
     dump = _write(tmp_path, "diamond.json", _diamond(12))
-    main(["check", dump, "--root", "I_F12"])  # the bare diamond trips other checks; only the print matters
+    report = tmp_path / "r.json"
+    assert main(["check", dump, "--root", "I_F12", "--json", str(report)]) == 1
     out = capsys.readouterr().out
     assert "truncated" in out and "200 numbers" in out
+    # the truncation is a finding, so a root-only run fails on it like a --since run does
+    new = json.loads(report.read_text())["new"]
+    assert ("ahnentafel-truncated", "root I_F12") in {(f["check"], f["key"]) for f in new}
+    # and --known accepts it by its key
+    others = [{"check": f["check"], "key": f["key"]} for f in new if f["check"] != "ahnentafel-truncated"]
+    known = _write(tmp_path, "known.json", others + [{"check": "ahnentafel-truncated", "key": "root I_F12"}])
+    assert main(["check", dump, "--root", "I_F12", "--known", known]) == 0
+
+
+def test_cli_module_runs_selftest():
+    # `python -m gwt_check.cli selftest` must run the self-test, not import the module and exit 0
+    done = subprocess.run([sys.executable, "-m", "gwt_check.cli", "selftest"], capture_output=True, text=True,
+                          cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    assert done.returncode == 0 and "planted errors" in done.stdout
 
 
 def test_root_only_report_quiet_when_ahnentafel_is_complete(tmp_path, capsys):
