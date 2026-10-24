@@ -17,6 +17,7 @@ The toolkit works for genealogy in any country. One module, `spanish-poller`, is
 
 - `gwt-apply`: applies a JSON Lines change list to a tree, reads before every write, skips what is already there, and stays dry-run until you pass `--apply`
 - `gwt-check`: reads the whole tree after an apply and reports orphans, dangling links, broken birth and death pointers, likely duplicates and what changed since the last copy, with a self-test that plants every error kind
+- `gwt-import-excel`: reads a research workbook (.xlsx, standard library only) with a JSON column mapping and writes a gwt-apply change list in dry-run form: dates it cannot read are kept as text, rows that look like people already in the tree are reported and left out, rows without a source get a note
 - `gwt-fetch`: downloads archive images and text without a browser, with one manifest row per file: any IIIF archive, Europeana search, plus Spanish sources (DIGIBIB, the historical Gaceta de Madrid, CartoCiudad geocoding)
 - `gwt-ledger`: a shared "already searched" ledger, so parallel agents stop repeating each other's negative searches
 - `gwt-fscache`: an on-disk HTTP cache for rate-limited genealogy APIs that never stores a block or an auth header
@@ -33,13 +34,13 @@ python3 -m pip install -e apply      # Python 3.11+, needs only requests
 gwt-apply changes.jsonl              # dry-run: prints the plan and the diff
 ```
 
-`gwt-check`, the ledger, cache and rawstore tools need only the Python standard library and run from their folders (`check/gwt-check`, `ledger/gwt-ledger`, `fscache/gwt-fscache`, `gate/gwt-gate`, `rawstore/gwt-rawstore`). `gwt-spanish-poller` needs Node 18+ and Playwright.
+`gwt-check`, the ledger, cache and rawstore tools need only the Python standard library and run from their folders (`check/gwt-check`, `importxl/gwt-import-excel`, `ledger/gwt-ledger`, `fscache/gwt-fscache`, `gate/gwt-gate`, `rawstore/gwt-rawstore`). `gwt-spanish-poller` needs Node 18+ and Playwright.
 
 ## Documentation
 
 - [The research pipeline](docs/pipeline.md): how agents, verifiers, a judge and a writer share one tree
 - [Hard-won lessons](docs/hard-won.md): each failure that cost us time, data or an account, and the rule that followed
-- [gwt-apply](docs/apply.md), [gwt-check](docs/check.md), [gwt-fetch](docs/fetch.md), [gwt-ledger](docs/ledger.md), [gwt-fscache](docs/fscache.md), [gwt-gate](docs/gate.md), [gwt-rawstore](docs/rawstore.md), [gwt-spanish-poller](docs/spanish-poller.md), [ocr-bench](docs/ocr-bench.md)
+- [gwt-apply](docs/apply.md), [gwt-check](docs/check.md), [gwt-import-excel](docs/import-excel.md), [gwt-fetch](docs/fetch.md), [gwt-ledger](docs/ledger.md), [gwt-fscache](docs/fscache.md), [gwt-gate](docs/gate.md), [gwt-rawstore](docs/rawstore.md), [gwt-spanish-poller](docs/spanish-poller.md), [ocr-bench](docs/ocr-bench.md)
 
 ## License
 
