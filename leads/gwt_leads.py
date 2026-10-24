@@ -22,6 +22,7 @@ import argparse, collections, gzip, json, shlex, sys
 KINDS = ('branch-end', 'missing-vital', 'uncited')
 VITALS = ('Birth', 'Death', 'Marriage')
 LIVING_CUTOFF = 1900  # no death is asked of someone born after this
+SEARCH_CUTOFF = 1925  # nobody born after this, without a death year, goes into a search on an outside site
 
 
 class BadInput(Exception):
@@ -187,11 +188,18 @@ def weak_label(label):
     return len(label.replace('(', ' ').replace(')', ' ').split()) < 2
 
 
-def group_by_person(rows, keep_weak=False):
+def maybe_living(facts):
+    """Born after the cutoff and no death year: not safe to put into a search on an outside site."""
+    return bool(facts.get('by')) and int(facts['by']) > SEARCH_CUTOFF and not facts.get('dy')
+
+
+def group_by_person(rows, keep_weak=False, keep_living=False):
     """One task per person and task kind: the gaps of one person are one search, not one search per gap."""
     groups = {}
     for r in rows:
         if not keep_weak and weak_label(r['label']):
+            continue
+        if not keep_living and maybe_living(r.get('facts') or {}):
             continue
         kind = 'search' if r['kind'] != 'uncited' else 'verify'
         g = groups.setdefault((r['person'], kind), {'person': r['person'], 'label': r['label'], 'task': kind,
@@ -229,6 +237,7 @@ def main(argv=None):
     p.add_argument('--format', choices=('queue', 'tsv', 'json'), default='tsv')
     p.add_argument('--source', default='', help='source name to put on every queue task (queue format)')
     p.add_argument('--keep-weak', action='store_true', help='queue format: also queue people whose name is a single word')
+    p.add_argument('--keep-living', action='store_true', help='queue format: also queue people born after %d with no death year' % SEARCH_CUTOFF)
     p.add_argument('--per-gap', action='store_true', help='queue format: one task per gap instead of one per person')
     args = p.parse_args(argv)
     kinds = tuple(k for k in args.kinds.split(',') if k)
@@ -240,9 +249,15 @@ def main(argv=None):
     except BadInput as exc:
         print('gwt-leads: %s' % exc, file=sys.stderr)
         return 2
+    if args.format == 'queue' and not args.keep_living:   # before the grouped / per-gap fork: every queue output
+        living = {r['person'] for r in rows if maybe_living(r.get('facts') or {})}
+        rows = [r for r in rows if r['person'] not in living]
+        if living:
+            print('gwt-leads: left out %d people born after %d with no death year (they may be living)' % (len(living), SEARCH_CUTOFF),
+                  file=sys.stderr)
     if args.format == 'queue' and not args.per_gap:
         skipped = {r['person'] for r in rows if weak_label(r['label'])} if not args.keep_weak else set()
-        rows = group_by_person(rows, args.keep_weak)
+        rows = group_by_person(rows, args.keep_weak, args.keep_living)
         if skipped:
             print('gwt-leads: skipped %d people whose name is one word (research them by hand, or --keep-weak)' % len(skipped),
                   file=sys.stderr)

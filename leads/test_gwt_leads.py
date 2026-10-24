@@ -178,6 +178,38 @@ class LeadsTest(unittest.TestCase):
             base['places'] = [{'handle': 'pl1', 'name': {'value': 'Tours'}}]
             self.assertIn('pl1', L.load(self._dump(td, base))['places'])
 
+    def test_people_who_may_be_living_are_not_queued(self):
+        rows = [{'person': 'I1', 'label': 'Ana Lopez', 'kind': 'branch-end', 'what': 'x', 'priority': 99, 'facts': {'by': 1949}},
+                {'person': 'I2', 'label': 'Eva Lopez', 'kind': 'branch-end', 'what': 'x', 'priority': 98, 'facts': {'by': 1949, 'dy': 2010}},
+                {'person': 'I3', 'label': 'Rosa Lopez', 'kind': 'branch-end', 'what': 'x', 'priority': 97, 'facts': {'by': 1900}},
+                {'person': 'I4', 'label': 'Luz Lopez', 'kind': 'branch-end', 'what': 'x', 'priority': 96, 'facts': {}}]
+        self.assertEqual([t['person'] for t in L.group_by_person(rows)], ['I2', 'I3', 'I4'])
+        self.assertEqual(len(L.group_by_person(rows, keep_living=True)), 4)
+
+    def test_cli_keeps_possibly_living_people_out_of_every_queue_output(self):
+        def person(h, gid, first, by, dy=None):
+            evs = [{'handle': 'b' + h, 'type': 'Birth', 'date': {'dateval': [0, 0, by, False]}, 'place': ''}]
+            if dy:
+                evs.append({'handle': 'd' + h, 'type': 'Death', 'date': {'dateval': [0, 0, dy, False]}, 'place': ''})
+            return ({'handle': h, 'gramps_id': gid, 'primary_name': {'first_name': first, 'surname_list': [{'surname': 'Lopez'}]},
+                     'event_ref_list': [{'ref': e['handle']} for e in evs], 'parent_family_list': []}, evs)
+        people, events = [], []
+        for h, gid, first, by, dy in (('h1', 'I1', 'Ana', 1949, None), ('h2', 'I2', 'Eva', 1949, 2010), ('h3', 'I3', 'Rosa', 1901, 1980)):
+            p, e = person(h, gid, first, by, dy)
+            people.append(p); events += e
+        with tempfile.TemporaryDirectory() as td:
+            path = self._dump(td, {'people': people, 'families': [], 'events': events})
+            def run(*extra):
+                r = subprocess.run([sys.executable, CLI, path, '--format', 'queue'] + list(extra), capture_output=True, text=True)
+                self.assertEqual(r.returncode, 0, r.stderr)
+                return r.stdout
+            for mode in ([], ['--per-gap']):
+                out = run(*mode)
+                self.assertNotIn("--person I1 ", out)      # Ana, born 1949, no death
+                self.assertIn("--person I2 ", out)
+                self.assertIn("--person I3 ", out)
+                self.assertIn("--person I1 ", run('--keep-living', *mode))
+
     # --- the real `gwt-check dump` shape, and honest dates ---
 
     def real_dump(self, td, mutate=None):
