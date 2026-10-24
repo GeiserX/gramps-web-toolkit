@@ -195,6 +195,44 @@ class LedgerTest(unittest.TestCase):
         rows = L.read_rows(self.path)
         self.assertEqual([(r['person_key'], r['next_date']) for r in rows], [('ana', ''), ('b', '2026-12-01')])
         self.assertIn('new q', run('--ledger', self.path, 'due', '--on', '2026-12-01')[1])
+    def dated(self, date, result, query='Ana Peiro bautismo 1850-1860', source='familysearch'):
+        run('--ledger', self.path, 'add', '--person', 'ana', '--source', source, '--query', query,
+            '--result', result, '--date', date)
+
+    def test_equal_scores_list_the_newest_first(self):
+        # An old `none` must not hide a newer `hit`: a caller that reads the first row reuses the newest.
+        self.dated('2026-01-01', 'none')
+        self.dated('2026-06-01', 'hit')
+        self.dated('2026-03-01', 'partial')  # backfilled later, but older: the date wins over file order
+        self.dated('2026-06-01', 'blocked')  # same day as the hit, logged after it
+        code, out = run('--ledger', self.path, 'check', '--source', 'familysearch',
+                        '--query', 'Ana Peiro bautismo 1850-1860')
+        self.assertEqual(code, 0)
+        self.assertEqual([line.split('\t')[6] for line in out.splitlines()], ['blocked', 'hit', 'partial', 'none'])
+        # A better score still comes first: a newer row that only matches with a typo goes last.
+        self.dated('2027-01-01', 'hit', query='Ana Peiro bautizmo 1850-1860')
+        out = run('--ledger', self.path, 'check', '--query', 'Ana Peiro bautismo 1850-1860')[1]
+        self.assertEqual(out.splitlines()[-1].split('\t')[6], 'hit')
+        self.assertEqual(out.splitlines()[0].split('\t')[6], 'blocked')
+
+    def test_exact_needs_the_same_source_and_the_identical_query(self):
+        self.dated('2026-01-01', 'none', query='Ana Peiro bautismo 1850-1860 Toledo')  # fuzzy match only
+        self.dated('2026-01-02', 'none', source='gaceta')                             # other source
+        self.dated('2026-01-03', 'hit', query='ANA Peiró, bautismo 1850 1860')        # same once normalized
+        base = ('--ledger', self.path, 'check', '--source', 'FamilySearch', '--query', 'Ana Peiro bautismo 1850-1860')
+        self.assertEqual(len(run(*base)[1].splitlines()), 2)
+        code, out = run(*base, '--exact', '--threshold', '0')
+        self.assertEqual(code, 0)
+        self.assertEqual([line.split('\t')[6] for line in out.splitlines()], ['hit'])
+        # A reworded query is done for the fuzzy check, not for --exact.
+        reworded = ('--ledger', self.path, 'check', '--source', 'familysearch', '--query', 'bautismo de Ana Peiro 1850-1860')
+        self.assertEqual(run(*reworded)[0], 0)
+        self.assertEqual(run(*reworded, '--exact'), (1, ''))
+        # --exact refuses to run without a source, so it can never match across sites.
+        for src in ((), ('--source', ''), ('--source', '!!')):
+            with self.assertRaises(SystemExit) as e, redirect_stderr(io.StringIO()):
+                run('--ledger', self.path, 'check', *src, '--query', 'Ana Peiro bautismo 1850-1860', '--exact')
+            self.assertEqual(e.exception.code, 2)
 
 if __name__ == '__main__':
     unittest.main()
