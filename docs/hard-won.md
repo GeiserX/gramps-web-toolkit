@@ -128,7 +128,7 @@ Format: what happened, why, and the rule.
 
 ### 19. A known finding is matched by its whole key
 
-**What happened.** The known file listed `I0830` for a `surname-marker` finding whose key is `I0830 Bron[…]te`. The check reported it as new and exited 1.
+**What happened.** The known file listed `I0042` for a `surname-marker` finding whose key is `I0042 Smi[…]th`. The check reported it as new and exited 1.
 
 **Rule.** Copy the key from the `--json` report of the previous run. The key is the whole string, not the id in it.
 
