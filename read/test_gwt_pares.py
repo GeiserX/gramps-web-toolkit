@@ -120,6 +120,9 @@ class Stops(Pares):
     def test_captcha_on_the_form_is_a_stop_before_any_search(self):
         self.assert_stop([(200, CAPTCHA)], gwt_reader.EXIT_WALL, 'hits', 1)
 
+    def test_error_page_instead_of_the_form_is_a_stop_before_any_search(self):
+        self.assert_stop([(200, ERROR_PAGE)], gwt_reader.EXIT_WALL, 'hits', 1)
+
     def test_incapsula_block_is_a_stop(self):
         self.assert_stop([(200, FORM), (200, b'<html><body><div id="_Incapsula_Resource">x</div></body></html>')],
                          gwt_reader.EXIT_WALL, 'hits', 2)
