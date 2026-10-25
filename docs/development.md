@@ -31,6 +31,12 @@ The four fields are the file (relative to the package), the exact text to replac
 
 When you add a guard, add its row and a test that fails with the row applied. CI runs the mutants of every package a pull request touches, and all of them on a push to `main` or when a pull request changes `.github/`.
 
+## Releases and the changelog
+
+The version comes from git tags (hatch-vcs): a `v0.2.0` tag builds 0.2.0, and a commit after it builds `0.2.1.devN+g<sha>`. `gwt --version` in a clone prints the same shape, read from git. Pushing a `v*` tag runs [release.yml](https://github.com/GeiserX/gramps-web-toolkit/blob/main/.github/workflows/release.yml): it builds the sdist and wheel, publishes them to PyPI through trusted publishing, and creates the GitHub release from the tag's section of [CHANGELOG.md](https://github.com/GeiserX/gramps-web-toolkit/blob/main/CHANGELOG.md). It stops before publishing when that section is missing or has no `### Change lists` heading. A manual run of the workflow is a dry run that publishes a dev build to TestPyPI only. To release, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, merge that, then tag the merge commit and push the tag.
+
+Every pull request that changes how an existing change list behaves (an op newly refused, a newly required field, a different skip or duplicate rule, a different default, in `gwt-apply` or in what `gwt-import-excel` writes) adds a line under `### Change lists` in the Unreleased section of `CHANGELOG.md`. Other user-facing changes go under Added, Changed or Fixed.
+
 ## Build this site
 
 ```sh
