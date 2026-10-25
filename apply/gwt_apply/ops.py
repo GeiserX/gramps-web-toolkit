@@ -125,6 +125,16 @@ def _event_fact(event: dict, field: str):
     return key
 
 
+def _date_text(date: dict | None) -> str:
+    """A stored date as a short text for a message: 1890-03-16, 1890, or its text; "no date" when empty."""
+    key = date_key(date)
+    if key[2] == (0, 0, 0):
+        return (date or {}).get("text") or "no date"
+    day, month, year = key[2][:3]
+    text = "-".join([f"{year:04d}", *([f"{month:02d}"] if month else []), *([f"{day:02d}"] if month and day else [])])
+    return text + (" (with a modifier or quality)" if key[0] or key[1] else "")
+
+
 class Conflict(Exception):
     """The tree disagrees with the op in a way only a person can settle."""
 
@@ -211,6 +221,7 @@ def validate(ops: list[dict]) -> list[str]:
     errors = []
     keys: set[str] = set()
     payloads: dict[str, str] = {}  # the op without key and ruling -> where it was first seen
+    pages: dict[tuple, tuple[str, dict]] = {}  # (source, page) of an add_citation -> (where, the op that makes it)
     for i, op in enumerate(ops, 1):
         where = f"op {i}"
         if not isinstance(op, dict):
@@ -260,6 +271,12 @@ def validate(ops: list[dict]) -> list[str]:
         if name == "add_citation" and "confidence" in op and (
                 isinstance(op["confidence"], bool) or op["confidence"] not in (0, 1, 2, 3, 4)):
             errors.append(f"{where}: confidence is a whole number 0-4")
+        if name == "add_citation" and isinstance(op.get("source"), str) and isinstance(op.get("page"), str):
+            first = pages.setdefault((op["source"], op["page"].strip()), (where, op))
+            if first[1] is not op:
+                errors += [f"{where}: {first[0]} cites the same page with {f} {theirs}; this op says {ours}. "
+                           "One page text per role: give each its own page, e.g. add the role to it"
+                           for f, theirs, ours in _citation_differs(first[1], op)]
         payload = json.dumps({k: v for k, v in op.items() if k not in ("key", "ruling")}, sort_keys=True)
         if payload in payloads:
             errors.append(f"{where}: the same change as {payloads[payload]}; one change, one op")
@@ -428,6 +445,20 @@ def validate(ops: list[dict]) -> list[str]:
         except (ValueError, DateError, TypeError) as exc:  # TypeError: a value of the wrong kind, e.g. a list
             errors.append(f"{where}: {exc}")
     return errors
+
+
+def _citation_differs(first: dict, op: dict) -> list[tuple[str, object, object]]:
+    """(field, first's value, op's value) for each field `op` sets that differs from the citation `first` makes."""
+    out = []
+    if "confidence" in op and op["confidence"] != first.get("confidence", 2):
+        out.append(("confidence", first.get("confidence", 2), op["confidence"]))
+    if op.get("date"):
+        try:
+            if date_key(parse_date(op["date"])) != date_key(parse_date(first.get("date"))):
+                out.append(("date", first.get("date") or "no date", op["date"]))
+        except DateError:
+            pass  # reported as an unreadable date
+    return out
 
 
 @dataclass
@@ -707,6 +738,26 @@ class Applier:
             self.actions.append(f"skip: {cls} {self.label(obj)} already made by key {op['key']!r}")
         return obj
 
+    def _reuse(self, cls: str, candidates: list[dict], matched: str, checks, fix) -> dict | None:
+        """Of the objects that match the op on `matched`, the one where every other field the op sets is the same.
+
+        `checks(obj)` gives (field, same, theirs, ours) for each field the op sets; `fix(field)` says what to do.
+        None when there is no candidate. When every candidate differs it is a Conflict: reusing one would put this
+        op's fact on an object that says something else (a firm fact on a weak citation)."""
+        differing = None
+        for obj in candidates:
+            rows = checks(obj)
+            diff = next((r for r in rows if not r[1]), None)
+            if diff is None:
+                fields = ", ".join([matched, *(r[0] for r in rows)])
+                self.actions.append(f"reused {self.label(obj)} (same {fields})")
+                return obj
+            differing = differing or (obj, diff)
+        if differing is None:
+            return None
+        obj, (f, _, theirs, ours) = differing
+        raise Conflict(f"{cls} {self.label(obj)} has the same {matched} with {f} {theirs}; this op says {ours}: {fix(f)}")
+
     def _check_gramps_id(self, cls: str, op: dict) -> None:
         if op.get("gramps_id") and self.c.handle_for_gramps_id(cls, op["gramps_id"]):
             raise Conflict(f"Gramps ID {op['gramps_id']} is taken by another {cls}")
@@ -837,21 +888,38 @@ class Applier:
             refs = target.get("event_ref_list") or []
             events = self.c.get_many("Event", [r["ref"] for r in refs]) if refs else []
             roles = {r["ref"]: r.get("role") for r in refs}
+            same_date = []
             for ev in events:
                 if str(ev.get("type")).lower() != etype.lower():
                     continue
                 if date_key(ev.get("date")) == date_key(date):
-                    self.keymap[op["key"]] = ev["handle"]
-                    self.actions.append(
-                        f"skip: {target_cls} {self.label(target)} already has {etype} "
-                        f"{op.get('date') or '(no date)'} as Event {self.label(ev)}"
-                    )
-                    return
+                    same_date.append(ev)
+                    continue
                 if etype in SINGLE_VITAL and role == "Primary" and roles.get(ev["handle"]) == "Primary":
                     raise Conflict(
                         f"{target_cls} {self.label(target)} already has a {etype} with another date "
                         f"(Event {self.label(ev)}); fix that event instead of adding a second one"
                     )
+            place = self.resolve("Place", op["place"]) if op.get("place") and same_date else None
+
+            def checks(ev):
+                rows = []
+                if op.get("place"):
+                    p = self.c.get("Place", ev["place"]) if ev.get("place") and ev["place"] != place else None
+                    shown = (p or {}).get("gramps_id") or ("none" if not ev.get("place") else op["place"])
+                    rows.append(("place", ev.get("place") == place, shown, op["place"]))
+                if op.get("description"):
+                    theirs = (ev.get("description") or "").strip()
+                    rows.append(("description", theirs == op["description"].strip(), repr(theirs), repr(op["description"])))
+                return rows
+
+            ev = self._reuse(
+                "Event", same_date, f"type and date on {target_cls} {self.label(target)}", checks,
+                lambda f: f"if it is that event, correct it with update_event; if it is another {etype}, give this op "
+                          "its date so the two can be told apart")
+            if ev is not None:
+                self.keymap[op["key"]] = ev["handle"]
+                return
             self._check_gramps_id("Event", op)
             h = stable_handle(op["key"])
             place = self.resolve("Place", op["place"]) if op.get("place") else ""
@@ -1107,11 +1175,19 @@ class Applier:
         if self._existing("Source", op):
             return
         title = op["title"].strip()
-        for row in self.c.list_all("Source", ["title", "gramps_id"]):
-            if (row.get("title") or "").strip() == title:
-                self.keymap[op["key"]] = row["handle"]
-                self.actions.append(f"skip: Source {row.get('gramps_id') or row['handle']} has that title")
-                return
+        rows = [r for r in self.c.list_all("Source", ["title", "author", "pubinfo", "gramps_id"])
+                if (r.get("title") or "").strip() == title]
+
+        def checks(row):
+            return [(f, (row.get(f) or "").strip() == op[f].strip(), repr(row.get(f) or ""), repr(op[f]))
+                    for f in ("author", "pubinfo") if op.get(f)]
+
+        found = self._reuse("Source", rows, "title", checks,
+                            lambda f: f"if it is that source, set its {f} in Gramps and rerun; if it is another "
+                                      "source, give it a title that tells them apart")
+        if found is not None:
+            self.keymap[op["key"]] = found["handle"]
+            return
         self._check_gramps_id("Source", op)
         h = stable_handle(op["key"])
         obj = {"_class": "Source", "handle": h, "gramps_id": op.get("gramps_id", ""), "title": title}
@@ -1255,14 +1331,28 @@ class Applier:
         cit = self._existing("Citation", op)
         handle = cit["handle"] if cit else None
         if handle is None:
-            for row in self.c.list_all("Citation", ["source_handle", "page", "gramps_id"]):
-                if row.get("source_handle") == source and (row.get("page") or "").strip() == page:
-                    handle = row["handle"]
-                    self.keymap[op["key"]] = handle
-                    self.actions.append(
-                        f"skip: Citation {row.get('gramps_id') or handle} already cites that page"
-                    )
-                    break
+            rows = [r for r in self.c.list_all("Citation", ["source_handle", "page", "confidence", "date", "gramps_id"])
+                    if r.get("source_handle") == source and (r.get("page") or "").strip() == page]
+
+            def checks(row):
+                out = []
+                if "confidence" in op:
+                    theirs = row.get("confidence")
+                    theirs = 2 if theirs is None else theirs
+                    out.append(("confidence", theirs == op["confidence"], theirs, op["confidence"]))
+                if op.get("date"):
+                    out.append(("date", date_key(row.get("date")) == date_key(parse_date(op["date"])),
+                                _date_text(row.get("date")), op["date"]))
+                return out
+
+            def fix(f):
+                return (f"{'raise it' if f == 'confidence' else 'correct it'} with update_citation, or give this "
+                        "role its own page")
+
+            found = self._reuse("Citation", rows, "source and page", checks, fix)
+            if found is not None:
+                handle = found["handle"]
+                self.keymap[op["key"]] = handle
         if handle is None:
             self._check_gramps_id("Citation", op)
             handle = stable_handle(op["key"])
@@ -1332,14 +1422,25 @@ class Applier:
             for spec in op["attach"]:
                 cls, ref = _parse_target(spec)
                 _, carrier, label = self.holder(cls, ref)
-                for n in self.c.get_many("Note", carrier.get("note_list") or []):
+                notes = self.c.get_many("Note", carrier.get("note_list") or [])
+                for n in notes:
                     found = (n.get("text") or {}).get("string") or ""
-                    if found == text or (marker and found.startswith(marker)):
+                    if marker and found.startswith(marker):  # the mark itself, whatever its reason says
                         handle = n["handle"]
                         self.keymap[op["key"]] = handle
-                        self.actions.append(f"skip: {label} already has that text as Note {self.label(n)}")
+                        self.actions.append(f"skip: {label} already has that mark as Note {self.label(n)}")
                         break
                 if handle:
+                    break
+                same = [n for n in notes if ((n.get("text") or {}).get("string") or "") == text]
+                found = self._reuse(
+                    "Note", same, f"text on {label}",
+                    lambda n: [("type", str(n.get("type")).lower() == op["type"].lower(), n.get("type"), op["type"])]
+                    if op.get("type") else [],
+                    lambda f: "if it is that note, correct it with update_note; if not, give this one its own text")
+                if found is not None:
+                    handle = found["handle"]
+                    self.keymap[op["key"]] = handle
                     break
         if handle is None:
             self._check_gramps_id("Note", op)

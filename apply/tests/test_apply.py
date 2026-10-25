@@ -2251,3 +2251,113 @@ def test_merge_person_refuses_an_unknown_use_loser_vital():
     errors = "\n".join(validate([{"op": "merge_person", "key": "m", "ruling": R, "winner": "I0001", "loser": "I0002",
                                   "use_loser": ["marriage"]}]))
     assert "use_loser takes ['birth', 'death']" in errors
+
+
+# -- reuse only what is the same: a new citation, event, note or source never folds into one that differs --
+
+def _two_baptisms(fake):
+    for h in ("bap-a", "bap-b"):
+        fake.add("events", {"handle": h, "type": "Baptism", "date": parse_date("1890-03-16")})  # E0001, E0002
+    return [{"event": "E0001"}], [{"event": "E0002"}]
+
+
+def _weak_and_firm(a, b):
+    page = "book 3, folio 12v"
+    return [{"op": "add_citation", "key": "weak", "ruling": R, "source": "S0001", "page": page, "confidence": 1, "attach": a},
+            {"op": "add_citation", "key": "firm", "ruling": R, "source": "S0001", "page": page, "confidence": 3, "attach": b}]
+
+
+def test_two_citations_of_one_page_that_differ_are_a_validation_error(fake):
+    a, b = _two_baptisms(fake)
+    errors = "\n".join(validate(_weak_and_firm(a, b)))
+    assert "op 2" in errors and "confidence" in errors and "own page" in errors, errors
+    other_date = [dict(_weak_and_firm(a, b)[0], date="1890"), dict(_weak_and_firm(a, b)[0], key="w2", attach=b, date="1891")]
+    assert "date" in "\n".join(validate(other_date))
+    same = [_weak_and_firm(a, b)[0], dict(_weak_and_firm(a, b)[0], key="w2", attach=b)]
+    assert validate(same) == []  # the same citation on two targets
+    no_confidence = [_weak_and_firm(a, b)[0], {k: v for k, v in _weak_and_firm(a, b)[1].items() if k != "confidence"}]
+    assert validate(no_confidence) == []  # sets nothing that differs: it reuses
+
+
+def test_a_firm_citation_never_reuses_a_weak_one_of_the_same_page(fake):
+    a, b = _two_baptisms(fake)
+    weak, firm = _weak_and_firm(a, b)
+    assert run(fake, [weak])[0].status == "done"
+    res = run(fake, [firm])
+    assert res[0].status == "conflict", res[0].actions
+    assert "C0001" in res[0].actions[-1] and "confidence 1" in res[0].actions[-1] and "update_citation" in res[0].actions[-1]
+    assert fake.store["events"]["bap-b"]["citation_list"] == []  # event B unchanged
+    assert len(fake.store["citations"]) == 1
+
+
+def test_an_identical_citation_is_reused_and_says_so(fake):
+    a, b = _two_baptisms(fake)
+    weak, _ = _weak_and_firm(a, b)
+    run(fake, [weak])
+    res = run(fake, [dict(weak, key="weak2", attach=b)])
+    assert res[0].status == "done", res[0].actions
+    assert any(x.startswith("reused C0001 (same ") for x in res[0].actions), res[0].actions
+    assert fake.store["events"]["bap-b"]["citation_list"] == [stable_handle("weak")]
+    again = run(fake, [dict(weak, key="weak2", attach=b)])
+    assert again[0].status == "skip"  # a rerun of an applied list still skips
+
+
+def test_a_second_undated_residence_with_another_place_is_not_skipped(fake):
+    fake.add("places", {"handle": "plc2", "name": {"value": "Shelbyville"}})  # P0002
+    ops = [{"op": "add_event", "key": "res1", "ruling": R, "person": "I0001", "type": "Residence", "place": "P0001"},
+           {"op": "add_event", "key": "res2", "ruling": R, "person": "I0001", "type": "Residence", "place": "P0002"}]
+    res = run(fake, ops)
+    assert res[0].status == "done"
+    assert res[1].status == "conflict", res[1].actions
+    assert "place" in res[1].actions[-1] and "E0001" in res[1].actions[-1]
+    assert len(fake.store["events"]) == 1
+    # the same place again is the same residence: reused, and a rerun skips
+    res = run(fake, [dict(ops[0], key="res3")])
+    assert res[0].status == "skip" and any(x.startswith("reused E0001 (same ") for x in res[0].actions), res[0].actions
+    assert run(fake, [ops[0]])[0].status == "skip"
+
+
+
+def test_a_citation_of_the_same_page_with_another_date_is_not_reused(fake):
+    a, b = _two_baptisms(fake)
+    weak, _ = _weak_and_firm(a, b)
+    assert run(fake, [dict(weak, date="1890-03-16")])[0].status == "done"
+    res = run(fake, [dict(weak, key="w2", attach=b, date="1891")])
+    assert res[0].status == "conflict", res[0].actions
+    assert "C0001" in res[0].actions[-1] and "date 1890-03-16" in res[0].actions[-1], res[0].actions
+    assert fake.store["events"]["bap-b"]["citation_list"] == []
+    assert len(fake.store["citations"]) == 1
+
+
+def test_a_second_undated_residence_with_another_description_is_not_skipped(fake):
+    ops = [{"op": "add_event", "key": "r1", "ruling": R, "person": "I0001", "type": "Residence", "description": "farm"},
+           {"op": "add_event", "key": "r2", "ruling": R, "person": "I0001", "type": "Residence", "description": "mill"}]
+    res = run(fake, ops)
+    assert res[0].status == "done"
+    assert res[1].status == "conflict", res[1].actions
+    assert "description 'farm'" in res[1].actions[-1] and "E0001" in res[1].actions[-1], res[1].actions
+    assert len(fake.store["events"]) == 1
+
+def test_a_note_of_another_type_with_the_same_text_is_not_reused(fake):
+    ops = [{"op": "add_note", "key": "n1", "ruling": R, "type": "Research", "text": "Born in the mill house.",
+            "attach": [{"person": "I0001"}]},
+           {"op": "add_note", "key": "n2", "ruling": R, "type": "Transcript", "text": "Born in the mill house.",
+            "attach": [{"person": "I0001"}]}]
+    res = run(fake, ops)
+    assert res[0].status == "done"
+    assert res[1].status == "conflict", res[1].actions
+    assert "type" in res[1].actions[-1] and "N0001" in res[1].actions[-1]
+    assert len(fake.store["notes"]) == 1
+    res = run(fake, [dict(ops[0], key="n3")])
+    assert res[0].status == "skip" and any(x.startswith("reused N0001 (same ") for x in res[0].actions), res[0].actions
+
+
+def test_a_source_with_the_same_title_but_another_author_is_not_reused(fake):
+    fake.store["sources"]["src1"]["author"] = "Parish of Springfield"
+    op = {"op": "add_source", "key": "s", "ruling": R, "title": "Parish register of Springfield, book 3"}
+    res = run(fake, [dict(op, author="Diocese of Capital City")])
+    assert res[0].status == "conflict", res[0].actions
+    assert "author" in res[0].actions[-1] and "S0001" in res[0].actions[-1]
+    assert len(fake.store["sources"]) == 1
+    res = run(fake, [dict(op, author="Parish of Springfield")])
+    assert res[0].status == "skip" and any(x.startswith("reused S0001 (same ") for x in res[0].actions), res[0].actions

@@ -10,3 +10,11 @@ gwt_apply/ops.py | if etype in SINGLE_VITAL and role == "Primary" and roles.get(
 gwt_apply/ops.py | if name == "merge_person" and set(op.get("use_loser") or []) - set(USE_LOSER): | if False: | validate refuses an unknown use_loser vital
 gwt_apply/ops.py | lost += [f"answer lost on try {attempt}: {w}" for w in self.c.unknown_write] | lost += [] | a write whose answer was lost and whose re-read finds the change is done, not skip
 gwt_apply/ops.py | isinstance(op["confidence"], bool) or op["confidence"] not in (0, 1, 2, 3, 4)): | False): | validate refuses an add_citation confidence that is not a whole number 0-4
+gwt_apply/ops.py | diff = next((r for r in rows if not r[1]), None) | diff = None | an existing object that differs in a field the op sets is a conflict, never reused
+gwt_apply/ops.py | if first[1] is not op: | if False: | validate refuses two add_citation ops on one page with another confidence or date
+gwt_apply/ops.py | out.append(("confidence", theirs == op["confidence"], theirs, op["confidence"])) | out.append(("confidence", True, theirs, op["confidence"])) | a firm citation never reuses a weak one of the same page
+gwt_apply/ops.py | rows.append(("place", ev.get("place") == place, shown, op["place"])) | rows.append(("place", True, shown, op["place"])) | an undated event with another place is not folded into the existing one
+gwt_apply/ops.py | str(n.get("type")).lower() == op["type"].lower() | True | a note of another type with the same text is not reused
+gwt_apply/ops.py | (row.get(f) or "").strip() == op[f].strip() | True | a source with the same title but another author is not reused
+gwt_apply/ops.py | out.append(("date", date_key(row.get("date")) == date_key(parse_date(op["date"])), | out.append(("date", True, | a citation of the same page with another date is not reused
+gwt_apply/ops.py | rows.append(("description", theirs == op["description"].strip(), | rows.append(("description", True, | an undated event with another description is not folded into the existing one
