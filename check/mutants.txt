@@ -1,0 +1,9 @@
+# Mutations the check tests must catch. One row each: file | exact text | replacement | why
+# `python3 .github/scripts/run_tests.py --mutants --only check` applies each row to a scratch copy
+# of check/ and fails when the tests still pass. The text must occur exactly once in the file.
+gwt_check/cites.py | if want and acts and want not in acts: | if want and acts: | a citation whose page names the event's own kind of act is not other-act
+gwt_check/cites.py | (?:s|es)?(?!\w)", f) | ", f) | an act word matches whole, never inside a longer word such as birthplace
+gwt_check/cites.py | "boda", | "bodx", | a marriage cited by a «Bodas» page is not another kind of act
+gwt_check/cites.py | if want in ("death", "marriage") and any(m in _fold(page) for m in MARGINAL): | if False: | a death or marriage cited by a marginal mention is flagged
+gwt_check/fill.py | (flagged if prob else parts).extend(text) | parts.extend(text) | fill-places does not propose a place that only a flagged citation names
+gwt_check/fill.py | if only: | if False: | a place only a flagged citation names is listed under held_back
