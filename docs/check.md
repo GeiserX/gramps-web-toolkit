@@ -74,7 +74,7 @@ gwt-check fill-places dump.json.gz --json             # every proposal and every
 - When the text names a place and also one that encloses it (`Villaejemplo, Provincia Imaginaria`), the enclosing one is dropped. One place left is a proposal. More than one, such as two towns with the same name, is listed as ambiguous with each place ID, and nothing is proposed.
 - A citation can name where the record was made rather than where the event happened: a census town, the parish of a death record, a newspaper's city. Read each proposal against the record before you apply it.
 
-`--ops FILE` writes one [`gwt-apply`](apply.md) `update_event` op per proposal, with `"ruling": ""`. `gwt-apply` refuses an op with no ruling, so the file applies only after someone has read each record, written the ruling and deleted the ops they reject. An existing file is never replaced.
+`--ops FILE` writes one [`gwt-apply`](apply.md) `update_event` op per proposal, with `"ruling": ""`. `gwt-apply` refuses an op with no ruling, so the file applies only after someone has read each record, written the ruling and deleted the ops they reject. An `update_event` op replaces whatever place the event has when it is applied, so build the file from a fresh dump and apply it soon after; an event someone has placed in the meantime should have its op deleted. An existing file is never replaced.
 
 The output quotes citations and notes, so it is as private as the tree.
 

@@ -23,7 +23,8 @@ def _fold(text: str) -> str:
     """Lowercase without accents, one character for one, so a match's offsets still point into the text."""
     out = []
     for c in text:
-        b = unicodedata.normalize("NFD", c)[0]
+        b = "".join(x for x in unicodedata.normalize("NFD", c) if not unicodedata.combining(x))
+        b = b if len(b) == 1 else c  # Hangul and the like decompose into letters, not accents: kept whole
         lo = b.lower()
         out.append(lo if len(lo) == 1 else b)
     return "".join(out)

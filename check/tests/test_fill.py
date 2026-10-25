@@ -62,6 +62,17 @@ def test_case_accents_and_spacing_are_ignored():
     assert p["place"] == "P0050"
 
 
+def test_a_script_that_decomposes_into_letters_is_compared_whole():
+    # Hangul syllables decompose into letters, not accents: dropping all but the first letter made
+    # 각낙닥락 match 가나다라
+    d = selftest.clean_tree()
+    _place(d, "P0050", "가나다라")
+    _placeless(d, "출생지 각낙닥락")
+    assert propose_places(_tree(d))["proposals"] == []
+    _placeless(d, "출생지 가나다라")
+    assert [p["place"] for p in propose_places(_tree(d))["proposals"]] == ["P0050"]
+
+
 def test_a_name_inside_a_longer_word_does_not_match():
     d = _placeless(selftest.clean_tree(), "Libro de Villaejemplonuevo")
     assert propose_places(_tree(d))["proposals"] == []
