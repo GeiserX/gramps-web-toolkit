@@ -439,6 +439,20 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
                     got[person_name(P[x])].add(x)
         return got
 
+    def birth_parents(h: str) -> tuple[str, str] | None:
+        """Names of the father and mother of the first family the person is a birth child of, both named."""
+        for fh in P[h].get("parent_family_list", []):
+            f = F.get(fh) or {}
+            for c in f.get("child_ref_list", []):
+                if c.get("ref") == h and dates.kind(c.get("frel")) in BIOLOGICAL \
+                        and dates.kind(c.get("mrel")) in BIOLOGICAL:
+                    fa, mo = (person_name(P[x]) if x in P else ""
+                              for x in (f.get("father_handle"), f.get("mother_handle")))
+                    return (fa, mo) if fa and mo else None
+        return None
+
+    skipped: set[str] = set()
+
     def touched(h: str) -> bool:
         """In scope, or in a family that is: an old person the run gave a new spouse or parents."""
         p = P[h]
@@ -467,7 +481,14 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
                 why = "birth within 2 years" if near else (
                     "same parent" if pp & pq else "same spouse" if sp & sq else "same child")
                 pair = ",".join(sorted((P[h]["gramps_id"], P[c]["gramps_id"])))
+                # namesakes: each has a father and a mother, and both differ by name, so two people
+                bh, bc = birth_parents(h), birth_parents(c)
+                if bh and bc and bh[0] != bc[0] and bh[1] != bc[1]:
+                    skipped.add(pair)
+                    continue
                 out.add("dup-person-fuzzy", pair, f"{person_name(P[h])} / {person_name(P[c])}, {why}")
+
+    info["dup-person-fuzzy skipped, parents differ by name"] = sorted(skipped, key=id_order)
 
     # two vital events of one type on one person or family
     for t, role in (("people", "Primary"), ("families", "Family")):
