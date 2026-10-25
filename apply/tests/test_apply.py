@@ -2437,8 +2437,59 @@ def test_a_dry_run_and_a_snapshot_leave_no_log_anywhere(fake, tmp_path, env, sta
     changes = _changes(tmp_path, [{"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}])
     assert main([str(changes)]) == 0
     assert main(["--save-snapshot", str(tmp_path / "s.json.gz")]) == 0
+    assert main(["--save-snapshot", str(tmp_path / "s2.json.gz"), "--apply"]) == 0  # --apply does not make it a write
     assert list(cwd.iterdir()) == []
     assert not state_home.exists()
+
+
+def test_a_revert_plan_leaves_no_log_and_a_revert_logs_its_counts(fake, tmp_path, env, state_home, monkeypatch, capsys):
+    _note(fake, "n1", "old text")
+    pre = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", pre]) == 0
+    log = _apply_list(tmp_path, [{"op": "update_note", "key": "u", "ruling": R, "note": "N0001",
+                                  "set": {"text": "new text"}, "expect": "old text"}], "run")
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
+    capsys.readouterr()
+    assert _undo(log, pre) == 0  # a plan
+    first = capsys.readouterr().out.splitlines()[0]
+    assert first.startswith("run 2") and "log none" in first, first
+    assert list(cwd.iterdir()) == [] and not state_home.exists()
+    assert _undo(log, pre, "--apply") == 0
+    first = capsys.readouterr().out.splitlines()[0]
+    logs = list((state_home / "gwt-apply" / "tree-test").glob("gwt-apply-revert-*.jsonl"))
+    assert len(logs) == 1 and first.startswith("run 2") and str(logs[0]) in first, first
+    assert list(cwd.iterdir()) == []
+    lines = _lines(logs[0])
+    assert lines[0]["event"] == "start" and lines[0]["list"] == log and lines[0]["pre"] == pre
+    assert lines[-1]["event"] == "end" and lines[-1]["exit"] == 0
+    assert lines[-1]["counts"] == {"undone": 1, "changed": 0, "manual": 0, "problems": 0}
+    assert fake.store["notes"]["n1"]["text"]["string"] == "old text"
+
+
+@pytest.mark.parametrize("tree, folder", [("..", "_"), (".", "_"), ("", "_"), ("a/b", "a_b"), ("tree-1", "tree-1")])
+def test_the_log_folder_stays_inside_the_state_dir(tree, folder, state_home):
+    from types import SimpleNamespace
+    from gwt_apply.cli import _log_path
+    got = _log_path(SimpleNamespace(log=None), "RUN", tree, prefix="gwt-apply", writes=True)
+    assert got == str(state_home / "gwt-apply" / folder / "gwt-apply-RUN.jsonl")
+
+
+def test_dry_merge_delete_and_upload_lines_are_planned_never_status(fake, tmp_path):
+    log = tmp_path / "dry.jsonl"
+    client = Client("https://gw.example", "u", "s3cret-pw", tree="tree-test", dry_run=True, session=fake,
+                    log_path=str(log))
+    client.login()
+    client.merge("Event", "e1", "e2", {"x": 1})
+    client.remove("Repository", "r2")
+    assert client.upload_missing_file("m1", b"data", "image/jpeg") == "would upload"
+    client.end_log(exit=0)
+    writes = [e for e in _lines(log) if e.get("method") and not e["path"].startswith("/token/")]
+    assert [(e["method"], e["path"]) for e in writes] == [
+        ("POST", "/events/e1/merge/e2"), ("DELETE", "/repositories/r2"), ("PUT", "/media/m1/file?uploadmissing=1")]
+    assert all(e.get("planned") is True and "status" not in e for e in writes), writes
+    assert fake.writes() == []
 
 
 def test_a_real_run_logs_under_the_state_dir_and_names_it_first(fake, tmp_path, env, state_home, monkeypatch, capsys):
@@ -2555,6 +2606,18 @@ def test_a_crash_or_a_kill_ends_the_log_with_the_error(fake, tmp_path, env, monk
     end = _lines(next(tmp_path.glob("run.2*.jsonl")))[-1]
     assert end["event"] == "end" and end["exit"] is None, end
     assert end["error"].startswith(exc.__name__), end
+
+
+def test_a_run_stopped_by_sigterm_ends_the_log_with_exit_1(fake, tmp_path, env, monkeypatch):
+    import signal
+    monkeypatch.setattr("gwt_apply.cli.preflight", lambda ops, client: signal.raise_signal(signal.SIGTERM))
+    changes = _changes(tmp_path, [{"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}])
+    with pytest.raises(SystemExit):
+        main([str(changes), "--apply", "--log", str(tmp_path / "run.jsonl"), "--retry-wait", "0"])
+    end = _lines(next(tmp_path.glob("run.2*.jsonl")))[-1]
+    assert end["event"] == "end" and end["exit"] == 1, end
+    from gwt_apply.lock import LOCK_HANDLE
+    assert LOCK_HANDLE not in fake.store["notes"]  # the kill still released the lock
 
 
 def test_a_login_into_another_tree_leaves_a_refused_line(fake, tmp_path, env, state_home, capsys):

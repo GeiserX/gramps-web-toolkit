@@ -78,7 +78,8 @@ def _log_path(args, run_id: str, tree: str | None, *, prefix: str, writes: bool)
         return str(p.with_name(f"{p.stem}.{run_id}{p.suffix or '.jsonl'}"))
     if not writes:
         return None
-    folder = re.sub(r"[^A-Za-z0-9._-]", "_", tree or "") or "_"
+    folder = re.sub(r"[^A-Za-z0-9._-]", "_", tree or "")
+    folder = "_" if folder in ("", ".", "..") else folder  # never the state dir itself or the one above it
     return str(state_dir() / "gwt-apply" / folder / f"{prefix}-{run_id}.jsonl")
 
 

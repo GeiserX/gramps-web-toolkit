@@ -52,7 +52,7 @@ What it holds is one JSON object per line. Every line has `ts` (UTC) and `dry_ru
 ```
 
 - `start`: the run id, the toolkit version, the arguments, the change list's path and the sha256 of its bytes, the tree the login landed in, and the `--snapshot` file if any. A `--revert` names the log it undoes as `list` and the pre-run copy as `pre`.
-- `end`: the exit code, the count of each status (for a revert: undone, changed since the run, manual, problems), and the ops not run. `counts` is `null` when the run stopped before any op; `error` says why when an API error, a held lock or a crash stopped it, and then `exit` is `null` for a crash.
+- `end`: the exit code, the count of each status (for a revert: undone, changed since the run, manual, problems), and the ops not run. `counts` is `null` when the run stopped before any op; `error` says why when an API error, a held lock or a crash stopped it, and then `exit` is `null` for a crash. A run stopped by SIGTERM or SIGHUP ends with `exit` 1.
 - `refused`: a run that stopped before its first write says why, with `reason` (`tree` for a login that landed in another tree than `GWT_TREE`, `preflight` for likely duplicates, `snapshot-plan` when the plan on the snapshot does not go through or the tree changed since, `snapshot-tree`, or `pre` for a revert's pre-run copy) and `problems`, the lines it printed.
 - Every API call in between: the op's `key` and `ruling`, `method`, `path`, `status`, and the body of every write. `status: null` means a real request whose answer was lost: the server may have done it. A dry run's writes carry `planned: true` and no `status`.
 - After a create, its line carries `gramps_id`, the Gramps ID the server gave the new object (from the server's answer).
