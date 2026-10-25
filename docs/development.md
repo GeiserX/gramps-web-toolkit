@@ -15,6 +15,8 @@ python3 .github/scripts/run_tests.py --only apply # one package (comma-separate 
 
 CI runs the same script on every pull request ([ci.yml](https://github.com/GeiserX/gramps-web-toolkit/blob/main/.github/workflows/ci.yml)), and `node --test` for `spanish-poller` in its own job.
 
+CI also builds the package in a `wheel` job: `.github/scripts/check_wheel.sh` installs the wheel into a clean virtualenv outside the clone and runs `gwt --version`, `gwt <tool> --help` and `gwt-<tool> --help` for every tool, then `gwt check selftest`. A new Python tool goes in three places: its module in `[tool.hatch.build.targets.wheel.force-include]` and its `gwt-<tool>` line in `[project.scripts]` of the root `pyproject.toml`, and a row in `TOOLS` in `core/gwt_core/cli.py`. Miss the first and the `wheel` job fails.
+
 No test needs a Gramps Web server or a FamilySearch or MyHeritage account. The `apply` tests run against an in-process fake of the Gramps Web API, and the `gwt-mh` tests read invented fixture pages.
 
 ## Mutants: prove a test can fail

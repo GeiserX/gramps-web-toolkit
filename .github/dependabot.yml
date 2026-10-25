@@ -10,7 +10,7 @@ updates:
     cooldown:
       default-days: 3
   - package-ecosystem: pip
-    directories: ["/apply", "/fetch"]
+    directory: /
     schedule:
       interval: weekly
     labels: ["dependencies", "automated"]

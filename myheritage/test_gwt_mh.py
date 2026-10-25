@@ -839,5 +839,31 @@ class Lists(unittest.TestCase):
         self.assertEqual(mh.catalog_tsv(rows).splitlines()[0].split('\t'), list(mh.CATALOG_COLUMNS))
 
 
+class RawstoreCommand(unittest.TestCase):
+    """gwt-mh hands binaries to gwt-rawstore: $GWT_RAWSTORE_BIN, the clone's script, or the installed module."""
+
+    def test_env_wins_then_clone_script_then_module(self):
+        with mock_env(GWT_RAWSTORE_BIN='/opt/invented/gwt-rawstore'):
+            self.assertEqual(CLI.rawstore_cmd(), [sys.executable, '/opt/invented/gwt-rawstore'])
+        with mock_env(GWT_RAWSTORE_BIN=None):
+            self.assertEqual(CLI.rawstore_cmd()[1], os.path.join(HERE, '..', 'rawstore', 'gwt-rawstore'))
+            with tempfile.TemporaryDirectory() as d, contextlib.ExitStack() as st:
+                st.callback(setattr, CLI, 'HERE', CLI.HERE)
+                CLI.HERE = d     # an installed wheel: no ../rawstore beside the module
+                self.assertEqual(CLI.rawstore_cmd(), [sys.executable, '-m', 'gwt_rawstore'])
+
+
+@contextlib.contextmanager
+def mock_env(**kv):
+    old = {k: os.environ.get(k) for k in kv}
+    for k, v in kv.items():
+        os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
+    try:
+        yield
+    finally:
+        for k, v in old.items():
+            os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
+
+
 if __name__ == '__main__':
     unittest.main()
