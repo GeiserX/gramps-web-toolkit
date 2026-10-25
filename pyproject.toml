@@ -70,3 +70,4 @@ dev-mode-dirs = ["apply", "check", "fetch", "core", "ledger", "gate", "fscache",
 "myheritage/gwt-mh" = "gwt_mh_cli.py"
 "read/gwt_reader.py" = "gwt_reader.py"
 "read/gwt_read.py" = "gwt_read.py"
+"read/gwt_pares.py" = "gwt_pares.py"

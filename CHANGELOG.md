@@ -36,6 +36,7 @@ Lists written for the first public commit of `gwt-apply` behave differently in t
 - A documentation site at https://geiserx.github.io/gramps-web-toolkit/.
 - Tagged releases publish to PyPI, and `gwt --version` in a clone prints a version read from git.
 - `gwt-read familysearch`: FamilySearch record search and records with your own session token, through the cache and a slow per-account gate (one request every 30 s at best), stopping on a 403, 429, captcha, sign-in page or empty frame; it writes the same envelope and candidates files as `gwt-mh`, whose shared parts now live in `read/gwt_reader.py`.
+- `gwt-read pares`: search and descriptions from PARES, the Spanish state archives' catalogue, on the same reader shape, cache (`PARES_RULES`: searches 7 days, descriptions 90 days) and STOP rules, with its own gate (one request every 15 s at best); a page without the record text it asked for (an empty frame, the site's error page) is a STOP.
 
 ### Changed
 
