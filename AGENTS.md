@@ -36,6 +36,8 @@ page goes into the `mkdocs.yml` nav and `docs/index.md`, and `mkdocs build --str
   tree, no real case or expediente numbers, no real tree ids, hostnames, IPs, accounts or emails.
   Public records (a Gaceta page, a published parish entry) are fine with their source.
 - Never commit a secret, a certificate or a config file with credentials.
+- `README.md` is a short overview: one plain line per tool, with no options, plan or tier differences, limits or deep links
+  into the docs. Every detail lives on the tool's page in `docs/` (the site).
 
 ## Test
 
