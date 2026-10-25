@@ -262,3 +262,26 @@ def test_the_text_report_prints_at_most_limit_people(capsys):
     print_act(rep, 1)
     out = capsys.readouterr().out
     assert f"first 1 of {len(rep['candidates'])} people" in out and out.count("  I00") == 1
+
+
+def test_a_reference_is_not_found_inside_a_longer_number():
+    t = _tree()
+    selftest._get({k: list(v.values()) for k, v in t.objs.items()}, "citations", "C0001")["page"] = "folio 21"
+    [r] = compare_act(t, _act(reference="1"))["candidates"]
+    assert r["events"][0]["cited"] == "no citation text contains it"
+
+
+def test_a_spouse_name_that_fits_the_subject_is_not_the_subject_himself():
+    act = {"kind": "marriage", "date": "1895", "subject": {"given": "Mateo", "surname": "Ortega"},
+           "spouse": {"surname": "Ortega"}}  # nobody he married is an Ortega; he is one himself
+    [r] = compare_act(_tree(), act, "I0002")["candidates"]
+    assert r["family"] == [] and r["event"] == "tree has no such event (no family with that spouse)"
+
+
+def test_a_gramps_backup_is_refused_because_it_has_no_citation_text(tmp_path, capsys):
+    a = tmp_path / "a.json"
+    a.write_text(json.dumps(_act()))
+    b = tmp_path / "t.gramps"
+    b.write_text('<?xml version="1.0" encoding="UTF-8"?><database xmlns="http://gramps-project.org/xml/1.7.1/"></database>')
+    assert main(["act", str(a), str(b)]) == 2
+    assert "use a dump" in capsys.readouterr().err

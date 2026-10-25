@@ -7,3 +7,5 @@ gwt_check/act.py | and all(isinstance(who.get(k) or "", str) for k in ("given", 
 gwt_check/act.py | cands = wed or cands | cands = cands | a marriage act counts only the namesakes who have a family with the named spouse
 gwt_check/act.py | p.get("gramps_id") == person] | True] | --person picks exactly the named person
 gwt_check/act.py | if want == names[0]: | if want in names: | a place that only encloses the tree's place is not reported as the same place
+gwt_check/act.py | r"(?<!\w)" + re.escape(want) | re.escape(want) | a reference is not found inside a longer number ("1" in "folio 21")
+gwt_check/act.py | x in P and x != p["handle"] and _fits | x in P and _fits | a spouse name that fits the subject is never the subject himself
