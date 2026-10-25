@@ -1885,3 +1885,44 @@ def test_update_child_ref_conflicts_when_the_probable_note_moved_on(fake):
     assert res[0].status == "conflict"
     assert fake.store["families"]["fam"]["child_ref_list"][0]["mrel"] == "Birth"
     assert len(fake.writes()) == puts
+
+
+def test_revert_plan_only_cannot_write_and_logs_as_a_dry_run(fake, tmp_path, env):
+    log, pre, _ = _run_a_note_on_a_family(fake, tmp_path)
+    before = fake.writes()
+    assert _undo(log, pre, "--log", str(tmp_path / "plan.jsonl")) == 0
+    assert fake.writes() == before
+    lines = [json.loads(x) for p in tmp_path.glob("plan.2*.jsonl") for x in p.read_text().splitlines() if x]
+    assert lines and all(e["dry_run"] for e in lines)
+
+
+def test_update_citation_page_must_be_a_text():
+    op = {"op": "update_citation", "key": "c", "ruling": R, "citation": "C0001", "set": {"page": 12}, "expect": "folio 12"}
+    assert any("page is a non-empty text" in e for e in validate([op]))
+
+
+def test_detach_refuses_a_media_reference_that_carries_its_own_data(fake):
+    fake.add("media", {"handle": "m1", "path": "scan.jpg", "mime": "image/jpeg", "desc": "a scan"})
+    mid = fake.store["media"]["m1"]["gramps_id"]
+    fake.store["people"]["anna"]["media_list"] = [{"_class": "MediaRef", "ref": "m1", "rect": [10, 10, 60, 60],
+                                                  "note_list": [], "citation_list": [], "attribute_list": []}]
+    puts = len(fake.writes())
+    res = run(fake, [{"op": "detach", "key": "d", "ruling": R, "target": {"person": "I0001"}, "object": {"media": mid}}])
+    assert res[0].status == "conflict"
+    assert len(fake.store["people"]["anna"]["media_list"]) == 1 and len(fake.writes()) == puts
+    fake.store["people"]["anna"]["media_list"][0]["rect"] = []  # a plain reference goes
+    res = run(fake, [{"op": "detach", "key": "d2", "ruling": R, "target": {"person": "I0001"}, "object": {"media": mid}}])
+    assert res[0].status == "done" and fake.store["people"]["anna"]["media_list"] == []
+
+
+def test_revert_deletes_a_note_the_run_made_and_then_corrected(fake, tmp_path, env):
+    fake.add("families", {"handle": "fam", "mother_handle": "anna", "type": "Unknown"})
+    pre = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", pre]) == 0
+    log = _apply_list(tmp_path, [
+        {"op": "add_note", "key": "n", "ruling": R, "text": "first draft", "attach": [{"family": "F0001"}]},
+        {"op": "update_note", "key": "u", "ruling": R, "note": "key:n", "set": {"text": "second draft"}, "expect": "first draft"},
+    ], "run")
+    assert fake.store["notes"][stable_handle("n")]["text"]["string"] == "second draft"
+    assert _undo(log, pre, "--apply") == 0
+    assert fake.store["notes"] == {} and fake.store["families"]["fam"]["note_list"] == []

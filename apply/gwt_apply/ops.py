@@ -331,6 +331,8 @@ def validate(ops: list[dict]) -> list[str]:
                 f = op.get("set")
                 if not isinstance(f, dict) or not f or set(f) - CITATION_FIELDS:
                     raise ValueError(f"set takes only {sorted(CITATION_FIELDS)}")
+                if "page" in f and not (isinstance(f["page"], str) and f["page"].strip()):
+                    raise ValueError("page is a non-empty text")
                 if "page" in f and not isinstance(op.get("expect"), str):
                     raise ValueError("changing the page needs expect: the page the citation has now")
                 if "page" not in f and "expect" in op:
@@ -1013,6 +1015,10 @@ class Applier:
         if len(keep) == len(items):
             self.actions.append(f"skip: {label} does not have it in {lst}")
             return
+        for i in items:
+            if isinstance(i, dict) and i.get("ref") == handle and (i.get("rect") or any(i.get(o) for o in REF_OWN_LISTS)):
+                raise Conflict(f"{label}: its reference to {oref} carries a region, notes, citations or attributes "
+                               "that attach_existing cannot put back; not detached")
         before = copy.deepcopy(target)
         carrier[lst] = keep
         self.save(before, target)

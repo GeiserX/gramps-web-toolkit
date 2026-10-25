@@ -72,7 +72,7 @@ def _revert(args) -> int:
         return 2
     run_id = f"{datetime.now():%Y%m%d-%H%M%S}-{secrets.token_hex(3)}"
     client = Client(conf["GWT_URL"], conf["GWT_USERNAME"], conf["GWT_PASSWORD"], tree=conf.get("GWT_TREE"),
-                    dry_run=False, log_path=_log_path(args, run_id, f"gwt-apply-revert-{run_id}.jsonl"))
+                    dry_run=not args.apply, log_path=_log_path(args, run_id, f"gwt-apply-revert-{run_id}.jsonl"))
     lock, handlers = None, {}
     try:
         client.login()

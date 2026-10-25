@@ -245,13 +245,14 @@ def plan(entries: list[dict], pre: dict, live, links=None) -> list[dict]:
                               "why": f"a {cls} made by the run; the server also edits what it links to, restore the backup"})
                 continue
             now = live(cls, h)
+            written = created[(cls, h)] + puts.get((cls, h), [])  # a later op of the run may have updated it
             if now is None:
                 steps.append({"action": "skip", "cls": cls, "handle": h, "why": "already gone"})
-            elif not _any_same(now, created[(cls, h)]):
+            elif not _any_same(now, written):
                 steps.append({"action": "skip", "cls": cls, "handle": h, "changed": True,
                               "why": "changed since the run; not deleted"})
             else:
-                steps.append({"action": "delete", "cls": cls, "handle": h, "written": created[(cls, h)],
+                steps.append({"action": "delete", "cls": cls, "handle": h, "written": written,
                               "why": "made by the run"})
     # an object left alone because it changed since the run may still point at something the run made: keep that too
     held = [json.dumps(puts[(s["cls"], s["handle"])]) for s in steps
