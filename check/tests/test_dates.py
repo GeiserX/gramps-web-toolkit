@@ -255,3 +255,114 @@ def test_baseline_fails_only_the_contradiction_a_block_wrote(tmp_path, capsys):
     assert main(["check", str(new), "--baseline", str(old)]) == 1
     out = capsys.readouterr().out
     assert "FAIL child-after-parent-death: 1 new" in out and "known event-order" in out
+
+
+# -- guards each rule depends on ------------------------------------------------------------------
+
+def test_slack_and_range_edges():
+    plain = dates.span(D(1850))
+    assert dates.span(D(1850, mod=1, q=1)).hi == plain.hi + 2 * 366     # est. before 1850
+    assert dates.span(D(1850, mod=2, q=2)).lo == plain.lo - 366         # calc. after 1850
+    rng = dict(D(1850, mod=4), dateval=[0, 0, 1850, False, 0, 0, 1849, False])
+    assert dates.span(rng) is None                                      # a range that ends before it starts
+    dual = dict(D(1850, mod=4), dateval=[0, 0, 1850, False, 10, 2, 1851, True])
+    assert dates.span(dual) is None                                     # second date dual-dated
+
+
+def test_about_in_free_text_gets_the_slack():
+    for text, found in (("c. 1880", False), ("1880", True)):
+        b = Build()
+        b.person("I1", 0, birth=D(0, mod=6, text=text))
+        b.person("I2", 1, birth=D(1893, 6, 1))
+        b.family("F1", None, "I1", ["I2"])
+        assert bool(b.found("parent-age")) is found, text
+
+
+def test_only_the_persons_own_events_count():
+    """A godparent's role in someone else's baptism is not the godparent's baptism."""
+    b = Build()
+    b.person("I1", 1, birth=D(1850))
+    b.d["events"].append({"handle": "hx", "gramps_id": "E99", "type": "Baptism", "date": D(1840, 5, 1)})
+    b.d["people"][0]["event_ref_list"].append({"ref": "hx", "role": "Godparent"})
+    assert b.found() == set()
+
+
+def test_the_birth_pointer_picks_the_birth():
+    b = Build()
+    b.person("I1", 1, death=D(1860))
+    for gid, y in (("E98", 1870), ("E99", 1850)):
+        b.d["events"].append({"handle": "h" + gid, "gramps_id": gid, "type": "Birth", "date": D(y)})
+        b.d["people"][0]["event_ref_list"].append({"ref": "h" + gid, "role": "Primary"})
+    b.d["people"][0]["birth_ref_index"] = 2
+    assert b.found("event-order") == set()
+
+
+def test_a_burial_bounds_the_death():
+    b = Build()
+    b.person("I1", 1, birth=D(1800), death=D(1850, 6, 1), burial=D(1850, 5, 1))
+    assert b.found() == {("event-order", "I1 E2 E3")}
+
+    b = Build()
+    b.person("I1", 0, birth=D(1800), burial=D(1830))
+    b.person("I2", 1, birth=D(1835))
+    b.family("F1", None, "I1", ["I2"], marriage=D(1832))
+    assert b.found() == {("child-after-parent-death", "F1 I1 I2"), ("marriage-after-death", "F1 E4 I1")}
+
+
+def test_an_old_father():
+    b = Build()
+    b.person("I1", 1, birth=D(1700))
+    b.person("I2", 1, birth=D(1790))
+    b.family("F1", "I1", None, ["I2"])
+    assert b.found("parent-age") == {("parent-age", "F1 I1 I2")}
+
+
+def test_sibling_spacing_needs_exact_days_and_birth_children():
+    b = Build()
+    b.person("I1", 0, birth=D(1835))
+    b.person("I2", 1, birth=D(1860))           # a year only: it may be any day of 1860
+    b.person("I3", 1, birth=D(1860, 3, 1))
+    b.family("F1", None, "I1", ["I2", "I3"])
+    assert b.found("sibling-spacing") == set()
+
+    b = Build()
+    b.person("I1", 0, birth=D(1835))
+    b.person("I2", 1, birth=D(1860, 1, 1))
+    b.person("I3", 1, birth=D(1860, 4, 1))
+    b.family("F1", None, "I1", ["I2", "I3"], rel="Adopted")
+    assert b.found("sibling-spacing") == set()
+
+
+def test_unknown_sex_is_held_to_the_lower_marriage_age():
+    b = Build()
+    b.person("I1", 2, birth=D(1774, 6, 1))
+    b.family("F1", "I1", None, marriage=D(1787, 5, 1))
+    assert b.found("marriage-age") == set()
+
+
+def test_only_a_marriage_event_counts_as_the_marriage():
+    b = Build()
+    b.person("I1", 1, birth=D(1850))
+    b.family("F1", "I1", None, marriage=D(1840))
+    b.d["events"][-1]["type"] = "Engagement"
+    assert b.found() == set()
+
+
+def test_unread_dates_are_counted():
+    b = Build()
+    b.person("I1", 1, birth=D(1850, calendar=1), death=D(1900, mod=7))
+    _, info = run_checks(Tree(b.d))
+    assert info["dates not read"] == 2
+
+
+def test_the_age_and_spacing_checks_never_fail_a_run(tmp_path):
+    b = Build()
+    b.person("I1", 0, birth=D(1880, 1, 1))
+    b.person("I2", 1, birth=D(1890, 6, 1))     # mother of 10
+    b.person("I3", 1, birth=D(1890, 9, 1))     # 92 days after his brother
+    b.person("I4", 1, birth=D(1860))
+    b.family("F1", "I4", "I1", ["I2", "I3"], marriage=D(1891, 6, 1))   # bride of 11
+    path = tmp_path / "t.json"
+    path.write_text(json.dumps(b.d), encoding="utf-8")
+    assert {c for c, _ in b.found()} == {"parent-age", "marriage-age", "sibling-spacing"}
+    assert main(["check", str(path)]) == 0
