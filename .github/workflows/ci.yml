@@ -37,6 +37,16 @@ jobs:
             python .github/scripts/run_tests.py --mutants --only "${pkgs:-none}"
           fi
 
+  wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"  # the oldest Python the package allows
+      - name: build, install in a clean venv, run every tool from it
+        run: .github/scripts/check_wheel.sh
+
   spanish-poller:
     runs-on: ubuntu-latest
     steps:

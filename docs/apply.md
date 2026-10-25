@@ -7,10 +7,9 @@ It exists because agents that call the Gramps Web REST API directly keep making 
 ## Install and run
 
 ```sh
-cd apply
-python3 -m pip install -e .          # Python 3.11+, needs only requests
-gwt-apply changes.jsonl              # dry-run: prints the plan and the diff
-gwt-apply changes.jsonl --apply      # writes
+pipx install gramps-web-toolkit      # Python 3.11+, see Getting started
+gwt apply changes.jsonl              # dry-run: prints the plan and the diff
+gwt apply changes.jsonl --apply      # writes
 ```
 
 Settings come from the environment, or from a `KEY=VALUE` file passed with `--config` (keep it out of git; `.env` is already ignored). The environment wins.

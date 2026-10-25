@@ -7,8 +7,7 @@ It runs the [independent check](pipeline.md#the-independent-check) after an appl
 ## Install and run
 
 ```sh
-cd check
-python3 -m pip install -e .        # Python 3.11+, standard library only
+pipx install gramps-web-toolkit    # Python 3.11+, see Getting started; `gwt check` = `gwt-check`
 gwt-check selftest                 # proves every check can fail (no tree needed)
 gwt-check check                    # reads the live tree, runs every check
 gwt-check check dump.json.gz       # the same on a saved dump

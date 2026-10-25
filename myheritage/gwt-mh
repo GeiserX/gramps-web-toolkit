@@ -250,14 +250,23 @@ def cmd_fetch(S, a):
         out('%s\t%s\t%s\toriginal=%s' % (r['kind'], r['file'], r['size'], r['original']))
     binaries = [p for p, kind, _ in files if kind in mh.RAWSTORE_KINDS and os.path.exists(p)]
     if binaries and not a.no_rawstore:
-        rs = os.environ.get('GWT_RAWSTORE_BIN') or os.path.join(HERE, '..', 'rawstore', 'gwt-rawstore')
-        r = subprocess.run([sys.executable, rs, 'put', '--remove'] + binaries)
+        r = subprocess.run(rawstore_cmd() + ['put', '--remove'] + binaries)
         if r.returncode:
             err('gwt-rawstore put failed (exit %d); the files stay in %s' % (r.returncode, d))
             return 1
     out('plan\t%s' % plan)
     out('evidence\t%s' % os.path.join(d, 'manifest.tsv'))
     return mh.EXIT_OK
+
+
+def rawstore_cmd():
+    """How to run gwt-rawstore: $GWT_RAWSTORE_BIN, else the clone's ../rawstore/gwt-rawstore, else the installed module."""
+    rs = os.environ.get('GWT_RAWSTORE_BIN')
+    if not rs:
+        rs = os.path.join(HERE, '..', 'rawstore', 'gwt-rawstore')
+        if not os.path.exists(rs):
+            return [sys.executable, '-m', 'gwt_rawstore']
+    return [sys.executable, rs]
 
 
 def cmd_matches(S, a):

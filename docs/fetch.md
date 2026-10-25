@@ -2,7 +2,7 @@
 
 A research agent that opens a browser to save a register page is slow and leaves no trace of where the file came from. `gwt-fetch` downloads the file straight from the portal and writes one `manifest.tsv` row per file, so every image in your tree can be traced back to its source URL and checksum.
 
-Python 3.11 or newer with `requests`. Run it as [`fetch/gwt-fetch`](https://github.com/GeiserX/gramps-web-toolkit/blob/main/fetch/gwt-fetch), symlinked onto your `PATH` if you like, or `pip install ./fetch` for a `gwt-fetch` command. The code is in [`fetch/gwt_fetch/`](https://github.com/GeiserX/gramps-web-toolkit/tree/main/fetch/gwt_fetch). Tests: `cd fetch && python3 -m pytest`.
+Python 3.11 or newer with `requests`. Run it as [`fetch/gwt-fetch`](https://github.com/GeiserX/gramps-web-toolkit/blob/main/fetch/gwt-fetch), symlinked onto your `PATH` if you like, or install the package (`pipx install gramps-web-toolkit`, see [Getting started](getting-started.md)) for `gwt fetch` and `gwt-fetch`. The code is in [`fetch/gwt_fetch/`](https://github.com/GeiserX/gramps-web-toolkit/tree/main/fetch/gwt_fetch). Tests: `cd fetch && python3 -m pytest`.
 
 `iiif` works with any IIIF archive in any country. `digibib`, `gazeta` and `geo` cover Spanish sources only. `europeana` searches every provider in any country; `--provider Hispana` narrows it to Spain.
 

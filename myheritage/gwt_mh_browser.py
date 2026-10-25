@@ -15,13 +15,16 @@ ever stored in the cache.
 import base64, fcntl, json, os, random, sys, time, urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-for sub in ('gate', 'fscache'):
-    p = os.path.join(HERE, '..', sub)
-    if p not in sys.path:
-        sys.path.insert(0, p)
-
-from gwt_gate import Gate, Paused  # noqa: E402
-from gwt_fscache import FSCache  # noqa: E402
+try:                     # installed: gwt_gate and gwt_fscache are modules beside this one
+    from gwt_gate import Gate, Paused
+    from gwt_fscache import FSCache
+except ImportError:      # a clone: they live in ../gate and ../fscache
+    for sub in ('gate', 'fscache'):
+        p = os.path.join(HERE, '..', sub)
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    from gwt_gate import Gate, Paused
+    from gwt_fscache import FSCache
 import gwt_mh as mh  # noqa: E402
 
 GRAPHQL = '/web-family-graphql/search_in_historical_records'

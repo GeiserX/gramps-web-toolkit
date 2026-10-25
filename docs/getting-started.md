@@ -1,10 +1,10 @@
 # Getting started
 
-The toolkit is a set of separate command-line tools, one per folder. You install only the ones you use. Most need nothing but Python's standard library.
+The toolkit is a set of command-line tools, one per folder in the repository, installed together as one Python package. Every tool runs as `gwt <tool>`.
 
 ## What you need
 
-- Python 3.11 or newer for `gwt-apply`, `gwt-check`, `gwt-fetch` and `gwt-mh`. The other Python tools run on 3.8 or newer.
+- Python 3.11 or newer on macOS or Linux. The package needs only `requests`.
 - A Gramps Web server and a user of the tree you want to work on, for `gwt-apply` and the live reads of `gwt-check`. No other tool talks to Gramps Web.
 - Node 18 or newer with Playwright, only for `gwt-spanish-poller`.
 - Python Playwright and a Chrome reachable over CDP, only for `gwt-mh`.
@@ -12,29 +12,19 @@ The toolkit is a set of separate command-line tools, one per folder. You install
 ## Install
 
 ```sh
-git clone https://github.com/GeiserX/gramps-web-toolkit && cd gramps-web-toolkit
-python3 -m pip install -e apply      # gwt-apply, needs requests
-python3 -m pip install -e check      # gwt-check, standard library only
-python3 -m pip install -e fetch      # gwt-fetch, needs requests
+pipx install gramps-web-toolkit            # every Python tool
+pipx install 'gramps-web-toolkit[mh]'      # the same, plus Playwright for gwt mh
+gwt                                        # lists the tools
+gwt --version
 ```
 
-The other tools run from their folders in the clone; symlink them onto your `PATH` if you like. A few need more than Python:
+PyPI gets the package with the first release. Until then, install it from GitHub: `pipx install git+https://github.com/GeiserX/gramps-web-toolkit`. Plain `pip install` into a virtualenv works too.
 
-| Tool | Run it as | Needs |
-|---|---|---|
-| [gwt-import-excel](import-excel.md) | `importxl/gwt-import-excel` | standard library |
-| [gwt-leads](leads.md) | `leads/gwt-leads` | standard library |
-| [gwt-queue](queue.md) | `queue/gwt-queue` | standard library |
-| [gwt-ledger](ledger.md) | `ledger/gwt-ledger` | standard library |
-| [gwt-rank](rank.md) | `rank/gwt-rank` | standard library |
-| [gwt-gate](gate.md) | `gate/gwt-gate` | standard library, macOS or Linux |
-| [gwt-fscache](fscache.md) | `fscache/gwt-fscache` | standard library |
-| [gwt-rawstore](rawstore.md) | `rawstore/gwt-rawstore` | standard library and an S3-compatible bucket |
-| [gwt-mh](myheritage.md) | `myheritage/gwt-mh` | `pip install playwright` and a Chrome over CDP |
-| [gwt-spanish-poller](spanish-poller.md) | `spanish-poller/gwt-spanish-poller` | Node 18+, `npm install` in its folder |
-| [ocr-bench](ocr-bench.md) | `ocr-bench/run.sh` | one virtualenv per engine, built by `ocr-bench/setup.sh` |
+The package installs one command, `gwt`. `gwt <tool> ...` runs that tool and loads nothing else, and `gwt <tool> --help` prints its options. Each tool also keeps its own `gwt-<tool>` command (`gwt-apply`, `gwt-check`, ...), so scripts written for those names keep working. The PyPI package named `gwt` is an unrelated project: install `gramps-web-toolkit`, never `gwt`.
 
-Every `gwt-` Python tool prints its options with `--help`. For `gwt-spanish-poller` and `ocr-bench`, read their pages.
+To work on the code, install the clone in editable mode: `python3 -m pip install -e .` at its root. The tools still run from their folders too (`ledger/gwt-ledger`, `check/gwt-check`, ...).
+
+Two tools are not in the package. [gwt-spanish-poller](spanish-poller.md) needs Node 18+ and `npm install` in its folder. [ocr-bench](ocr-bench.md) needs one virtualenv per engine, built by `ocr-bench/setup.sh`. Read their pages.
 
 ## Connect to your tree
 
@@ -54,7 +44,7 @@ Both tools compare `GWT_TREE` with the tree named in the login token and stop if
 1. Prove the checks can fail. This needs no server:
 
     ```sh
-    gwt-check selftest
+    gwt check selftest
     ```
 
     It plants every kind of error in a made-up tree and ends with `OK: 38 planted errors, 0 problem(s)`.
@@ -62,14 +52,14 @@ Both tools compare `GWT_TREE` with the tree named in the login token and stop if
 2. Save the tree once, then check it offline:
 
     ```sh
-    gwt-apply --save-snapshot tree.json.gz
-    gwt-check check tree.json.gz
+    gwt apply --save-snapshot tree.json.gz
+    gwt check check tree.json.gz
     ```
 
 3. Write a change list, one JSON object per line (the format is in [gwt-apply](apply.md#the-change-list)), and dry-run it against the snapshot. Nothing is written:
 
     ```sh
-    gwt-apply changes.jsonl --snapshot tree.json.gz
+    gwt apply changes.jsonl --snapshot tree.json.gz
     ```
 
     The dry run prints the plan: what each op would create, what it skips because it is already there, and any conflict that would stop the run.
@@ -77,8 +67,8 @@ Both tools compare `GWT_TREE` with the tree named in the login token and stop if
 4. When the plan is right, write it, then check the tree again:
 
     ```sh
-    gwt-apply changes.jsonl --snapshot tree.json.gz --apply
-    gwt-check check --since tree.json.gz
+    gwt apply changes.jsonl --snapshot tree.json.gz --apply
+    gwt check check --since tree.json.gz
     ```
 
     `--since` reads the live tree, diffs it against the snapshot and checks only what is new or changed since then.

@@ -34,12 +34,12 @@ The toolkit works for genealogy in any country. One module, `spanish-poller`, is
 ## Quick start
 
 ```bash
-git clone https://github.com/GeiserX/gramps-web-toolkit && cd gramps-web-toolkit
-python3 -m pip install -e apply      # Python 3.11+, needs only requests
-gwt-apply changes.jsonl              # dry-run: prints the plan and the diff
+pipx install gramps-web-toolkit      # Python 3.11+, macOS or Linux; every Python tool, needs only requests
+gwt                                  # lists the tools
+gwt apply changes.jsonl              # dry-run: prints the plan and the diff
 ```
 
-`gwt-check`, the ledger, queue, cache, rank and rawstore tools need only the Python standard library and run from their folders (`check/gwt-check`, `importxl/gwt-import-excel`, `ledger/gwt-ledger`, `queue/gwt-queue`, `leads/gwt-leads`, `fscache/gwt-fscache`, `gate/gwt-gate`, `rank/gwt-rank`, `rawstore/gwt-rawstore`). `gwt-mh` (`myheritage/gwt-mh`) needs Python Playwright (`pip install playwright`) and a Chrome it reaches over CDP. `gwt-spanish-poller` needs Node 18+ and Playwright. [Getting started](https://geiserx.github.io/gramps-web-toolkit/getting-started/) has the full table and a first run against your tree.
+PyPI gets the package with the first release; until then install from GitHub with `pipx install git+https://github.com/GeiserX/gramps-web-toolkit`. Every tool runs as `gwt <tool>` and keeps its old `gwt-<tool>` command too. `gwt mh` needs the `mh` extra (`pipx install 'gramps-web-toolkit[mh]'`) and a Chrome it reaches over CDP. `gwt-spanish-poller` needs Node 18+ and Playwright and is not in the package. [Getting started](https://geiserx.github.io/gramps-web-toolkit/getting-started/) has the details and a first run against your tree.
 
 ## Documentation
 
