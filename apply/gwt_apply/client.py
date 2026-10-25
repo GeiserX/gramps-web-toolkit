@@ -157,8 +157,12 @@ class Client:
                     method, self.base + path, headers=headers, timeout=120, **kw
                 )
             except (requests.ConnectionError, requests.Timeout) as exc:
-                # the write may or may not have happened: the op starts over from fresh reads
-                self.log(method=method, path=path, status=None, error=f"{type(exc).__name__}: {exc}"[:500])
+                # the write may or may not have happened: the op starts over from fresh reads. The body goes in the
+                # log line, so a revert can tell whether the server holds it.
+                entry = {"method": method, "path": path, "status": None, "error": f"{type(exc).__name__}: {exc}"[:500]}
+                if write and "json" in kw:
+                    entry["body"] = kw["json"]
+                self.log(**entry)
                 raise Retryable(f"{method} {path}: {type(exc).__name__}") from exc
             kw["headers"] = {k: v for k, v in headers.items() if k != "Authorization"}
             if r.status_code == 401 and attempt == 1:
@@ -198,9 +202,13 @@ class Client:
             return obj
         return self.get_live(cls, handle)
 
-    def get_live(self, cls: str, handle: str) -> dict | None:
+    def get_live(self, cls: str, handle: str, *, backlinks: bool = False) -> dict | None:
+        """The object as the server has it now. With `backlinks`, also what points at it ({class: [handles]})."""
         self._touched(cls, handle)
-        r = self._request("GET", f"/{NAMESPACE[cls]}/{handle}")
+        if backlinks:
+            r = self._request("GET", f"/{NAMESPACE[cls]}/{handle}", params={"backlinks": "true"})
+        else:
+            r = self._request("GET", f"/{NAMESPACE[cls]}/{handle}")
         if r.status_code == 404:
             return None
         if r.status_code != 200:

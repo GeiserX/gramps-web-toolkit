@@ -86,6 +86,15 @@ class FakeGrampsWeb:
     def by_id(self, ns: str, gramps_id: str) -> dict:
         return next(o for o in self.store[ns].values() if o["gramps_id"] == gramps_id)
 
+    def backlinks(self, handle: str) -> dict[str, list[str]]:
+        """Every object that holds `handle` anywhere in it, by lower-case class."""
+        out: dict[str, list[str]] = {}
+        for ns, (cls, _) in NS.items():
+            for h, o in self.store[ns].items():
+                if h != handle and handle in json.dumps(o):
+                    out.setdefault(cls.lower(), []).append(h)
+        return out
+
     def writes(self) -> list[tuple[str, str]]:
         return [c for c in self.calls if c[0] in ("POST", "PUT", "DELETE") and c[1] != "/api/token/"]
 
@@ -169,7 +178,10 @@ class FakeGrampsWeb:
             if obj is None:
                 return Resp(404, {"error": "not found"})
             if method == "GET":
-                resp = Resp(200, copy.deepcopy(obj), {"ETag": self._etag(obj)})
+                body = copy.deepcopy(obj)
+                if params.get("backlinks") in (True, "true", "1"):  # like the server: {class: [handles]}, lower case
+                    body["backlinks"] = self.backlinks(parts[1])
+                resp = Resp(200, body, {"ETag": self._etag(obj)})
                 if self.edit_after_read and self.edit_after_read[0] == parts[1]:
                     self.edit_after_read, (_, fn) = None, self.edit_after_read
                     fn(obj)

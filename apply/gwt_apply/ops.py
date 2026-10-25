@@ -35,6 +35,11 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "update_person": ({"person", "set"}, set()),
     "update_event": ({"event", "set"}, set()),
     "update_place": ({"place", "set"}, set()),
+    "update_note": ({"note", "set"}, {"expect"}),
+    "update_citation": ({"citation", "set"}, {"expect"}),
+    "update_family": ({"family", "set"}, set()),
+    "update_child_ref": ({"family", "child"}, {"set", "confirm_probable", "expect"}),
+    "detach": ({"target", "object"}, set()),
     "add_event": ({"type"}, {"person", "family", "role", "date", "place", "description", "gramps_id"}),
     "add_family": (set(), {"father", "mother", "children", "type", "gramps_id"}),
     "link_child": ({"family", "child"}, {"frel", "mrel", "probable", "probable_reason"}),
@@ -71,6 +76,11 @@ ADDRESS_KEYS = {"street", "locality", "city", "county", "state", "country", "pos
 REPOSITORY_FIELDS = {"name", "type", "url", "address"}
 EVENT_FIELDS = {"type", "date", "place", "description"}
 PLACE_FIELDS = {"lat", "long"}
+NOTE_FIELDS = {"text", "type"}
+CITATION_FIELDS = {"page", "confidence", "date"}
+FAMILY_FIELDS = {"type"}
+CHILD_REF_FIELDS = {"frel", "mrel"}
+CONFIRMED = "[confirmed]"  # what a [probable] mark becomes once a document settles the link
 GENDER = {"F": 0, "M": 1, "U": 2}
 SINGLE_VITAL = {"Birth": "birth_ref_index", "Death": "death_ref_index"}
 PROBABLE = "[probable]"  # how a doubtful parent link is marked: a note on its child_ref starting with this
@@ -231,7 +241,7 @@ def validate(ops: list[dict]) -> list[str]:
         else:
             payloads[payload] = where
         refs = [op.get(f) for f in ("person", "family", "father", "mother", "child", "source", "place", "enclosed_by",
-                                    "winner", "loser", "repository")]
+                                    "winner", "loser", "repository", "note", "citation")]
         refs += list(op.get("children") or [])
         if name == "attach_existing":
             refs += _target_refs(op.get("object"))
@@ -240,6 +250,8 @@ def validate(ops: list[dict]) -> list[str]:
         refs += _ref_list(op.get("namesake_of")) if op.get("namesake_of") else []
         for t in [op.get("target"), *(op.get("attach") or [])]:
             refs += _target_refs(t)
+        if name == "detach":
+            refs += _target_refs(op.get("object"))
         for ref in refs:
             if ref is not None and not (isinstance(ref, str) and (ref.startswith("key:") or _GRAMPS_ID.match(ref))):
                 errors.append(f"{where}: {ref!r} is neither key:<key> nor a Gramps ID (never a handle)")
@@ -303,6 +315,56 @@ def validate(ops: list[dict]) -> list[str]:
                 if not isinstance(s, dict) or not s or set(s) - PLACE_FIELDS:
                     raise ValueError(f"set takes only {sorted(PLACE_FIELDS)}")
                 _check_coords(s)
+            if name == "update_note":
+                f = op.get("set")
+                if not isinstance(f, dict) or not f or set(f) - NOTE_FIELDS:
+                    raise ValueError(f"set takes only {sorted(NOTE_FIELDS)}")
+                for k in f:
+                    if not isinstance(f[k], str) or not f[k].strip():
+                        raise ValueError(f"{k} is a non-empty text")
+                if "text" in f and not isinstance(op.get("expect"), str):
+                    raise ValueError("changing the text needs expect: the text the note has now, so a note that "
+                                     "changed since you read it is a conflict and not overwritten")
+                if "text" not in f and "expect" in op:
+                    raise ValueError("expect goes with set.text")
+            if name == "update_citation":
+                f = op.get("set")
+                if not isinstance(f, dict) or not f or set(f) - CITATION_FIELDS:
+                    raise ValueError(f"set takes only {sorted(CITATION_FIELDS)}")
+                if "page" in f and not (isinstance(f["page"], str) and f["page"].strip()):
+                    raise ValueError("page is a non-empty text")
+                if "page" in f and not isinstance(op.get("expect"), str):
+                    raise ValueError("changing the page needs expect: the page the citation has now")
+                if "page" not in f and "expect" in op:
+                    raise ValueError("expect goes with set.page")
+                if "confidence" in f and f["confidence"] not in (0, 1, 2, 3, 4):
+                    raise ValueError("confidence is 0-4")
+                if "date" in f:
+                    parse_date(f["date"])
+            if name == "update_family":
+                f = op.get("set")
+                if not isinstance(f, dict) or not f or set(f) - FAMILY_FIELDS:
+                    raise ValueError(f"set takes only {sorted(FAMILY_FIELDS)}")
+                if not isinstance(f["type"], str) or not f["type"].strip():
+                    raise ValueError("type is a non-empty text, e.g. Married")
+            if name == "update_child_ref":
+                f = op.get("set") or {}
+                if not f and not op.get("confirm_probable"):
+                    raise ValueError("give set (frel, mrel) or confirm_probable, or both")
+                if not isinstance(f, dict) or set(f) - CHILD_REF_FIELDS:
+                    raise ValueError(f"set takes only {sorted(CHILD_REF_FIELDS)}")
+                for k in f:
+                    if not isinstance(f[k], str) or not f[k].strip():
+                        raise ValueError(f"{k} is a non-empty text, e.g. Birth")
+                if "confirm_probable" in op and not (isinstance(op["confirm_probable"], str) and op["confirm_probable"].strip()):
+                    raise ValueError("confirm_probable is the reason: the document that settles the link")
+                if "expect" in op and not op.get("confirm_probable"):
+                    raise ValueError("expect goes with confirm_probable")
+            if name == "detach":
+                cls, _ = _parse_target(op.get("target"))
+                ocls, _, lst = _parse_object(op.get("object"))
+                if cls not in CARRIES[lst]:
+                    raise ValueError(f"a {cls} cannot carry a {lst[:-5]}")
             if name == "set_attribute" and _parse_target(op.get("target"))[0] in ("ChildRef", "PersonRef"):
                 raise ValueError("a child_ref or an association has no attributes")
             if name in ("add_repository", "update_repository"):
@@ -857,6 +919,109 @@ class Applier:
                 },
                 marker=PROBABLE,
             )
+
+    def update_note(self, op):
+        """Correct a note the tree has. A new text needs `expect`, the text it has now: a note someone changed
+        since you read it is a Conflict, never overwritten. The old text stays in the log line."""
+        self._update_note(self.obj("Note", op["note"]), op["set"], op.get("expect"))
+
+    def _update_note(self, note: dict, s: dict, expect: str | None) -> None:
+        note.setdefault("_class", "Note")
+        before = copy.deepcopy(note)
+        text = (note.get("text") or {}).get("string") or ""
+        if "text" in s and text != s["text"]:
+            if text != expect:
+                raise Conflict(f"Note {self.label(note)} no longer reads as expected (it reads {text[:80]!r}...); read it again")
+            note["text"] = {**(note.get("text") or {"_class": "StyledText"}), "string": s["text"], "tags": []}
+        if "type" in s:
+            note["type"] = s["type"]
+        if note == before:
+            self.actions.append(f"skip: Note {self.label(note)} already has those values")
+            return
+        self.save(before, note)
+
+    def update_citation(self, op):
+        cit = self.obj("Citation", op["citation"])
+        cit.setdefault("_class", "Citation")
+        before = copy.deepcopy(cit)
+        s = op["set"]
+        if "page" in s and (cit.get("page") or "").strip() != s["page"].strip():
+            if (cit.get("page") or "").strip() != op["expect"].strip():
+                raise Conflict(f"Citation {self.label(cit)} no longer has the page {op['expect']!r} (it has {cit.get('page')!r})")
+            cit["page"] = s["page"].strip()
+        if "confidence" in s:
+            cit["confidence"] = int(s["confidence"])
+        if "date" in s and date_key(cit.get("date")) != date_key(parse_date(s["date"])):
+            cit["date"] = parse_date(s["date"])
+        if cit == before:
+            self.actions.append(f"skip: Citation {self.label(cit)} already has those values")
+            return
+        self.save(before, cit)
+
+    def update_family(self, op):
+        family = self.obj("Family", op["family"])
+        family.setdefault("_class", "Family")
+        before = copy.deepcopy(family)
+        family["type"] = op["set"]["type"]
+        if family == before:
+            self.actions.append(f"skip: Family {self.label(family)} already has that type")
+            return
+        self.save(before, family)
+
+    def update_child_ref(self, op):
+        """Change a parent link's relation (frel, mrel), and/or settle a [probable] link: its mark becomes
+        "[confirmed] <reason> (was: <the old reason>)", so the history of the doubt stays on the link."""
+        family, entry, label = self.holder("ChildRef", (op["family"], op["child"]))
+        before = copy.deepcopy(family)
+        for k, v in (op.get("set") or {}).items():
+            entry[k] = v
+        reason = (op.get("confirm_probable") or "").strip()
+        marked = []
+        if reason:  # every check before the first write: a conflict leaves the server as it was
+            notes = self.c.get_many("Note", entry.get("note_list") or [])
+            marked = [n for n in notes if ((n.get("text") or {}).get("string") or "").startswith(PROBABLE)]
+            done = [n for n in notes if ((n.get("text") or {}).get("string") or "").startswith(CONFIRMED)]
+            if not marked and not done:
+                raise Conflict(f"{label} has no [probable] note to confirm")
+            if len(marked) > 1:
+                raise Conflict(f"{label} has more than one [probable] note")
+            if marked and "expect" in op and marked[0]["text"]["string"] != op["expect"]:
+                raise Conflict(f"the [probable] note of {label} no longer reads as expected "
+                               f"(it reads {marked[0]['text']['string'][:80]!r}...)")
+            if not marked:
+                self.actions.append(f"skip: {label} is already confirmed (Note {self.label(done[0])})")
+        if family != before:
+            self.save(before, family)
+        elif not marked:
+            if not reason:
+                self.actions.append(f"skip: {label} already has those relations")
+            return
+        if marked:
+            cur = marked[0]["text"]["string"]
+            old = cur[len(PROBABLE):].strip()
+            # by handle: a note made earlier in this list has no Gramps ID this run knows
+            note = self.c.get("Note", marked[0]["handle"])
+            self._update_note(note, {"text": f"{CONFIRMED} {reason} (was: {PROBABLE} {old})"}, cur)
+
+    def detach(self, op):
+        """Take a note, citation or media reference off a target. The object stays in the tree (an orphan
+        that gwt-check lists), so nothing is lost and attach_existing can put it back."""
+        ocls, oref, lst = _parse_object(op["object"])
+        handle = self.resolve(ocls, oref)
+        cls, ref = _parse_target(op["target"])
+        target, carrier, label = self.holder(cls, ref)
+        items = carrier.get(lst) or []
+        keep = [i for i in items if (i if isinstance(i, str) else i.get("ref")) != handle]
+        if len(keep) == len(items):
+            self.actions.append(f"skip: {label} does not have it in {lst}")
+            return
+        for i in items:
+            if isinstance(i, dict) and i.get("ref") == handle and (i.get("rect") or any(i.get(o) for o in REF_OWN_LISTS)):
+                raise Conflict(f"{label}: its reference to {oref} carries a region, notes, citations or attributes "
+                               "that attach_existing cannot put back; not detached")
+        before = copy.deepcopy(target)
+        carrier[lst] = keep
+        self.save(before, target)
 
     def add_place(self, op):
         if self._existing("Place", op):
