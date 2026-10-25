@@ -158,7 +158,7 @@ def _revert_run(args, argv, client: Client, run_id: str, entries, snap, pre, out
                             lambda cls, h: (client.get_live(cls, h, backlinks=True) or {}).get("backlinks"))
         for s in steps:
             print(f"[{s['action']}] {s['cls']} {s['handle']}: {s['why']}")
-        todo = [s for s in steps if s["action"] in ("restore", "delete")]
+        todo = [s for s in steps if s["action"] in ("restore", "recreate", "delete")]
         manual = [s for s in steps if s["action"] == "manual"]
         print(f"{len(todo)} to undo, {sum(s['action'] == 'skip' for s in steps)} skipped "
               f"({sum(bool(s.get('changed')) for s in steps)} changed since the run), {len(manual)} for the backup")
@@ -171,7 +171,7 @@ def _revert_run(args, argv, client: Client, run_id: str, entries, snap, pre, out
                 print(f"[skip] {s['cls']} {s['handle']}: {s['why']}")
         for p in problems:
             print(f"PROBLEM: {p}", file=sys.stderr)
-        done = sum(s["action"] in ("restore", "delete") for s in todo)
+        done = sum(s["action"] in ("restore", "recreate", "delete") for s in todo)
         changed = sum(bool(s.get("changed")) for s in steps)
         outcome["counts"] = {"undone": done, "changed": changed, "manual": len(manual), "problems": len(problems)}
         print(f"{done} undone and read back, {changed} changed since the run and left alone, "

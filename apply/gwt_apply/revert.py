@@ -9,6 +9,8 @@ writes whose answer was lost or came back 5xx (the server may still have done th
 what each object was. Newest write first:
 
 - an object the run changed (PUT) goes back to its pre-run copy, once, whatever the number of writes;
+- a note the run deleted (unlink_child removes the mark of the link it takes away) is made again from its
+  pre-run copy, before the objects that pointed at it are restored;
 - a note, citation, event, place, source, repository or tag the run made (POST) is deleted, after every
   restore, and only while nothing points at it any more (the server's backlinks: a later run that reused the
   tag or attached the note keeps it);
@@ -17,7 +19,7 @@ what each object was. Newest write first:
   again right before it is written.
 
 Not undone, reported for a backup restore: people and families the run made (the server also edits the
-objects around them), merges, deletes and media uploads.
+objects around them), merges, deletes of anything but a note, and media uploads.
 """
 
 from __future__ import annotations
@@ -204,11 +206,31 @@ def plan(entries: list[dict], pre: dict, live, links=None) -> list[dict]:
                 puts[(cls, h)].append(e["body"])
             else:
                 blind.add((cls, h))
+        elif m == "DELETE" and _cls_of_path(path)[0] == "Note":
+            key = _cls_of_path(path)
+            if ("recreate", *key) not in seen:
+                seen.add(("recreate", *key))
+                order.append(("recreate", *key))
         else:
             manual.append({"action": "manual", "cls": "?", "handle": path,
                            "why": f"{m} {path}: a merge, delete or upload is not undone from the log; restore the backup"})
     steps = []
     for kind, cls, h in reversed(order):
+        if kind == "recreate":
+            before = pre.get((cls, h))
+            if (cls, h) in created:
+                steps.append({"action": "skip", "cls": cls, "handle": h, "why": "made and deleted by this run"})
+            elif before is None:
+                steps.append({"action": "manual", "cls": cls, "handle": h,
+                              "why": "deleted by the run and not in the pre-run copy; cannot make it again"})
+            elif live(cls, h) is not None:
+                steps.append({"action": "skip", "cls": cls, "handle": h, "why": "already in the tree"})
+            else:
+                body = {k: v for k, v in before.items() if k not in ("extended", "profile", "backlinks", "change")}
+                body.setdefault("_class", cls)
+                steps.append({"action": "recreate", "cls": cls, "handle": h, "body": body,
+                              "why": "deleted by the run; made again from its pre-run copy"})
+            continue
         if kind == "put":
             if (cls, h) in created:
                 steps.append({"action": "skip", "cls": cls, "handle": h, "why": "made by this run; its delete covers it"})
@@ -326,10 +348,14 @@ def execute(client: Client, steps: list[dict], pre: dict, *, lock=None, retries:
             return
         client.update(dict(s["body"]))
 
-    for s in steps:
-        if s["action"] == "restore":
+    def recreate(s):
+        if client.get_live(s["cls"], s["handle"]) is None:  # else made by this step's own earlier try
+            client.create(dict(s["body"]))
+
+    for s in steps:  # newest first: a deleted note is back before the object that pointed at it is restored
+        if s["action"] in ("restore", "recreate"):
             refresh()
-            _busy(lambda: restore(s), retries, retry_wait)
+            _busy(lambda: (restore if s["action"] == "restore" else recreate)(s), retries, retry_wait)
 
     pending = [s for s in steps if s["action"] == "delete"]
     blocked: dict[int, set] = {}
@@ -359,7 +385,7 @@ def execute(client: Client, steps: list[dict], pre: dict, *, lock=None, retries:
 
     problems = []
     for s in steps:
-        if s["action"] == "restore":
+        if s["action"] in ("restore", "recreate"):
             now = client.get_live(s["cls"], s["handle"])
             if now is None or not _same(now, pre[(s["cls"], s["handle"])]):
                 problems.append(f"{s['cls']} {s['handle']} does not read back as before the run")

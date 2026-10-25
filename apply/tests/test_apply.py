@@ -3027,3 +3027,173 @@ def test_verify_reasons_of_a_retried_op_are_said_once(fake, monkeypatch):
         [{"op": "update_citation", "key": "r", "ruling": R, "citation": "C0001", "set": {"confidence": 3}}])
     assert len(tries) == 2 and res[0].status == "done"
     assert res[0].reasons == ["differs: Citation C0001 confidence 2 != 3"]
+
+
+# -- unlink_child: take a child out of a family linked by mistake ------------
+
+
+def _linked_kid(fake, ref_notes=(), ref_cits=()):
+    """Tom Example (I0002), child of Family F0001 (mother Anna), both sides of the link in place."""
+    fake.add("people", {"handle": "kid", "gender": 1, "primary_name": {"first_name": "Tom", "surname_list": [{"surname": "Example", "primary": True}]}})
+    fake.add("families", {"handle": "fam", "mother_handle": "anna", "type": "Unknown", "child_ref_list": [
+        {"ref": "kid", "frel": "Birth", "mrel": "Birth", "note_list": list(ref_notes), "citation_list": list(ref_cits)}]})
+    assert fake.store["people"]["kid"]["parent_family_list"] == ["fam"]
+
+
+def _unlink(**extra):
+    return {"op": "unlink_child", "key": "u-tom", "ruling": R, "family": "F0001", "child": "I0002",
+            "reason": "the baptism names another mother", **extra}
+
+
+def test_unlink_child_takes_both_sides_and_keeps_people_and_family(fake):
+    _linked_kid(fake)
+    res = run(fake, [_unlink()])
+    assert res[0].status == "done", res[0].actions
+    assert fake.store["families"]["fam"]["child_ref_list"] == [] and fake.store["families"]["fam"]["mother_handle"] == "anna"
+    kid = fake.store["people"]["kid"]
+    assert kid["parent_family_list"] == [] and len(fake.store["people"]) == 2
+    (note,) = [fake.store["notes"][h] for h in kid["note_list"]]
+    assert note["text"]["string"] == "[unlinked from Family F0001] the baptism names another mother"
+    assert note["type"] == "Research"
+    assert not any(a.startswith("warning") for a in res[0].actions)  # the family still has its mother
+    writes = len(fake.writes())
+    again = run(fake, [_unlink()])
+    assert again[0].status == "skip" and "not a child of Family F0001" in again[0].actions[-1]
+    assert len(fake.writes()) == writes
+    # linked again by mistake and taken out again under another key: the same note is reused, not repeated
+    fake.store["families"]["fam"]["child_ref_list"] = [{"ref": "kid", "frel": "Birth", "mrel": "Birth"}]
+    kid["parent_family_list"] = ["fam"]
+    assert run(fake, [_unlink(key="u-tom-2")])[0].status == "done"
+    assert len(fake.store["people"]["kid"]["note_list"]) == 1 and len(fake.store["notes"]) == 1
+
+
+def test_unlink_child_repairs_a_one_sided_link_and_warns_on_an_empty_family(fake):
+    _linked_kid(fake)
+    fake.store["people"]["kid"]["parent_family_list"] = []  # only the family has it
+    res = run(fake, [_unlink()])
+    assert res[0].status == "done"
+    assert any("fixed the family's side only" in a for a in res[0].actions), res[0].actions
+    assert fake.store["families"]["fam"]["child_ref_list"] == []
+    # only the person has it, in a family with nobody else
+    fake.add("families", {"handle": "fam2", "type": "Unknown"})  # F0002
+    fake.store["people"]["kid"]["parent_family_list"] = ["fam2"]
+    res = run(fake, [_unlink(key="u2", family="F0002")])
+    assert res[0].status == "done"
+    assert any("fixed the person's side only" in a for a in res[0].actions), res[0].actions
+    assert fake.store["people"]["kid"]["parent_family_list"] == [] and "fam2" in fake.store["families"]
+    assert not any(a.startswith("warning") for a in res[0].actions)  # this op took no child out of it
+    # the last member taken out: the family stays, with a warning
+    fake.store["families"]["fam2"]["child_ref_list"] = [{"ref": "kid", "frel": "Birth", "mrel": "Birth"}]
+    res = run(fake, [_unlink(key="u3", family="F0002")])
+    assert "warning: Family F0002 now has no father, no mother and no children; it is not deleted" in res[0].actions
+    assert "fam2" in fake.store["families"]
+
+
+def test_unlink_child_removes_the_probable_mark_with_the_link(fake):
+    _linked_kid(fake)
+    assert run(fake, [{"op": "link_child", "key": "l", "ruling": R, "family": "F0001", "child": "I0002",
+                       "probable": True, "probable_reason": "parents from the index only"}])[0].status == "done"
+    mark = fake.store["families"]["fam"]["child_ref_list"][0]["note_list"][0]
+    res = run(fake, [_unlink()])
+    assert res[0].status == "done", res[0].actions
+    assert mark not in fake.store["notes"]
+    assert any(a.startswith("delete Note") and "[probable]" in a for a in res[0].actions)
+    assert fake.store["families"]["fam"]["child_ref_list"] == []
+
+
+def test_unlink_child_keeps_what_else_the_link_carries(fake):
+    _note(fake, "wl", "[wrong link] the godmother, not the mother")  # N0001
+    _note(fake, "why", "Read in the 1890 census")  # N0002
+    fake.add("citations", {"handle": "cit1", "source_handle": "src1", "page": "folio 3"})  # C0001
+    _linked_kid(fake, ref_notes=["wl", "why"], ref_cits=["cit1"])
+    res = run(fake, [_unlink()])
+    assert res[0].status == "conflict"
+    assert "Note N0002, Citation C0001" in res[0].actions[-1] and "N0001" not in res[0].actions[-1]
+    assert fake.writes() == [] or all(w[0] != "PUT" for w in fake.writes())
+    assert fake.store["people"]["kid"]["parent_family_list"] == ["fam"]
+    res = run(fake, [_unlink(drop_link_sources=True)])
+    assert res[0].status == "done", res[0].actions
+    assert "why" in fake.store["notes"] and "cit1" in fake.store["citations"]  # detached, still in the tree
+    assert "wl" not in fake.store["notes"]  # the mark went with the link
+    assert any("detached from the link" in a and "Note N0002" in a for a in res[0].actions)
+
+
+def test_unlink_child_keeps_a_mark_that_is_also_held_elsewhere(fake):
+    _note(fake, "wl", "[wrong link] the godmother, not the mother")  # N0001
+    _linked_kid(fake, ref_notes=["wl"])
+    fake.store["people"]["kid"]["note_list"] = ["wl"]  # the same note on the person too
+    res = run(fake, [_unlink()])
+    assert res[0].status == "conflict" and "Note N0001" in res[0].actions[-1]
+    fake.store["people"]["kid"]["note_list"] = []
+    fake.store["families"]["fam"]["note_list"] = ["wl"]  # on the family itself, outside the link
+    res = run(fake, [_unlink()])
+    assert res[0].status == "conflict" and "Note N0001" in res[0].actions[-1]
+
+
+def test_unlink_child_whose_second_write_lost_its_answer_is_done(fake):
+    _linked_kid(fake)
+    fake.drop_after = ("PUT", "/api/people/", 1)  # the reason note goes on Tom, then his parent families: answer lost
+    res = run(fake, [_unlink()])
+    assert res[0].status == "done" and res[0].answer_lost, res[0].actions
+    assert any(a.startswith("answer lost on try 1: PUT /people/kid") and "shows the change in place" in a
+               for a in res[0].actions), res[0].actions
+    assert fake.store["people"]["kid"]["parent_family_list"] == []
+    assert fake.writes().count(("PUT", "/api/people/kid")) == 2
+
+
+def test_unlink_child_finishes_deleting_the_mark_after_a_lost_answer(fake):
+    _note(fake, "wl", "[wrong link] the godmother, not the mother")
+    _linked_kid(fake, ref_notes=["wl"])
+    fake.drop_after = ("PUT", "/api/people/", 1)
+    res = run(fake, [_unlink()])
+    assert res[0].status == "done", res[0].actions
+    assert "wl" not in fake.store["notes"] and fake.store["people"]["kid"]["parent_family_list"] == []
+
+
+def test_validate_unlink_child():
+    assert validate([_unlink()]) == [] and validate([_unlink(drop_link_sources=False)]) == []
+    op = _unlink()
+    del op["reason"]
+    assert "missing ['reason']" in "\n".join(validate([op]))
+    assert "reason is a non-empty text" in "\n".join(validate([_unlink(reason="   ")]))
+    assert "drop_link_sources is true or false" in "\n".join(validate([_unlink(drop_link_sources="yes")]))
+    assert "never a handle" in "\n".join(validate([_unlink(family="0123b4e9269542049080d7a4c798")]))
+
+
+def test_revert_puts_an_unlinked_child_and_its_mark_back(fake, tmp_path, env):
+    _note(fake, "wl", "[wrong link] the godmother, not the mother")
+    _linked_kid(fake, ref_notes=["wl"])
+    pre = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", pre]) == 0
+    log = _apply_list(tmp_path, [_unlink()], "run")
+    assert "wl" not in fake.store["notes"] and fake.store["families"]["fam"]["child_ref_list"] == []
+    assert _undo(log, pre, "--apply") == 0
+    assert fake.store["families"]["fam"]["child_ref_list"][0]["ref"] == "kid"
+    assert fake.store["families"]["fam"]["child_ref_list"][0]["note_list"] == ["wl"]
+    assert fake.store["people"]["kid"]["parent_family_list"] == ["fam"]
+    assert fake.store["notes"]["wl"]["text"]["string"] == "[wrong link] the godmother, not the mother"
+    assert fake.store["notes"]["wl"]["gramps_id"] == "N0001"
+    assert list(fake.store["notes"]) == ["wl"] and fake.store["people"]["kid"]["note_list"] == []  # reason note gone
+
+
+def test_unlink_child_dry_run_on_a_snapshot_and_verify(fake, tmp_path, env, monkeypatch, capsys):
+    _note(fake, "wl", "[wrong link] the godmother, not the mother")
+    _linked_kid(fake, ref_notes=["wl"])
+    changes = _changes(tmp_path, [_unlink()])
+    assert main([str(changes), "--verify"]) == 1  # pending: a write
+    out = capsys.readouterr().out
+    assert "[done] u-tom" in out and "differs: Family F0001 child_ref_list" in out and "missing: delete Note N0001" in out
+    snap = tmp_path / "tree.json.gz"
+    assert main(["--save-snapshot", str(snap)]) == 0
+    import gwt_apply.client as clientmod
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: NoServer())
+    capsys.readouterr()
+    assert main([str(changes), "--snapshot", str(snap)]) == 0
+    out = capsys.readouterr().out
+    assert "update Family F0001: child_ref_list" in out and "update Person I0002: parent_family_list" in out, out
+    assert "delete Note N0001" in out
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: fake)
+    assert main([str(changes), "--apply"]) == 0
+    capsys.readouterr()
+    assert main([str(changes), "--verify"]) == 0  # applied: a skip
+    assert "[skip] u-tom" in capsys.readouterr().out
