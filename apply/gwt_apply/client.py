@@ -6,10 +6,16 @@ import base64
 import copy
 import json
 import time
+import urllib.parse
 from datetime import datetime, timezone
 from typing import Any
 
 import requests
+
+from . import version
+
+# the Gramps Web maintainer asks every API client to say who it is
+USER_AGENT = f"gramps-web-toolkit/{version()} (gwt-apply; +https://github.com/GeiserX/gramps-web-toolkit)"
 
 # Gramps class -> REST namespace
 NAMESPACE = {
@@ -40,6 +46,20 @@ class Stale(ApiError):
     """An object read from the snapshot changed on the server since: take a new snapshot."""
 
 
+def api_base(url: str) -> str:
+    """GWT_URL -> the API root. The site address and the API address (ending in /api) both work."""
+    url = url.strip().rstrip("/")
+    return (url[: -len("/api")] if url.endswith("/api") else url) + "/api"
+
+
+def url_problem(url: str) -> str | None:
+    """Why GWT_URL cannot be used, or None."""
+    parts = urllib.parse.urlsplit(url.strip())
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        return f"GWT_URL must be an http:// or https:// address, such as https://gramps.example.org; got {url!r}"
+    return None
+
+
 def jwt_claims(token: str) -> dict:
     payload = token.split(".")[1]
     return json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
@@ -55,13 +75,16 @@ class Client:
         password: str,
         *,
         tree: str | None = None,
+        token: str | None = None,
         dry_run: bool = True,
         log_path: str | None = None,
         session: Any = None,
     ):
-        self.base = url.rstrip("/") + "/api"
+        self.base = api_base(url)
         self.username = username
         self._password = password
+        # a persistent Gramps Web access token of scope "sync": exchanged for a JWT instead of the password
+        self._sync_token = token
         self.expected_tree = tree
         self.dry_run = dry_run
         self.session = session or requests.Session()
@@ -112,17 +135,19 @@ class Client:
             if wait > 0:
                 time.sleep(wait)
             self._last_login = time.monotonic()
+            # the sync endpoint answers no refresh token: a 401 later on exchanges the token again
+            if self._sync_token:
+                path, body = "/token/sync/", {"token": self._sync_token}
+            else:
+                path, body = "/token/", {"username": self.username, "password": self._password}
             try:
                 r = self.session.request(
-                    "POST",
-                    self.base + "/token/",
-                    json={"username": self.username, "password": self._password},
-                    timeout=60,
+                    "POST", self.base + path, json=body, headers={"User-Agent": USER_AGENT}, timeout=60
                 )
             except (requests.ConnectionError, requests.Timeout) as exc:
-                self.log(method="POST", path="/token/", status=None, error=type(exc).__name__)
+                self.log(method="POST", path=path, status=None, error=type(exc).__name__)
                 raise Retryable(f"login: {type(exc).__name__}") from exc
-            self.log(method="POST", path="/token/", status=r.status_code)
+            self.log(method="POST", path=path, status=r.status_code)
             if r.status_code != 429:
                 break
             time.sleep(float(r.headers.get("Retry-After") or 5 * attempt))
@@ -152,6 +177,7 @@ class Client:
         for attempt in (1, 2):
             headers = dict(kw.pop("headers", {}) or {})
             headers["Authorization"] = f"Bearer {self.token}"
+            headers["User-Agent"] = USER_AGENT
             try:
                 r = self.session.request(
                     method, self.base + path, headers=headers, timeout=120, **kw

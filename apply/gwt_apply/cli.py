@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import revert, snapshot
-from .client import ApiError, Client
+from .client import ApiError, Client, url_problem
 from .dupes import preflight
 from .lock import LockHeld, TreeLock, read_lock
 from .ops import Applier, load_change_list, validate
@@ -29,6 +29,21 @@ def read_config(path: str | None) -> dict:
                     conf[k.strip()] = v.strip().strip("'\"")
     conf.update({k: v for k, v in os.environ.items() if k.startswith("GWT_")})
     return conf
+
+
+def settings_problem(conf: dict) -> str | None:
+    """What stops a login: a missing setting, or a GWT_URL that is no web address."""
+    need = ["GWT_URL"] + ([] if conf.get("GWT_TOKEN") else ["GWT_USERNAME", "GWT_PASSWORD"])
+    missing = [k for k in need if not conf.get(k)]
+    if missing:
+        hint = " (or GWT_TOKEN instead of a username and password)" if missing != ["GWT_URL"] else ""
+        return f"missing settings: {', '.join(missing)}{hint}"
+    return url_problem(conf["GWT_URL"])
+
+
+def _client(conf: dict, **kw) -> Client:
+    return Client(conf.get("GWT_URL", ""), conf.get("GWT_USERNAME", ""), conf.get("GWT_PASSWORD", ""),
+                  tree=conf.get("GWT_TREE"), token=conf.get("GWT_TOKEN") or None, **kw)
 
 
 def _plan_on_snapshot(ops: list[dict], snap: dict, client: Client, *, tag: str | None = None) -> list[str]:
@@ -63,16 +78,16 @@ def _revert(args) -> int:
         print(f"revert: {exc}", file=sys.stderr)
         return 2
     conf = read_config(args.config)
-    missing = [k for k in ("GWT_URL", "GWT_USERNAME", "GWT_PASSWORD") if not conf.get(k)]
-    if missing:
-        print(f"missing settings: {', '.join(missing)}", file=sys.stderr)
+    problem = settings_problem(conf)
+    if problem:
+        print(problem, file=sys.stderr)
         return 2
     if args.apply and not conf.get("GWT_TREE"):
         print("--apply needs GWT_TREE (the tree id the login must land in)", file=sys.stderr)
         return 2
     run_id = f"{datetime.now():%Y%m%d-%H%M%S}-{secrets.token_hex(3)}"
-    client = Client(conf["GWT_URL"], conf["GWT_USERNAME"], conf["GWT_PASSWORD"], tree=conf.get("GWT_TREE"),
-                    dry_run=not args.apply, log_path=_log_path(args, run_id, f"gwt-apply-revert-{run_id}.jsonl"))
+    client = _client(conf, dry_run=not args.apply,
+                     log_path=_log_path(args, run_id, f"gwt-apply-revert-{run_id}.jsonl"))
     lock, handlers = None, {}
     try:
         client.login()
@@ -130,7 +145,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("change_list", nargs="?", help="JSON array, {\"ops\": [...]}, or JSONL")
     ap.add_argument("--apply", action="store_true", help="write; without it nothing is written")
-    ap.add_argument("--config", help="KEY=VALUE file with GWT_URL, GWT_USERNAME, GWT_PASSWORD, GWT_TREE")
+    ap.add_argument("--config", help="KEY=VALUE file with GWT_URL, GWT_USERNAME and GWT_PASSWORD (or GWT_TOKEN), GWT_TREE")
     ap.add_argument("--log", help="JSONL log of every API call; the run id is added to the name "
                     "(default gwt-apply-<run id>.jsonl)")
     ap.add_argument("--snapshot", metavar="FILE",
@@ -178,23 +193,16 @@ def main(argv: list[str] | None = None) -> int:
     offline = snap is not None and not args.apply
 
     conf = read_config(args.config)
-    missing = [k for k in ("GWT_URL", "GWT_USERNAME", "GWT_PASSWORD") if not conf.get(k)]
-    if missing and not offline:
-        print(f"missing settings: {', '.join(missing)}", file=sys.stderr)
+    problem = None if offline else settings_problem(conf)
+    if problem:
+        print(problem, file=sys.stderr)
         return 2
     if args.apply and not conf.get("GWT_TREE"):
         print("--apply needs GWT_TREE (the tree id the login must land in)", file=sys.stderr)
         return 2
     run_id = f"{datetime.now():%Y%m%d-%H%M%S}-{secrets.token_hex(3)}"
     log = _log_path(args, run_id, f"gwt-apply-{run_id}.jsonl")
-    client = Client(
-        conf.get("GWT_URL", ""),
-        conf.get("GWT_USERNAME", ""),
-        conf.get("GWT_PASSWORD", ""),
-        tree=conf.get("GWT_TREE"),
-        dry_run=not args.apply,
-        log_path=log,
-    )
+    client = _client(conf, dry_run=not args.apply, log_path=log)
     try:
         if offline:
             client.use_snapshot(snap, offline=True)

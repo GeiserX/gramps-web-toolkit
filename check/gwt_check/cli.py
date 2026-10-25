@@ -9,7 +9,7 @@ import sys
 import time
 
 from .checks import CHECKS, INFO_CHECKS, run_checks
-from .client import ApiError, Client
+from .client import ApiError, Client, url_problem
 from . import compare
 from .compare import ahnentafel, compare_ahnentafel, diff
 from .tree import READ_MARGIN, BadInput, Tree, load, save
@@ -36,10 +36,16 @@ SEEN_IN = 3  # passes in a row a finding must show in while the tree is being wr
 
 def _client(args) -> Client:
     conf = read_config(args.config)
-    missing = [k for k in ("GWT_URL", "GWT_USERNAME", "GWT_PASSWORD") if not conf.get(k)]
+    need = ["GWT_URL"] + ([] if conf.get("GWT_TOKEN") else ["GWT_USERNAME", "GWT_PASSWORD"])
+    missing = [k for k in need if not conf.get(k)]
     if missing:
-        raise BadInput(f"missing settings: {', '.join(missing)}")
-    client = Client(conf["GWT_URL"], conf["GWT_USERNAME"], conf["GWT_PASSWORD"], tree=conf.get("GWT_TREE"))
+        hint = " (or GWT_TOKEN instead of a username and password)" if missing != ["GWT_URL"] else ""
+        raise BadInput(f"missing settings: {', '.join(missing)}{hint}")
+    bad = url_problem(conf["GWT_URL"])
+    if bad:
+        raise BadInput(bad)
+    client = Client(conf["GWT_URL"], conf.get("GWT_USERNAME", ""), conf.get("GWT_PASSWORD", ""),
+                    tree=conf.get("GWT_TREE"), token=conf.get("GWT_TOKEN") or None)
     try:
         client.login()
     except ApiError as exc:
@@ -270,7 +276,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     def live_opts(p):
-        p.add_argument("--config", help="KEY=VALUE file with GWT_URL, GWT_USERNAME, GWT_PASSWORD, GWT_TREE")
+        p.add_argument("--config", help="KEY=VALUE file with GWT_URL, GWT_USERNAME and GWT_PASSWORD (or GWT_TOKEN), GWT_TREE")
         p.add_argument("--pagesize", type=int, default=1000, help="objects per request (default 1000)")
         p.add_argument("--workers", type=int, default=4, help="requests in flight at once (default 4)")
         p.add_argument("--live", action="store_true",

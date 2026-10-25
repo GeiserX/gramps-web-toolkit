@@ -1549,6 +1549,7 @@ def test_revert_compares_what_the_server_keeps_not_its_defaults(tmp_path):
     log = tmp_path / "l.jsonl"
     log.write_text("\n".join(json.dumps(e) for e in [
         {"method": "POST", "path": "/token/", "status": 200},
+        {"method": "POST", "path": "/token/sync/", "status": 200},  # the GWT_TOKEN login
         {"method": "DELETE", "path": "/notes/" + revert.LOCK_HANDLE, "status": 200},
         {"method": "POST", "path": "/objects/", "status": 201, "body": [{"_class": "Note", "handle": revert.LOCK_HANDLE}]},
     ]) + "\n")
@@ -1926,6 +1927,62 @@ def test_revert_deletes_a_note_the_run_made_and_then_corrected(fake, tmp_path, e
     assert fake.store["notes"][stable_handle("n")]["text"]["string"] == "second draft"
     assert _undo(log, pre, "--apply") == 0
     assert fake.store["notes"] == {} and fake.store["families"]["fam"]["note_list"] == []
+
+
+# -- the connection: User-Agent, sync token, GWT_URL ---------------------------
+
+
+def test_every_request_names_the_toolkit(fake, scan):
+    run(fake, full_list(scan))
+    assert len(fake.headers) == len(fake.calls) > 5
+    for (method, path), headers in zip(fake.calls, fake.headers):
+        ua = headers.get("User-Agent", "")
+        assert ua.startswith("gramps-web-toolkit/"), (method, path, headers)
+        assert "(gwt-apply; +https://github.com/GeiserX/gramps-web-toolkit)" in ua
+
+
+def test_a_sync_token_logs_in_without_a_password(fake, tmp_path, env, monkeypatch, capsys):
+    fake.sync_tokens["persistent-sync-token"] = "tree-test"
+    for k in ("GWT_USERNAME", "GWT_PASSWORD"):
+        monkeypatch.delenv(k)
+    monkeypatch.setenv("GWT_TOKEN", "persistent-sync-token")
+    assert main(["--save-snapshot", str(tmp_path / "s.json.gz")]) == 0, capsys.readouterr().err
+    assert ("POST", "/api/token/sync/") in fake.calls and ("POST", "/api/token/") not in fake.calls
+    sent = fake.headers[fake.calls.index(("POST", "/api/token/sync/"))]
+    assert "Authorization" not in sent
+
+
+def test_a_sync_token_is_exchanged_again_after_a_401(fake):
+    fake.sync_tokens["persistent-sync-token"] = "tree-test"
+    c = Client("https://gw.example", "", "", token="persistent-sync-token", tree="tree-test", dry_run=False,
+               session=fake)
+    op = {"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}
+    c.login()
+    fake.expire = 1  # the short-lived JWT runs out mid-run; no refresh token to fall back on
+    res = Applier(c, retries=1, retry_wait=0).run([op])
+    assert res[0].status == "done", res[0].actions
+    assert fake.calls.count(("POST", "/api/token/sync/")) == 2
+
+
+def test_a_sync_token_for_another_tree_is_refused(fake):
+    fake.sync_tokens["persistent-sync-token"] = "another-tree"
+    c = Client("https://gw.example", "", "", token="persistent-sync-token", tree="tree-test", session=fake)
+    with pytest.raises(ApiError, match="expected"):
+        c.login()
+
+
+def test_a_trailing_api_in_the_url_is_dropped(fake):
+    for url in ("https://gw.example/api", "https://gw.example/api/", "https://gw.example/"):
+        fake.calls.clear()
+        Client(url, "u", "pw", session=fake).login()
+        assert fake.calls == [("POST", "/api/token/")], url
+
+
+def test_a_url_without_a_scheme_is_a_settings_error(env, monkeypatch, capsys):
+    monkeypatch.setenv("GWT_URL", "gw.example")
+    assert main(["--save-snapshot", "never.json.gz"]) == 2
+    err = capsys.readouterr().err
+    assert "GWT_URL" in err and "http" in err and "snapshot:" not in err
 
 
 # -- one test per row of apply/mutants.txt: each fails when its guard is mutated away --
