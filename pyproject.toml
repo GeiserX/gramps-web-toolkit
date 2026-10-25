@@ -1,12 +1,12 @@
 # One distribution for every Python tool. The folders stay where they are; the wheel maps them in.
 # spanish-poller (Node) and ocr-bench (a hand-run benchmark) are not part of it.
 [build-system]
-requires = ["hatchling>=1.24"]
+requires = ["hatchling>=1.24", "hatch-vcs>=0.4"]
 build-backend = "hatchling.build"
 
 [project]
 name = "gramps-web-toolkit"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Command-line tools for running AI research agents against a Gramps Web family tree without letting them write guesses into it"
 readme = "README.md"
 license = "GPL-3.0-or-later"
@@ -44,6 +44,10 @@ gwt-rank = "gwt_rank:main"
 gwt-import-excel = "gwt_import_excel:main"
 gwt-rawstore = "gwt_rawstore:main"
 gwt-mh = "gwt_core.cli:mh"
+
+# The version comes from the git tag: `v0.2.0` builds 0.2.0; a commit after it builds 0.2.1.devN+g<sha>.
+[tool.hatch.version]
+source = "vcs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["apply/gwt_apply", "check/gwt_check", "fetch/gwt_fetch", "core/gwt_core"]

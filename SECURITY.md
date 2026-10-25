@@ -10,4 +10,4 @@ You will get an answer within 72 hours. Include what you found, how to reproduce
 
 ## Supported versions
 
-Only the latest release receives security fixes.
+Only the latest release on PyPI (https://pypi.org/project/gramps-web-toolkit/) receives security fixes.
