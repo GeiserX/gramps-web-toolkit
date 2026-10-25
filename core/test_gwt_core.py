@@ -37,6 +37,31 @@ class Dispatcher(unittest.TestCase):
         self.assertEqual((code, out.strip()), (0, "gwt " + version()))
         self.assertNotEqual(version(), "unknown")
 
+    def test_checkout_version_comes_from_git(self):
+        # Run from a clone with nothing installed: the version names the commit, as hatch-vcs does in a build.
+        import subprocess
+        from importlib import metadata
+        from unittest import mock
+        vmod = sys.modules["gwt_core.version"]
+        sha = subprocess.run(["git", "-C", ROOT, "rev-parse", "--short", "HEAD"],
+                             capture_output=True, text=True, check=True).stdout.strip()
+        with mock.patch.object(vmod.metadata, "version", side_effect=metadata.PackageNotFoundError):
+            v = vmod.version()
+        exact = subprocess.run(["git", "-C", ROOT, "describe", "--tags", "--exact-match", "--match", "v[0-9]*"],
+                               capture_output=True, text=True)
+        if exact.returncode == 0:
+            self.assertEqual(v, exact.stdout.strip()[1:])
+        else:
+            self.assertRegex(v, r"^\d+\.\d+(\.\d+)?\.dev\d+\+g[0-9a-f]+$")
+            self.assertIn("+g" + sha, v)
+
+    def test_checkout_version_after_a_tag(self):
+        from unittest import mock
+        vmod = sys.modules["gwt_core.version"]
+        for described, want in (("v0.2.0-0-gabc1234", "0.2.0"), ("v0.2.0-5-gabc1234", "0.2.1.dev5+gabc1234")):
+            with mock.patch.object(vmod, "_git", return_value=described):
+                self.assertEqual(vmod._from_git(), want)
+
     def test_unknown_tool_is_an_error(self):
         code, _, err = run(["nope"])
         self.assertEqual(code, 2)

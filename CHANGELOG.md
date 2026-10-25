@@ -1,0 +1,48 @@
+# Changelog
+
+Every release of gramps-web-toolkit, newest first. The format follows https://keepachangelog.com/en/1.1.0/ and the versions follow https://semver.org/. A release is a `v*` tag; PyPI gets the package from it.
+
+Every release has a **Change lists** heading. It names each change that makes a change list that worked before behave differently: an op that is now refused, a field that is now required, a different skip or duplicate rule, a different default. Read it before applying an old list with a new version. "None" is a valid entry; a missing heading is not, and the release workflow stops on it.
+
+## [Unreleased]
+
+Everything since the first public commit. The first tag will be `v0.2.0`.
+
+### Change lists
+
+Lists written for the first public commit of `gwt-apply` behave differently in these ways:
+
+- `allow_namesake` needs `namesake_reason` and `namesake_of`; a namesake without them is refused.
+- Two ops in one list that make the same change are refused, and a pre-flight read reports every likely duplicate person before the first write.
+- `add_transcription` is refused without `margin_reading` (what the margins say, or `none` once looked).
+- `--apply` holds a lock in the tree; a second `--apply` on the same tree stops before writing and names the holder.
+- A list planned on a snapshot is refused when the tree moved since the snapshot.
+- Every object a run creates carries the run's tag. An empty run tag is refused, and a tag the server reports as created but does not keep stops the op.
+- A Gramps ID with a suffix (`I0042-b`) is accepted in every op; a bare handle is still refused.
+- A person with one name and no surname is accepted.
+- `namesake_of` by `key:` resolves people an earlier list created.
+- `gwt-import-excel` stops with exit 2 on an unknown mapping field instead of dropping that column.
+
+### Added
+
+- `gwt`, one command for every Python tool (`gwt <tool> ...`), installed with one `pip install gramps-web-toolkit`; each `gwt-<tool>` command stays.
+- `gwt-apply`: offline planning on a snapshot (`--save-snapshot`, `--since`), merges of people, families and events through Gramps' own merge, DNA matches as associations, `attach_existing`, `dedupe_list`, `update_place`, repositories, `update_note`, `update_citation`, `update_family`, `update_child_ref`, `detach`, and `--revert` to undo one run from its log.
+- `gwt-check`: read-only whole-tree checks, `--baseline`, `--ignore-check`, accepted findings with a reason, disconnected family components, contradictory dates, living-people privacy checks, missing event places found in their citations, and offline checks of saved snapshots.
+- `gwt-ledger` (shared search ledger, one file per lane), `gwt-gate` (one request pace per machine), `gwt-queue` (search tasks for parallel lanes), `gwt-leads` (tree gaps as queue tasks), `gwt-rank` (orders FamilySearch results), `gwt-import-excel` (workbooks to change lists), `gwt-rawstore` (originals in S3) and `gwt-mh` (MyHeritage through a signed-in browser).
+- Both Gramps Web clients send a toolkit User-Agent and log in with a sync token (`GWT_TOKEN`).
+- A documentation site at https://geiserx.github.io/gramps-web-toolkit/.
+- Tagged releases publish to PyPI, and `gwt --version` in a clone prints a version read from git.
+
+### Changed
+
+- `gwt-fetch` searches every Europeana provider by default.
+- `poller` is now `spanish-poller`.
+- `gwt-apply` runs about 30% faster, writes a person's associations once, and checks an apply on an updated snapshot instead of the server.
+- `gwt-check` after a write refreshes a saved tree file instead of reading the whole tree again.
+
+### Fixed
+
+- `gwt-check`: timeouts are retried, a pedigree-collapsed Ahnentafel walk is bounded and a truncated walk fails, info findings no longer hold a read open, writes during a check no longer abort it, and namesakes with differently named parents are no longer fuzzy duplicates.
+- `gwt-ledger`: a shared catalogue prefix no longer hides a different search, an unreadable ledger exits 2, and non-Latin and blocked queries are found again.
+- `gwt-gate`: a dead session or a permission refusal is no longer reported as a rate limit.
+- `gwt-leads`, `gwt-rank`, `gwt-import-excel` and `gwt-queue`: fixes to living-person detection, surname-first rows and lease handling.

@@ -1,0 +1,135 @@
+name: Release
+
+# A `v*` tag builds the sdist and wheel, publishes them to PyPI through trusted
+# publishing (OIDC: no token is stored anywhere), and creates the GitHub release
+# from the tag's section of CHANGELOG.md. The build fails before anything is
+# published when the tag and the built version differ or CHANGELOG.md has no
+# section for the version.
+#
+# A manual run (workflow_dispatch) is the dry run: it builds a dev version of
+# the branch it runs on and publishes it to TestPyPI only, never to PyPI, and
+# creates no release.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # hatch-vcs reads the version from the tags
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build twine hatch-vcs
+      - name: version
+        id: version
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            # TestPyPI, like PyPI, refuses a local version (+g<sha>), so the dry run drops it.
+            v=$(python -c 'from setuptools_scm import get_version; print(get_version(local_scheme="no-local-version"))')
+            echo "SETUPTOOLS_SCM_PRETEND_VERSION=$v" >> "$GITHUB_ENV"
+            echo "version=$v" >> "$GITHUB_OUTPUT"
+          fi
+      - name: build
+        run: python -m build
+      - name: check the build
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          python -m twine check --strict dist/*
+          ls dist
+          for f in "dist/gramps_web_toolkit-$VERSION.tar.gz" "dist/gramps_web_toolkit-$VERSION-py3-none-any.whl"; do
+            [ -f "$f" ] || { echo "::error::expected $f: the tag and the built version differ"; exit 1; }
+          done
+      - name: release notes from CHANGELOG.md
+        if: github.ref_type == 'tag'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          awk -v v="$VERSION" '
+            /^## \[/ { if (found) exit; if (index($0, "## [" v "]") == 1) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "::error::CHANGELOG.md has no '## [$VERSION]' section; rename Unreleased before tagging"
+            exit 1
+          fi
+          if ! grep -q '^### Change lists' notes.md; then
+            echo "::error::the $VERSION section of CHANGELOG.md has no '### Change lists' heading"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+      - uses: actions/upload-artifact@v7
+        if: github.ref_type == 'tag'
+        with:
+          name: notes
+          path: notes.md
+
+  testpypi:
+    if: github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/gramps-web-toolkit
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+
+  pypi:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/gramps-web-toolkit
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    needs: pypi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - uses: actions/download-artifact@v8
+        with:
+          name: notes
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes-file notes.md
