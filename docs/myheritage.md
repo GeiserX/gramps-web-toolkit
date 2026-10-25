@@ -129,7 +129,7 @@ Not measured yet: how a paid account serves image bytes, and at what size. Steps
 
 ## 8. Search output and the ledger
 
-`search` writes the envelope (`<key>.json`: URL, final URL, page text, HTML, captured search JSON) and `<key>.candidates.json`, and prints the ledger `source` and `evidence` path. Sources: `myheritage`, `myheritage-oldnews` (collection 12040 and other OldNews collections), and `myheritage-espejo-fs-<cid>` for a collection that mirrors a FamilySearch one. The ledger compares sources as exact slugs, so a mirror row never counts as the FamilySearch search done. `gwt-mh` never writes the ledger; the lane runs `gwt-ledger check` before and `add` after.
+`search` writes the envelope (`<key>.json`: URL, final URL, page text, HTML, captured search JSON) and `<key>.candidates.json`, and prints the ledger `source` and `evidence` path: the [reader shape](read.md#the-reader-shape) `gwt-read` writes for FamilySearch too. Sources: `myheritage`, `myheritage-oldnews` (collection 12040 and other OldNews collections), and `myheritage-espejo-fs-<cid>` for a collection that mirrors a FamilySearch one. The ledger compares sources as exact slugs, so a mirror row never counts as the FamilySearch search done. `gwt-mh` never writes the ledger; the lane runs `gwt-ledger check` before and `add` after.
 
 Each normalized candidate is the matched person (`principal`), with relatives under `relatives` (`father`, `mother`, `parent`, `spouse`, `child`, `other`). A masked value is `null` or `""` and its field is listed in `mh.masked`, so a verifier can tell "hidden on this plan" from "not in the record". Extra fields stay under `mh` and the ranker ignores them.
 
@@ -145,7 +145,7 @@ Only `equivalent` lets MyHeritage go first for that collection, under `myheritag
 
 ## 10. FamilySearch, for a follow-up
 
-FamilySearch gives original images for many collections at no cost; some are limited to signed-in users, affiliate libraries or FamilySearch centers. Our FamilySearch tools download images ([gwt-fetch](fetch.md)) but do not yet keep the image, the record JSON and the citation in rawstore with a manifest like this one. Aligning them is a follow-up.
+FamilySearch gives original images for many collections at no cost; some are limited to signed-in users, affiliate libraries or FamilySearch centers. [gwt-read](read.md) searches FamilySearch and reads its records in the same shape as `gwt-mh`, and [gwt-fetch](fetch.md) downloads images, but neither yet keeps the image, the record JSON and the citation in rawstore with a manifest like this one. Aligning them is a follow-up.
 
 ## Commands and options
 

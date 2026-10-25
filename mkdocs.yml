@@ -141,6 +141,7 @@ nav:
       - gwt-rank: rank.md
       - gwt-fetch: fetch.md
       - gwt-mh: myheritage.md
+      - gwt-read: read.md
       - gwt-rawstore: rawstore.md
       - ocr-bench: ocr-bench.md
       - gwt-spanish-poller: spanish-poller.md

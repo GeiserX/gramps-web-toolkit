@@ -69,13 +69,9 @@ def cmd_search(S, a):
         S.plan.add([dict(o, at=env['captured_at']) for o in mh.search_observations(items, mh.normalize_url(url))])
     cands = [mh.candidate(x) for x in items]
     key = mh.search_key(url, a.given, a.surname, a.by)
-    base = os.path.join(a.out, key)
-    mh.write_json(base + '.json', env)
-    mh.write_json(base + '.candidates.json', {'candidates': cands})
+    base = mh.gwt_reader.write_search(a.out, key, env, cands)
     source = mh.source_slug(a.collection or '') if a.collection else 'myheritage'
-    out('source\t%s' % source)
-    out('evidence\t%s.json' % base)
-    out('candidates\t%s.candidates.json' % base)
+    mh.gwt_reader.print_paths(source, base, out)
     out('plan\t%s' % S.plan.label())
     out('results\t%s total, %d read%s' % (total if total is not None else '?', len(cands),
                                          ' (cache)' if env.get('from_cache') else ''))

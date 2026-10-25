@@ -24,7 +24,13 @@ TTLs go by URL pattern, first match wins. `None` means the entry never expires. 
 | `/search/`, `/service/search/` | 7 days |
 | anything else | 7 days |
 
-Pass `rules=[(regex, seconds_or_None), ...]` and `default_ttl=` for another site.
+Pass `rules=[(regex, seconds_or_None), ...]` and `default_ttl=` for another site. `PARES_RULES` is the set [gwt-read pares](read.md#pares) uses:
+
+| URL pattern | TTL |
+|---|---|
+| `/catalogo/search` (the search form, fetched only for its session cookie) | 0, never served |
+| `/catalogo/description/` (one archival description) | 90 days |
+| `/catalogo/find?` (a search) | 7 days |
 
 ## As a module
 

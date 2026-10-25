@@ -44,6 +44,7 @@ gwt-rank = "gwt_rank:main"
 gwt-import-excel = "gwt_import_excel:main"
 gwt-rawstore = "gwt_rawstore:main"
 gwt-mh = "gwt_core.cli:mh"
+gwt-read = "gwt_read:main"
 
 # The version comes from the git tag: `v0.2.0` builds 0.2.0; a commit after it builds 0.2.1.devN+g<sha>.
 [tool.hatch.version]
@@ -53,7 +54,7 @@ source = "vcs"
 packages = ["apply/gwt_apply", "check/gwt_check", "fetch/gwt_fetch", "core/gwt_core"]
 # `pip install -e .` puts these folders on sys.path instead of copying files
 dev-mode-dirs = ["apply", "check", "fetch", "core", "ledger", "gate", "fscache", "queue", "leads", "rank",
-                 "importxl", "rawstore", "myheritage"]
+                 "importxl", "rawstore", "myheritage", "read"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "ledger/gwt_ledger.py" = "gwt_ledger.py"
@@ -67,3 +68,6 @@ dev-mode-dirs = ["apply", "check", "fetch", "core", "ledger", "gate", "fscache",
 "myheritage/gwt_mh.py" = "gwt_mh.py"
 "myheritage/gwt_mh_browser.py" = "gwt_mh_browser.py"
 "myheritage/gwt-mh" = "gwt_mh_cli.py"
+"read/gwt_reader.py" = "gwt_reader.py"
+"read/gwt_read.py" = "gwt_read.py"
+"read/gwt_pares.py" = "gwt_pares.py"
