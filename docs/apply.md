@@ -238,18 +238,29 @@ Two habits from those rounds belong around every apply, with or without this too
 A backup restores the whole tree. When one run went wrong and the rest of the tree has moved on since, undo only that run:
 
 ```bash
-gwt-check dump before.json.gz            # or gwt-apply --save-snapshot before.json.gz, before the run
+gwt-apply --save-snapshot before.json.gz   # or gwt-check dump before.json.gz, right before the run
 gwt-apply changes.jsonl --apply --log run.jsonl
 gwt-apply --revert run.<run id>.jsonl --pre before.json.gz           # plan: prints every step, writes nothing
 gwt-apply --revert run.<run id>.jsonl --pre before.json.gz --apply   # undo, then read each object back
 ```
 
-`--revert` reads the real run's log (dry-run lines are ignored) and the pre-run copy, and goes through the writes newest first:
+`--pre` must be a `--save-snapshot` or a `gwt-check dump` of the same tree, taken right before the run. A `.gramps` export is not accepted. The revert refuses, with exit 2 and nothing written, a copy of another tree, a copy taken after the run's first write, and a copy that already holds an object the run made.
+
+`--revert` reads the real run's log (dry-run lines are ignored) and the pre-run copy, and goes through the writes newest first. A write whose answer was lost, or that came back 5xx, counts as a write: the server may have done it.
 
 | In the log | Step |
 |---|---|
 | PUT of an object that exists in the pre-run copy | `restore`: the object goes back to its pre-run copy, once, however many times the run wrote it |
-| POST of a note, citation, event, place, source, repository or tag | `delete` |
+| POST of a note, citation, event, place, source, repository or tag | `delete`, after every restore, and only once nothing points at it |
 | anything else: a person or family the run made, a merge, a delete, a media upload | `manual`: the server also edits the objects around these, so restore the backup |
 
-Nothing is overwritten that is no longer what the run left. A restore whose object changed since the run, and a delete of something a changed object still points at, are `skip` lines that say why. An object already as before the run is a `skip` too, so running the revert twice is safe. `--apply` takes the tree lock, then reads every restored object back and every deleted one again and reports a problem if it is not as expected. The exit code is 1 on a problem or when any `manual` step is left. The revert writes its own log, `gwt-apply-revert-<run id>.jsonl`.
+The revert never overwrites anything that differs from what the run left:
+
+- An object that changed since the run is a `skip` line that says why, and so is a delete of something a changed object still points at.
+- A delete reads the object's backlinks first. While anything still points at it, it is kept: a later run that used the same `--tag`, or attached the note somewhere else, keeps the tag and the note.
+- A restore is `manual` when the pre-run copy is older than what the run read. Restoring it would also undo the edits made in between.
+- An object already as before the run is a `skip` too, so running the revert twice is safe.
+
+With `--apply` the tree lock is taken before the plan reads anything. Each object is read again right before it is written, and an object that changed since the plan is skipped. Busy answers are tried again. If the revert stops halfway, run the same command again: what is already undone reads as a skip. At the end it reads every restored object back and checks every deleted one again.
+
+The exit code is 0 when the run is undone. It is 1 on a problem, when a `manual` step is left, or when an object changed since the run and was left alone. The revert writes its own log: `gwt-apply-revert-<run id>.jsonl`, or `<stem>.<run id><suffix>` next to `--log`, as for an apply. A revert is a tree write like any other, so run it as that tree's only writer and check the tree after it.
