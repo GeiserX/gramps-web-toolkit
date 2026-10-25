@@ -6,7 +6,9 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
-Everything since the first public commit. The first tag will be `v0.2.0`.
+## [0.2.0] - 2026-10-26
+
+The first release: everything since the first public commit.
 
 ### Change lists
 
