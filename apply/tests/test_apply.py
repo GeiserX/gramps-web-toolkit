@@ -661,8 +661,10 @@ def test_snapshot_dry_run_needs_no_server_and_plans_like_the_server(fake, scan, 
     for k in ("GWT_URL", "GWT_USERNAME", "GWT_PASSWORD"):
         monkeypatch.delenv(k)
     capsys.readouterr()
-    assert main([str(changes), "--snapshot", str(snap)]) == 0
+    assert main([str(changes), "--snapshot", str(snap), "--log", str(tmp_path / "plan.jsonl")]) == 0
     out = capsys.readouterr().out
+    plan = list(tmp_path.glob("plan.2*.jsonl"))
+    assert len(plan) == 1 and _lines(plan[0])[0]["event"] == "start"  # no server, still the log asked for
     for r in live:  # the same plan, op by op
         assert f"[{r.status}] {r.key}" in out
         for a in r.actions:
@@ -677,9 +679,12 @@ def test_apply_on_a_snapshot_refuses_what_changed_since(fake, scan, tmp_path, en
     # someone renames Anna after the snapshot: the plan updates her, so the apply refuses
     fake.store["people"]["anna"].update(gender=1, change=fake.tick())
     before = len(fake.writes())
-    assert main([str(changes), "--snapshot", str(snap), "--apply"]) == 1
+    assert main([str(changes), "--snapshot", str(snap), "--apply", "--log", str(tmp_path / "run.jsonl")]) == 1
     err = capsys.readouterr().err
     assert "Person I0001 changed after the snapshot" in err and "take a new one" in err
+    lines = _lines(next(tmp_path.glob("run.2*.jsonl")))
+    assert [e["event"] for e in lines if e.get("event")] == ["start", "refused", "end"]
+    assert next(e for e in lines if e.get("event") == "refused")["reason"] == "snapshot-plan"
     from gwt_apply.lock import LOCK_HANDLE
     assert fake.writes()[before:] == [("POST", "/api/objects/"), ("DELETE", f"/api/notes/{LOCK_HANDLE}")]  # the lock only
     # a new person after the snapshot: the plan searched every person for namesakes
@@ -688,6 +693,23 @@ def test_apply_on_a_snapshot_refuses_what_changed_since(fake, scan, tmp_path, en
     fake.add("people", {"handle": "late", "primary_name": {"first_name": "Late", "surname_list": [{"surname": "Comer"}]}})
     assert main([str(changes), "--snapshot", str(snap2), "--apply"]) == 1
     assert "1 Person object(s) added" in capsys.readouterr().err
+
+
+def test_apply_on_a_snapshot_of_another_tree_is_refused_and_logged(fake, tmp_path, env, capsys):
+    import gzip
+    snap = tmp_path / "tree.json.gz"
+    assert main(["--save-snapshot", str(snap)]) == 0
+    with gzip.open(snap, "rt") as fh:
+        data = json.load(fh)
+    other = tmp_path / "other.json.gz"
+    with gzip.open(other, "wt") as fh:
+        json.dump(dict(data, tree="another-tree"), fh)
+    changes = _changes(tmp_path, [{"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}])
+    assert main([str(changes), "--snapshot", str(other), "--apply", "--log", str(tmp_path / "run.jsonl")]) == 1
+    assert "another-tree" in capsys.readouterr().err
+    lines = _lines(next(tmp_path.glob("run.2*.jsonl")))
+    assert [(e["event"], e.get("reason")) for e in lines if e.get("event")] == [
+        ("start", None), ("refused", "snapshot-tree"), ("end", None)]
 
 
 def test_apply_on_a_current_snapshot_reads_almost_nothing(fake, scan, tmp_path, env, capsys):
@@ -1726,10 +1748,13 @@ def test_revert_refuses_a_pre_copy_that_is_not_from_before_the_run(fake, tmp_pat
     with gzip.open(future, "wt") as fh:
         json.dump(dict(snap, taken="2999-01-01T00:00:00+00:00"), fh)
     before = fake.writes()
-    for bad, why in ((late, "the run made"), (other, "another-tree"), (future, "after the run's first write")):
+    for i, (bad, why) in enumerate(((late, "the run made"), (other, "another-tree"), (future, "after the run's first write"))):
         capsys.readouterr()
-        assert _undo(log, bad, "--apply") == 2, bad
+        assert _undo(log, bad, "--apply", "--log", str(tmp_path / f"undo{i}.jsonl")) == 2, bad
         assert why in capsys.readouterr().err
+        lines = _lines(next(tmp_path.glob(f"undo{i}.2*.jsonl")))
+        assert [(e["event"], e.get("reason")) for e in lines if e.get("event")] == [
+            ("start", None), ("refused", "pre"), ("end", None)]
         assert fake.writes() == before  # nothing written, not even the lock
     assert fake.store["families"]["fam"]["type"] == "Married"
     assert _undo(log, good, "--apply") == 0
@@ -2468,8 +2493,11 @@ def test_a_big_put_logs_a_hash_and_revert_still_restores_it(fake, tmp_path, env)
     _note(fake, "n1", old)
     pre = str(tmp_path / "pre.json.gz")
     assert main(["--save-snapshot", pre]) == 0
-    log = _apply_list(tmp_path, [{"op": "update_note", "key": "u", "ruling": R, "note": "N0001",
-                                  "set": {"text": new}, "expect": old}], "big")
+    op = {"op": "update_note", "key": "u", "ruling": R, "note": "N0001", "set": {"text": new}, "expect": old}
+    assert main([str(_changes(tmp_path, [op], "dry.changes.jsonl")), "--log", str(tmp_path / "dry.jsonl")]) == 0
+    planned = [e for e in _lines(next(tmp_path.glob("dry.2*.jsonl"))) if e.get("method") == "PUT"]
+    assert len(planned) == 1 and "body" not in planned[0] and planned[0]["body_digest"]["bytes"] > 65536
+    log = _apply_list(tmp_path, [op], "big")
     put = [e for e in _lines(log) if e.get("method") == "PUT"]
     assert len(put) == 1 and "body" not in put[0] and put[0]["body_digest"]["bytes"] > 65536
     assert len(put[0]["body_digest"]["sha256"]) == 64
