@@ -25,14 +25,14 @@ Lists written for the first public commit of `gwt-apply` behave differently in t
 - `namesake_of` by `key:` resolves people an earlier list created.
 - A value of the wrong kind, a citation `confidence` outside 0-4, or a full date that is not a real calendar day (`1890-02-31`) is refused before the first write.
 - A write whose answer was lost (timeout, dropped connection, 5xx) but which landed reports `done` instead of `skip`.
-- `gwt-check fill-places` no longer proposes a place that only a citation about another person or another kind of act names; the event appears under `held_back` instead, so an `--ops` file has fewer ops than before.
+- `gwt-check fill-places` no longer proposes a place that only a citation of another kind of act or a marginal mention names; the event appears under `held_back` instead, so an `--ops` file has fewer ops than before.
 - `gwt-import-excel` stops with exit 2 on an unknown mapping field instead of dropping that column.
 - An `add_family` with both parents whose couple looks like a tree family's couple, or another `add_family` of the list, is flagged before the first write even when each parent carries `allow_namesake`; `allow_new_couple` with `new_couple_reason` and `new_couple_of` clears it.
 - New op `unlink_child` takes a child out of a family; a list that used it was refused as an unknown op before. `--revert` now makes a note the run deleted again instead of sending it to the backup.
 
 ### Added
 
-- `gwt-check cites`: events whose citation is about another person or another kind of act, or that carry a plain date their description says they do not have; a person with his father's name, and an event date that is the day the act was written; a report that never fails.
+- `gwt-check cites`: events whose citation's page names another kind of act (a marriage act under a birth) or a marginal mention in another act; a report that never fails.
 - `gwt`, one command for every Python tool (`gwt <tool> ...`), installed with one `pip install gramps-web-toolkit`; each `gwt-<tool>` command stays.
 - `gwt-apply --verify` proves a list landed: a dry run that exits 1 when any op would write, conflicts or errs, and names each missing object and each field that differs; a Gramps ID merged away is read on its winner. `--json FILE` writes one result per op. A dry-run op retried after a server error no longer reads its own first try's plan as already in the tree.
 - `gwt-apply`: offline planning on a snapshot (`--save-snapshot`, `--since`), merges of people, families and events through Gramps' own merge, DNA matches as associations, `attach_existing`, `dedupe_list`, `update_place`, repositories, `update_note`, `update_citation`, `update_family`, `update_child_ref`, `detach`, `unlink_child`, and `--revert` to undo one run from its log.

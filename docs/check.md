@@ -194,7 +194,7 @@ A request that fails on the network (a timeout, a reset connection, an SSL read 
 
 ## Citations that do not fit their event (`cites`)
 
-`gwt-check cites [DUMP]` reads a dump (or the live tree) and writes nothing. It never sets the exit code. It lists each event whose citation, read as text, is not about that event, with the words that fired the rule. Read the act before you act on a row.
+`gwt-check cites [DUMP]` reads a dump (or the live tree) and writes nothing. It never sets the exit code. It lists each event whose citation's page (its title) says the citation is about another kind of act. Read the act before you act on a row.
 
 ```sh
 gwt-check cites dump.json.gz          # one line per row
@@ -205,13 +205,7 @@ gwt-check cites dump.json.gz --json   # the same rows as JSON
 |---|---|
 | `other-act` | the citation's page names a kind of act (birth, death, marriage) and none of them is the event's kind; a birth event cited by a marriage act holds that act's place and date |
 | `marginal-mention` | a death or marriage is cited by a marginal mention in another act; the act's place and date are that act's |
-| `other-subject` | the citation's «Valor afirmado» is about someone else and the person is named in it only as a relation (after «hijo de», «fils de»...) |
-| `namesake` | the person's name stands both before and after «hijo de» in the claim: a son with his father's name; the act may be the father's or the son's |
-| `registration-date` | the event's plain date is the day the act was written («acta del 18/09/1900», «registrada el...») and the claim gives another full date for the event |
-| `date-not-its-own` | the description says the event has no date of its own and the date is a plain one, not «before» or «after» |
 
-- `other-subject` compares name words of three letters or more, without case or accents. Two people with the same name, a father and a son, cannot be told apart, so the rule stays quiet when the person's name is also in the act's own subject, and `namesake` lists the case instead. A name written as two words matches the same name as one («Du Pont», «Dupont»); a bracket right after the subject that holds the person's name counts as the subject.
-- `registration-date` reads only a date that follows «acta» or «acte» and «del»/«du», or «registrad...». A date after «nota marginal» or a bare act number is not read. It does not tell birth day from registration day when the act gives one date only.
-- `fill-places` holds back every row `cites` lists, `namesake` and `registration-date` included. It can withhold the son's own act; read the row.
-- Words that name a kind of act are in one table at the top of `gwt_check/cites.py`. A language that is not in it is not read.
-- `date-not-its-own` reads a date by its modifier as well as its value: «before 1832-08-09» is not a plain date.
+- Only the page is read, never the citation's notes, so the rules work on any tree whatever its note style.
+- The words that name a kind of act are in one table, `ACT_WORDS`, at the top of `gwt_check/cites.py`, and the words of a marginal mention in `MARGINAL` beside it. A language that is not in them is not read. A word matches as a whole word, singular or plural (`nacimiento`, `nacimientos`), never inside a longer word (`birthplace` is not a birth act).
+- `fill-places` holds back every row `cites` lists: a place that only such a citation names is listed under `held_back`, not proposed.

@@ -64,10 +64,7 @@ def propose_places(tree: Tree) -> dict:
     # one pattern for every name, longest first, compiled once
     rx = re.compile(r"(?<!\w)(?:" + "|".join(re.escape(n).replace(r"\ ", r"\s+")
                                              for n in sorted(by_name, key=len, reverse=True)) + r")(?!\w)") if by_name else None
-    from .cites import _owners, citation_problem  # here: cites imports this module
-    own = _owners(tree)
-    from .cites import _owners, citation_problem  # here: cites imports this module
-    own = _owners(tree)
+    from .cites import citation_problem  # here: cites imports this module
     proposals, ambiguous, held, without = [], [], [], 0
 
     def places_in(text: str):
@@ -90,14 +87,14 @@ def propose_places(tree: Tree) -> dict:
             if not c:
                 continue
             text = [c.get("page") or ""] + [_note_text(N[n]) for n in c.get("note_list") or [] if n in N]
-            prob = citation_problem(tree, e, own.get(h), c)
+            prob = citation_problem(e, c)
             (flagged if prob else parts).extend(text)
             why = why or (prob[1] if prob else "")
         text = unicodedata.normalize("NFC", "\n".join(p for p in parts if p))
         hits, most = places_in(text)
         row = {"event": tree.gid("events", h), "kind": kind(e.get("type"))}
         if not most:
-            # a place only a citation about someone else or another act names is held back, not proposed
+            # a place only a citation of another act names is held back, not proposed
             _, only = places_in(unicodedata.normalize("NFC", "\n".join(p for p in flagged if p)))
             if only:
                 held.append({**row, "places": [f"{tree.gid('places', ph)} {_name(P[ph])}" for ph in only], "why": why})
@@ -120,8 +117,8 @@ def print_places(rep: dict, limit: int) -> None:
     for x in rep["ambiguous"][:limit]:
         print(f"  {x['event']} ({x['kind']}): several places: {'; '.join(x['places'])}")
     if rep.get("held_back"):
-        print(f"held back, not proposed: {len(rep['held_back'])} (the only citations are about someone else or "
-              f"another act; gwt-check cites says which; --json lists them)")
+        print(f"held back, not proposed: {len(rep['held_back'])} (the only citations are of another act or a "
+              f"marginal mention; gwt-check cites says which; --json lists them)")
     print("proposals only: read each record before applying one (the text may name where the record was made)")
 
 
