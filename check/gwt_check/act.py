@@ -129,10 +129,10 @@ def _cited(tree: Tree, ev: dict, ref: str) -> str:
     want = " ".join(_fold(ref).split())
     for ch in ev.get("citation_list") or []:
         c = tree.objs["citations"].get(ch)
-        if not c:
+        if not c or c.get("private"):
             continue
         parts = [c.get("page") or ""] + [_note_text(tree.objs["notes"][n]) for n in c.get("note_list") or []
-                                         if n in tree.objs["notes"]]
+                                         if n in tree.objs["notes"] and not tree.objs["notes"][n].get("private")]
         if re.search(r"(?<!\w)" + re.escape(want).replace(r"\ ", r"\s+") + r"(?!\w)", " ".join(_fold(" ".join(parts)).split())):
             return f"text found in {tree.gid('citations', ch)} (words only, the record itself is not checked)"
     return "no citation text contains it" if ev.get("citation_list") else "event has no citation"
@@ -174,7 +174,8 @@ def _parents(tree: Tree, p: dict, act: dict) -> dict:
 
 def _events(tree: Tree, p: dict, types: set[str]) -> list[dict]:
     E = tree.objs["events"]
-    return [E[r["ref"]] for r in p.get("event_ref_list") or [] if r.get("ref") in E and kind(E[r["ref"]].get("type")) in types]
+    return [E[r["ref"]] for r in p.get("event_ref_list") or []
+            if r.get("role") == "Primary" and r.get("ref") in E and kind(E[r["ref"]].get("type")) in types]
 
 
 def compare_act(tree: Tree, act: dict) -> dict:
@@ -187,6 +188,9 @@ def compare_act(tree: Tree, act: dict) -> dict:
         fewer = bool(cands)
     rows = []
     for p in cands:
+        if p.get("private"):  # counted, so a private namesake still blocks "one fits", but nothing of it is shown
+            rows.append({"person": tree.gid("people", p["handle"]), "private": True})
+            continue
         row = {"person": tree.gid("people", p["handle"]),
                "name": " ".join(_person_names(p)[0] + _person_names(p)[1])}
         if fewer:
@@ -221,6 +225,9 @@ def print_act(rep: dict) -> None:
           + (f" (registered {a['registered']}, not compared)" if a.get("registered") else ""))
     print(rep["verdict"])
     for r in rep["candidates"]:
+        if r.get("private"):
+            print(f"  {r['person']} (marked private: held back)")
+            continue
         print(f"  {r['person']} {r['name']}" + (f"  ({r['name_note']})" if r.get("name_note") else ""))
         if "event" in r:
             print(f"    {r['event']}")

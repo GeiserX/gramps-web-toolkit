@@ -1,2 +1,5 @@
 gwt_check/act.py | ("several people fit the subject: none is chosen" if len(rows) > 1 else "one person fits") | "one person fits" | an act whose subject fits several people is never matched to one
 gwt_check/act.py | if registered: | if False: | a tree date that is the registration day is reported as such, not as a plain difference
+gwt_check/act.py | if r.get("role") == "Primary" and r.get("ref") in E | if r.get("ref") in E | a godparent's or witness's ref to an event is never read as the person's own event
+gwt_check/act.py | if p.get("private"):  # counted | if False:  # counted | a person marked private is counted but nothing of them is shown
+gwt_check/act.py | if not c or c.get("private"): | if not c: | a private citation is never searched for the act's reference

@@ -158,3 +158,37 @@ def test_without_a_dump_the_command_reads_the_live_tree(live, tmp_path, capsys):
     f.write_text(json.dumps({"kind": "birth", "date": "1900-01-01", "subject": {"given": "Nobody", "surname": "Atall"}}))
     assert main(["act", str(f)]) == 0
     assert "subject not in the tree" in capsys.readouterr().out
+
+
+def test_a_godparent_ref_to_a_baptism_is_not_the_persons_own_event():
+    t = _tree()
+    p = next(x for x in t.objs["people"].values() if x["gramps_id"] == "I0001")
+    p["event_ref_list"][0]["role"] = "Godparent"
+    [r] = compare_act(t, _act())["candidates"]
+    assert r["event"] == "tree has no such event" and "events" not in r
+
+
+def test_a_private_person_is_counted_but_nothing_of_them_is_shown(capsys):
+    t = _tree()
+    next(x for x in t.objs["people"].values() if x["gramps_id"] == "I0001")["private"] = True
+    rep = compare_act(t, _act())
+    assert rep["candidates"] == [{"person": "I0001", "private": True}]
+    from gwt_check.act import print_act
+    print_act(rep)
+    out = capsys.readouterr().out
+    assert "I0001 (marked private: held back)" in out and "lucia" not in out.lower()
+
+
+def test_a_private_citation_or_note_is_not_searched_for_the_reference():
+    t = _tree()
+    c = next(x for x in t.objs["citations"].values() if x["gramps_id"] == "C0001")
+    c["page"] = "nothing here"
+    next(x for x in t.objs["notes"].values() if x["gramps_id"] == "N0002")["text"]["string"] = "folio 1"
+    [r] = compare_act(t, _act())["candidates"]
+    assert r["events"][0]["cited"].startswith("text found in C0001")
+    next(x for x in t.objs["notes"].values() if x["gramps_id"] == "N0002")["private"] = True
+    [r] = compare_act(t, _act())["candidates"]
+    assert r["events"][0]["cited"] == "no citation text contains it"
+    c["page"], c["private"] = "folio 1", True
+    [r] = compare_act(t, _act())["candidates"]
+    assert r["events"][0]["cited"] == "no citation text contains it"
