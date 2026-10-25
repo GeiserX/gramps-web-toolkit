@@ -1,6 +1,8 @@
 import json
+from urllib.parse import urlparse
 
 import pytest
+import requests
 
 from fake_api import FakeGrampsWeb, Resp
 from gwt_apply.client import ApiError, Client
@@ -866,7 +868,8 @@ def test_merge_whose_answer_was_lost_is_not_done_twice_and_keeps_the_birth():
     fake.drop_after = ("POST", "/api/people/anna/merge/")
     op = {"op": "merge_person", "key": "mp", "ruling": R, "winner": "I0001", "loser": "I0002", "use_loser": ["birth"]}
     res = run(fake, [op])
-    assert res[0].status == "skip", res[0].actions  # the retry finds the merge done
+    assert res[0].status == "done", res[0].actions  # the retry finds the merge done: the lost answer was a write
+    assert res[0].actions[-1].startswith("answer lost on try 1: POST /people/anna/merge/")
     assert sum(1 for m, p in fake.calls if m == "POST" and "/merge/" in p) == 1
     anna = fake.store["people"]["anna"]
     assert "anna2" not in fake.store["people"] and anna["birth_ref_index"] == 0
@@ -1090,8 +1093,9 @@ def test_held_associations_are_written_when_a_later_op_crashes(fake, tmp_path):
         {"op": "add_media", "key": "m", "ruling": R, "file": str(tmp_path / "gone.jpg"), "path": "x.jpg",
          "attach": [{"person": "I0001"}]},
     ]
-    with pytest.raises(FileNotFoundError):
-        run(fake, ops)
+    res = run(fake, ops)
+    assert [r.status for r in res] == ["done", "error"]
+    assert res[1].actions[-1].startswith("error: FileNotFoundError"), res[1].actions
     assert len(fake.store["people"]["anna"]["person_ref_list"]) == 1
 
 
@@ -1581,7 +1585,7 @@ def test_revert_undoes_a_write_whose_answer_was_lost(fake, tmp_path, env):
     _note(fake, "n1", "Father read as Denis (?)")
     pre = str(tmp_path / "pre.json.gz")
     assert main(["--save-snapshot", pre]) == 0
-    fake.drop_after = ("PUT", "/api/notes/")  # the server writes, the answer never arrives; the retry says skip
+    fake.drop_after = ("PUT", "/api/notes/")  # the server writes, the answer never arrives; the retry reads it back
     log = _apply_list(tmp_path, [{"op": "update_note", "key": "u", "ruling": R, "note": "N0001",
                                   "set": {"text": "Father read as Rene (?)"}, "expect": "Father read as Denis (?)"}], "run")
     assert fake.store["notes"]["n1"]["text"]["string"] == "Father read as Rene (?)"
@@ -1927,6 +1931,211 @@ def test_revert_deletes_a_note_the_run_made_and_then_corrected(fake, tmp_path, e
     assert fake.store["notes"][stable_handle("n")]["text"]["string"] == "second draft"
     assert _undo(log, pre, "--apply") == 0
     assert fake.store["notes"] == {} and fake.store["families"]["fam"]["note_list"] == []
+
+
+# ---- honest status: a write whose answer was lost, and inputs that would crash mid-run
+
+
+def test_update_note_whose_answer_was_lost_reports_done(fake):
+    _note(fake, "n1", "Father read as Denis (?)")
+    fake.drop_after = ("PUT", "/api/notes/")  # the server writes, the answer never arrives
+    op = {"op": "update_note", "key": "u", "ruling": R, "note": "N0001",
+          "set": {"text": "Father read as Rene (?)"}, "expect": "Father read as Denis (?)"}
+    res = run(fake, [op])
+    assert res[0].status == "done", res[0].actions
+    assert any(a.startswith("answer lost on try 1: PUT /notes/n1") for a in res[0].actions), res[0].actions
+    assert fake.writes().count(("PUT", "/api/notes/n1")) == 1  # the retry read it back and wrote nothing
+    assert run(fake, [op])[0].status == "skip"  # a rerun of the applied list writes nothing
+
+
+def test_add_person_whose_answer_was_lost_reports_done(fake, env, tmp_path, capsys):
+    op = {"op": "add_person", "key": "p-tom", "ruling": R, "first_name": "Tom", "surname": "Sample"}
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text(json.dumps(op))
+    fake.drop_after = ("POST", "/api/objects/", 1)  # after the lock note: the person is made, the answer is lost
+    assert main([str(changes), "--apply", "--retry-wait", "0"]) == 0
+    out = capsys.readouterr().out
+    assert "[done] p-tom" in out and "answer lost on try 1: POST /objects/" in out, out
+    assert "1 done (answer lost: 1), 0 skip" in out, out
+    assert list(fake.store["people"]).count(stable_handle("p-tom")) == 1
+    writes = len(fake.writes())
+    assert main([str(changes), "--apply", "--retry-wait", "0"]) == 0
+    assert "0 done, 1 skip" in capsys.readouterr().out
+    assert [w for w in fake.writes()[writes:] if "/objects/" in w[1] or "/people/" in w[1]] == [
+        ("POST", "/api/objects/")]  # only the lock note: no write for the person
+
+
+@pytest.mark.parametrize("op, says", [
+    ({"op": "add_person", "first_name": "Tom", "surname": "Sample", "attach": [{"person": "I1"}]}, "unknown fields ['attach']"),
+    ({"op": "add_citation", "source": "S1", "page": "p. 1", "attach": [{"person": "I1"}], "confidence": "high"}, "confidence is a whole number 0-4"),
+    ({"op": "add_citation", "source": "S1", "page": "p. 1", "attach": [{"person": "I1"}], "confidence": 9}, "confidence is a whole number 0-4"),
+    ({"op": "add_event", "person": "I1", "type": "  "}, "type is a non-empty text"),
+    ({"op": "add_event", "person": "I1", "type": "Birth", "date": "1890-02-31"}, "impossible date '1890-02-31'"),
+    ({"op": "add_person", "first_name": 5, "surname": "Sample"}, "first_name is a non-empty text"),
+    ({"op": "add_family", "mother": "I1", "children": "I2"}, "children is a list of"),
+    ({"op": "add_note", "text": ["a"], "attach": [{"person": "I1"}]}, "text is a non-empty text"),
+    ({"op": "add_person", "first_name": "Tom", "surname": "Sample", "tag": ["ok", 3]}, "tag is a non-empty name"),
+    ({"op": "add_citation", "source": "S1", "page": "p. 1", "attach": [{"person": "I1"}], "confidence": True}, "confidence is a whole number 0-4"),
+    ({"op": "add_person", "first_name": "Tom", "surname": "Sample", "gender": ["M"]}, "gender is one of"),
+    ({"op": "update_person", "person": "I1", "set": {"gender": ["M"]}}, "gender is one of"),
+    ({"op": "dedupe_list", "target": {"person": "I1"}, "list": ["note_list"]}, "list is one of"),
+    ({"op": "update_event", "event": "E1", "set": {"place": 5}}, "5 is neither key:<key> nor a Gramps ID"),
+    ({"op": "merge_person", "winner": "I1", "loser": "I2", "use_loser": [["birth"]]}, "unhashable type"),  # a TypeError
+])
+def test_validate_refuses_inputs_that_would_crash_mid_run(op, says):
+    errors = validate([dict(op, key="k", ruling=R)])
+    assert any(says in e for e in errors), errors
+
+
+def test_validate_keeps_real_dates_and_allowed_empty_texts():
+    assert validate([
+        {"op": "add_event", "key": "a", "ruling": R, "person": "I1", "type": "Birth", "date": "1892-02-29"},
+        {"op": "add_person", "key": "b", "ruling": R, "first_name": "Tom", "surname": ""},
+        {"op": "add_citation", "key": "c", "ruling": R, "source": "S1", "page": "", "attach": [{"person": "I1"}], "confidence": 0},
+        {"op": "add_citation", "key": "d", "ruling": R, "source": "S1", "page": "p. 2", "attach": [{"person": "I1"}], "date": ""},
+        {"op": "add_event", "key": "e", "ruling": R, "person": "I1", "type": "Death", "date": "", "description": ""},
+    ]) == []
+    assert any("description is a non-empty text" in e for e in validate(  # "" is none, spaces are a mistake
+        [{"op": "add_event", "key": "a", "ruling": R, "person": "I1", "type": "Death", "description": "  "}]))
+    assert any("impossible date" in e for e in validate(
+        [{"op": "add_event", "key": "a", "ruling": R, "person": "I1", "type": "Birth", "date": "1900-02-29"}]))
+
+
+
+def test_an_optional_text_left_blank_or_null_is_none_as_older_lists_write_it(fake, env, tmp_path):
+    ops = [{"op": "add_source", "key": "s", "ruling": R, "title": "Register of Testville", "author": ""},
+           {"op": "add_event", "key": "e", "ruling": R, "person": "I0001", "type": "Residence", "date": None,
+            "description": None}]
+    assert validate(ops) == []
+    assert [r.status for r in run(fake, ops)] == ["done", "done"]
+    assert any("title is a non-empty text" in e for e in validate(  # a required text still may not be blank
+        [{"op": "add_source", "key": "s", "ruling": R, "title": "  "}]))
+    assert any("author is a non-empty text" in e for e in validate(  # nor may an optional one hold spaces
+        [{"op": "add_source", "key": "s", "ruling": R, "title": "Register of Testville", "author": " "}]))
+
+def test_a_list_that_would_crash_halfway_writes_nothing(fake, env, tmp_path):
+    ops = [{"op": "add_note", "key": "n", "ruling": R, "text": "a note", "attach": [{"person": "I0001"}]},
+           {"op": "add_citation", "key": "c", "ruling": R, "source": "S0001", "page": "p. 1",
+            "attach": [{"person": "I0001"}], "confidence": "high"}]
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text("".join(json.dumps(o) + "\n" for o in ops))
+    assert main([str(changes), "--apply", "--retry-wait", "0"]) == 2
+    assert fake.store["notes"] == {} and fake.writes() == []
+
+
+def test_an_op_that_crashes_is_an_error_that_stops_the_run(fake):
+    ops = [{"op": "add_note", "key": "n", "ruling": R, "text": "a note", "attach": [{"person": "I0001"}]},
+           {"op": "add_citation", "key": "c", "ruling": R, "source": "S0001", "page": "p. 1",
+            "attach": [{"person": "I0001"}], "confidence": "high"},  # what validate refuses, run without it
+           {"op": "add_note", "key": "n2", "ruling": R, "text": "never reached", "attach": [{"person": "I0001"}]}]
+    res = run(fake, ops)
+    assert [r.status for r in res] == ["done", "error"]
+    assert res[1].actions[-1].startswith("error: ValueError"), res[1].actions
+
+
+LOCKED = "sqlite3.OperationalError: database is locked"
+
+
+def _script(fake, *steps):
+    """Answer requests by a script. Each step (method, path prefix, what) is used once, in order; requests that do
+    not match the next step go through. `what` is "lost" (done, then the connection drops), a Resp (done, then that
+    answer) or a function of the fake (not done; its return value is the answer)."""
+    steps, real = list(steps), fake.request
+
+    def request(method, url, **kw):
+        path = urlparse(url).path
+        if steps and method == steps[0][0] and path.startswith(steps[0][1]):
+            what = steps.pop(0)[2]
+            if callable(what):
+                fake.calls.append((method, path))
+                return what(fake)
+            real(method, url, **kw)
+            if what == "lost":
+                raise requests.ConnectionError("connection dropped after the server did the work")
+            return what
+        return real(method, url, **kw)
+
+    fake.request = request
+
+
+def _refused(fake):
+    return Resp(500, LOCKED)
+
+
+def _rename(fake):  # another writer changes the note, and this write is refused
+    fake.store["notes"]["n1"]["text"]["string"] = "Father read as Remy (?)"
+    return Resp(500, LOCKED)
+
+
+def _crash(fake):
+    raise RuntimeError("the client broke")
+
+
+NOTE_OP = {"op": "update_note", "key": "u", "ruling": R, "note": "N0001",
+           "set": {"text": "Father read as Rene (?)"}, "expect": "Father read as Denis (?)"}
+
+
+def _lost_lines(res):
+    return [a for a in res.actions if a.startswith("answer lost")]
+
+
+@pytest.mark.parametrize("answer", [Resp(500, LOCKED), Resp(200, LOCKED)])
+def test_a_write_that_lands_and_answers_locked_is_done_with_the_lost_answer(fake, answer):
+    _note(fake, "n1", "Father read as Denis (?)")
+    _script(fake, ("PUT", "/api/notes/", answer))
+    res = run(fake, [NOTE_OP])[0]
+    assert res.status == "done" and res.answer_lost, res.actions
+    assert _lost_lines(res) == ["answer lost on try 1: PUT /notes/n1; the re-read shows the change in place"], res.actions
+    assert fake.store["notes"]["n1"]["text"]["string"] == "Father read as Rene (?)"
+
+
+def test_each_lost_answer_is_named_once_with_its_own_try(fake):
+    _note(fake, "n1", "Father read as Denis (?)")
+    _script(fake, ("PUT", "/api/notes/", _refused), ("PUT", "/api/notes/", "lost"))
+    res = run(fake, [NOTE_OP])[0]
+    assert res.status == "done" and res.answer_lost, res.actions
+    assert [a.split(";")[0] for a in _lost_lines(res)] == [
+        "answer lost on try 1: PUT /notes/n1", "answer lost on try 2: PUT /notes/n1"], res.actions
+
+
+def test_a_held_write_whose_answer_was_lost_is_not_the_answer_of_the_op_that_flushed_it(fake):
+    fake.add("people", {"handle": "k0", "primary_name": {"first_name": "K0", "surname_list": [{"surname": "Kit"}]}})
+    _script(fake, ("PUT", "/api/people/anna", "lost"),  # the held association write
+            ("PUT", "/api/people/anna", _refused))  # set_attribute's own write, refused once
+    ops = [{"op": "add_association", "key": "a", "ruling": R, "person": "I0001", "target": "I0002", "relation": "DNA"},
+           {"op": "set_attribute", "key": "s", "ruling": R, "target": {"person": "I0001"}, "type": "Nickname", "value": "Nan"}]
+    res = run(fake, ops)
+    assert [r.status for r in res] == ["done", "done"], [r.actions for r in res]
+    assert not res[1].answer_lost
+    assert _lost_lines(res[1]) == [
+        "answer lost on try 1: PUT /people/anna; the re-read did not find it, so this try wrote it"
+    ], res[1].actions
+    anna = fake.store["people"]["anna"]
+    assert len(anna["person_ref_list"]) == 1 and len(anna["attribute_list"]) == 1
+
+
+def test_an_op_that_gives_up_says_the_server_may_hold_each_lost_write(fake):
+    _note(fake, "n1", "Father read as Denis (?)")
+    fake.busy = 10
+    res = run(fake, [NOTE_OP])[0]
+    assert res.status == "error" and not res.answer_lost
+    assert _lost_lines(res) == [f"answer lost on try {n}: PUT /notes/n1; the server may hold that write"
+                                for n in (1, 2, 3)], res.actions
+    assert res.actions[-1].endswith("(gave up after 3 tries)")
+
+
+@pytest.mark.parametrize("second, status, last", [
+    (None, "conflict", "conflict: Note N0001 no longer reads as expected"),
+    (("GET", "/api/notes/", _crash), "error", "error: RuntimeError: the client broke"),
+    (("PUT", "/api/notes/", lambda f: Resp(400, "bad request")), "error", "error: "),
+])
+def test_an_op_that_ends_in_conflict_or_error_says_the_server_may_hold_the_lost_write(fake, second, status, last):
+    _note(fake, "n1", "Father read as Denis (?)")
+    _script(fake, ("PUT", "/api/notes/", _rename if second is None else _refused), *([second] if second else []))
+    res = run(fake, [NOTE_OP])[0]
+    assert res.status == status, res.actions
+    assert _lost_lines(res) == ["answer lost on try 1: PUT /notes/n1; the server may hold that write"], res.actions
+    assert res.actions[-1].startswith(last), res.actions
 
 
 # -- the connection: User-Agent, sync token, GWT_URL ---------------------------

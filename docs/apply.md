@@ -87,7 +87,7 @@ Place names, place types and person names are compared without case, accents or 
 
 Types (event, note, place, family, attribute, repository, media type) are Gramps' internal English names, whatever language the web UI shows: `Research`, `Transcript`, `Baptism`, `Parish`. A name the server does not recognise is stored as a new custom type, separate from the built-in one; whether a translated name is recognised depends on the server's language, so do not rely on it. Custom types the tree already uses are written as they are.
 
-Dates are written in this format: `1890`, `1890-03`, `1890-03-14`, optionally after `abt`, `bef` or `aft`, and optionally after `est` or `calc`. Ranges are `bet 1890 and 1895`, spans `from 1890 to 1895`. Anything else is refused rather than stored as text.
+Dates are written in this format: `1890`, `1890-03`, `1890-03-14`, optionally after `abt`, `bef` or `aft`, and optionally after `est` or `calc`. Ranges are `bet 1890 and 1895`, spans `from 1890 to 1895`. A full date must be a real calendar day: `1890-02-31` is refused, `1892-02-29` is not. Anything else is refused rather than stored as text.
 
 ### Example
 
@@ -115,6 +115,25 @@ The dry-run prints one block per op:
     skip: Citation C0123 already cites that page
     skip: Event E0456 already has it in citation_list
 ```
+
+### Results
+
+Each op ends with one status, and the last line of the run counts them:
+
+- `done`: the op wrote something.
+- `skip`: everything it would write was already in the tree, so nothing was sent. A rerun of a list that was fully applied is all `skip`.
+- `conflict`: the tree disagrees with the op in a way only a person can settle.
+- `error`: the server refused, kept failing after `--retries` tries, or the op itself failed (the error names the exception). The run stops there.
+
+A write can land on the server while its answer is lost: a timeout, a dropped connection, a 5xx, or "database is locked". The op then starts over from fresh reads, finds its change already in place and writes nothing more. That op is `done`, not `skip`, because this run made the change, and it says which request lost its answer:
+
+```
+[done] u-note (update_note, ruling R-12)
+    answer lost on try 1: PUT /notes/gwt1a2b...; the re-read shows the change in place
+1 done (answer lost: 1), 0 skip, 0 conflict, 0 error
+```
+
+When the re-read did not find the change and a later try wrote it, the op is plain `done` and the line ends `the re-read did not find it, so this try wrote it`. That write cannot leave a second copy: an update replaces the whole object, and a new object gets the same handle on every try. When an op whose answer was lost later ends in a `conflict` or an `error`, the same line says `the server may hold that write`. `--revert` treats such a write as made either way.
 
 ### DNA matches
 
@@ -169,7 +188,7 @@ gwt-apply changes.jsonl --snapshot tree-0413.json.gz                    # every 
 ## Safety rules
 
 - **Dry-run by default.** Without `--apply` nothing is written. Reads run, so the plan reflects the real tree, and objects the plan would create are kept in memory so later ops can refer to them.
-- **The whole list is checked before the first request**: known ops and fields, a `ruling` and a unique `key` on each op, references that are Gramps IDs or keys, dates in the format above, media files that exist, a reason and the compared IDs on every `allow_namesake`, a reason on every `probable`, and no two ops that are the same change under different keys (everything but `key` and `ruling` equal).
+- **The whole list is checked before the first request**: known ops and fields, a `ruling` and a unique `key` on each op, references that are Gramps IDs or keys, dates in the format above, media files that exist, a reason and the compared IDs on every `allow_namesake`, a reason on every `probable`, and no two ops that are the same change under different keys (everything but `key` and `ruling` equal). Values have the right kind: every text field is a non-blank string (`surname` of `add_person` and `page` of `add_citation` may be `""`, and any optional text may be `""` or `null`, which means none), `children`, `attach` and `use_loser` are lists, `namesake_of` and `tag` are a name or a list of names, and `confidence` is a whole number from 0 to 4. A value of the wrong kind is reported here instead of failing halfway through the run, after earlier ops wrote.
 - **Duplicates are looked for before the first write.** After login, and before any op runs, every `add_person` is compared with everyone in the tree and with the other people the list makes. It is flagged when someone has the same first name and surname, or the same first given name and first surname and also a birth or baptism year within two years, a parent in common or a spouse in common. Every flag is printed at once and nothing is written; an op clears a flag by naming that person in `namesake_of`, with `allow_namesake` and a `namesake_reason`.
 - **Read before every write, skip what exists.** The same event type and date on that person or family; the same page on that source; a media object with the same MD5; a note with the same text on a target; a family with the same parents; a place with the same name, type and parent; a source with the same title; a link that is already there.
 - **No silent namesakes.** A new person whose first name and surname already exist in the tree stops the run until the change list either uses the existing ID or says `allow_namesake`, with the reason and the IDs it compared. The reason goes into the plan and the log.
