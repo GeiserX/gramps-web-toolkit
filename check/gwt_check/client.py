@@ -85,10 +85,11 @@ class Client:
             path, body = "/token/sync/", {"token": self._sync_token}
         else:
             path, body = "/token/", {"username": self.username, "password": self._password}
-        data = json.dumps(body).encode()
-        headers = {"Content-Type": "application/json", "User-Agent": USER_AGENT}
+        # the request and the response keep apart names: a retry after a 429 resends the same credentials
+        payload = json.dumps(body).encode()
+        req_headers = {"Content-Type": "application/json", "User-Agent": USER_AGENT}
         for attempt in range(1, 8):
-            req = urllib.request.Request(self.base + path, data, headers)
+            req = urllib.request.Request(self.base + path, payload, req_headers)
             try:
                 status, headers, data = self._call(req)
             except NETWORK_ERRORS as exc:

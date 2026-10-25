@@ -395,8 +395,10 @@ class LiveServer:
     def __init__(self, data, write=None):
         self.data, self.write, self.calls = data, write, []
         self.headers = []  # the headers of every request, in step with `calls`
+        self.bodies = []  # the body of every request, in step with `calls`
         self.sync_tokens = {}  # persistent sync token -> the tree its JWT is for
         self.expire = 0  # answer the next N requests that carry a JWT with 401, as if it had expired
+        self.rate_limit_login = 0  # answer the next N logins with 429, as a rate-limited server does
 
     @staticmethod
     def jwt(tree):
@@ -407,6 +409,11 @@ class LiveServer:
         url = urllib.parse.urlparse(req.full_url)
         self.calls.append((url.path, url.query))
         self.headers.append(dict(req.header_items()))
+        self.bodies.append(req.data)
+        if url.path.endswith(("/token/", "/token/sync/")) and self.rate_limit_login:
+            self.rate_limit_login -= 1
+            raise urllib.error.HTTPError(req.full_url, 429, "Too Many Requests", {"Retry-After": "0"},
+                                         io.BytesIO(b'{"error":"rate"}'))
         if url.path.endswith("/token/sync/"):
             tree = self.sync_tokens.get(json.loads(req.data).get("token"))
             if tree is None:
@@ -958,6 +965,23 @@ def test_a_sync_token_for_another_tree_is_refused(live):
         client.login()
 
 
+@pytest.mark.parametrize("token", [None, "persistent-sync-token"])
+def test_a_rate_limited_login_is_retried_with_the_same_request(live, token):
+    server = live(selftest.clean_tree())
+    server.sync_tokens["persistent-sync-token"] = "tree-1"
+    server.rate_limit_login = 1
+    client = Client("https://gramps.example.org", "u", "pw", token=token, tree="tree-1",
+                    opener=server, sleep=lambda s: None)
+    client.login()
+    path = "/api/token/sync/" if token else "/api/token/"
+    assert [p for p, _ in server.calls] == [path, path]
+    assert server.bodies[1] == server.bodies[0] == json.dumps(
+        {"token": token} if token else {"username": "u", "password": "pw"}).encode()
+    first, second = server.headers
+    assert second == first and second["User-agent"].startswith("gramps-web-toolkit/")
+    assert second["Content-type"] == "application/json"
+
+
 def test_a_trailing_api_in_the_url_is_dropped(live):
     server = live(selftest.clean_tree())
     for url in ("https://gramps.example.org/api", "https://gramps.example.org/api/", "https://gramps.example.org/"):
@@ -968,9 +992,10 @@ def test_a_trailing_api_in_the_url_is_dropped(live):
 
 def test_a_url_without_a_scheme_is_a_settings_error(live, monkeypatch, capsys):
     server = live(selftest.clean_tree())
-    monkeypatch.setenv("GWT_URL", "gramps.example.org")
-    assert main(["check"]) == 2
-    assert "GWT_URL" in capsys.readouterr().err and server.calls == []
+    for url in ("gramps.example.org", "ftp://gramps.example.org"):
+        monkeypatch.setenv("GWT_URL", url)
+        assert main(["check"]) == 2, url
+        assert "GWT_URL" in capsys.readouterr().err and server.calls == [], url
 
 
 # -- dup-citation ---------------------------------------------------------------------------------
