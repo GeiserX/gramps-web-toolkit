@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """gwt-leads: turn the gaps of a tree dump into research tasks for gwt-queue.
 
-Reads an offline dump (the JSON `gwt-check dump` writes, .gz ok) and never touches the tree. Exit 2 on a file that
-is not a dump, never a silent empty list. Prints the gaps highest priority first: direct ancestors of --root count
+Reads an offline dump (the JSON `gwt-check dump` writes, or a `gwt-apply` snapshot; gzipped or not) and never
+touches the tree. Exit 2 on a file that is not a dump, never a silent empty list. Prints the gaps highest priority first: direct ancestors of --root count
 100 minus a point per generation (never below 40), everyone else 10.
 
   gwt-leads [--root I0001] [--kinds branch-end,missing-vital,uncited] [--limit N] [--format tsv|json|queue] DUMP
@@ -39,29 +39,40 @@ def default_living_after():
     return datetime.date.today().year - 100
 
 
+SNAPSHOT_FORMAT = 'gwt-apply-snapshot/1'
+# a gwt-apply snapshot keys objects by Gramps class; a gwt-check dump by REST namespace
+SNAPSHOT_KEYS = {'Person': 'people', 'Family': 'families', 'Event': 'events', 'Place': 'places'}
+ACCEPTED = 'a gwt-check dump or a gwt-apply snapshot'
+
+
 def load(path):
-    """The people, families, events and places of a `gwt-check dump` file: {tree, dumped_at, objects: {people: [...]}}.
-    A bare {people: [...]} map is read too. Anything else is an error, never an empty result."""
-    opener = gzip.open if path.endswith('.gz') else open
+    """The people, families, events and places of a `gwt-check dump` file ({tree, dumped_at, objects: {people:
+    [...]}}) or of a `gwt-apply` snapshot ({format: gwt-apply-snapshot/1, objects: {Person: [...]}}), gzipped or
+    not. A bare {people: [...]} map is read too. Anything else is an error, never an empty result."""
     try:
-        with opener(path, 'rt', encoding='utf-8') as f:
+        with open(path, 'rb') as f:
+            gz = f.read(2) == b'\x1f\x8b'
+        with (gzip.open if gz else open)(path, 'rt', encoding='utf-8') as f:
             data = json.load(f)
     except (OSError, ValueError, EOFError) as exc:
-        raise BadInput('%s: not a JSON dump (%s)' % (path, exc))
+        raise BadInput('%s: not JSON, so not %s (%s)' % (path, ACCEPTED, exc))
+    snapshot = isinstance(data, dict) and data.get('format') == SNAPSHOT_FORMAT
     if isinstance(data, dict):
         data = data.get('objects', data)
     if not isinstance(data, dict):
-        raise BadInput('%s: a dump is a JSON object with one list per type' % path)
+        raise BadInput('%s: not %s: expected a JSON object with one list per type' % (path, ACCEPTED))
+    if snapshot:
+        data = {SNAPSHOT_KEYS[k]: v for k, v in data.items() if k in SNAPSHOT_KEYS}
     bad = [t for t in ('people', 'families', 'events') if not isinstance(data.get(t), list)]
     if bad:
-        raise BadInput('%s: no %s list: is this a gwt-check dump?' % (path, ', '.join(bad)))
+        raise BadInput('%s: no %s list: is this %s?' % (path, ', '.join(bad), ACCEPTED))
     if not data['people']:
         raise BadInput('%s: the dump holds no people' % path)
     out = {}
     for t in ('people', 'families', 'events'):
         bad = [o for o in data[t] if not isinstance(o, dict) or 'handle' not in o]
         if bad:
-            raise BadInput('%s: %d %s records are not objects with a handle: is this a gwt-check dump?' % (path, len(bad), t))
+            raise BadInput('%s: %d %s records are not objects with a handle: is this %s?' % (path, len(bad), t, ACCEPTED))
         out[t] = {o['handle']: o for o in data[t]}
     places = data.get('places', [])
     if not isinstance(places, list) or any(not isinstance(o, dict) or 'handle' not in o for o in places):

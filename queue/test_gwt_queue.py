@@ -494,6 +494,20 @@ class QueueTest(unittest.TestCase):
             self.assertTrue(out.startswith('q2\t'), result)
             self.assertEqual([r['status'] for r in self.rows()], ['done', 'open'])
 
+    def test_dedupe_tells_apart_names_in_other_scripts(self):
+        # The queue normalizes like gwt-ledger, so a query in Cyrillic keeps its words and two names differ.
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'ledger'))
+        import gwt_ledger
+        for text in ('Иван Петров, 1880', 'Ørsted', 'Peiró, JOSÉ «Pepe»', 'snake_case'):
+            self.assertEqual(Q.normalize(text), gwt_ledger.normalize(text), text)
+        self.add(person='Ivan Petrov', query='Иван Петров 1880')
+        self.assertEqual(self.rows()[0]['query'], 'иван петров 1880')
+        code, out, _ = self.add('--dedupe', person='Ivan Petrov', query='Мария Сидорова 1880')
+        self.assertTrue(out.startswith('q2\t'))
+        code, out, _ = self.add('--dedupe', person='Ivan Petrov', query='ИВАН петров, 1880')
+        self.assertTrue(out.startswith('q1\t'))
+        self.assertEqual(len(self.rows()), 2)
+
     def test_lease_minutes_must_be_at_least_one(self):
         self.add()
         for bad in ('0', '-5'):
