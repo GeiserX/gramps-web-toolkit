@@ -203,3 +203,47 @@ def test_a_badly_typed_act_is_refused_as_bad_input_not_a_crash(tmp_path, capsys,
     d = tmp_path / "t.json"
     d.write_text(json.dumps({"tree": "x", "dumped_at": "", "objects": selftest.clean_tree()}))
     assert main(["act", str(a), str(d)]) == 2
+
+
+def _second_mateo(d):
+    """Another Mateo Ortega, married to someone else."""
+    me = copy.deepcopy(next(p for p in d["people"] if p["gramps_id"] == "I0002"))
+    me.update(gramps_id="I0009", handle="hI0009", family_list=["hF0009"], parent_family_list=[],
+              event_ref_list=[])
+    fam = copy.deepcopy(next(f for f in d["families"] if f["gramps_id"] == "F0002"))
+    fam.update(gramps_id="F0009", handle="hF0009", father_handle="hI0009", child_ref_list=[], event_ref_list=[])
+    d["people"].append(me)
+    d["families"].append(fam)
+    return d
+
+
+def test_a_marriage_act_counts_only_the_namesake_who_married_that_spouse():
+    t = Tree(_second_mateo(copy.deepcopy(selftest.clean_tree())))
+    act = {"kind": "marriage", "date": "1895", "subject": {"given": "Mateo", "surname": "Ortega"},
+           "spouse": {"given": "Clara", "surname": "Sanz"}}
+    rep = compare_act(t, act)
+    assert [r["person"] for r in rep["candidates"]] == ["I0002"]
+    assert rep["verdict"] == "one person's name fits and has a family with that spouse"
+    act["spouse"] = {"given": "Nadie", "surname": "Inventado"}  # nobody married her: every namesake is shown
+    rep = compare_act(t, act)
+    assert len(rep["candidates"]) == 2 and rep["verdict"].startswith("several people's names fit")
+
+
+def test_person_names_the_subject_so_no_name_search_is_made(tmp_path, capsys):
+    t = Tree(_second_mateo(copy.deepcopy(selftest.clean_tree())))
+    act = _act(subject={"given": "Mateo", "surname": "Ortega"}, date="1870-03-02", father=None, mother=None)
+    assert len(compare_act(t, act)["candidates"]) == 2
+    rep = compare_act(t, act, "I0002")
+    [r] = rep["candidates"]
+    assert r["person"] == "I0002" and r["events"][0]["date"] == "same" and "name_note" not in r
+    assert rep["verdict"] == "the person was named, not searched for"
+    [r] = compare_act(t, act, "I0003")["candidates"]
+    assert r["name_note"] == "the act's name does not fit this person"
+    with pytest.raises(BadInput):
+        compare_act(t, act, "I9999")
+    d = tmp_path / "t.json"
+    d.write_text(json.dumps({"tree": "x", "dumped_at": "", "objects": selftest.clean_tree()}))
+    a = tmp_path / "a.json"
+    a.write_text(json.dumps(act))
+    assert main(["act", str(a), str(d), "--person", "I0002"]) == 0
+    assert "I0002" in capsys.readouterr().out

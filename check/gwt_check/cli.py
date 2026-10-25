@@ -328,6 +328,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("act", help="set one transcribed act beside the tree: same date, place, parents, cited or not; a report that changes nothing")
     p.add_argument("actfile", help="JSON file with the act: kind, date, place, reference, subject, father, mother or spouse")
     p.add_argument("tree", nargs="?", help="dump file; without it the live tree is read")
+    p.add_argument("--person", metavar="GRAMPS_ID", help="the tree person the act is about; without it the act's name is searched")
     p.add_argument("--json", action="store_true", help="print the result as JSON")
     live_opts(p)
 
@@ -349,7 +350,7 @@ def main(argv: list[str] | None = None) -> int:
             tree = load(args.tree) if args.tree else Tree(live_dump(args)["objects"], source="live tree")
             if tree.partial:
                 raise BadInput(f"{tree.source}: a .gramps backup has no citation text; use a dump")
-            rep = compare_act(tree, act)
+            rep = compare_act(tree, act, args.person)
             if args.json:
                 print(json.dumps(rep, ensure_ascii=False, indent=1))
             else:

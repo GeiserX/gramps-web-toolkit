@@ -181,14 +181,31 @@ def _events(tree: Tree, p: dict, types: set[str]) -> list[dict]:
             if r.get("role") == "Primary" and r.get("ref") in E and kind(E[r["ref"]].get("type")) in types]
 
 
-def compare_act(tree: Tree, act: dict) -> dict:
+def _spouse_families(tree: Tree, p: dict, spouse: dict) -> list[dict]:
+    P, F = tree.objs["people"], tree.objs["families"]
+    fams = [F[h] for h in p.get("family_list") or [] if h in F]
+    return [f for f in fams if any(x in P and x != p["handle"] and _fits(P[x], spouse)
+                                   for x in (f.get("father_handle"), f.get("mother_handle")))]
+
+
+def compare_act(tree: Tree, act: dict, person: str | None = None) -> dict:
+    """`person` is a Gramps ID: whoever transcribed the act names the person, and no name search is made."""
     types = KINDS[act["kind"]]
     P = tree.objs["people"]
-    cands = [p for p in P.values() if _fits(p, act["subject"])]
-    fewer = False
-    if not cands:  # the tree may carry fewer names than the act: listed apart, never taken as a match
-        cands = [p for p in P.values() if _fits_fewer(p, act["subject"])]
-        fewer = bool(cands)
+    fewer = narrowed = False
+    if person:
+        cands = [p for p in P.values() if p.get("gramps_id") == person]
+        if not cands:
+            raise BadInput(f"--person {person}: no such person")
+    else:
+        cands = [p for p in P.values() if _fits(p, act["subject"])]
+        if not cands:  # the tree may carry fewer names than the act: listed apart, never taken as a match
+            cands = [p for p in P.values() if _fits_fewer(p, act["subject"])]
+            fewer = bool(cands)
+        if act["kind"] == "marriage" and len(cands) > 1:  # the spouse is a second name that picks the subject out
+            wed = [p for p in cands if _spouse_families(tree, p, act["spouse"])]
+            narrowed = bool(wed) and len(wed) < len(cands)
+            cands = wed or cands
     rows = []
     for p in cands:
         if p.get("private"):  # counted, so a private namesake still blocks "one fits", but nothing of it is shown
@@ -198,10 +215,10 @@ def compare_act(tree: Tree, act: dict) -> dict:
                "name": " ".join(_person_names(p)[0] + _person_names(p)[1])}
         if fewer:
             row["name_note"] = "the tree gives fewer names than the act"
+        elif person and not _fits(p, act["subject"]):
+            row["name_note"] = "the act's name does not fit this person"
         if act["kind"] == "marriage":
-            fams = [tree.objs["families"][h] for h in p.get("family_list") or [] if h in tree.objs["families"]]
-            fams = [f for f in fams if any(
-                x in P and _fits(P[x], act["spouse"]) for x in (f.get("father_handle"), f.get("mother_handle")))]
+            fams = _spouse_families(tree, p, act["spouse"])
             evs = [e for f in fams for r in f.get("event_ref_list") or []
                    if (e := tree.objs["events"].get(r.get("ref"))) and kind(e.get("type")) in types]
             row["family"] = [tree.gid("families", f["handle"]) for f in fams]
@@ -215,11 +232,18 @@ def compare_act(tree: Tree, act: dict) -> dict:
                               "place": _place_status(tree, e, act.get("place") or ""),
                               "cited": _cited(tree, e, act.get("reference") or "")} for e in evs]
         rows.append(row)
+    if person:
+        verdict = "the person was named, not searched for"
+    elif not rows:
+        verdict = "subject not in the tree"
+    elif fewer:
+        verdict = "the tree has people with fewer names than the act: none is taken as the subject, read each"
+    elif len(rows) > 1:
+        verdict = "several people's names fit the subject: none is chosen"
+    else:
+        verdict = "one person's name fits" + (" and has a family with that spouse" if narrowed else "")
     return {"act": {k: act.get(k) for k in ("kind", "date", "registered", "place", "reference")},
-            "candidates": rows,
-            "verdict": "subject not in the tree" if not rows else
-            ("the tree has people with fewer names than the act: none is taken as the subject, read each" if fewer else None) or
-            ("several people fit the subject: none is chosen" if len(rows) > 1 else "one person fits")}
+            "candidates": rows, "verdict": verdict}
 
 
 def print_act(rep: dict) -> None:
