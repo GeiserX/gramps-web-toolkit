@@ -181,7 +181,7 @@ def print_report(report: dict, limit: int) -> None:
         if len(new) > limit:
             print(f"  ... {len(new) - limit} more (--limit, or --json for all)")
     info = report["info"]
-    print(f"\nevents without place: {info['events without place']}"
+    print(f"\nevents without place: {info['events without place']} (places their citations name: gwt-check fill-places)"
           + (f", {len(info['events without place, in scope'])} in scope" if "events without place, in scope" in info else ""))
     if info.get("dates not read"):
         print(f"dates not read by the dated checks: {info['dates not read']} (another calendar, from/to, dual-dated or free text)")
@@ -284,14 +284,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--limit", type=int, default=30, help="sources listed with --unlinked (default 30)")
     live_opts(p)
 
-    p = sub.add_parser("insight", help="read-only reading aid: what citation and note texts say (possible mismatches, conflict notes, fill proposals, search order, witnesses); proves nothing")
+    p = sub.add_parser("fill-places", help="for each event with no place, the place its own citations name, with the quote; proposals only")
     p.add_argument("tree", nargs="?", help="dump file; without it the live tree is read")
-    p.add_argument("--only", help="comma-separated sections: citations, discrepancies, fill, frontier, witnesses")
-    p.add_argument("--archives", help="JSON file: {place name: {from, to, online}} for the frontier ordering")
-    p.add_argument("--searched", help="a gwt-ledger TSV: the frontier shows when each person was last searched")
-    p.add_argument("--csv", metavar="FILE", help="write the fill proposals to a new CSV with an empty decision column (never applies anything)")
+    p.add_argument("--ops", metavar="FILE", help="also write the proposals to a new file as gwt-apply update_event ops with an empty ruling")
     p.add_argument("--json", action="store_true", help="print the result as JSON")
-    p.add_argument("--limit", type=int, default=15, help="lines printed per section (default 15)")
+    p.add_argument("--limit", type=int, default=30, help="proposals printed (default 30)")
     live_opts(p)
 
     sub.add_parser("selftest", help="plant every error kind in a synthetic tree and prove each check fires")
@@ -306,40 +303,22 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "dump":
             save(live_dump(args), args.out)
             return 0
-        if args.cmd == "insight":
-            from .insight import SECTIONS, dumps, insight, print_insight, read_searched, write_proposals_csv
-            only = set(args.only.split(",")) if args.only else None
-            if only and only - set(SECTIONS):
-                raise BadInput(f"unknown section: {', '.join(sorted(only - set(SECTIONS)))}")
+        if args.cmd == "fill-places":
+            from .fill import print_places, propose_places, write_ops
             tree = load(args.tree) if args.tree else Tree(live_dump(args)["objects"], source="live tree")
             if tree.partial:
-                raise BadInput(f"{tree.source}: a .gramps backup has no details; use a dump")
-            archives = None
-            if args.archives:
+                raise BadInput(f"{tree.source}: a .gramps backup has no citation text; use a dump")
+            rep = propose_places(tree)
+            if args.ops:
                 try:
-                    with open(args.archives, encoding="utf-8") as fh:
-                        archives = json.load(fh)
-                except (OSError, ValueError) as exc:
-                    raise BadInput(f"{args.archives}: {exc}") from exc
-            searched = None
-            if args.searched:
-                try:
-                    searched = read_searched(args.searched)
+                    n = write_ops(rep, args.ops)
                 except OSError as exc:
-                    raise BadInput(f"{args.searched}: {exc}") from exc
-            if args.csv and only and "fill" not in only:
-                raise BadInput("--csv needs the fill section")
-            rep = insight(tree, only, archives, searched)
-            if args.csv:
-                try:
-                    n = write_proposals_csv(rep, args.csv)
-                except OSError as exc:
-                    raise BadInput(f"{args.csv}: {exc} (an existing file is never replaced)") from exc
-                print(f"{n} proposals written to {args.csv}; nothing was applied", file=sys.stderr)
+                    raise BadInput(f"{args.ops}: {exc} (an existing file is never replaced)") from exc
+                print(f"{n} ops written to {args.ops} with an empty ruling; nothing was applied", file=sys.stderr)
             if args.json:
-                print(dumps(rep))
+                print(json.dumps(rep, ensure_ascii=False, indent=1))
             else:
-                print_insight(rep, args.limit)
+                print_places(rep, args.limit)
             return 0
         if args.cmd == "repos":
             from .repos import print_repository_report, repository_report
