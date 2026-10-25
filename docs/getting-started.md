@@ -49,6 +49,32 @@ GWT_TREE=<the tree id the login must land in>
 
 Both tools compare `GWT_TREE` with the tree named in the login token and stop if they differ, so a wrong account never reads or writes the wrong tree.
 
+`GWT_URL` is the address of the site. The API address works too: a trailing `/api` is dropped. An address without `http://` or `https://` stops the run with a settings error before anything is read.
+
+### Log in with a token instead of a password
+
+A server that signs users in only through single sign-on (OIDC) has no password to give. On any server, a token is also easier to take back than a password. Set `GWT_TOKEN` and leave out `GWT_USERNAME` and `GWT_PASSWORD`:
+
+```sh
+GWT_URL=https://gramps.example.org
+GWT_TOKEN=<a sync access token>
+GWT_TREE=<the tree id the login must land in>
+```
+
+To create the token, sign in to Gramps Web, open your user settings, and under **Access tokens** choose **Add sync device**. Give it a label such as `gwt`, then copy the token it shows; the server does not keep it, so it is shown only once. The token belongs to your user and carries the `sync` scope: it can read, add, edit and delete objects, which covers every `gwt-apply` op and every `gwt-check` read, and nothing else (no user or tree administration). You can revoke it from the same list at any time: from then on it can no longer be exchanged, and a login already made with it ends when it expires (15 minutes on a default server). One token per machine or per script keeps each one revocable on its own. Your Gramps Web version must show **Access tokens** in the user settings.
+
+The tools exchange the token at `POST /api/token/sync/` for a short-lived login, and exchange it again when that login expires. When `GWT_TOKEN` is set, a username and password in the same settings are ignored.
+
+### How the tools identify themselves
+
+Every request to Gramps Web carries a User-Agent, as the Gramps Web maintainer asks of every API client:
+
+```text
+gramps-web-toolkit/<version> (gwt-apply; +https://github.com/GeiserX/gramps-web-toolkit)
+```
+
+`gwt-check` sends the same with `gwt-check`. A server admin can tell the toolkit apart from the web app and from other scripts in the logs. The version is `0+checkout` when a tool runs from a clone without being installed.
+
 ## First run
 
 1. Prove the checks can fail. This needs no server:

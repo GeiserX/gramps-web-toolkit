@@ -50,6 +50,9 @@ class FakeGrampsWeb:
         self.store: dict[str, dict[str, dict]] = {ns: {} for ns in NS}
         self.files: dict[str, bytes] = {}  # media handle -> stored bytes
         self.calls: list[tuple[str, str]] = []
+        self.headers: list[dict] = []  # the headers of every request, in step with `calls`
+        self.sync_tokens: dict[str, str] = {}  # persistent sync token -> the tree its JWT is for
+        self.expire = 0  # answer the next N requests that carry a JWT with 401, as if it had expired
         self.busy = 0  # answer the next N writes with "database is locked"
         self.busy_status = 500  # the HTTP status of that answer; some servers send it as a 4xx
         self.edit_after_read: tuple | None = None  # (handle, fn): another writer edits it once, right after a read
@@ -97,7 +100,7 @@ class FakeGrampsWeb:
         return out
 
     def writes(self) -> list[tuple[str, str]]:
-        return [c for c in self.calls if c[0] in ("POST", "PUT", "DELETE") and c[1] != "/api/token/"]
+        return [c for c in self.calls if c[0] in ("POST", "PUT", "DELETE") and not c[1].startswith("/api/token/")]
 
     def _family_refs(self, old: dict | None, new: dict):
         """What the real server does on a family write: keep the persons' family links in step."""
@@ -119,9 +122,18 @@ class FakeGrampsWeb:
     def request(self, method, url, headers=None, params=None, json=None, data=None, timeout=None):
         path = urlparse(url).path
         self.calls.append((method, path))
+        self.headers.append(dict(headers or {}))
         params = params or {}
         if path == "/api/token/":
             return Resp(200, {"access_token": make_jwt(self.tree), "refresh_token": "r"})
+        if path == "/api/token/sync/":
+            tree = self.sync_tokens.get((json or {}).get("token"))
+            if tree is None:
+                return Resp(403, {"error": {"message": "Forbidden"}})
+            return Resp(200, {"access_token": make_jwt(tree)})  # never a refresh token
+        if self.expire:
+            self.expire -= 1
+            return Resp(401, {"msg": "Token has expired"})
         if method in ("POST", "PUT") and self.busy:
             self.busy -= 1
             return Resp(self.busy_status, "sqlite3.OperationalError: database is locked")

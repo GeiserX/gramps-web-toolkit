@@ -48,7 +48,7 @@ def read_log(path: str) -> list[dict]:
             e = json.loads(line)
             if e.get("dry_run") or e.get("method") not in ("PUT", "POST", "DELETE"):
                 continue
-            if e["path"] == "/token/" or LOCK_HANDLE in e["path"] or LOCK_HANDLE in json.dumps(e.get("body") or ""):
+            if e["path"].startswith("/token/") or LOCK_HANDLE in e["path"] or LOCK_HANDLE in json.dumps(e.get("body") or ""):
                 continue  # the login and the tree lock's own note are not changes to the tree
             status = e.get("status")
             if status in (200, 201, 204) or status is None or status >= 500:
