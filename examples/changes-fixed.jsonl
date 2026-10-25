@@ -1,0 +1,8 @@
+{"op": "add_source", "key": "s-marriages", "ruling": "R-1", "title": "Libro de matrimonios de Villaejemplo"}
+{"op": "add_person", "key": "p-elena", "ruling": "R-1", "first_name": "Elena", "surname": "Marín Soto", "gender": "F"}
+{"op": "add_family", "key": "f-tomas-elena", "ruling": "R-1", "father": "I0008", "mother": "key:p-elena", "type": "Married"}
+{"op": "add_event", "key": "e-tomas-elena-marriage", "ruling": "R-1", "family": "key:f-tomas-elena", "type": "Marriage", "date": "1928-06-02", "place": "P0001"}
+{"op": "add_person", "key": "p-andres", "ruling": "R-1", "first_name": "Andrés", "surname": "Ortega Marín", "gender": "M"}
+{"op": "link_child", "key": "l-andres", "ruling": "R-1", "family": "key:f-tomas-elena", "child": "key:p-andres"}
+{"op": "add_citation", "key": "c-marriage", "ruling": "R-1", "source": "key:s-marriages", "page": "folio 14, no. 3", "confidence": 3, "attach": [{"event": "key:e-tomas-elena-marriage"}]}
+{"op": "add_note", "key": "n-andres", "ruling": "R-1", "type": "Research", "text": "Andrés is named as their son in the parish census of 1935; his baptism is still to be found.", "attach": [{"person": "key:p-andres"}]}

@@ -33,13 +33,23 @@ The toolkit works for genealogy in any country. One module, `spanish-poller`, is
 
 ## Quick start
 
-```bash
-pipx install gramps-web-toolkit      # Python 3.11+, macOS or Linux; every Python tool, needs only requests
-gwt                                  # lists the tools
-gwt apply changes.jsonl              # dry-run: prints the plan and the diff
-```
+Watch the toolkit refuse a duplicate in two minutes, with no server. The tree in `examples/` is a snapshot of 30 invented people, and `changes.jsonl` adds a wife and a son for Tomás Ortega Sanz, but adds Tomás again as a new person although he is already in the tree.
 
-PyPI gets the package with the first release; until then install from GitHub with `pipx install git+https://github.com/GeiserX/gramps-web-toolkit`. Every tool runs as `gwt <tool>` and keeps its old `gwt-<tool>` command too. `gwt mh` needs the `mh` extra (`pipx install 'gramps-web-toolkit[mh]'`) and a Chrome it reaches over CDP. `gwt-spanish-poller` needs Node 18+ and Playwright and is not in the package. [Getting started](https://geiserx.github.io/gramps-web-toolkit/getting-started/) has the details and a first run against your tree.
+<!-- quick-start:begin -->
+```bash
+git clone https://github.com/GeiserX/gramps-web-toolkit
+cd gramps-web-toolkit
+pipx install .                    # Python 3.11+, macOS or Linux; every Python tool, needs only requests
+cd examples
+gwt check selftest                # plants every kind of error in a made-up tree and finds each one
+gwt apply changes.jsonl --snapshot tree.json.gz --log /tmp/gwt-demo.jsonl         # refused: Tomás is already I0008
+gwt apply changes-fixed.jsonl --snapshot tree.json.gz --log /tmp/gwt-demo.jsonl   # uses I0008: the plan goes through
+gwt check check tree.json.gz      # the whole tree, offline
+gwt leads --root I0001 --limit 10 tree.json.gz   # the gaps to research next, Lucía's ancestors first
+```
+<!-- quick-start:end -->
+
+`./demo.sh` in `examples/` runs the same commands and checks each exit code. Nothing above writes to a tree: without `--apply`, `gwt apply` only prints the plan. Every tool runs as `gwt <tool>` and keeps its old `gwt-<tool>` command too. `gwt mh` needs the `mh` extra (`pipx install '.[mh]'`) and a Chrome it reaches over CDP. `gwt-spanish-poller` needs Node 18+ and Playwright and is not in the package. PyPI gets the package with the first release. [Getting started](https://geiserx.github.io/gramps-web-toolkit/getting-started/) connects the tools to your own tree.
 
 ## Documentation
 
