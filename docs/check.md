@@ -1,6 +1,6 @@
 # gwt-check
 
-`gwt-check` reads a whole Gramps Web tree and reports what is broken in it: orphans, dangling links, wrong birth and death pointers, repeated references, likely duplicates, and what a run changed compared with an earlier copy. It never writes to the tree.
+`gwt-check` reads a whole Gramps Web tree and reports what is broken in it: orphans, dangling links, wrong birth and death pointers, repeated references, likely duplicates, dates that contradict each other, and what a run changed compared with an earlier copy. It never writes to the tree.
 
 It runs the [independent check](pipeline.md#the-independent-check) after an apply in one command. Before it, every round's checker wrote throwaway scripts, and no two rounds checked quite the same things.
 
@@ -20,7 +20,7 @@ Without installing, run `check/gwt-check` from a clone.
 
 Settings come from the environment, or from a `KEY=VALUE` file passed with `--config`, the same as [`gwt-apply`](apply.md): `GWT_URL`, `GWT_USERNAME`, `GWT_PASSWORD`, and `GWT_TREE`, the tree id the login must land in. If `GWT_TREE` is set and the token's `tree` claim differs, it stops. One login serves the whole run, and the password never reaches the output.
 
-It exits `0` with no new findings and `1` with new findings. Findings of a check marked for information only, today `unconnected`, are printed as `info` and never count as new. It exits `2` on bad input, which covers a file that is not a dump, missing settings, a failed login, and a live tree that never settles (below).
+It exits `0` with no new findings and `1` with new findings. Findings of a check marked for information only, today `unconnected`, `parent-age`, `marriage-age`, `sibling-spacing` and `lifespan`, are printed as `info` and never count as new. It exits `2` on bad input, which covers a file that is not a dump, missing settings, a failed login, and a live tree that never settles (below).
 
 ## Reading a tree that is being written to
 
@@ -51,7 +51,7 @@ A `gwt-apply` snapshot (`gwt-apply --save-snapshot`, or `--save-snapshot NEW --s
 | `--pagesize`, `--workers` | Objects per request (default 1000) and requests in flight (default 4) |
 | `--live` | The old strict read of the live tree, which stops when the tree changes during it |
 
-**Scope.** The structural checks always run on the whole tree. The fuzzy duplicate checks (`dup-couple-names`, `dup-person-birth`, `dup-person-relative`, `dup-person-fuzzy`, `dup-vital-event`) report a pair only when at least one side is in scope, so a run is not blamed for duplicates that were already there. Without `--since` or `--tag`, everything is in scope.
+**Scope.** The structural and dated checks always run on the whole tree. The fuzzy duplicate checks (`dup-couple-names`, `dup-person-birth`, `dup-person-relative`, `dup-person-fuzzy`, `dup-vital-event`) report a pair only when at least one side is in scope, so a run is not blamed for duplicates that were already there. Without `--since` or `--tag`, everything is in scope.
 
 **Reasons.** Rows of a known file may carry a `reason`, and the report prints it (`known N0099: kept on purpose`). `gwt-check mark-known REPORT.json --check NAME --key KEY [--key KEY ...] --reason "..." --out known.json` adds findings of a report to a known file with the reason; it refuses a key the report does not have and a blank reason, and adding one twice changes nothing.
 
@@ -99,14 +99,33 @@ gwt-check repos dump.json.gz --json                   # repositories with their 
 | `ahnentafel-lost`, `ahnentafel-changed` | With `--since` and `--root`: a number that disappeared, or holds another person |
 | `ahnentafel-truncated` | With `--root`: the pedigree passes 100,000 Ahnentafel positions (pedigree collapse, or someone made their own ancestor), so the walk stopped there. With `--since`, only the generations both trees walked in full are compared. It fails the run, in a `--since --root` run and a `--root` run alike; accept it with `--known` and the key `root <ID>` |
 | `unconnected` | For information only, it never sets the exit code. A group of people joined to each other by families (as father, mother or child) with no family link to the main group. The main group is the `--root` person's, or without `--root` (or with a root in no family) the largest one, the one with the lowest Gramps ID on a tie. One finding per other group, keyed by its lowest Gramps ID in numeric order (`I9001` before `I10000`), with its size and first five IDs in the detail, so the key holds while the group grows. It finds a batch written with no link to the main family, such as a research branch waiting for a documentary bridge; it does not find a person written into the wrong tree and linked to one of its families, who joins the main group like anyone else. People in no family are left out. A link through an event role (a godparent, a witness) or an association does not count, so a couple tied to the tree only as godparents is its own group. With `--since` or `--tag` it reports only the groups holding a person or a family in scope |
+| `event-order` | A person's own dates in an order no reading allows: death before birth or baptism, baptism before birth, burial before death. Dates are compared as intervals (below) |
+| `child-before-parent` | A child born before their father or mother |
+| `child-after-parent-death` | A child born after the mother's death, or more than 300 days after the father's |
+| `marriage-before-birth`, `marriage-after-death` | A Marriage event before a spouse's birth or after their death (or burial) |
+| `own-ancestor` | A person who is their own ancestor through the families' father, mother and child links. Keyed by the IDs in the loop |
+| `parent-age` | For information only. A mother under 14 or over 52, or a father under 14 or over 85, at a child's birth |
+| `marriage-age` | For information only. A bride under 12 or a groom under 14 at the marriage: the canon-law minimum before 1917. A person of unknown sex is held to 12 |
+| `sibling-spacing` | For information only. Two children of one mother born less than 240 days apart and more than a day apart (twins). Birth events with an exact day only: a baptism can be late |
+| `lifespan` | For information only. A life of more than 105 years, from birth or baptism to death or burial |
 
 Names are compared lowercased, without accents, with b/v and i/y folded and the particle "de" dropped. `dup-person-fuzzy` also drops "del", "la", "las", "los" and "y", and matches "Pedro Lasa" with "Pedro José Lasa Ibarra". For a pair to count, at least one side must be in scope, or belong to a family that is. That covers an old person the run gave a new spouse or new parents. A different spelling of the same word ("Lasa" against "Lassa") is still not matched. A run that allowed namesakes still needs its homonyms read one by one.
 
 The report also gives, without failing: events without a place (in the whole tree and in scope), sources without a repository (in a tree that has repositories: a source is linked only when its repository is certain, so some stay unlinked), the objects changed and new since `--since`, the last changed object (it should be the last item applied), and the Ahnentafel counts.
 
+## Dated checks
+
+The dated checks read every date as the interval it may stand for, and report two facts only when their intervals cannot overlap, so a vague date never produces a contradiction. A day is one day, a month or a year is the whole month or year, a range runs from its first day to its last, and "before" and "after" are open on one side. An "about" or estimated date gets 2 years of slack either side, and a calculated one (usually worked out from a stated age) 1 year. A text-only date is read only when it is a plain ISO date (`1878`, `1878-05`, `c. 1878`). Dates in another calendar, with a new year other than 1 January, dual-dated (`1699/1700`), or "from" and "to" are not read; the report counts them (`dates not read`).
+
+The detail of each finding names the event types, IDs and dates behind it, and ends in `(firm)` when every date is a plain day, month or year, or `(soft)` when one has slack. A person with no Birth event is taken as born up to a year before their baptism, an infant baptism: a mother who died in childbirth and a child baptised the next day is no contradiction. A death with no Death event is bounded by the burial. Parent rules apply to children whose relation to that parent is `Birth`, `Unknown` or blank, so an adopted or stepchild is left out.
+
+Each key is built from Gramps IDs: the family, the parent and the child for the parent rules, the person and both events for `event-order`. Between write blocks, `gwt-check check --baseline <dump before the block>` fails only on the contradictions the block wrote: a child linked to a father who died years before, or to a mother of 9, is the usual mark of a namesake or a godparent linked as a parent. Two Birth or two Death events on one person are left to `dup-vital-event`, whatever their dates.
+
+A year worked out from an age (a marriage index that gives the bride's age) should be written as `calc 1801` or `abt 1801`, never as a plain year: a plain year is read as firm, and one that falls after the person's dated baptism is an `event-order` finding.
+
 ## Self-test
 
-`gwt-check selftest` builds an invented three-generation tree, checks that it comes out clean (the positive control), then plants 38 errors, one at a time and then all together, and checks that each comes out as its finding. The test suite also silences each check in turn and requires the self-test to fail, so a check without a planted error cannot slip in.
+`gwt-check selftest` builds an invented three-generation tree, checks that it comes out clean (the positive control), then plants 48 errors, one at a time and then all together, and checks that each comes out as its finding. The test suite also silences each check in turn and requires the self-test to fail, so a check without a planted error cannot slip in.
 
 ## Speed
 
