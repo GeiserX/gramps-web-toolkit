@@ -1553,3 +1553,30 @@ def test_revert_compares_what_the_server_keeps_not_its_defaults(tmp_path):
         {"method": "POST", "path": "/objects/", "status": 201, "body": [{"_class": "Note", "handle": revert.LOCK_HANDLE}]},
     ]) + "\n")
     assert revert.read_log(str(log)) == []  # login and lock note are not changes to the tree
+
+
+def test_update_child_ref_conflict_writes_nothing(fake):
+    kid = fake.add("people", {"handle": "kid", "gender": 1, "primary_name": {"first_name": "Sam", "surname_list": [{"surname": "Example", "primary": True}]}})
+    fam = fake.add("families", {"handle": "fam", "mother_handle": "anna"})
+    assert run(fake, [{"op": "link_child", "key": "l", "ruling": R, "family": fam["gramps_id"], "child": kid["gramps_id"]}])[0].status == "done"
+    puts = len(fake.writes())
+    res = run(fake, [{"op": "update_child_ref", "key": "c", "ruling": R, "family": fam["gramps_id"], "child": kid["gramps_id"],
+                      "set": {"mrel": "Adopted"}, "confirm_probable": "the 1890 baptism names both parents"}])
+    assert res[0].status == "conflict"
+    assert fake.store["families"]["fam"]["child_ref_list"][0]["mrel"] == "Birth"
+    assert len(fake.writes()) == puts
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_update_child_ref_confirms_a_link_made_earlier_in_the_same_list(fake, dry_run):
+    kid = fake.add("people", {"handle": "kid", "gender": 1, "primary_name": {"first_name": "Tom", "surname_list": [{"surname": "Example", "primary": True}]}})
+    fam = fake.add("families", {"handle": "fam", "mother_handle": "anna"})
+    ops = [{"op": "link_child", "key": "l", "ruling": R, "family": fam["gramps_id"], "child": kid["gramps_id"],
+            "probable": True, "probable_reason": "same names in the same parish"},
+           {"op": "update_child_ref", "key": "c", "ruling": R, "family": fam["gramps_id"], "child": kid["gramps_id"],
+            "confirm_probable": "the 1890 baptism names both parents"}]
+    res = run(fake, ops, dry_run=dry_run)
+    assert [r.status for r in res] == ["done", "done"], [r.actions for r in res]
+    if not dry_run:
+        ref = fake.store["families"]["fam"]["child_ref_list"][0]
+        assert fake.store["notes"][ref["note_list"][0]]["text"]["string"].startswith("[confirmed] the 1890 baptism")

@@ -921,13 +921,14 @@ class Applier:
     def update_note(self, op):
         """Correct a note the tree has. A new text needs `expect`, the text it has now: a note someone changed
         since you read it is a Conflict, never overwritten. The old text stays in the log line."""
-        note = self.obj("Note", op["note"])
+        self._update_note(self.obj("Note", op["note"]), op["set"], op.get("expect"))
+
+    def _update_note(self, note: dict, s: dict, expect: str | None) -> None:
         note.setdefault("_class", "Note")
         before = copy.deepcopy(note)
-        s = op["set"]
         text = (note.get("text") or {}).get("string") or ""
         if "text" in s and text != s["text"]:
-            if text != op["expect"]:
+            if text != expect:
                 raise Conflict(f"Note {self.label(note)} no longer reads as expected (it reads {text[:80]!r}...); read it again")
             note["text"] = {**(note.get("text") or {"_class": "StyledText"}), "string": s["text"], "tags": []}
         if "type" in s:
@@ -972,29 +973,33 @@ class Applier:
         before = copy.deepcopy(family)
         for k, v in (op.get("set") or {}).items():
             entry[k] = v
+        reason = (op.get("confirm_probable") or "").strip()
+        marked = []
+        if reason:  # every check before the first write: a conflict leaves the server as it was
+            notes = self.c.get_many("Note", entry.get("note_list") or [])
+            marked = [n for n in notes if ((n.get("text") or {}).get("string") or "").startswith(PROBABLE)]
+            done = [n for n in notes if ((n.get("text") or {}).get("string") or "").startswith(CONFIRMED)]
+            if not marked and not done:
+                raise Conflict(f"{label} has no [probable] note to confirm")
+            if len(marked) > 1:
+                raise Conflict(f"{label} has more than one [probable] note")
+            if marked and "expect" in op and marked[0]["text"]["string"] != op["expect"]:
+                raise Conflict(f"the [probable] note of {label} no longer reads as expected "
+                               f"(it reads {marked[0]['text']['string'][:80]!r}...)")
+            if not marked:
+                self.actions.append(f"skip: {label} is already confirmed (Note {self.label(done[0])})")
         if family != before:
             self.save(before, family)
-        reason = (op.get("confirm_probable") or "").strip()
-        if not reason:
-            if family == before:
+        elif not marked:
+            if not reason:
                 self.actions.append(f"skip: {label} already has those relations")
             return
-        notes = self.c.get_many("Note", entry.get("note_list") or [])
-        marked = [n for n in notes if ((n.get("text") or {}).get("string") or "").startswith(PROBABLE)]
-        done = [n for n in notes if ((n.get("text") or {}).get("string") or "").startswith(CONFIRMED)]
-        if not marked:
-            if done:
-                self.actions.append(f"skip: {label} is already confirmed (Note {self.label(done[0])})")
-                return
-            raise Conflict(f"{label} has no [probable] note to confirm")
-        if len(marked) > 1:
-            raise Conflict(f"{label} has more than one [probable] note")
-        cur = marked[0]["text"]["string"]
-        if "expect" in op and cur != op["expect"]:
-            raise Conflict(f"the [probable] note of {label} no longer reads as expected (it reads {cur[:80]!r}...)")
-        old = cur[len(PROBABLE):].strip()
-        self.update_note({"note": marked[0]["gramps_id"] or marked[0]["handle"], "set": {
-            "text": f"{CONFIRMED} {reason} (was: {PROBABLE} {old})"}, "expect": cur})
+        if marked:
+            cur = marked[0]["text"]["string"]
+            old = cur[len(PROBABLE):].strip()
+            # by handle: a note made earlier in this list has no Gramps ID this run knows
+            note = self.c.get("Note", marked[0]["handle"])
+            self._update_note(note, {"text": f"{CONFIRMED} {reason} (was: {PROBABLE} {old})"}, cur)
 
     def detach(self, op):
         """Take a note, citation or media reference off a target. The object stays in the tree (an orphan
