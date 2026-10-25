@@ -145,7 +145,7 @@ A year worked out from an age (a marriage index that gives the bride's age) shou
 
 ## Self-test
 
-`gwt-check selftest` builds an invented three-generation tree, checks that it comes out clean (the positive control), then plants 53 errors, one at a time and then all together, and checks that each comes out as its finding. One plant must stay quiet instead: two namesakes whose fathers and mothers have other names must not come out as `dup-person-fuzzy`, and must be listed among the pairs left out. Its counterparts must still fire: the same pair with same-named parents, with only the mother's name or only the father's name in common, and with other-named parents where one side is an adopted child. The test suite also silences each check in turn and requires the self-test to fail, so a check without a planted error cannot slip in.
+`gwt-check selftest` builds an invented three-generation tree, checks that it comes out clean (the positive control), then plants 54 errors, one at a time and then all together, and checks that each comes out as its finding. One plant must stay quiet instead: two namesakes whose fathers and mothers have other names must not come out as `dup-person-fuzzy`, and must be listed among the pairs left out. Its counterparts must still fire: the same pair with same-named parents, with only the mother's name or only the father's name in common, and with other-named parents where one side is an adopted child. The test suite also silences each check in turn and requires the self-test to fail, so a check without a planted error cannot slip in.
 
 ## Speed
 
