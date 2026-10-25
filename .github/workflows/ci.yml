@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # the mutants step diffs the pull request against its base
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
       - run: python -m pip install requests pytest
@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.11"  # the oldest Python the package allows
       - name: build, install in a clean venv, run every tool from it
