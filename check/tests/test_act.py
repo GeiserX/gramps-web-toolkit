@@ -7,7 +7,6 @@ from gwt_check import selftest
 from gwt_check.act import compare_act, load_act
 from gwt_check.cli import main
 from gwt_check.tree import BadInput, Tree
-from test_check import live  # noqa: F401  (the fixture that serves a fake live tree)
 
 
 def _tree():
@@ -49,9 +48,9 @@ def test_a_different_place_and_a_different_father_are_reported():
     assert r["parents"]["father"].startswith("names differ in")
 
 
-def test_a_place_that_encloses_the_tree_place_counts_as_the_same():
+def test_a_place_that_only_encloses_the_tree_place_is_not_called_the_same():
     [r] = compare_act(_tree(), _act(place="Provincia Imaginaria"))["candidates"]
-    assert r["events"][0]["place"] == "same"
+    assert r["events"][0]["place"] == "encloses the tree place (tree Villaejemplo)"
 
 
 def test_an_act_naming_no_citation_reference_matches_none():
@@ -152,12 +151,12 @@ def test_a_bad_registered_date_is_refused(tmp_path):
         load_act(str(p))
 
 
-def test_without_a_dump_the_command_reads_the_live_tree(live, tmp_path, capsys):
-    live(selftest.clean_tree())
+def test_the_command_needs_a_dump_and_never_reads_the_whole_live_tree(tmp_path, capsys):
     f = tmp_path / "a.json"
-    f.write_text(json.dumps({"kind": "birth", "date": "1900-01-01", "subject": {"given": "Nobody", "surname": "Atall"}}))
-    assert main(["act", str(f)]) == 0
-    assert "subject not in the tree" in capsys.readouterr().out
+    f.write_text(json.dumps(_act()))
+    with pytest.raises(SystemExit) as exc:
+        main(["act", str(f)])
+    assert exc.value.code == 2
 
 
 def test_a_godparent_ref_to_a_baptism_is_not_the_persons_own_event():
@@ -247,3 +246,19 @@ def test_person_names_the_subject_so_no_name_search_is_made(tmp_path, capsys):
     a.write_text(json.dumps(act))
     assert main(["act", str(a), str(d), "--person", "I0002"]) == 0
     assert "I0002" in capsys.readouterr().out
+
+
+def test_a_tree_date_kept_as_text_only_is_read():
+    t = _tree()
+    ev = next(e for e in t.objs["events"].values() if e["gramps_id"] == "E0001")
+    ev["date"] = {"dateval": [0, 0, 0, False], "modifier": 6, "quality": 0, "text": "1900-03-01"}
+    [r] = compare_act(t, _act())["candidates"]
+    assert r["events"][0]["date"] == "same"
+
+
+def test_the_text_report_prints_at_most_limit_people(capsys):
+    from gwt_check.act import print_act
+    rep = compare_act(_tree(), _act(subject={"surname": "Ortega"}))
+    print_act(rep, 1)
+    out = capsys.readouterr().out
+    assert f"first 1 of {len(rep['candidates'])} people" in out and out.count("  I00") == 1

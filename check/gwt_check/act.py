@@ -86,7 +86,8 @@ def _date_status(tree_date: dict | None, iso: str, registered: str | None = None
     have = span(tree_date)
     if want is None:
         return "unreadable act date"
-    if not tree_date or not (tree_date.get("dateval") and any(tree_date["dateval"][:3])):
+    if not tree_date or not ((tree_date.get("dateval") and any(tree_date["dateval"][:3]))
+                             or (tree_date.get("text") or "").strip()):
         return "tree has no date"
     if have is None:
         return "tree date cannot be read"
@@ -121,8 +122,11 @@ def _place_status(tree: Tree, ev: dict, place: str) -> str:
     if not ev.get("place") or ev["place"] not in tree.objs["places"]:
         return "tree has no place"
     names = _place_names(tree, ev["place"])
-    if " ".join(_fold(place).split()) in names:
+    want = " ".join(_fold(place).split())
+    if want == names[0]:
         return "same"
+    if want in names:  # a province is not the village: say so instead of "same"
+        return f"encloses the tree place (tree {_name(tree.objs['places'][ev['place']])})"
     return f"differs (tree {_name(tree.objs['places'][ev['place']])})"
 
 
@@ -246,12 +250,14 @@ def compare_act(tree: Tree, act: dict, person: str | None = None) -> dict:
             "candidates": rows, "verdict": verdict}
 
 
-def print_act(rep: dict) -> None:
+def print_act(rep: dict, limit: int = 30) -> None:
     a = rep["act"]
     print(f"act: {a['kind']} {a['date']} {a['place'] or ''} {a['reference'] or ''}".rstrip()
-          + (f" (registered {a['registered']}, not compared)" if a.get("registered") else ""))
+          + (f" (registered {a['registered']}; used only to explain a tree date equal to it)" if a.get("registered") else ""))
     print(rep["verdict"])
-    for r in rep["candidates"]:
+    if len(rep["candidates"]) > limit:
+        print(f"  first {limit} of {len(rep['candidates'])} people (--limit; --json has all)")
+    for r in rep["candidates"][:limit]:
         if r.get("private"):
             print(f"  {r['person']} (marked private: held back)")
             continue

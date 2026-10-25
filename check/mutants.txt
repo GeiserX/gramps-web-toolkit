@@ -6,3 +6,4 @@ gwt_check/act.py | if not c or c.get("private"): | if not c: | a private citatio
 gwt_check/act.py | and all(isinstance(who.get(k) or "", str) for k in ("given", "surname"))) | and True) | a name given as a list or a number is refused as bad input, not a crash
 gwt_check/act.py | cands = wed or cands | cands = cands | a marriage act counts only the namesakes who have a family with the named spouse
 gwt_check/act.py | p.get("gramps_id") == person] | True] | --person picks exactly the named person
+gwt_check/act.py | if want == names[0]: | if want in names: | a place that only encloses the tree's place is not reported as the same place
