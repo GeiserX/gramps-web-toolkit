@@ -69,6 +69,7 @@ CHECKS = {
     "living-media-sensitive": "media of a possibly living person, not marked private, whose path, description or "
                               "attributes look like an ID document, passport or home address",
     "dup-repository": "two repositories with the same name, compared like people's names",
+    "dup-citation": "two citations of one source with the same page text, ignoring case and spacing",
     "private": "object or sub-reference marked private",
     "place-no-coords": "place used by an event without coordinates",
     "surname-marker": "surname with a « [ » marker",
@@ -91,7 +92,7 @@ CHECKS = {
 }
 
 # Checks reported without failing: a finding of these is never new, so it never sets the exit code.
-INFO_CHECKS = {"unconnected", "parent-age", "marriage-age", "sibling-spacing", "lifespan"}
+INFO_CHECKS = {"unconnected", "parent-age", "marriage-age", "sibling-spacing", "lifespan", "dup-citation"}
 
 # limits of the dated checks
 POSTHUMOUS_DAYS = 300                       # a child can be born this long after the father's death
@@ -266,6 +267,17 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
     for ids in by_name.values():
         if len(ids) > 1:
             out.add("dup-repository", ",".join(sorted(ids)))
+
+    # citations of one record entered twice: same source, same page. Not folded further (no b/v, no accents),
+    # since "folio 12v" and "folio 12" are different pages
+    by_page: dict[tuple, list[dict]] = defaultdict(list)
+    for c in T["citations"].values():
+        page = " ".join((c.get("page") or "").casefold().split())
+        if page and c.get("source_handle"):
+            by_page[(c["source_handle"], page)].append(c)
+    for cs in by_page.values():
+        if len(cs) > 1 and any(in_scope("citations", c["handle"]) for c in cs):
+            out.add("dup-citation", ",".join(sorted((c.get("gramps_id") or c["handle"] for c in cs), key=id_order)))
 
     # birth and death pointers
     E = T["events"]
