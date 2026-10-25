@@ -42,9 +42,11 @@ Lists written for the first public commit of `gwt-apply` behave differently in t
 - `poller` is now `spanish-poller`.
 - `gwt-apply` runs about 30% faster, writes a person's associations once, and checks an apply on an updated snapshot instead of the server.
 - `gwt-check` after a write refreshes a saved tree file instead of reading the whole tree again.
+- `gwt-apply` logs a real run under `$XDG_STATE_HOME/gwt-apply/<tree>/` instead of the working directory, and a dry run or `--save-snapshot` keeps no log unless `--log` is given. Each log opens with a `start` line (arguments, change list hash, tree) and closes with an `end` line (counts, exit code), records refusals, marks dry-run writes `planned`, and names the Gramps ID of each object created.
 
 ### Fixed
 
+- `gwt-apply`: a missing or unreadable change list is one line and exit 2 instead of a traceback, and a run whose login fails still prints its run id.
 - `gwt-check`: timeouts are retried, a pedigree-collapsed Ahnentafel walk is bounded and a truncated walk fails, info findings no longer hold a read open, writes during a check no longer abort it, and namesakes with differently named parents are no longer fuzzy duplicates.
 - `gwt-ledger`: a shared catalogue prefix no longer hides a different search, an unreadable ledger exits 2, and non-Latin and blocked queries are found again.
 - `gwt-gate`: a dead session or a permission refusal is no longer reported as a rate limit.
