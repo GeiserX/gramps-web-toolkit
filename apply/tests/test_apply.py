@@ -86,7 +86,7 @@ def test_full_apply_then_rerun_writes_nothing(fake, scan, tmp_path):
     birth = fake.store["events"][stable_handle("e-john-birth")]
     assert birth["place"] == "plc1"  # the Gramps ID P0001 became a handle
     assert birth["date"]["dateval"] == [14, 3, 1890, False]
-    assert john["event_ref_list"] == [{"_class": "EventRef", "ref": birth["handle"], "role": "Primary"}]
+    assert john["event_ref_list"] == [{"ref": birth["handle"], "role": "Primary"}]
     assert john["birth_ref_index"] == 0
     fam = fake.store["families"][stable_handle("f-anna")]
     assert fam["mother_handle"] == "anna" and fam["child_ref_list"][0]["ref"] == john["handle"]
@@ -95,8 +95,8 @@ def test_full_apply_then_rerun_writes_nothing(fake, scan, tmp_path):
     media = fake.store["media"][stable_handle("m-bapt")]
     assert media["checksum"] == __import__("hashlib").md5(scan.read_bytes()).hexdigest()
     assert fake.files[media["handle"]] == scan.read_bytes()
-    assert fake.store["citations"][cit]["media_list"] == [{"_class": "MediaRef", "ref": media["handle"]}]
-    assert john["attribute_list"] == [{"_class": "Attribute", "type": "Occupation", "value": "miller"}]
+    assert fake.store["citations"][cit]["media_list"] == [{"ref": media["handle"]}]
+    assert john["attribute_list"] == [{"type": "Occupation", "value": "miller"}]
     assert fake.store["people"]["anna"]["primary_name"]["first_name"] == "Anna Maria"
     # media went in through /api/objects/ and the upload-missing file route, never POST /api/media/
     assert ("POST", "/api/media/") not in fake.calls
@@ -216,7 +216,7 @@ def test_add_place_dedupes_on_name_type_parent_and_feeds_event_places(fake):
     res = run(fake, ops)
     assert [r.status for r in res] == ["skip", "done", "done", "done"], [r.actions for r in res]
     parish = fake.store["places"][stable_handle("pl-st-mary")]
-    assert parish["placeref_list"] == [{"_class": "PlaceRef", "ref": "town"}]  # the existing town, found by dedupe
+    assert parish["placeref_list"] == [{"ref": "town"}]  # the existing town, found by dedupe
     assert (parish["lat"], parish["long"]) == ("51.5", "-1.25")
     assert fake.store["events"][stable_handle("e")]["place"] == parish["handle"]
     assert [r.status for r in run(fake, ops)] == ["skip"] * 4
@@ -235,7 +235,7 @@ def test_add_repository_and_link_it_to_a_source(fake):
     repo = fake.store["repositories"][stable_handle("r-archive")]
     assert (repo["name"], repo["type"]) == ("Example County Archives", "Archive")
     src = fake.store["sources"]["src1"]
-    assert src["reporef_list"] == [{"_class": "RepoRef", "ref": repo["handle"], "call_number": "5MI149/R13"}]
+    assert src["reporef_list"] == [{"ref": repo["handle"], "call_number": "5MI149/R13"}]
     assert [r.status for r in run(fake, ops)] == ["skip", "skip"]  # nothing is made or linked twice
     again = [{"op": "add_repository", "key": "r-other-key", "ruling": R, "name": "example county archives", "type": "Archive"}]
     assert [r.status for r in run(fake, again)] == ["skip"]  # same name, found by name
@@ -2516,6 +2516,45 @@ def test_a_big_put_edited_since_the_run_is_left_alone(fake, tmp_path, env):
     fake.store["notes"]["n1"]["text"]["string"] = new + " edited by hand"
     assert _undo(log, pre, "--apply") == 1
     assert fake.store["notes"]["n1"]["text"]["string"] == new + " edited by hand"
+
+
+def test_a_digest_ignores_class_at_every_depth():
+    from gwt_apply.client import digest
+    assert digest({"l": [{"_class": "X", "k": 1}]}) == digest({"l": [{"k": 1}]})
+    assert digest({"l": [{"k": 1}]}) != digest({"l": [{"k": 2}]})
+
+
+def test_a_big_put_with_nested_class_is_restored_by_revert(fake, tmp_path, env):
+    # the body carries {"_class": "PersonRef", ...}; the server keeps the ref without it
+    fake.add("people", {"handle": "k0", "primary_name": {"first_name": "K0", "surname_list": [{"surname": "Kit"}]}})
+    fake.store["people"]["anna"].update(person_ref_list=[], attribute_list=[{"type": "Description", "value": "x" * 100_000}])
+    pre = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", pre]) == 0
+    log = _apply_list(tmp_path, [{"op": "add_association", "key": "a", "ruling": R, "person": "I0001",
+                                  "target": "I0002", "relation": "DNA"}], "big")
+    put = [e for e in _lines(log) if e.get("method") == "PUT"]
+    assert len(put) == 1 and "body" not in put[0] and put[0]["body_digest"]["bytes"] > 65536
+    assert len(fake.store["people"]["anna"]["person_ref_list"]) == 1
+    assert _undo(log, pre, "--apply") == 0
+    assert fake.store["people"]["anna"]["person_ref_list"] == []
+
+
+def _kill(fake):
+    raise KeyboardInterrupt
+
+
+@pytest.mark.parametrize("how, exc", [("crash", RuntimeError), ("kill", KeyboardInterrupt)])
+def test_a_crash_or_a_kill_ends_the_log_with_the_error(fake, tmp_path, env, monkeypatch, how, exc):
+    if how == "crash":
+        monkeypatch.setattr("gwt_apply.cli.preflight", lambda ops, client: _crash(fake))
+    else:
+        _script(fake, ("POST", "/api/objects/", _kill))
+    changes = _changes(tmp_path, [{"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}])
+    with pytest.raises(exc):
+        main([str(changes), "--apply", "--log", str(tmp_path / "run.jsonl"), "--retry-wait", "0"])
+    end = _lines(next(tmp_path.glob("run.2*.jsonl")))[-1]
+    assert end["event"] == "end" and end["exit"] is None, end
+    assert end["error"].startswith(exc.__name__), end
 
 
 def test_a_login_into_another_tree_leaves_a_refused_line(fake, tmp_path, env, state_home, capsys):

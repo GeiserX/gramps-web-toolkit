@@ -26,6 +26,15 @@ NS = {
 CLASS_NS = {cls: ns for ns, (cls, _) in NS.items()}
 
 
+def drop_class(value):
+    """What the real server keeps of a written object: `_class` dropped at every depth, not just the top."""
+    if isinstance(value, dict):
+        return {k: drop_class(v) for k, v in value.items() if k != "_class"}
+    if isinstance(value, list):
+        return [drop_class(v) for v in value]
+    return value
+
+
 class Resp:
     def __init__(self, status: int, body=None, headers=None):
         self.status_code = status
@@ -82,7 +91,7 @@ class FakeGrampsWeb:
         if cls == "Family":
             obj.setdefault("child_ref_list", [])
             self._family_refs(None, obj)
-        obj.pop("_class", None)
+        obj = drop_class(obj)
         obj["change"] = self.tick()
         self.store[ns][obj["handle"]] = obj
         return obj
@@ -208,8 +217,7 @@ class FakeGrampsWeb:
             if method == "PUT":
                 if headers.get("If-Match"):  # like the real server: a GET ETag never matches
                     return Resp(412, "Resource does not match provided ETag")
-                new = copy.deepcopy(body)
-                new.pop("_class", None)
+                new = drop_class(body)
                 new["change"] = self.tick()
                 if ns == "families":
                     self._family_refs(obj, new)
