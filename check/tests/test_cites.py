@@ -1,6 +1,8 @@
 import copy
 import json
 
+import pytest
+
 from gwt_check import selftest
 from gwt_check.cites import cites_report
 from gwt_check.cli import main
@@ -81,3 +83,14 @@ def test_without_a_dump_the_command_reads_the_live_tree(live, capsys):
 def test_a_word_that_only_starts_with_an_act_word_is_not_that_act():
     assert not _rows(_tree(page="1881 census, birthplace column", etype="Death"))
     assert _rows(_tree(page="Registro de nacimientos, folio 3", etype="Death"), "other-act")
+
+
+@pytest.mark.parametrize("etype,page", [
+    ("Marriage", "Bodas, libro 2"), ("Marriage", "Velaciones de 1801"), ("Marriage", "Desposorios de 1790"),
+    ("Marriage", "Processetti matrimoniali 1850"), ("Marriage", "Matrimoni 1850"),
+    ("Death", "Sepultura de Tomás"), ("Death", "Esquela en el diario"), ("Death", "Atti di morte 1890"),
+    ("Death", "Sepolture 1890"), ("Birth", "Atti di nascita 1890"), ("Birth", "Battesimi 1890"),
+    ("Birth", "Bautizo de Lucía")])
+def test_a_page_that_names_the_events_own_kind_is_not_another_act(etype, page):
+    other = "acta de nacimiento" if etype == "Death" else "acta de defuncion"
+    assert not _rows(_tree(page=f"{page}; {other}", etype=etype), "other-act")

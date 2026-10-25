@@ -16,9 +16,18 @@ from .tree import Tree
 
 # One table of record words. Add a language here, not a regex in a rule.
 ACT_WORDS = {
-    "birth": ("nacimiento", "naissance", "birth", "bautismo", "bapteme", "baptism", "baptismo"),
-    "death": ("defuncion", "deces", "death", "entierro", "sepulture", "burial"),
-    "marriage": ("matrimonio", "mariage", "marriage", "casamiento"),
+    "birth": ("nacimiento", "bautismo", "bautizo", "baptismo",  # es
+              "naissance", "bapteme",  # fr
+              "birth", "baptism",  # en
+              "nascita", "nascite", "battesimo", "battesimi"),  # it
+    "death": ("defuncion", "entierro", "sepultura", "esquela",  # es
+              "deces", "sepulture",  # fr
+              "death", "burial",  # en
+              "morte", "morti", "sepoltura", "sepolture"),  # it
+    "marriage": ("matrimonio", "casamiento", "boda", "velacion", "desposorio",  # es
+                 "mariage",  # fr
+                 "marriage",  # en
+                 "matrimoni", "processetti"),  # it
 }
 EVENT_ACT = {"birth": "birth", "baptism": "birth", "death": "death", "burial": "death", "marriage": "marriage"}
 # a page that says the citation is a marginal mention in another act (a death noted in a birth act)
