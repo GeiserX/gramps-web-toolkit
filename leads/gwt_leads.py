@@ -21,7 +21,11 @@ birth in --living-after or earlier) and people or events marked private are held
 """
 import argparse, collections, datetime, gzip, json, re, sys
 
-KINDS = ('branch-end', 'missing-vital', 'uncited')
+KINDS = ('branch-end', 'missing-vital', 'uncited', 'unsupported-link')
+DEFAULT_KINDS = ('branch-end', 'missing-vital', 'uncited')  # unsupported-link needs --links, so it is asked for
+LINK_GAPS = {'no record names a parent': 'no record in the tree names either parent',
+             'cited, names neither': 'a cited record names neither parent',
+             'a record names one': 'records name only one of the two parents'}
 BIRTH_LIKE = ('Birth', 'Baptism', 'Christening')   # in order of preference
 DEATH_LIKE = ('Death', 'Burial', 'Cremation')
 MARRIAGE_LIKE = ('Marriage',)
@@ -294,7 +298,7 @@ def facts(T, p):
     return out
 
 
-def leads(T, root_gid=None, kinds=KINDS, living_after=None, hold=True):
+def leads(T, root_gid=None, kinds=DEFAULT_KINDS, living_after=None, hold=True, links=None):
     """(rows, held): one row per gap, highest priority first, and {gramps_id: why} for the people held back
     (none when hold is False)."""
     living_after = default_living_after() if living_after is None else living_after
@@ -352,6 +356,18 @@ def leads(T, root_gid=None, kinds=KINDS, living_after=None, hold=True):
                         add(p, 'missing-vital', 'marriage-missing-%s' % f.get('gramps_id', f['handle']),
                             'family %s has children but no marriage event' % f.get('gramps_id', ''))
                         break
+    if 'unsupported-link' in kinds:
+        by_gid = {p.get('gramps_id'): p for p in T['people'].values()}
+        for row in (links or {}).get('rows', []):
+            p, gap = by_gid.get(row.get('child')), LINK_GAPS.get(row.get('level'))
+            if p is None or gap is None:
+                continue
+            why = held_back(T, p, living_after, old) if hold else ''
+            if why:
+                held[p.get('gramps_id', p['handle'])] = why
+                continue
+            add(p, 'unsupported-link', 'link-%s' % row.get('family'),
+                'family %s: %s (words only: the link is not shown wrong)' % (row.get('family'), gap))
     out.sort(key=lambda r: (-r['priority'], id_order(r['person']), r['kind'], r['gap']))
     return out, held
 
@@ -412,7 +428,8 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog='gwt-leads', description=__doc__.split('\n')[0])
     p.add_argument('dump')
     p.add_argument('--root', help='Gramps id of the person whose ancestors rank first')
-    p.add_argument('--kinds', default=','.join(KINDS))
+    p.add_argument('--kinds', default=','.join(DEFAULT_KINDS))
+    p.add_argument('--links', metavar='FILE', help='the JSON `gwt-check links --json` wrote: needed for the unsupported-link kind')
     p.add_argument('--limit', type=int, default=0, help='keep the N highest-priority rows (tasks, in queue format)')
     p.add_argument('--format', choices=('queue', 'tsv', 'json'), default='tsv')
     p.add_argument('--living-after', type=int, default=default_living_after(), metavar='YEAR',
@@ -435,8 +452,20 @@ def main(argv=None):
     bad = [k for k in kinds if k not in KINDS]
     if bad:
         p.error('unknown kind: %s' % ', '.join(bad))
+    if ('unsupported-link' in kinds) != bool(args.links):
+        p.error('the unsupported-link kind and --links go together')
+    links = None
+    if args.links:
+        try:
+            with open(args.links, encoding='utf-8') as fh:
+                links = json.load(fh)
+            if not isinstance(links, dict) or not isinstance(links.get('rows'), list):
+                raise ValueError('not a gwt-check links report')
+        except (OSError, ValueError) as exc:
+            print('gwt-leads: %s: %s' % (args.links, exc), file=sys.stderr)
+            return 2
     try:
-        rows, held = leads(load(args.dump), args.root, kinds, args.living_after, hold=not args.include_living)
+        rows, held = leads(load(args.dump), args.root, kinds, args.living_after, hold=not args.include_living, links=links)
     except BadInput as exc:
         print('gwt-leads: %s' % exc, file=sys.stderr)
         return 2

@@ -18,6 +18,7 @@ The same tree gives the same leads from either file. A file in any other shape, 
 | `branch-end` | a person with no birth parents recorded: where a line stops |
 | `missing-vital` | no birth or baptism; no death or burial for someone born in `--living-after` or earlier; a birth or death (or its stand-in) with no date or no place; a family with children and no marriage event |
 | `uncited` | a birth or death (or its stand-in) with no citation: a fact nobody can check |
+| `unsupported-link` | a parent link that exists, but no cited record names both parents. Needs `--links FILE`, the JSON `gwt-check links --json` writes. It is a gap in the record text, not a sign the link is wrong, and the same hold-back of the possibly living applies |
 
 `--kinds` picks a subset. Only a person's own events count, the same way `gwt-check` and `gwt-apply` read them:
 

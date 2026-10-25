@@ -1,0 +1,2 @@
+gwt_leads.py | if p is None or gap is None: | if p is None: | only a link no record fully supports is listed, never one a birth record names both parents for
+gwt_leads.py | if ('unsupported-link' in kinds) != bool(args.links): | if False: | the unsupported-link kind and --links are asked for together

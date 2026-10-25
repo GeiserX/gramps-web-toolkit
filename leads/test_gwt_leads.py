@@ -526,5 +526,39 @@ class LeadsTest(unittest.TestCase):
         self.assertIsNone(L.year({'date': {'modifier': 6, 'dateval': [0, 0, 1850, False]}}))
 
 
+    def test_unsupported_link_kind_lists_links_no_record_supports_and_never_calls_them_wrong(self):
+        T = tree()
+        links = {'rows': [{'family': 'F1', 'child': 'I1', 'level': 'no record names a parent', 'flags': []},
+                          {'family': 'F2', 'child': 'I3', 'level': 'a record names one', 'flags': []},
+                          {'family': 'F2', 'child': 'I3', 'level': 'birth record names both', 'flags': []},
+                          {'family': 'F9', 'child': 'I99', 'level': 'no record names a parent', 'flags': []}]}
+        rows, _ = L.leads(T, None, ('unsupported-link',), 1925, links=links)
+        self.assertEqual({(r['person'], r['gap']) for r in rows}, {('I1', 'link-F1'), ('I3', 'link-F2')})
+        self.assertTrue(all('not shown wrong' in r['what'] for r in rows))
+        self.assertEqual(L.leads(T, None, ('unsupported-link',), 1925)[0], [])  # no report, no rows
+
+    def test_unsupported_link_holds_back_the_possibly_living_like_every_other_kind(self):
+        T = tree()
+        T['people']['r']['event_ref_list'] = []  # no dates, no death: may be living
+        links = {'rows': [{'family': 'F1', 'child': 'I1', 'level': 'no record names a parent', 'flags': []}]}
+        rows, held = L.leads(T, None, ('unsupported-link',), 1925, links=links)
+        self.assertEqual(rows, [])
+        self.assertIn('I1', held)
+
+    def test_cli_needs_links_and_the_kind_together_and_stops_on_a_bad_report(self):
+        d = self.dump(tree())
+        self.assertEqual(self.cli(d, '--kinds', 'unsupported-link')[0], 2)
+        bad = os.path.join(self.td.name, 'bad.json')
+        open(bad, 'w').write('[1]')
+        rc, _, err = self.cli(d, '--kinds', 'unsupported-link', '--links', bad)
+        self.assertEqual(rc, 2)
+        self.assertIn('not a gwt-check links report', err)
+        good = os.path.join(self.td.name, 'good.json')
+        json.dump({'rows': [{'family': 'F1', 'child': 'I1', 'level': 'no record names a parent'}]}, open(good, 'w'))
+        rc, out, _ = self.cli(d, '--kinds', 'unsupported-link', '--links', good, '--format', 'queue', '--include-living')
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(out.splitlines()[0])['person'], 'I1')
+
+
 if __name__ == '__main__':
     unittest.main()
