@@ -4,7 +4,9 @@
 gwt_apply/dupes.py | if a.spouses & b.spouses: | if False: | preflight flags a namesake who shares a spouse with a tree person
 gwt_apply/ops.py | if str(ev.get("type")).lower() != etype.lower(): | if str(ev.get("type")) != etype: | add_event matches an existing event type whatever its case
 gwt_apply/client.py | if r.status_code >= 500 or "database is locked" in r.text[:2000].lower(): | if r.status_code >= 500: | a "database is locked" answer is retried even when its status is not 5xx
-gwt_apply/ops.py | if s.get("place") and not (s["place"].startswith("key:") or _GRAMPS_ID.match(s["place"])): | if False: | validate refuses an update_event place that is a handle
+gwt_apply/ops.py | if s.get("place") and not (isinstance(s["place"], str) and ( | if False and (True and ( | validate refuses an update_event place that is a handle
 gwt_apply/ops.py | and fold(str(row.get("place_type"))) == fold(op["type"]) | and True | add_place reuses a place only when its type matches too
 gwt_apply/ops.py | if etype in SINGLE_VITAL and role == "Primary" and roles.get(ev["handle"]) == "Primary": | if etype in SINGLE_VITAL and role == "Primary": | a second Birth is refused only when the existing one is the person's Primary
 gwt_apply/ops.py | if name == "merge_person" and set(op.get("use_loser") or []) - set(USE_LOSER): | if False: | validate refuses an unknown use_loser vital
+gwt_apply/ops.py | lost += [f"answer lost on try {attempt}: {w}" for w in self.c.unknown_write] | lost += [] | a write whose answer was lost and whose re-read finds the change is done, not skip
+gwt_apply/ops.py | isinstance(op["confidence"], bool) or op["confidence"] not in (0, 1, 2, 3, 4)): | False): | validate refuses an add_citation confidence that is not a whole number 0-4

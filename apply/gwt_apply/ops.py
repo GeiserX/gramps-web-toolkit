@@ -71,6 +71,15 @@ USE_LOSER = {"birth": "birth_ref_index", "death": "death_ref_index"}
 ATTACHABLE = {"citation": ("Citation", "citation_list"), "media": ("Media", "media_list"),  # attach_existing
               "note": ("Note", "note_list")}
 REF_OWN_LISTS = ("note_list", "citation_list", "attribute_list")  # what a MediaRef carries besides its ref
+# fields that are not one line of text; every other field in SPECS is a non-blank string. A field added to SPECS
+# gets that text check by default: list it here if it is not text, or in TEXT_CHECKED_BELOW if validate() checks it
+# by hand further down.
+NOT_TEXT = {"set", "target", "object", "attach", "children", "namesake_of", "use_loser", "address",
+            "allow_namesake", "probable", "confidence", "lat", "long", "expect"}
+TEXT_CHECKED_BELOW = {("add_repository", "name"), ("add_repository", "type"), ("link_repository", "media_type"),
+                      ("add_association", "relation"), ("add_transcription", "margin_reading"),
+                      ("update_child_ref", "confirm_probable"), ("add_person", "gender"),
+                      ("dedupe_list", "list")}
 PERSON_FIELDS = {"first_name", "surname", "gender"}
 ADDRESS_KEYS = {"street", "locality", "city", "county", "state", "country", "postal", "phone"}
 REPOSITORY_FIELDS = {"name", "type", "url", "address"}
@@ -235,6 +244,22 @@ def validate(ops: list[dict]) -> list[str]:
         extra = set(op) - allowed
         if extra:
             errors.append(f"{where}: unknown fields {sorted(extra)}")
+        for f in sorted((required | optional) - NOT_TEXT):
+            if f not in op or f in missing or (name, f) in TEXT_CHECKED_BELOW:
+                continue
+            if f in optional and op[f] in (None, ""):
+                continue  # an optional text left "" or null means none, as older lists write it
+            blank_ok = (name, f) in (("add_citation", "page"), ("add_person", "surname"))
+            if not isinstance(op[f], str) or not (op[f].strip() or (blank_ok and op[f] == "")):
+                errors.append(f"{where}: {f} is a non-empty text")
+        for f in ("children", "attach", "namesake_of", "use_loser"):
+            if f in op and not isinstance(op[f], list) and not (f == "namesake_of" and isinstance(op[f], str)):
+                errors.append(f"{where}: {f} is a list of " + ("targets" if f == "attach" else "names" if
+                                                                 f == "use_loser" else "Gramps IDs or key:<key>"))
+                op = {k: v for k, v in op.items() if k != f}  # checked no further
+        if name == "add_citation" and "confidence" in op and (
+                isinstance(op["confidence"], bool) or op["confidence"] not in (0, 1, 2, 3, 4)):
+            errors.append(f"{where}: confidence is a whole number 0-4")
         payload = json.dumps({k: v for k, v in op.items() if k not in ("key", "ruling")}, sort_keys=True)
         if payload in payloads:
             errors.append(f"{where}: the same change as {payloads[payload]}; one change, one op")
@@ -258,7 +283,7 @@ def validate(ops: list[dict]) -> list[str]:
         try:
             if "date" in op:
                 parse_date(op["date"])
-            if "gender" in op and op["gender"] not in GENDER:
+            if "gender" in op and (not isinstance(op["gender"], str) or op["gender"] not in GENDER):
                 raise ValueError(f"gender is one of {sorted(GENDER)}")
             if name == "add_person" and op.get("allow_namesake"):
                 if op["allow_namesake"] is not True:
@@ -288,7 +313,7 @@ def validate(ops: list[dict]) -> list[str]:
                 raise ValueError("margin_reading is required: what the margins say, or 'none' once you looked")
             if name == "dedupe_list":
                 cls, _ = _parse_target(op.get("target"))
-                if op.get("list") not in CARRIES:
+                if not isinstance(op.get("list"), str) or op["list"] not in CARRIES:
                     raise ValueError(f"list is one of {sorted(CARRIES)}")
                 if cls not in CARRIES[op["list"]]:
                     raise ValueError(f"a {cls} has no {op['list']}")
@@ -300,7 +325,7 @@ def validate(ops: list[dict]) -> list[str]:
                 s = op.get("set")
                 if not isinstance(s, dict) or not s or set(s) - PERSON_FIELDS:
                     raise ValueError(f"set takes only {sorted(PERSON_FIELDS)}")
-                if "gender" in s and s["gender"] not in GENDER:
+                if "gender" in s and (not isinstance(s["gender"], str) or s["gender"] not in GENDER):
                     raise ValueError(f"gender is one of {sorted(GENDER)}")
             if name == "update_event":
                 s = op.get("set")
@@ -308,7 +333,8 @@ def validate(ops: list[dict]) -> list[str]:
                     raise ValueError(f"set takes only {sorted(EVENT_FIELDS)}")
                 if "date" in s:
                     parse_date(s["date"])
-                if s.get("place") and not (s["place"].startswith("key:") or _GRAMPS_ID.match(s["place"])):
+                if s.get("place") and not (isinstance(s["place"], str) and (
+                        s["place"].startswith("key:") or _GRAMPS_ID.match(s["place"]))):
                     raise ValueError(f"{s['place']!r} is neither key:<key> nor a Gramps ID (never a handle)")
             if name == "update_place":
                 s = op.get("set")
@@ -387,10 +413,11 @@ def validate(ops: list[dict]) -> list[str]:
                 _check_coords(op)
             if name == "attach_existing":
                 lst = _parse_object(op.get("object"))[2]
-            elif op.get("attach"):
+            elif op.get("attach") and name in ("add_citation", "add_media", "add_note", "add_transcription"):
                 lst = {"add_citation": "citation_list", "add_media": "media_list", "add_note": "note_list",
                        "add_transcription": "note_list"}[name]
-            for spec in op.get("attach") or []:
+            for spec in (op.get("attach") or []) if name in ("attach_existing", "add_citation", "add_media",
+                                                             "add_note", "add_transcription") else []:
                 cls, _ = _parse_target(spec)
                 if cls not in CARRIES[lst]:
                     raise ValueError(f"a {cls} cannot carry a {lst[:-5]}")
@@ -398,7 +425,7 @@ def validate(ops: list[dict]) -> list[str]:
                 raise ValueError(f"file not found: {op.get('file')}")
             if name == "add_media" and Path(op.get("path", "")).is_absolute():
                 raise ValueError("path is relative to the tree's media folder")
-        except (ValueError, DateError) as exc:
+        except (ValueError, DateError, TypeError) as exc:  # TypeError: a value of the wrong kind, e.g. a list
             errors.append(f"{where}: {exc}")
     return errors
 
@@ -410,6 +437,7 @@ class Result:
     ruling: str
     status: str = "done"  # done | skip | conflict | error
     actions: list[str] = field(default_factory=list)
+    answer_lost: bool = False  # done because an earlier try's write landed, though its answer never came
 
 
 
@@ -559,28 +587,46 @@ class Applier:
             res = Result(op["key"], op["op"], op["ruling"])
             self._op_tags = list(dict.fromkeys(t for t in [self.run_tag, *_tag_names(op.get("tag"))] if t))
             self.c.context = {"key": op["key"], "op": op["op"], "ruling": op["ruling"]}
+            lost: list[str] = []  # "answer lost on try N: METHOD path", across every try of this op
             for attempt in range(1, self.retries + 1):
                 if self.lock is not None:  # every try: a slow server can make one op outlast the lock
                     self.lock.refresh()
                 self.actions, self.wrote, self._holding = [], False, None
+                self.c.unknown_write = []
                 try:
                     getattr(self, op["op"])(op)
                     res.status = "done" if self.wrote else "skip"
+                    if lost and self.wrote:  # the re-read did not find the change, so this try wrote it
+                        self.actions += [f"{line}; the re-read did not find it, so this try wrote it"
+                                         for line in lost]
+                    elif lost:
+                        # an earlier try's write landed and its answer did not: this try read the change back
+                        res.status, res.answer_lost = "done", True
+                        self.actions += [f"{line}; the re-read shows the change in place" for line in lost]
                     break
                 except Retryable as exc:
+                    lost += [f"answer lost on try {attempt}: {w}" for w in self.c.unknown_write]
                     if attempt == self.retries:
                         res.status = "error"
+                        self.actions += [f"{line}; the server may hold that write" for line in lost]
                         self.actions.append(f"error: {exc} (gave up after {attempt} tries)")
                         break
                     self.c.log(event="retry", attempt=attempt, error=str(exc))
                     time.sleep(self.retry_wait)
                 except Conflict as exc:
                     res.status = "conflict"
+                    self.actions += [f"{line}; the server may hold that write" for line in lost]
                     self.actions.append(f"conflict: {exc}")
                     break
                 except ApiError as exc:
                     res.status = "error"
+                    self.actions += [f"{line}; the server may hold that write" for line in lost]
                     self.actions.append(f"error: {exc}")
+                    break
+                except Exception as exc:  # a bug or an input validate() let through: stop here, never a traceback
+                    res.status = "error"
+                    self.actions += [f"{line}; the server may hold that write" for line in lost]
+                    self.actions.append(f"error: {type(exc).__name__}: {exc}")
                     break
             res.actions = self.actions
             results.append(res)
@@ -607,6 +653,7 @@ class Applier:
         returns what went wrong, or None. Each try starts from a fresh read and adds only the associations
         the person still lacks, so a try whose answer was lost is not written twice."""
         context, self._flushing, failed = self.c.context, True, None
+        unknown, self.c.unknown_write = self.c.unknown_write, []  # a held write's lost answer is not the op's
         try:
             for handle in handles:
                 held = self._held.pop(handle)
@@ -648,7 +695,7 @@ class Applier:
                 if error is not None and failed is None:
                     failed = f"the held associations of Person {held['label']} were not written: {error}"
         finally:
-            self.c.context, self._flushing = context, False
+            self.c.context, self._flushing, self.c.unknown_write = context, False, unknown
         return failed
 
     def _existing(self, cls: str, op: dict) -> dict | None:
