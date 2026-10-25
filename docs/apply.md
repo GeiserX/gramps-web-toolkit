@@ -17,11 +17,14 @@ Settings come from the environment, or from a `KEY=VALUE` file passed with `--co
 
 | Setting | Meaning |
 |---|---|
-| `GWT_URL` | Base URL of the Gramps Web server, e.g. `https://gramps.example.org` |
+| `GWT_URL` | Base URL of the Gramps Web server, e.g. `https://gramps.example.org`. A trailing `/api` is dropped; an address without `http://` or `https://` is a settings error (exit `2`) |
 | `GWT_USERNAME`, `GWT_PASSWORD` | A user of the tree you want to change |
+| `GWT_TOKEN` | Instead of a username and password: a persistent Gramps Web access token of scope `sync` ([how to create and revoke one](getting-started.md#log-in-with-a-token-instead-of-a-password)). Works on servers that allow only single sign-on |
 | `GWT_TREE` | The tree id the login must land in. Required with `--apply` |
 
-On a multi-tree server, the tree comes from the user: the login (`POST /api/token/`) returns a token whose `tree` claim names that user's tree. `gwt-apply` refuses to go on if that claim is not `GWT_TREE`, so a wrong account cannot write into the wrong tree.
+On a multi-tree server, the tree comes from the user: the login (`POST /api/token/` with a password, `POST /api/token/sync/` with `GWT_TOKEN`) returns a token whose `tree` claim names that user's tree. `gwt-apply` refuses to go on if that claim is not `GWT_TREE`, so a wrong account or a token of another user cannot write into the wrong tree. The sync endpoint gives no refresh token, so when the short-lived login expires mid-run, `gwt-apply` exchanges `GWT_TOKEN` again and repeats the call once.
+
+Every request carries the User-Agent `gramps-web-toolkit/<version> (gwt-apply; +https://github.com/GeiserX/gramps-web-toolkit)`, so a server admin can tell the toolkit apart in the logs.
 
 Other flags: `--log PATH`, `--retries N` (default 5), `--retry-wait SECONDS` (default 30), `--snapshot FILE`, `--save-snapshot FILE` and `--since OLD` ([Snapshots](#snapshots)), `--tag NAME` ([Tags](#tags)), `--break-lock` (below).
 

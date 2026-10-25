@@ -12,7 +12,11 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
+from . import version
 from .tree import TYPES
+
+# the Gramps Web maintainer asks every API client to say who it is
+USER_AGENT = f"gramps-web-toolkit/{version()} (gwt-check; +https://github.com/GeiserX/gramps-web-toolkit)"
 
 
 class ApiError(RuntimeError):
@@ -29,19 +33,35 @@ def backoff(attempt: int) -> float:
     return min(60.0, 5.0 * 2 ** (attempt - 1))
 
 
+def api_base(url: str) -> str:
+    """GWT_URL -> the API root. The site address and the API address (ending in /api) both work."""
+    url = url.strip().rstrip("/")
+    return (url[: -len("/api")] if url.endswith("/api") else url) + "/api"
+
+
+def url_problem(url: str) -> str | None:
+    """Why GWT_URL cannot be used, or None."""
+    parts = urllib.parse.urlsplit(url.strip())
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        return f"GWT_URL must be an http:// or https:// address, such as https://gramps.example.org; got {url!r}"
+    return None
+
+
 def jwt_claims(token: str) -> dict:
     payload = token.split(".")[1]
     return json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
 
 
 class Client:
-    """GET only. The password stays in this object and never reaches the output."""
+    """GET only. The password or token stays in this object and never reaches the output."""
 
     def __init__(self, url: str, username: str, password: str, *, tree: str | None = None,
-                 opener=None, sleep=time.sleep):
-        self.base = url.rstrip("/") + "/api"
+                 token: str | None = None, opener=None, sleep=time.sleep):
+        self.base = api_base(url)
         self.username = username
         self._password = password
+        # a persistent Gramps Web access token of scope "sync": exchanged for a JWT instead of the password
+        self._sync_token = token
         self.expected_tree = tree
         self.open = opener or urllib.request.urlopen
         self.sleep = sleep
@@ -60,9 +80,15 @@ class Client:
             return e.code, dict(e.headers or {}), e.read()
 
     def login(self) -> None:
-        body = json.dumps({"username": self.username, "password": self._password}).encode()
+        # the sync endpoint answers no refresh token: a 401 in get() exchanges the token again
+        if self._sync_token:
+            path, body = "/token/sync/", {"token": self._sync_token}
+        else:
+            path, body = "/token/", {"username": self.username, "password": self._password}
+        data = json.dumps(body).encode()
+        headers = {"Content-Type": "application/json", "User-Agent": USER_AGENT}
         for attempt in range(1, 8):
-            req = urllib.request.Request(self.base + "/token/", body, {"Content-Type": "application/json"})
+            req = urllib.request.Request(self.base + path, data, headers)
             try:
                 status, headers, data = self._call(req)
             except NETWORK_ERRORS as exc:
@@ -91,7 +117,7 @@ class Client:
                 token = self.token
             try:
                 status, headers, data = self._call(
-                    urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"}))
+                    urllib.request.Request(url, headers={"Authorization": f"Bearer {token}", "User-Agent": USER_AGENT}))
             except NETWORK_ERRORS as exc:
                 # one slow page must not end a whole-tree read: retry it like a 5xx
                 last = f"{type(exc).__name__}: {exc}"

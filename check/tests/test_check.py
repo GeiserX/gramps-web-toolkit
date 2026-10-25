@@ -7,6 +7,7 @@ import os
 import ssl
 import subprocess
 import sys
+import urllib.error
 import urllib.parse
 
 import pytest
@@ -393,13 +394,29 @@ class LiveServer:
 
     def __init__(self, data, write=None):
         self.data, self.write, self.calls = data, write, []
+        self.headers = []  # the headers of every request, in step with `calls`
+        self.sync_tokens = {}  # persistent sync token -> the tree its JWT is for
+        self.expire = 0  # answer the next N requests that carry a JWT with 401, as if it had expired
+
+    @staticmethod
+    def jwt(tree):
+        claims = base64.urlsafe_b64encode(json.dumps({"tree": tree}).encode()).decode().rstrip("=")
+        return Resp(200, json.dumps({"access_token": f"x.{claims}.y"}).encode())
 
     def __call__(self, req, timeout):
         url = urllib.parse.urlparse(req.full_url)
         self.calls.append((url.path, url.query))
+        self.headers.append(dict(req.header_items()))
+        if url.path.endswith("/token/sync/"):
+            tree = self.sync_tokens.get(json.loads(req.data).get("token"))
+            if tree is None:
+                raise urllib.error.HTTPError(req.full_url, 403, "Forbidden", {}, io.BytesIO(b"{}"))
+            return self.jwt(tree)
         if url.path.endswith("/token/"):
-            claims = base64.urlsafe_b64encode(json.dumps({"tree": "tree-1"}).encode()).decode().rstrip("=")
-            return Resp(200, json.dumps({"access_token": f"x.{claims}.y"}).encode())
+            return self.jwt("tree-1")
+        if self.expire:
+            self.expire -= 1
+            raise urllib.error.HTTPError(req.full_url, 401, "Unauthorized", {}, io.BytesIO(b"{}"))
         t = url.path.rstrip("/").rsplit("/", 1)[-1]
         q = dict(urllib.parse.parse_qsl(url.query))
         if self.write:
@@ -894,3 +911,63 @@ def test_root_only_report_quiet_when_ahnentafel_is_complete(tmp_path, capsys):
     dump = _write(tmp_path, "clean.json", selftest.clean_tree())
     assert main(["check", dump, "--root", "I0001"]) == 0
     assert "truncated" not in capsys.readouterr().out
+
+
+# -- the connection: User-Agent, sync token, GWT_URL ---------------------------
+
+
+def test_every_request_names_the_toolkit(live, tmp_path, capsys):
+    server = live(selftest.clean_tree())
+    assert main(["check", "--pagesize", "2", "--json", str(tmp_path / "r.json")]) == 0, capsys.readouterr().err
+    assert len(server.headers) == len(server.calls) > 5
+    for call, headers in zip(server.calls, server.headers):
+        ua = headers.get("User-agent", "")  # urllib stores header names capitalised
+        assert ua.startswith("gramps-web-toolkit/"), (call, headers)
+        assert "(gwt-check; +https://github.com/GeiserX/gramps-web-toolkit)" in ua
+
+
+def test_a_sync_token_logs_in_without_a_password(live, tmp_path, monkeypatch, capsys):
+    server = live(selftest.clean_tree())
+    server.sync_tokens["persistent-sync-token"] = "tree-1"
+    for k in ("GWT_USERNAME", "GWT_PASSWORD"):
+        monkeypatch.delenv(k)
+    monkeypatch.setenv("GWT_TOKEN", "persistent-sync-token")
+    assert main(["check", "--json", str(tmp_path / "r.json")]) == 0, capsys.readouterr().err
+    paths = [p for p, _ in server.calls]
+    assert "/api/token/sync/" in paths and "/api/token/" not in paths
+    assert "Authorization" not in server.headers[paths.index("/api/token/sync/")]
+
+
+def test_a_sync_token_is_exchanged_again_after_a_401(live):
+    server = live(selftest.clean_tree())
+    server.sync_tokens["persistent-sync-token"] = "tree-1"
+    client = Client("https://gramps.example.org", "", "", token="persistent-sync-token", tree="tree-1",
+                    opener=server, sleep=lambda s: None)
+    client.login()
+    server.expire = 1  # the short-lived JWT runs out mid-read; no refresh token to fall back on
+    client.get("/people/", {"page": 1, "pagesize": 10})
+    assert [p for p, _ in server.calls].count("/api/token/sync/") == 2
+
+
+def test_a_sync_token_for_another_tree_is_refused(live):
+    server = live(selftest.clean_tree())
+    server.sync_tokens["persistent-sync-token"] = "another-tree"
+    client = Client("https://gramps.example.org", "", "", token="persistent-sync-token", tree="tree-1",
+                    opener=server)
+    with pytest.raises(ApiError, match="expected 'tree-1'"):
+        client.login()
+
+
+def test_a_trailing_api_in_the_url_is_dropped(live):
+    server = live(selftest.clean_tree())
+    for url in ("https://gramps.example.org/api", "https://gramps.example.org/api/", "https://gramps.example.org/"):
+        server.calls.clear()
+        Client(url, "u", "pw", opener=server).login()
+        assert server.calls == [("/api/token/", "")], url
+
+
+def test_a_url_without_a_scheme_is_a_settings_error(live, monkeypatch, capsys):
+    server = live(selftest.clean_tree())
+    monkeypatch.setenv("GWT_URL", "gramps.example.org")
+    assert main(["check"]) == 2
+    assert "GWT_URL" in capsys.readouterr().err and server.calls == []
