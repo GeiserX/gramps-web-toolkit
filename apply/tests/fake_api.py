@@ -51,6 +51,7 @@ class FakeGrampsWeb:
         self.files: dict[str, bytes] = {}  # media handle -> stored bytes
         self.calls: list[tuple[str, str]] = []
         self.busy = 0  # answer the next N writes with "database is locked"
+        self.busy_status = 500  # the HTTP status of that answer; some servers send it as a 4xx
         self.edit_after_read: tuple | None = None  # (handle, fn): another writer edits it once, right after a read
         self.drop_after: tuple | None = None  # (method, path prefix[, n to let through]): fail once, after doing it
         self.clock = 1_700_000_000  # the server's `change` stamp, one tick per write
@@ -123,7 +124,7 @@ class FakeGrampsWeb:
             return Resp(200, {"access_token": make_jwt(self.tree), "refresh_token": "r"})
         if method in ("POST", "PUT") and self.busy:
             self.busy -= 1
-            return Resp(500, "sqlite3.OperationalError: database is locked")
+            return Resp(self.busy_status, "sqlite3.OperationalError: database is locked")
         resp = self._route(method, path, headers or {}, params, json, data)
         if self.drop_after and method == self.drop_after[0] and path.startswith(self.drop_after[1]):
             method_, prefix, *skip = self.drop_after
