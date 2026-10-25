@@ -76,3 +76,8 @@ def test_without_a_dump_the_command_reads_the_live_tree(live, capsys):
     live(_tree(page="acte de mariage de X"))
     assert main(["cites"]) == 0
     assert "other-act" in capsys.readouterr().out
+
+
+def test_a_word_that_only_starts_with_an_act_word_is_not_that_act():
+    assert not _rows(_tree(page="1881 census, birthplace column", etype="Death"))
+    assert _rows(_tree(page="Registro de nacimientos, folio 3", etype="Death"), "other-act")

@@ -28,7 +28,7 @@ MARGINAL = ("mencion marginal", "mention marginale", "marginal mention", "margin
 def _acts(page: str) -> set[str]:
     """Which kinds of act the citation's own title (its page) names."""
     f = _fold(page)
-    return {k for k, ws in ACT_WORDS.items() if any(re.search(rf"(?<!\w){w}", f) for w in ws)}
+    return {k for k, ws in ACT_WORDS.items() if any(re.search(rf"(?<!\w){w}(?:s|es)?(?!\w)", f) for w in ws)}
 
 
 def citation_problem(event: dict, c: dict) -> tuple[str, str] | None:
