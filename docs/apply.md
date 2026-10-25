@@ -53,7 +53,7 @@ References to other objects are either a **Gramps ID** (`I0042`, `P0007`, or wit
 | `add_person` | `first_name`, `surname` | `gender` (`M`, `F`, `U`), `gramps_id`, `allow_namesake` with `namesake_reason` and `namesake_of` | New person. `surname` may be `""` for someone known by one name only (a DNA match shown by first name); the field must still be there. If someone with the same first name and surname exists, the op is a conflict that names them. When it really is another person, set `allow_namesake: true`, say why in `namesake_reason`, and list in `namesake_of` the Gramps ID (or `key:<key>`) of every namesake you compared; one the op does not name is still a conflict. A `key:<key>` from an earlier list still counts once that person is in the tree under a Gramps ID of its own |
 | `update_person` | `person`, `set` | | `set` takes only `first_name`, `surname`, `gender` |
 | `add_place` | `name`, `type` | `enclosed_by`, `lat` and `long`, `gramps_id` | New place inside its parent, or the existing one with the same name, type and parent |
-| `add_event` | `type`, and `person` or `family` | `date`, `place`, `description`, `role`, `gramps_id` | New event, linked to the person (role `Primary` by default) or the family (role `Family`) |
+| `add_event` | `type`, and `person` or `family` | `date`, `place`, `description`, `role`, `gramps_id` | New event, linked to the person (role `Primary` by default) or the family (role `Family`). An event of the same type and date already on that person or family is reused when its place and description match too; see [Reuse only what is the same](#reuse-only-what-is-the-same) |
 | `update_event` | `event`, `set` | | `set` takes only `type`, `date`, `place`, `description`: the way to correct an event instead of adding a second one |
 | `update_place` | `place`, `set` | | `set` takes only `lat` and `long`, given together: puts coordinates on a place the tree already has, for what `gwt-check` reports as `place-no-coords`. A place that already has those coordinates is skipped |
 | `update_note` | `note`, `set` | `expect` | `set` takes only `text` and `type`. A new `text` needs `expect`, the text the note has now: a note that changed since you read it is a conflict and is never overwritten. The old text stays in the log line. A note that already has the new values is skipped |
@@ -63,15 +63,15 @@ References to other objects are either a **Gramps ID** (`I0042`, `P0007`, or wit
 | `detach` | `target`, `object` | | Takes a note, citation or media reference off a target (`{"note": "N0042"}`). The object stays in the tree, which `gwt-check` lists as an orphan, and `attach_existing` puts it back. A media reference that carries a region, notes, citations or attributes is a conflict, because `attach_existing` cannot put those back |
 | `add_family` | `father` or `mother` | `children`, `type`, `gramps_id` | New family, or the existing one with the same parents |
 | `link_child` | `family`, `child` | `frel`, `mrel` (default `Birth`), `probable: true` with `probable_reason` | Adds a child to a family. With `probable`, the link also gets a `Research` note on its child_ref that reads `[probable] <probable_reason>`; a link that is already there gets the note if it has none starting with `[probable]` |
-| `add_source` | `title` | `author`, `pubinfo`, `abbrev`, `gramps_id` | New source, or the existing one with the same title |
+| `add_source` | `title` | `author`, `pubinfo`, `abbrev`, `gramps_id` | New source, or the existing one with the same title, author and publication info |
 | `add_repository` | `name`, `type` | `gramps_id`, `url`, `address` | New repository, or the existing one with the same name, ignoring case and accents. `type` is a non-empty string; the built-in ones are `Library`, `Cemetery`, `Church`, `Archive`, `Album`, `Web site`, `Bookstore`, `Collection`, `Safe`, and another name becomes a custom type. `url` starts with `http://` or `https://`; `address` takes some of `street`, `locality`, `city`, `county`, `state`, `country`, `postal`, `phone` |
 | `update_repository` | `repository`, `set` | | `set` takes only `name`, `type`, `url`, `address`. A `url` already listed is kept, `address` completes the first address, and a `name` another repository already has is a conflict (use `merge_repository`). A note goes on with `add_note` and `{"repository": ...}` as the target |
 | `link_repository` | `source`, `repository` | `call_number`, `media_type` | Adds the repository to the source's repository list. If the source already lists it, a `call_number` or `media_type` that differs is updated in that entry, and nothing else changes. `media_type` is a non-empty string; the built-in ones are `Audio`, `Book`, `Card`, `Electronic`, `Fiche`, `Film`, `Magazine`, `Manuscript`, `Map`, `Newspaper`, `Photo`, `Tombstone`, `Video`, `Unknown` |
 | `unlink_repository` | `source`, `repository` | | Takes the repository out of the source's list. The repository stays. Skipped when the source does not list it |
 | `merge_repository` | `winner`, `loser` | `reason` | Moves every source from the loser to the winner (a source that lists both keeps one entry, with the loser's call number and media type where the winner's are empty, and the notes of both), adds the loser's urls, addresses and notes to the winner, then deletes the loser. A `Research` note on the winner records the merge, so a rerun skips. A dry run shows each source that moves and the delete |
-| `add_citation` | `source`, `page`, `attach` | `confidence` (0-4, default 2), `date`, `gramps_id` | New citation, or the existing one with the same page on that source, attached to each target |
+| `add_citation` | `source`, `page`, `attach` | `confidence` (0-4, default 2), `date`, `gramps_id` | New citation, or the existing one with the same page on that source and the same confidence and date, attached to each target. One page text per role: two ops that cite one page with different confidence or date are refused |
 | `add_media` | `file`, `path`, `attach` | `desc`, `mime`, `gramps_id` | Media object for a local file, or the existing one with the same MD5, attached to each target |
-| `add_note` | `text`, `attach` | `type` (default `General`), `gramps_id` | New note, or a note with the same text already on a target |
+| `add_note` | `text`, `attach` | `type` (default `General`), `gramps_id` | New note, or a note with the same text and type already on a target |
 | `add_transcription` | `text`, `margin_reading`, `attach` | `gramps_id` | A transcript as a `Transcript` note (never as media) whose text ends with `Margin reading: <margin_reading>`. `margin_reading` is required: what the page margins say (annotations, later notes, corrections) or `none` once you have looked. Same reuse rule as `add_note` |
 | `attach_existing` | `object`, `attach` | | Links a citation, media object or note the tree already has (`{"media": "O0054"}`) to more targets. For what an import left with no reference, which `gwt-check` reports as `orphan-citation`, `orphan-note` and `orphan-media`, or a document that belongs to a second person; `add_citation`, `add_media` and `add_note` only make new objects. Targets already carrying it are skipped |
 | `dedupe_list` | `target`, `list` | | Keeps the first of each repeated reference in one `citation_list`, `note_list` or `media_list`: what `gwt-check` reports as `repeated-ref` there, with the same identity: two media refs to one photo with different regions are not a repeat. A conflict when the dropped media ref carries notes, citations or attributes the kept one lacks. Nothing repeated is a skip |
@@ -112,7 +112,7 @@ The dry-run prints one block per op:
     create Event: {"_class": "Event", "handle": "gwt7f36...", "type": "Birth", ...}
     update Person gwtaf04...: birth_ref_index: -1 -> 0; event_ref_list: [] -> [{"ref": "gwt7f36...", "role": "Primary"}]
 [skip] c-john-bapt (add_citation, ruling R-12)
-    skip: Citation C0123 already cites that page
+    reused C0123 (same source and page, confidence)
     skip: Event E0456 already has it in citation_list
 ```
 
@@ -134,6 +134,27 @@ A write can land on the server while its answer is lost: a timeout, a dropped co
 ```
 
 When the re-read did not find the change and a later try wrote it, the op is plain `done` and the line ends `the re-read did not find it, so this try wrote it`. That write cannot leave a second copy: an update replaces the whole object, and a new object gets the same handle on every try. When an op whose answer was lost later ends in a `conflict` or an `error`, the same line says `the server may hold that write`. `--revert` treats such a write as made either way.
+
+### Reuse only what is the same
+
+An existing object an op finds (the page on that source, the event of that type and date) stands in for the new one only when every other field the op sets is equal, and the plan says so: `reused C0123 (same source and page, confidence)`. A field the op leaves out is not compared. When the found object differs, the op is a conflict that names it, the field and the fix, and nothing is written.
+
+| Op | Found by | Must also be equal, when the op sets it |
+|---|---|---|
+| `add_citation` | source and page | `confidence`, `date` |
+| `add_event` (no object made by its key yet) | type and date on that person or family | `place`, `description` |
+| `add_note`, `add_transcription` | text on a target | `type` |
+| `add_source` | title | `author`, `pubinfo` |
+
+So a firm fact never ends up carrying a weak citation. If one op cites a page with confidence 1 for one event and a later op cites the same page with confidence 3 for another, the second is refused:
+
+```
+conflict: Citation C0123 has the same source and page with confidence 1; this op says 3: raise it with update_citation, or give this role its own page
+```
+
+Within one list the same pair is refused before any request. **One page text per role**: give each role its own page text, for example `book 3, folio 12v, no. 40 (baptism)` and `book 3, folio 12v, no. 40 (godparent)`, so each citation keeps its own confidence and date.
+
+`add_media` still reuses by MD5 alone, the `[probable]` mark of `link_child` is still found by its prefix, and an object an earlier run made by the same key is skipped as before, so a rerun of an applied list is still all `skip`.
 
 ### DNA matches
 
@@ -188,9 +209,10 @@ gwt-apply changes.jsonl --snapshot tree-0413.json.gz                    # every 
 ## Safety rules
 
 - **Dry-run by default.** Without `--apply` nothing is written. Reads run, so the plan reflects the real tree, and objects the plan would create are kept in memory so later ops can refer to them.
-- **The whole list is checked before the first request**: known ops and fields, a `ruling` and a unique `key` on each op, references that are Gramps IDs or keys, dates in the format above, media files that exist, a reason and the compared IDs on every `allow_namesake`, a reason on every `probable`, and no two ops that are the same change under different keys (everything but `key` and `ruling` equal). Values have the right kind: every text field is a non-blank string (`surname` of `add_person` and `page` of `add_citation` may be `""`, and any optional text may be `""` or `null`, which means none), `children`, `attach` and `use_loser` are lists, `namesake_of` and `tag` are a name or a list of names, and `confidence` is a whole number from 0 to 4. A value of the wrong kind is reported here instead of failing halfway through the run, after earlier ops wrote.
+- **The whole list is checked before the first request**: known ops and fields, a `ruling` and a unique `key` on each op, references that are Gramps IDs or keys, dates in the format above, media files that exist, a reason and the compared IDs on every `allow_namesake`, a reason on every `probable`, no two ops that are the same change under different keys (everything but `key` and `ruling` equal), and no two `add_citation` ops that cite the same page of the same source with a different `confidence` or `date`. Values have the right kind: every text field is a non-blank string (`surname` of `add_person` and `page` of `add_citation` may be `""`, and any optional text may be `""` or `null`, which means none), `children`, `attach` and `use_loser` are lists, `namesake_of` and `tag` are a name or a list of names, and `confidence` is a whole number from 0 to 4. A value of the wrong kind is reported here instead of failing halfway through the run, after earlier ops wrote.
 - **Duplicates are looked for before the first write.** After login, and before any op runs, every `add_person` is compared with everyone in the tree and with the other people the list makes. It is flagged when someone has the same first name and surname, or the same first given name and first surname and also a birth or baptism year within two years, a parent in common or a spouse in common. Every flag is printed at once and nothing is written; an op clears a flag by naming that person in `namesake_of`, with `allow_namesake` and a `namesake_reason`.
 - **Read before every write, skip what exists.** The same event type and date on that person or family; the same page on that source; a media object with the same MD5; a note with the same text on a target; a family with the same parents; a place with the same name, type and parent; a source with the same title; a link that is already there.
+- **Reuse only what is the same.** An object found that way stands in for the new one only when every other field the op sets is equal too; otherwise the op is a conflict. See [Reuse only what is the same](#reuse-only-what-is-the-same).
 - **No silent namesakes.** A new person whose first name and surname already exist in the tree stops the run until the change list either uses the existing ID or says `allow_namesake`, with the reason and the IDs it compared. The reason goes into the plan and the log.
 - **Repositories.** Link a source to a repository only where the source is unambiguous, for example the archive named in the register's own title, and never from a guess. A source that already lists the repository is never linked twice: a different `call_number` or `media_type` is updated in that entry. `merge_repository` moves the loser's call number to a source's entry when the winner's is empty, so a throwaway repository made to try a merge should have no call number.
 - **One birth and one death.** If the person already has a `Birth` (or `Death`) in role `Primary` with another date, the op is a conflict. Correct the existing event with `update_event` instead of adding a second one.
@@ -238,6 +260,7 @@ Ten rounds of LLM-driven applies on two trees, each followed by a verification p
 | A new place duplicated one already in the tree | `gwt-apply`: same name, type and parent is reused, ignoring case and accents. Alternative names and spelling variants are not caught: search before adding |
 | A birth date was written into the baptism event | `gwt-apply`: one op per event, with its own date |
 | A citation, note or media object was left with no references | `gwt-apply`: `add_citation`, `add_media` and `add_note` require `attach` |
+| Two ops cited one page with different confidence; the second was folded into the first, and a firm event kept only the weak citation | `gwt-apply`: [reuse only what is the same](#reuse-only-what-is-the-same); one page text per role |
 | A media object was linked to one citation when two needed it | Change list: one `attach` entry per target; the second op with the same file reuses the object by MD5 |
 | Birth and death pointers left at -1 or pointing at the wrong event | `gwt-apply` sets the pointer when it adds a `Primary` birth or death and none is set. A baptism without a birth leaves it at -1, by design |
 | A correction was interrupted halfway by a usage limit | `gwt-apply`: rerun the same list; done ops skip |
