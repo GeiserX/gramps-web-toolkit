@@ -12,6 +12,7 @@ from .checks import CHECKS, INFO_CHECKS, run_checks
 from .client import ApiError, Client, url_problem
 from . import compare
 from .compare import ahnentafel, compare_ahnentafel, diff
+from .links import LEVELS
 from .tree import READ_MARGIN, BadInput, Tree, load, save
 
 
@@ -327,7 +328,8 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("links", help="which parent links have a record whose text names both parents; a report that changes nothing")
     p.add_argument("tree", nargs="?", help="dump file; without it the live tree is read")
-    p.add_argument("--level", help="list only the rows of this level (a level's full name, or 'flagged')")
+    p.add_argument("--level", choices=(*LEVELS, "flagged"), metavar="LEVEL",
+                   help="list only the rows of this level (a level's full name, or 'flagged')")
     p.add_argument("--json", action="store_true", help="print the result as JSON")
     p.add_argument("--limit", type=int, default=30, help="rows printed (default 30)")
     live_opts(p)
