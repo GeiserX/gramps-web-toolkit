@@ -46,19 +46,18 @@ def test_a_parent_named_in_another_record_is_the_second_level():
     assert _row(d)["level"] == LEVELS[2]
 
 
-def test_a_denial_word_in_the_sentence_of_a_name_is_flagged_not_hidden():
-    r = _row(_d("Lucía no es hija de Mateo Ortega y Clara Sanz"))
-    assert r["level"] == LEVELS[1]
-    assert any("denial word" in f for f in r["flags"])
+def test_ordinary_words_like_sin_and_no_raise_no_flag():
+    r = _row(_d("Bautismo de Lucía, hija de Mateo Ortega y Clara Sanz, nacida sin novedad, padrinos no constan"))
+    assert r["level"] == LEVELS[1] and r["flags"] == []
 
 
-def test_a_second_person_with_the_parents_name_is_flagged():
+def test_a_namesake_elsewhere_in_the_tree_raises_no_flag():
     d = _d("hija de Mateo Ortega y Clara Sanz")
     twin = copy.deepcopy(selftest._get(d, "people", "I0002"))
     twin["gramps_id"], twin["handle"] = "I0099", "hI0099"
     twin["family_list"], twin["parent_family_list"], twin["event_ref_list"] = [], [], []
     d["people"].append(twin)
-    assert any("another person in the tree bears the father's name" in f for f in _row(d)["flags"])
+    assert _row(d)["flags"] == []
 
 
 def test_a_relation_not_by_birth_is_flagged_and_never_raised():
@@ -140,6 +139,18 @@ def test_an_unknown_relation_counts_as_by_birth():
     d = _d("hija de Mateo Ortega y Clara Sanz")
     _link(d)["frel"] = "Unknown"
     assert _row(d)["flags"] == []
+
+
+def test_one_given_name_of_several_counts_beside_a_filiation_word():
+    d = _d("Bautismo de Lucía, hija legítima de Mateo Ortega y de Clara Sanz")
+    selftest._get(d, "people", "I0002")["primary_name"]["first_name"] = "José Mateo"
+    assert _row(d)["level"] == LEVELS[1]
+
+
+def test_one_given_name_of_several_without_a_filiation_word_does_not_count():
+    d = _d("padrinos Mateo Ortega y Clara Sanz")
+    selftest._get(d, "people", "I0002")["primary_name"]["first_name"] = "José Mateo"
+    assert _row(d)["named"] == {"mother": "birth record"}
 
 
 def test_private_citations_and_notes_are_not_read():
