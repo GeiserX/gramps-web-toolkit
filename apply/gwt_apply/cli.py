@@ -47,10 +47,18 @@ def _plan_on_snapshot(ops: list[dict], snap: dict, client: Client, *, tag: str |
     return []
 
 
+def _log_path(args, run_id: str, default: str) -> str:
+    if args.log:
+        p = Path(args.log)
+        return str(p.with_name(f"{p.stem}.{run_id}{p.suffix or '.jsonl'}"))
+    return default
+
+
 def _revert(args) -> int:
     try:
         entries = revert.read_log(args.revert)
-        pre = revert.load_pre(args.pre)
+        snap = revert.read_pre(args.pre)
+        pre = revert.pre_objects(snap)
     except (OSError, ValueError) as exc:
         print(f"revert: {exc}", file=sys.stderr)
         return 2
@@ -64,34 +72,55 @@ def _revert(args) -> int:
         return 2
     run_id = f"{datetime.now():%Y%m%d-%H%M%S}-{secrets.token_hex(3)}"
     client = Client(conf["GWT_URL"], conf["GWT_USERNAME"], conf["GWT_PASSWORD"], tree=conf.get("GWT_TREE"),
-                    dry_run=False, log_path=f"gwt-apply-revert-{run_id}.jsonl")
-    lock = None
+                    dry_run=False, log_path=_log_path(args, run_id, f"gwt-apply-revert-{run_id}.jsonl"))
+    lock, handlers = None, {}
     try:
         client.login()
-        steps = revert.plan(entries, pre, lambda cls, h: client.get_live(cls, h))
+        bad = revert.pre_problems(snap, client.tree, entries)
+        if bad:
+            print("\n".join(f"revert: {b}" for b in bad), file=sys.stderr)
+            print("revert: --pre must be a --save-snapshot or gwt-check dump of this tree taken right before the run;"
+                  " nothing was written", file=sys.stderr)
+            return 2
+        if args.apply:  # the plan is made under the lock, so nothing another apply writes slips in between
+            lock = TreeLock(client, run_id, retries=args.retries, retry_wait=args.retry_wait)
+            took = lock.acquire(break_lock=args.break_lock)
+            if took:
+                print(took)
+            handlers = {sig: signal.signal(sig, lambda *_: sys.exit(1)) for sig in (signal.SIGTERM, signal.SIGHUP)}
+        steps = revert.plan(entries, pre, lambda cls, h: client.get_live(cls, h),
+                            lambda cls, h: (client.get_live(cls, h, backlinks=True) or {}).get("backlinks"))
         for s in steps:
             print(f"[{s['action']}] {s['cls']} {s['handle']}: {s['why']}")
         todo = [s for s in steps if s["action"] in ("restore", "delete")]
         manual = [s for s in steps if s["action"] == "manual"]
-        print(f"{len(todo)} to undo, {sum(s['action'] == 'skip' for s in steps)} skipped, {len(manual)} for the backup")
+        print(f"{len(todo)} to undo, {sum(s['action'] == 'skip' for s in steps)} skipped "
+              f"({sum(bool(s.get('changed')) for s in steps)} changed since the run), {len(manual)} for the backup")
         if not args.apply:
             print("PLAN only: nothing was written; add --apply to undo")
             return 0
-        lock = TreeLock(client, run_id, retries=args.retries, retry_wait=args.retry_wait)
-        took = lock.acquire(break_lock=args.break_lock)
-        if took:
-            print(took)
-        problems = revert.execute(client, todo, pre)
+        problems = revert.execute(client, todo, pre, lock=lock, retries=args.retries, retry_wait=args.retry_wait)
+        for s in todo:
+            if s["action"] == "skip":
+                print(f"[skip] {s['cls']} {s['handle']}: {s['why']}")
         for p in problems:
             print(f"PROBLEM: {p}", file=sys.stderr)
-        print("undone and read back" if not problems else f"{len(problems)} problem(s)")
-        return 1 if problems or manual else 0
+        done = sum(s["action"] in ("restore", "delete") for s in todo)
+        changed = sum(bool(s.get("changed")) for s in steps)
+        print(f"{done} undone and read back, {changed} changed since the run and left alone, "
+              f"{len(manual)} for the backup, {len(problems)} problem(s)")
+        return 1 if problems or manual or changed else 0
     except (LockHeld, ApiError) as exc:
         print(exc, file=sys.stderr)
+        if lock is not None:
+            print("stopped; running the same command again is safe: what is already undone reads as a skip",
+                  file=sys.stderr)
         return 1
     finally:
         if lock is not None and lock.expires:
             lock.release()
+        for sig, handler in handlers.items():
+            signal.signal(sig, handler)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -157,11 +186,7 @@ def main(argv: list[str] | None = None) -> int:
         print("--apply needs GWT_TREE (the tree id the login must land in)", file=sys.stderr)
         return 2
     run_id = f"{datetime.now():%Y%m%d-%H%M%S}-{secrets.token_hex(3)}"
-    if args.log:
-        p = Path(args.log)
-        log = str(p.with_name(f"{p.stem}.{run_id}{p.suffix or '.jsonl'}"))
-    else:
-        log = f"gwt-apply-{run_id}.jsonl"
+    log = _log_path(args, run_id, f"gwt-apply-{run_id}.jsonl")
     client = Client(
         conf.get("GWT_URL", ""),
         conf.get("GWT_USERNAME", ""),

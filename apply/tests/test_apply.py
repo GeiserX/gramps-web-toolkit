@@ -1510,7 +1510,7 @@ def test_revert_sends_people_merges_and_deletes_to_the_backup(fake, tmp_path):
         {"method": "POST", "path": "/objects/", "status": 201, "body": [{"_class": "Person", "handle": "p9"}]},
         {"method": "POST", "path": "/people/a/merge", "status": 200, "body": {}},
         {"method": "DELETE", "path": "/notes/n1", "status": 200},
-        {"method": "PUT", "path": "/notes/n2", "status": None, "body": {}},   # a failed write is not a write
+        {"method": "PUT", "path": "/notes/n2", "status": 400, "body": {}},   # a refused write is not a write
         {"method": "PUT", "path": "/notes/n3", "status": 200, "body": {"handle": "n3"}, "dry_run": True},
     ]
     log = tmp_path / "log.jsonl"
@@ -1555,6 +1555,168 @@ def test_revert_compares_what_the_server_keeps_not_its_defaults(tmp_path):
     assert revert.read_log(str(log)) == []  # login and lock note are not changes to the tree
 
 
+# ---- --revert, the cases that must never lose or overwrite data
+
+
+def _apply_list(tmp_path, ops, name, *extra):
+    """A real --apply of `ops` through the CLI; returns its log."""
+    p = tmp_path / f"{name}.changes.jsonl"
+    p.write_text("".join(json.dumps(o) + "\n" for o in ops))
+    assert main([str(p), "--apply", "--log", str(tmp_path / f"{name}.jsonl"), "--retry-wait", "0", *extra]) == 0
+    return str(next(tmp_path.glob(f"{name}.2*.jsonl")))
+
+
+def _undo(log, pre, *extra):
+    return main(["--revert", log, "--pre", pre, "--retry-wait", "0", *extra])
+
+
+def _live_client(fake):
+    client = Client("https://gw.example", "u", "s3cret-pw", tree="tree-test", dry_run=False, session=fake)
+    client.login()
+    return client
+
+
+def test_revert_undoes_a_write_whose_answer_was_lost(fake, tmp_path, env):
+    _note(fake, "n1", "Father read as Denis (?)")
+    pre = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", pre]) == 0
+    fake.drop_after = ("PUT", "/api/notes/")  # the server writes, the answer never arrives; the retry says skip
+    log = _apply_list(tmp_path, [{"op": "update_note", "key": "u", "ruling": R, "note": "N0001",
+                                  "set": {"text": "Father read as Rene (?)"}, "expect": "Father read as Denis (?)"}], "run")
+    assert fake.store["notes"]["n1"]["text"]["string"] == "Father read as Rene (?)"
+    mark = len(fake.calls)
+    assert _undo(log, pre, "--apply") == 0
+    assert fake.store["notes"]["n1"]["text"]["string"] == "Father read as Denis (?)"
+    # the lock is taken before the plan reads anything
+    calls = fake.calls[mark:]
+    assert calls.index(("POST", "/api/objects/")) < calls.index(("GET", "/api/notes/n1"))
+
+
+def test_revert_undoes_a_write_that_answered_5xx_but_was_written(fake, tmp_path):
+    from gwt_apply import revert
+    _note(fake, "n1", "old text")
+    pre = {("Note", "n1"): json.loads(json.dumps(fake.store["notes"]["n1"]))}
+    new = {"_class": "Note", "handle": "n1", "type": "Research", "format": 0,
+           "text": {"_class": "StyledText", "string": "new text", "tags": []}}
+    fake.store["notes"]["n1"]["text"]["string"] = "new text"  # the server kept it, then answered 500
+    log = tmp_path / "run.jsonl"
+    log.write_text(json.dumps({"ts": "2026-01-01T10:00:00+00:00", "dry_run": False, "method": "PUT",
+                               "path": "/notes/n1", "status": 500, "body": new}) + "\n")
+    client = _live_client(fake)
+    steps = revert.plan(revert.read_log(str(log)), pre, client.get_live)
+    assert [s["action"] for s in steps] == ["restore"]
+    assert revert.execute(client, steps, pre, retry_wait=0) == []
+    assert fake.store["notes"]["n1"]["text"]["string"] == "old text"
+
+
+def test_revert_keeps_a_tag_and_a_note_that_a_later_run_still_uses(fake, tmp_path, env):
+    fake.add("families", {"handle": "fam", "mother_handle": "anna", "type": "Unknown"})  # F0001
+    pre = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", pre]) == 0
+    log_a = _apply_list(tmp_path, [{"op": "add_note", "key": "a-note", "ruling": R, "text": "Note from list A",
+                                    "attach": [{"family": "F0001"}]}], "list-a", "--tag", "r1")
+    _apply_list(tmp_path, [
+        {"op": "add_note", "key": "b-note", "ruling": R, "text": "Note from list B", "attach": [{"person": "I0001"}]},
+        {"op": "attach_existing", "key": "b-move", "ruling": R, "object": {"note": "key:a-note"}, "attach": [{"source": "S0001"}]},
+    ], "list-b", "--tag", "r1")
+    tag = stable_handle("tag:r1")
+    assert _undo(log_a, pre, "--apply") == 0
+    assert fake.store["families"]["fam"]["note_list"] == []  # list A's own change is undone
+    assert stable_handle("a-note") in fake.store["notes"]  # list B attached it to the source
+    assert tag in fake.store["tags"]  # list B's note carries it
+    for o in [*fake.store["notes"].values(), *fake.store["sources"].values()]:  # nothing points at a missing object
+        for h in o.get("note_list", []) + o.get("tag_list", []):
+            assert h in fake.store["notes"] or h in fake.store["tags"]
+
+
+def test_revert_does_not_overwrite_what_changed_between_plan_and_write(fake, tmp_path):
+    from gwt_apply import revert
+    _note(fake, "n1", "Father read as Denis (?)")
+    pre = {("Note", "n1"): json.loads(json.dumps(fake.store["notes"]["n1"]))}
+    log = str(tmp_path / "run.jsonl")
+    client = Client("https://gw.example", "u", "s3cret-pw", tree="tree-test", dry_run=False, log_path=log, session=fake)
+    client.login()
+    Applier(client, retries=1, retry_wait=0).run([{"op": "update_note", "key": "u", "ruling": R, "note": "N0001",
+                                                   "set": {"text": "Father read as Rene (?)"}, "expect": "Father read as Denis (?)"}])
+    client = _live_client(fake)
+    steps = revert.plan(revert.read_log(log), pre, client.get_live)
+    assert [s["action"] for s in steps] == ["restore"]
+    fake.store["notes"]["n1"]["text"]["string"] = "Father read as Rene, son of Paul"  # someone edits it now
+    fake.store["notes"]["n1"]["change"] = fake.tick()
+
+    class Lock:
+        refreshed = 0
+
+        def refresh(self):
+            Lock.refreshed += 1
+
+    assert revert.execute(client, steps, pre, lock=Lock(), retry_wait=0) == []
+    assert fake.store["notes"]["n1"]["text"]["string"] == "Father read as Rene, son of Paul"
+    assert steps[0]["action"] == "skip" and "changed since the plan" in steps[0]["why"]
+    assert Lock.refreshed >= 1
+
+
+def test_revert_waits_out_a_busy_server(fake, tmp_path):
+    from gwt_apply import revert
+    _note(fake, "n1", "old text")
+    pre = {("Note", "n1"): json.loads(json.dumps(fake.store["notes"]["n1"]))}
+    log = str(tmp_path / "run.jsonl")
+    client = Client("https://gw.example", "u", "s3cret-pw", tree="tree-test", dry_run=False, log_path=log, session=fake)
+    client.login()
+    Applier(client, retries=1, retry_wait=0).run([{"op": "update_note", "key": "u", "ruling": R, "note": "N0001",
+                                                   "set": {"text": "new text"}, "expect": "old text"}])
+    client = _live_client(fake)
+    steps = revert.plan(revert.read_log(log), pre, client.get_live)
+    fake.busy = 2  # "database is locked" twice
+    assert revert.execute(client, steps, pre, retries=3, retry_wait=0) == []
+    assert fake.store["notes"]["n1"]["text"]["string"] == "old text"
+
+
+def test_revert_refuses_a_pre_copy_that_is_not_from_before_the_run(fake, tmp_path, env, capsys):
+    import gzip
+    fake.add("families", {"handle": "fam", "mother_handle": "anna", "type": "Unknown"})
+    good = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", good]) == 0
+    log = _apply_list(tmp_path, [
+        {"op": "update_family", "key": "f", "ruling": R, "family": "F0001", "set": {"type": "Married"}},
+        {"op": "add_note", "key": "n", "ruling": R, "text": "made by the run", "attach": [{"family": "F0001"}]},
+    ], "run")
+    late = str(tmp_path / "late.json.gz")
+    assert main(["--save-snapshot", late]) == 0
+    with gzip.open(good, "rt") as fh:
+        snap = json.load(fh)
+    other = str(tmp_path / "other.json.gz")
+    with gzip.open(other, "wt") as fh:
+        json.dump(dict(snap, tree="another-tree"), fh)
+    future = str(tmp_path / "future.json.gz")
+    with gzip.open(future, "wt") as fh:
+        json.dump(dict(snap, taken="2999-01-01T00:00:00+00:00"), fh)
+    before = fake.writes()
+    for bad, why in ((late, "the run made"), (other, "another-tree"), (future, "after the run's first write")):
+        capsys.readouterr()
+        assert _undo(log, bad, "--apply") == 2, bad
+        assert why in capsys.readouterr().err
+        assert fake.writes() == before  # nothing written, not even the lock
+    assert fake.store["families"]["fam"]["type"] == "Married"
+    assert _undo(log, good, "--apply") == 0
+    assert fake.store["families"]["fam"]["type"] == "Unknown" and fake.store["notes"] == {}
+
+
+def test_revert_exits_1_when_something_changed_since_and_honours_log(fake, tmp_path, env, capsys):
+    fake.add("families", {"handle": "fam", "mother_handle": "anna", "type": "Unknown"})
+    pre = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", pre]) == 0
+    log = _apply_list(tmp_path, [{"op": "update_family", "key": "f", "ruling": R, "family": "F0001",
+                                  "set": {"type": "Married"}}], "run")
+    fake.store["families"]["fam"]["type"] = "Civil Union"  # someone settles it by hand after the run
+    capsys.readouterr()
+    assert _undo(log, pre, "--apply", "--log", str(tmp_path / "undo.jsonl")) == 1
+    out = capsys.readouterr().out
+    assert "1 changed since the run and left alone" in out
+    assert fake.store["families"]["fam"]["type"] == "Civil Union"
+    assert list(tmp_path.glob("undo.2*.jsonl"))  # next to the run it undoes, not in the working directory
+
+
 def test_update_child_ref_conflict_writes_nothing(fake):
     kid = fake.add("people", {"handle": "kid", "gender": 1, "primary_name": {"first_name": "Sam", "surname_list": [{"surname": "Example", "primary": True}]}})
     fam = fake.add("families", {"handle": "fam", "mother_handle": "anna"})
@@ -1580,3 +1742,16 @@ def test_update_child_ref_confirms_a_link_made_earlier_in_the_same_list(fake, dr
     if not dry_run:
         ref = fake.store["families"]["fam"]["child_ref_list"][0]
         assert fake.store["notes"][ref["note_list"][0]]["text"]["string"].startswith("[confirmed] the 1890 baptism")
+
+
+def test_revert_never_restores_a_copy_older_than_what_the_run_read(fake, tmp_path, env, capsys):
+    _note(fake, "n1", "Father read as Denis (?)")
+    pre = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", pre]) == 0
+    fake.store["notes"]["n1"]["text"]["string"] = "Father read as Denis, miller"  # an edit between the copy and the run
+    fake.store["notes"]["n1"]["change"] = fake.tick()
+    log = _apply_list(tmp_path, [{"op": "update_note", "key": "u", "ruling": R, "note": "N0001",
+                                  "set": {"text": "Father read as Rene, miller"}, "expect": "Father read as Denis, miller"}], "run")
+    assert _undo(log, pre, "--apply") == 1
+    assert "older than what the run read" in capsys.readouterr().out
+    assert fake.store["notes"]["n1"]["text"]["string"] == "Father read as Rene, miller"  # not back to the older copy
