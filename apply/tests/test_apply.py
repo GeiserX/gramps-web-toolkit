@@ -2534,6 +2534,29 @@ def test_a_rerun_does_not_flag_the_couple_the_list_made(fake):
     assert [r.status for r in run(fake, ops)] == ["skip"] * 3
 
 
+def test_a_later_list_waives_a_couple_an_earlier_list_made_by_its_key(fake):
+    """new_couple_of may name a family an earlier list made by that list's key:<key>, once it is in the tree."""
+    from gwt_apply.dupes import preflight
+    first = [
+        {"op": "add_person", "key": "p-tom", "ruling": R, "first_name": "Tom", "surname": "Sample", "gender": "M"},
+        {"op": "add_person", "key": "p-mary", "ruling": R, "first_name": "Mary", "surname": "Testing", "gender": "F"},
+        {"op": "add_family", "key": "f-1", "ruling": R, "father": "key:p-tom", "mother": "key:p-mary"},
+    ]
+    assert [r.status for r in run(fake, first)] == ["done"] * 3
+    later = [
+        {"op": "add_person", "key": "p-tom2", "ruling": R, "first_name": "Tom", "surname": "Sample", "gender": "M",
+         "allow_namesake": True, "namesake_reason": "another parish", "namesake_of": ["key:p-tom"]},
+        {"op": "add_person", "key": "p-mary2", "ruling": R, "first_name": "Mary", "surname": "Testing", "gender": "F",
+         "allow_namesake": True, "namesake_reason": "another parish", "namesake_of": ["key:p-mary"]},
+        {"op": "add_family", "key": "f-2", "ruling": R, "father": "key:p-tom2", "mother": "key:p-mary2"},
+    ]
+    problems = preflight(later, Client("https://gw.example", "u", "pw", session=fake))
+    assert len(problems) == 1 and "'f-2'" in problems[0], problems
+    later[2].update(allow_new_couple=True, new_couple_reason="married in another parish", new_couple_of=["key:f-1"])
+    assert validate(later) == []
+    assert preflight(later, Client("https://gw.example", "u", "pw", session=fake)) == []
+
+
 def test_couple_pass_rules(fake):
     """Both spouses must match, either way round; a list of only add_family ops is still compared."""
     from gwt_apply.dupes import preflight
@@ -2574,6 +2597,9 @@ def test_couple_pass_skips_what_the_list_already_waived_and_blank_given_names(fa
         {"op": "add_family", "key": "f-2", "ruling": R, "father": "key:p-tom2", "mother": "key:p-mary"},
     ]
     assert validate(ops) == [] and preflight(ops, c) == []
+    # resumed after a partial run: f-1 is now a tree family, and its waiver still covers f-2
+    assert [r.status for r in run(fake, ops[:3])] == ["done", "done", "done"]
+    assert preflight(ops, Client("https://gw.example", "u", "pw", session=fake)) == []
     # people with no given name match nobody, so their couples are never the same
     blank = []
     for h in ("x1", "y1", "x2", "y2"):

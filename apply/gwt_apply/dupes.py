@@ -209,6 +209,8 @@ def _couple_pass(ops: list[dict], tree: list[Who], couples: list[Couple], new: d
                    for op in ops if op["op"] == "add_person" and op.get("allow_namesake")}
     in_tree = {c.handle for c in couples}
     by_key = {f"key:{op['key']}": op for op in ops if op["op"] == "add_family"}
+    # a family an earlier run of this list made is in the tree under stable_handle(key): it is still that op
+    made = {stable_handle(k[4:]): k for k in by_key}
     problems = []
     seen: list[Couple] = []
     for op in ops:
@@ -232,7 +234,8 @@ def _couple_pass(ops: list[dict], tree: list[Who], couples: list[Couple], new: d
         for other in couples + seen:
             if other.ref in compared or (other.handle and other.handle in compared):
                 continue
-            if not other.handle and mine.ref in set(_ref_list(by_key[other.ref].get("new_couple_of") or [])):
+            earlier = made.get(other.handle) if other.handle else other.ref
+            if earlier and mine.ref in set(_ref_list(by_key[earlier].get("new_couple_of") or [])):
                 continue  # the earlier op already says these are two couples
             if not _same_couple(mine, other):
                 continue

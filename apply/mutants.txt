@@ -47,3 +47,5 @@ gwt_apply/ops.py | self.reasons.append(f"differs: {after['_class']} {self.label(
 gwt_apply/ops.py | if len(rows) != 1: | if not rows: | --verify never picks a winner when two objects carry the same merge note
 gwt_apply/ops.py | self.c.pending, self.c.deleted = planned | pass | a retried dry-run op does not read its own earlier try's plan as already done
 gwt_apply/cli.py | rows += [{ | rows + [{ | --json lists the ops a run never reached as not run
+gwt_apply/dupes.py | earlier = made.get(other.handle) if other.handle else other.ref | earlier = None if other.handle else other.ref | an earlier op's new_couple_of still waives the later op when a partial run already made the earlier family
+gwt_apply/dupes.py | if other.ref in compared or (other.handle and other.handle in compared): | if other.ref in compared: | new_couple_of may name a family an earlier list made by its key:<key>
