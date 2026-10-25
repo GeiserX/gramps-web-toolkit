@@ -2,7 +2,12 @@
 
 [gwt-queue](queue.md) holds what to search next. Somebody has to decide what that is. In the pipeline the judge did it by reading weak-points tables and branch depth by hand, every round. `gwt-leads` reads a tree dump offline and lists the gaps, ranked, ready to seed the queue. It never touches the tree.
 
-Standard library only. Run it as `leads/gwt-leads DUMP` where `DUMP` is the file `gwt-check dump` writes: `{tree, dumped_at, objects: {people, families, events, places}}`, gzipped or not. A file in any other shape, a dump with no people, or a record with no handle exits `2` with a message instead of printing an empty list.
+Standard library only. Run it as `leads/gwt-leads DUMP` where `DUMP` is either of two files, gzipped or not (gzip is told by its first bytes, not by a `.gz` name):
+
+- the file `gwt-check dump` writes: `{tree, dumped_at, objects: {people, families, events, places}}`;
+- a snapshot `gwt-apply` saves, the one [Getting started](getting-started.md) tells you to keep: `{format: "gwt-apply-snapshot/1", tree, taken, objects: {Person, Family, Event, Place, ...}}`.
+
+The same tree gives the same leads from either file. A file in any other shape, a dump with no people, or a record with no handle exits `2` with a message naming both formats instead of printing an empty list.
 
 `gwt-check dump` pages the whole tree. Do not take a dump while that tree's writer is applying a change list.
 
