@@ -12,7 +12,7 @@ from .checks import CHECKS, INFO_CHECKS, run_checks
 from .client import ApiError, Client, url_problem
 from . import compare
 from .compare import ahnentafel, compare_ahnentafel, diff
-from .tree import BadInput, Tree, load, save
+from .tree import READ_MARGIN, BadInput, Tree, load, save
 
 
 def read_config(path: str | None) -> dict:
@@ -29,6 +29,7 @@ def read_config(path: str | None) -> dict:
     return conf
 
 
+STAMP_SLACK = 2  # s: a change stamp has 1 s resolution, and the read start is floored to the second
 PASSES = 10  # rereads of what moved before a read of a tree that never stops changing gives up
 SEEN_IN = 3  # passes in a row a finding must show in while the tree is being written to
 
@@ -52,34 +53,55 @@ def _client(args) -> Client:
     return client
 
 
-def _dump(client: Client, objs: dict) -> dict:
-    return {"tree": client.tree, "dumped_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+def _dump(client: Client, objs: dict, started: int) -> dict:
+    return {"tree": client.tree, "read_started": started, "dumped_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
             "objects": {t: list(rows.values()) for t, rows in objs.items()}}
 
 
-def live_dump(args, settled=None) -> dict:
+def live_dump(args, settled=None, seed: Tree | None = None) -> dict:
     """The live tree, read while it may change. Pages are read without trusting them, then the change stamps
     of every type are compared and what moved is read again, pass after pass, until a pass finds nothing
     moved, or `settled(dump)` says the findings no longer depend on what is moving. With --live, the old
-    strict read: one pass, and a type whose count changes mid-read stops it."""
+    strict read: one pass, and a type whose count changes mid-read stops it.
+
+    With `seed`, a saved tree of the same tree, the pages are not read: the object map starts from the file, and
+    the first pass also reads again every object stamped at or after the moment the file's read started (minus
+    STAMP_SLACK), which a write in that same second leaves with the stamp the file holds."""
     client = _client(args)
     t0 = time.monotonic()
+    started = int(time.time())  # recorded in the dump as read_started, for a later --from
     progress = lambda t, n: print(f"  {t}: {n}", file=sys.stderr, flush=True)  # noqa: E731
     try:
         if args.live:
-            data = {"tree": client.tree, "dumped_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            data = {"tree": client.tree, "read_started": started, "dumped_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
                     "objects": client.dump(pagesize=args.pagesize, workers=args.workers, progress=progress)}
         else:
-            objs = client.read_all(pagesize=args.pagesize, workers=args.workers, progress=progress)
+            since = None
+            if seed is not None:
+                if seed.tree_id != client.tree:
+                    what = f"a dump of tree {seed.tree_id!r}" if seed.tree_id else "a file that records no tree"
+                    raise BadInput(f"--from {seed.source}: {what}, but the login is in tree {client.tree!r}")
+                if seed.read_started is None:
+                    raise BadInput(f"--from {seed.source}: says nowhere when it was read "
+                                   "(no read_started, dumped_at or taken)")
+                if seed.read_started_guessed:
+                    print(f"gwt-check: --from {seed.source} has no read_started; taking its read to have started "
+                          f"{READ_MARGIN // 60} min before it was written, and reading again what changed since",
+                          file=sys.stderr)
+                objs = {t: dict(rows) for t, rows in seed.objs.items()}
+                since = seed.read_started - STAMP_SLACK
+            else:
+                objs = client.read_all(pagesize=args.pagesize, workers=args.workers, progress=progress)
             for n in range(1, PASSES + 1):
-                moved = client.refresh(objs)
-                data = _dump(client, objs)
+                moved = client.refresh(objs, since=since if n == 1 else None)
+                data = _dump(client, objs, started)
                 if not moved:
                     break
                 if settled is not None and settled(data):
                     data["settled"] = True  # by findings, while writes went on
                     break
-                print(f"  pass {n}: {moved} object(s) changed during the read, reading them again", file=sys.stderr)
+                what = f"since {seed.source}" if seed is not None and n == 1 else "during the read"
+                print(f"  pass {n}: {moved} object(s) changed {what}, reading the stamps again", file=sys.stderr)
             else:
                 raise BadInput(f"the tree kept changing: {moved} object(s) still moving after {PASSES} passes")
             data["passes"] = n
@@ -275,6 +297,9 @@ def main(argv: list[str] | None = None) -> int:
                    help="leave a whole check out of the exit code (repeatable); the report still counts it")
     p.add_argument("--json", help="write the full report as JSON to this file (- for stdout)")
     p.add_argument("--save-dump", help="keep the live dump in this file")
+    p.add_argument("--from", dest="from_tree", metavar="OLD",
+                   help="a dump or gwt-apply snapshot of this tree: start from it and read again only what changed "
+                        "since, instead of the whole tree; implies --baseline OLD unless --baseline or --known is given")
     p.add_argument("--limit", type=int, default=30, help="findings printed per check (default 30)")
     live_opts(p)
 
@@ -344,10 +369,18 @@ def main(argv: list[str] | None = None) -> int:
         check_names(set(args.ignore_check))  # before a dump that can take minutes
         t0 = time.monotonic()
         known = load_known(args.known) if args.known else None
-        if args.baseline:
-            base = load(args.baseline)
+        seed = None
+        if args.from_tree:
+            if args.tree or args.live:
+                raise BadInput("--from refreshes a saved tree from the live one; it takes no TREE and no --live")
+            seed = load(args.from_tree)
+            if seed.partial:
+                raise BadInput(f"--from {args.from_tree}: a .gramps backup has no objects to start from; use a dump")
+        base = load(args.baseline) if args.baseline else seed if seed is not None and not args.known else None
+        if base is not None:
             if base.partial:
-                raise BadInput(f"{args.baseline}: a .gramps backup has no objects to check; --baseline needs a dump")
+                raise BadInput(f"{args.baseline or args.from_tree}: a .gramps backup has no objects to check; "
+                               "--baseline needs a dump")
             old = check(base)["findings"]
             known = {**{(f["check"], f["key"]): "" for f in old}, **(known or {})}
         since = load(args.since) if args.since else None
@@ -371,7 +404,7 @@ def main(argv: list[str] | None = None) -> int:
                     persistent.append(set.intersection(*seen[-SEEN_IN:]))
                 return len(persistent) >= 2 and persistent[-1] == persistent[-2]
 
-            data = live_dump(args, settled)
+            data = live_dump(args, settled, seed)
             if args.save_dump:
                 save(data, args.save_dump)
             tree = Tree(data["objects"], source="live tree")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import json
 import xml.etree.ElementTree as ET
+from datetime import datetime
 
 # REST namespaces, in dump order. Tags are optional: older dumps do not have them.
 TYPES = (
@@ -47,6 +48,12 @@ APPLY_CLASSES = {
 APPLY_LOCK = "gwt8e1481beef5aa4a5c4de4424f"
 
 
+# A file without `read_started` (written before it existed, or a gwt-apply snapshot) says only when it was written
+# (`dumped_at`, after a read that can take many minutes) or taken (`taken`); its read is taken to have started this
+# long before that, so `check --from` reads again whatever changed in that hour.
+READ_MARGIN = 3600
+
+
 class BadInput(Exception):
     """A file that cannot be read as a tree: exit code 2."""
 
@@ -62,6 +69,9 @@ class Tree:
         self.has_tags = data.get("tags") is not None
         self.partial = partial  # from a backup: handles, ids, change times and family links only
         self.source = source
+        self.tree_id: str | None = None  # the tree the file says it was read from
+        self.read_started: int | None = None  # Unix time the read began, to compare with change stamps
+        self.read_started_guessed = False  # True when worked out from dumped_at or taken minus READ_MARGIN
 
     def gid(self, t: str, handle: str) -> str:
         o = self.objs[t].get(handle)
@@ -108,6 +118,7 @@ def load(path: str) -> Tree:
         raise BadInput(f"{path}: not a JSON dump or a .gramps backup ({exc})") from exc
     if not isinstance(data, dict):
         raise BadInput(f"{path}: a dump is a JSON object with one list per type")
+    meta = data
     if data.get("format") == APPLY_SNAPSHOT:
         if not isinstance(data.get("objects"), dict) or not all(isinstance(v, list) for v in data["objects"].values()):
             raise BadInput(f"{path}: a gwt-apply snapshot without an objects map of lists")
@@ -116,7 +127,20 @@ def load(path: str) -> Tree:
             raise BadInput(f"{path}: a gwt-apply snapshot without {', '.join(missing)}; take a new one")
         data = {t: data["objects"].get(cls) for cls, t in APPLY_CLASSES.items()}
     data = data.get("objects", data)
-    return Tree(data, source=path)
+    tree = Tree(data, source=path)
+    tree.tree_id = meta.get("tree")
+    tree.read_started, tree.read_started_guessed = _read_started(meta)
+    return tree
+
+
+def _read_started(meta: dict) -> tuple[int | None, bool]:
+    if isinstance(meta.get("read_started"), (int, float)):
+        return int(meta["read_started"]), False
+    stamp = meta.get("taken") or meta.get("dumped_at")
+    try:
+        return int(datetime.fromisoformat(stamp).timestamp()) - READ_MARGIN, True
+    except (TypeError, ValueError):
+        return None, True
 
 
 def save(data: dict, path: str) -> None:
