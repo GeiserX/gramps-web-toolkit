@@ -2135,3 +2135,62 @@ def test_an_op_that_ends_in_conflict_or_error_says_the_server_may_hold_the_lost_
     assert res.status == status, res.actions
     assert _lost_lines(res) == ["answer lost on try 1: PUT /notes/n1; the server may hold that write"], res.actions
     assert res.actions[-1].startswith(last), res.actions
+
+
+# -- one test per row of apply/mutants.txt: each fails when its guard is mutated away --
+
+
+def test_preflight_flags_a_namesake_who_shares_a_spouse(fake):
+    from gwt_apply.dupes import preflight
+    fake.add("people", {"handle": "bob", "gender": 1, "primary_name": {"first_name": "Bob", "surname_list": [{"surname": "Sample"}]}})  # I0002
+    fake.add("families", {"handle": "fam", "father_handle": "bob", "mother_handle": "anna"})
+    # no birth years and no parents on either side: only the shared husband ties the new Anna to I0001
+    ops = [
+        {"op": "add_person", "key": "p", "ruling": R, "first_name": "Anna", "surname": "Example Other"},
+        {"op": "add_family", "key": "f", "ruling": R, "father": "I0002", "mother": "key:p"},
+    ]
+    problems = preflight(ops, Client("https://gw.example", "u", "pw", session=fake))
+    assert len(problems) == 1 and "I0001" in problems[0] and "a spouse in common" in problems[0], problems
+
+
+def test_an_event_type_in_another_case_is_the_same_event(fake):
+    ev = fake.add("events", {"handle": "bap", "type": "Baptism", "date": parse_date("1890-03-20")})
+    fake.store["people"]["anna"]["event_ref_list"] = [{"ref": ev["handle"], "role": "Primary"}]
+    res = run(fake, [{"op": "add_event", "key": "e", "ruling": R, "person": "I0001", "type": "baptism", "date": "1890-03-20"}])
+    assert res[0].status == "skip", res[0].actions
+    assert fake.writes() == []
+
+
+def test_database_is_locked_is_retried_whatever_the_status(fake):
+    fake.busy, fake.busy_status = 2, 400
+    res = run(fake, [{"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}])
+    assert res[0].status == "done", res[0].actions
+    assert fake.store["people"]["anna"]["note_list"] == [stable_handle("n")]
+
+
+def test_update_event_refuses_a_place_given_as_a_handle():
+    errors = "\n".join(validate([{"op": "update_event", "key": "u", "ruling": R, "event": "E0001",
+                                  "set": {"place": "0123b4e9269542049080d7a4c798"}}]))
+    assert "is neither key:<key> nor a Gramps ID" in errors
+
+
+def test_add_place_with_the_same_name_and_parent_but_another_type_is_a_new_place(fake):
+    fake.add("places", {"handle": "town", "name": {"value": "Oakford"}, "place_type": "Town", "placeref_list": [{"ref": "plc1"}]})
+    ops = [{"op": "add_place", "key": "pl", "ruling": R, "name": "Oakford", "type": "Parish", "enclosed_by": "P0001"}]
+    res = run(fake, ops)
+    assert res[0].status == "done", res[0].actions
+    assert fake.store["places"][stable_handle("pl")]["place_type"] == "Parish"
+
+
+def test_a_birth_where_the_person_is_only_a_witness_does_not_block_their_own(fake):
+    ev = fake.add("events", {"handle": "other", "type": "Birth", "date": parse_date("1910-06-01")})
+    fake.store["people"]["anna"]["event_ref_list"] = [{"ref": ev["handle"], "role": "Witness"}]
+    res = run(fake, [{"op": "add_event", "key": "b", "ruling": R, "person": "I0001", "type": "Birth", "date": "1885"}])
+    assert res[0].status == "done", res[0].actions
+    assert fake.store["people"]["anna"]["birth_ref_index"] == 1
+
+
+def test_merge_person_refuses_an_unknown_use_loser_vital():
+    errors = "\n".join(validate([{"op": "merge_person", "key": "m", "ruling": R, "winner": "I0001", "loser": "I0002",
+                                  "use_loser": ["marriage"]}]))
+    assert "use_loser takes ['birth', 'death']" in errors
