@@ -29,12 +29,14 @@ Lists written for the first public commit of `gwt-apply` behave differently in t
 ### Added
 
 - `gwt`, one command for every Python tool (`gwt <tool> ...`), installed with one `pip install gramps-web-toolkit`; each `gwt-<tool>` command stays.
+- `gwt-apply --verify` proves a list landed: a dry run that exits 1 when any op would write, conflicts or errs, and names each missing object and each field that differs; a Gramps ID merged away is read on its winner. `--json FILE` writes one result per op. A dry-run op retried after a server error no longer reads its own first try's plan as already in the tree.
 - `gwt-apply`: offline planning on a snapshot (`--save-snapshot`, `--since`), merges of people, families and events through Gramps' own merge, DNA matches as associations, `attach_existing`, `dedupe_list`, `update_place`, repositories, `update_note`, `update_citation`, `update_family`, `update_child_ref`, `detach`, and `--revert` to undo one run from its log.
 - `gwt-check`: read-only whole-tree checks, `--baseline`, `--ignore-check`, accepted findings with a reason, disconnected family components, contradictory dates, living-people privacy checks, missing event places found in their citations, citations entered twice, and offline checks of saved snapshots.
 - `gwt-ledger` (shared search ledger, one file per lane), `gwt-gate` (one request pace per machine), `gwt-queue` (search tasks for parallel lanes), `gwt-leads` (tree gaps as queue tasks), `gwt-rank` (orders FamilySearch results), `gwt-import-excel` (workbooks to change lists), `gwt-rawstore` (originals in S3) and `gwt-mh` (MyHeritage through a signed-in browser).
 - Both Gramps Web clients send a toolkit User-Agent and log in with a sync token (`GWT_TOKEN`).
 - A documentation site at https://geiserx.github.io/gramps-web-toolkit/.
 - Tagged releases publish to PyPI, and `gwt --version` in a clone prints a version read from git.
+- `gwt-read familysearch`: FamilySearch record search and records with your own session token, through the cache and a slow per-account gate (one request every 30 s at best), stopping on a 403, 429, captcha, sign-in page or empty frame; it writes the same envelope and candidates files as `gwt-mh`, whose shared parts now live in `read/gwt_reader.py`.
 
 ### Changed
 

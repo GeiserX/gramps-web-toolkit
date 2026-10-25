@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import re
 import secrets
@@ -197,6 +198,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("change_list", nargs="?", help="JSON array, {\"ops\": [...]}, or JSONL")
     ap.add_argument("--apply", action="store_true", help="write; without it nothing is written")
+    ap.add_argument("--verify", action="store_true",
+                    help="prove the list landed: a dry run that exits 1 if any op is not in the tree, and says why")
+    ap.add_argument("--json", metavar="FILE", help="write one result per op (key, op, status, reason) to FILE")
     ap.add_argument("--config", help="KEY=VALUE file with GWT_URL, GWT_USERNAME and GWT_PASSWORD (or GWT_TOKEN), GWT_TREE")
     ap.add_argument("--log", help="JSONL log of every API call; the run id is added to the name (default: a real run "
                     "logs under $XDG_STATE_HOME/gwt-apply/<tree>/, a dry run keeps no log)")
@@ -223,6 +227,10 @@ def main(argv: list[str] | None = None) -> int:
         return _revert(args, argv)
     if args.pre:
         ap.error("--pre goes with --revert")
+    if args.verify and (args.apply or args.save_snapshot):
+        ap.error("--verify is a dry run: no --apply or --save-snapshot")
+    if args.json and not args.change_list:
+        ap.error("--json goes with a change list")
     if not args.change_list and not args.save_snapshot:
         ap.error("give a change list, or --save-snapshot FILE, or --revert LOG --pre FILE")
     if args.since and not args.save_snapshot:
@@ -295,7 +303,7 @@ def _run(args, argv, client: Client, run_id: str, ops, snap, old, offline: bool,
         outcome["error"] = str(exc)
         print(exc, file=sys.stderr)
         return 1
-    mode = "APPLY" if args.apply else "DRY-RUN (nothing written)"
+    mode = "APPLY" if args.apply else "VERIFY (nothing written)" if args.verify else "DRY-RUN (nothing written)"
     where = f"snapshot {args.snapshot} of {snap['taken']}" if snap else "the server"
     print(f"{mode} on tree {client.tree}, run {run_id}, reading {where}, {len(ops)} op(s)")
     lock, handlers = None, {}
@@ -316,11 +324,13 @@ def _run(args, argv, client: Client, run_id: str, ops, snap, old, offline: bool,
                 msg = f"the snapshot is of tree {snap.get('tree')!r}, the login is in {client.tree!r}"
                 client.log(event="refused", reason="snapshot-tree", problems=[msg])
                 print(msg, file=sys.stderr)
+                _write_json(args.json, ops, [], "not run: the snapshot check refused the list")
                 return 1
             refused = _plan_on_snapshot(ops, snap, client, tag=args.tag)
             if refused:
                 client.log(event="refused", reason="snapshot-plan", problems=refused)
                 print("\n".join(refused) + "; nothing was written", file=sys.stderr)
+                _write_json(args.json, ops, [], "not run: the snapshot check refused the list")
                 return 1
             client.use_snapshot(snap)
         problems = preflight(ops, client)
@@ -328,11 +338,14 @@ def _run(args, argv, client: Client, run_id: str, ops, snap, old, offline: bool,
             client.log(event="refused", reason="preflight", problems=problems)
             print("\n".join(problems), file=sys.stderr)
             print(f"{len(problems)} likely duplicate(s); nothing was written", file=sys.stderr)
+            _write_json(args.json, ops, [], "not run: the list stopped on likely duplicates")
             return 1
-        results = Applier(client, retries=args.retries, retry_wait=args.retry_wait, lock=lock, tag=args.tag).run(ops)
+        results = Applier(client, retries=args.retries, retry_wait=args.retry_wait, lock=lock, tag=args.tag,
+                          verify=args.verify).run(ops)
     except (LockHeld, ApiError) as exc:
         outcome["error"] = str(exc)
         print(exc, file=sys.stderr)
+        _write_json(args.json, ops, [], f"not run: {exc}")
         return 1
     finally:
         if lock is not None and lock.expires:
@@ -343,10 +356,36 @@ def _run(args, argv, client: Client, run_id: str, ops, snap, old, offline: bool,
         print(f"[{r.status}] {r.key} ({r.op}, ruling {r.ruling})")
         for a in r.actions:
             print(f"    {a}")
+        if args.verify and r.status == "done":
+            for why in r.reasons:
+                print(f"    {why}")
     counts = {s: sum(r.status == s for r in results) for s in ("done", "skip", "conflict", "error")}
     not_run = len(ops) - len(results)
     outcome.update(counts=counts, not_run=not_run)
     lost = sum(r.answer_lost for r in results)
     words = [f"{v} {k}" + (f" (answer lost: {lost})" if k == "done" and lost else "") for k, v in counts.items()]
     print(", ".join(words) + (f", {not_run} not run" if not_run else ""))
+    _write_json(args.json, ops, results, "not run: an earlier op stopped the list")
+    if args.verify:
+        landed = counts["skip"]
+        print(f"VERIFY: {landed} of {len(ops)} op(s) in the tree" + ("" if landed == len(ops) else
+              f"; {len(ops) - landed} not (see the missing, differs, conflict and error lines above)"))
+        return 0 if landed == len(ops) else 1
     return 0 if not (counts["conflict"] or counts["error"]) else 1
+
+
+def _reason(r) -> str:
+    if r.status == "done":
+        return "; ".join(r.reasons) or (r.actions[-1] if r.actions else "")
+    if r.status in ("conflict", "error"):
+        return r.actions[-1] if r.actions else ""
+    return ""
+
+
+def _write_json(path: str | None, ops: list[dict], results: list, not_run: str) -> None:
+    """One object per op of the list, in its order: the ops a run never reached carry status `not run`."""
+    if not path:
+        return
+    rows = [{"key": r.key, "op": r.op, "status": r.status, "reason": _reason(r)} for r in results]
+    rows += [{"key": op["key"], "op": op["op"], "status": "not run", "reason": not_run} for op in ops[len(results):]]
+    Path(path).write_text(json.dumps(rows, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")

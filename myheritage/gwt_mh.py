@@ -4,13 +4,23 @@
 What lives here: search and record URL builders, the URL normalizer used as the cache key, the
 normalizer from MyHeritage's own search JSON to the candidate records gwt-rank reads, the record page
 parser, wall and paywall detection, plan inference from what pages showed, image-path and image-header
-decoding, the fetch manifest, ledger source slugs and the FamilySearch-mirror verdict.
+decoding, the fetch manifest kinds, ledger source slugs and the FamilySearch-mirror verdict. The file shape,
+secret scrubbing and manifest rows every reader shares live in ../read/gwt_reader.py.
 
 The browser side (gwt_mh_browser.py) captures pages and hands them here as an envelope:
     {"url", "final_url", "text", "html", "graphql": [{"url", "body"}], "captured_at", "plan"}
 """
-import datetime, hashlib, html, json, math, os, re, struct, unicodedata, urllib.parse
+import datetime, html, json, math, os, re, sys, urllib.parse
 from html.parser import HTMLParser
+
+try:                     # installed: gwt_reader is a module beside this one
+    import gwt_reader
+except ImportError:      # a clone: it lives in ../read
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'read'))
+    import gwt_reader
+# The site-agnostic parts every reader shares (file shape, secrets, manifest), kept importable from here.
+from gwt_reader import (norm_words, slug, now_iso, write_atomic, write_json, scrub, image_size,  # noqa: E402,F401
+                        MANIFEST_COLUMNS, read_manifest, write_manifest)
 
 HOST = 'https://www.myheritage.es'
 EXIT_OK, EXIT_EMPTY, EXIT_WALL, EXIT_DEAD, EXIT_PAYWALL, EXIT_PAUSED, EXIT_BUSY = 0, 2, 3, 4, 5, 6, 7
@@ -28,37 +38,6 @@ MYHERITAGE_RULES = (
 # Query parameters that change per session or per click and never change the answer.
 DROP_PARAMS = {'perm_id', 'recordtitle', 'csrf_token', 'fbclid', 'gclid', '_ga'}
 PLAN_HEADER = 'x-gwt-mh-plan'
-
-# ---------------------------------------------------------------- small helpers
-
-
-def norm_words(text):
-    t = unicodedata.normalize('NFKD', text or '')
-    t = ''.join(c for c in t if not unicodedata.combining(c)).lower()
-    return re.sub(r'[^a-z0-9 ]+', ' ', t).split()
-
-
-def slug(text, limit=60):
-    return '-'.join(norm_words(text))[:limit].strip('-') or 'x'
-
-
-def now_iso():
-    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-
-
-def write_atomic(path, data):
-    """Write to path.part, then rename: a reader never sees half a file."""
-    d = os.path.dirname(os.path.abspath(path))
-    os.makedirs(d, exist_ok=True)
-    tmp = path + '.part'
-    with open(tmp, 'wb') as f:
-        f.write(data if isinstance(data, bytes) else data.encode('utf-8'))
-    os.replace(tmp, path)
-
-
-def write_json(path, obj):
-    write_atomic(path, json.dumps(obj, ensure_ascii=False, indent=1) + '\n')
-
 
 # ---------------------------------------------------------------- URLs
 
@@ -172,33 +151,6 @@ def classify(final_url, text='', html_text=''):
 
 
 EXIT_FOR = {'ok': EXIT_OK, 'wall': EXIT_WALL, 'dead': EXIT_DEAD, 'paywall': EXIT_PAYWALL}
-
-# ---------------------------------------------------------------- secrets never reach disk
-
-# Session secrets a page or a search carries: the search bearer token, the FamilyGraph tokens embedded in
-# the page script (fgToken, webClientFgToken, ...), the XSRF and CSRF tokens, and Authorization headers.
-_SECRET_NAME = r'\w*(?:fgtoken|xsrftoken|csrftoken|csrf_token|bearer_token|bearertoken|access_token|accesstoken)'
-_SECRET_KEY = re.compile(r'^%s$|^authorization$' % _SECRET_NAME, re.I)
-_SECRET_RES = (
-    re.compile(r'(%s(?:\\*["\'])?\s*[:=]\s*(?:\\*["\'])?)([^"\'&\s,;}\\<]+)' % _SECRET_NAME, re.I),
-    re.compile(r'(name="bearer_token"\r?\n\r?\n)([^\r\n]+)'),
-    re.compile(r'(\b[Bb]earer\s+)([A-Za-z0-9._~+/=-]{16,})'),
-    re.compile(r'((?:[Aa]uthorization)["\']?\s*[:=]\s*["\']?)([^"\'\r\n,}]+)'),
-)
-
-
-def scrub(obj):
-    """A copy with every session token (bearer, FamilyGraph, XSRF, CSRF) and Authorization value replaced by REDACTED."""
-    if isinstance(obj, dict):
-        return {k: ('REDACTED' if _SECRET_KEY.match(k) else scrub(v)) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [scrub(v) for v in obj]
-    if isinstance(obj, str):
-        for rx in _SECRET_RES:
-            obj = rx.sub(lambda m: m.group(1) + 'REDACTED', obj)
-        return obj
-    return obj
-
 
 # ---------------------------------------------------------------- search JSON -> candidates
 
@@ -737,8 +689,6 @@ class PlanState:
 
 # ---------------------------------------------------------------- fetch: plan, manifest, image headers
 
-MANIFEST_COLUMNS = ('file', 'kind', 'url', 'sha256', 'size', 'width', 'height', 'plan', 'original', 'fetched_at',
-                    'collection_id', 'item_id')
 RECORD_KINDS = ('record-html', 'record-text', 'record-json', 'normalized', 'citation', 'collection')
 NOT_ORIGINAL = {'thumbnail', 'screenshot-fallback'}
 RAWSTORE_KINDS = {'record-html', 'image', 'oldnews-page', 'oldnews-ocr-pdf', 'thumbnail', 'screenshot-fallback'}
@@ -852,62 +802,11 @@ def classify_bytes(url, status, ctype, data):
     return 'ok'
 
 
-def image_size(data):
-    """(width, height) from a PNG, JPEG, GIF or WebP header, else (None, None)."""
-    if data[:8] == b'\x89PNG\r\n\x1a\n' and len(data) >= 24:
-        return struct.unpack('>II', data[16:24])
-    if data[:6] in (b'GIF87a', b'GIF89a') and len(data) >= 10:
-        return struct.unpack('<HH', data[6:10])
-    if data[:4] == b'RIFF' and data[8:12] == b'WEBP' and data[12:16] == b'VP8 ' and len(data) >= 30:
-        w, h = struct.unpack('<HH', data[26:30])
-        return w & 0x3fff, h & 0x3fff
-    if data[:2] == b'\xff\xd8':
-        i = 2
-        while i + 9 < len(data):
-            if data[i] != 0xff:
-                i += 1
-                continue
-            marker = data[i + 1]
-            if marker in (0xd8, 0x01) or 0xd0 <= marker <= 0xd7:
-                i += 2
-                continue
-            seg = struct.unpack('>H', data[i + 2:i + 4])[0]
-            if marker in (0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf):
-                h, w = struct.unpack('>HH', data[i + 5:i + 9])
-                return w, h
-            i += 2 + seg
-    return None, None
-
-
 def manifest_row(path, kind, url, plan, collection_id, item_id, fetched_at=None, original=None):
-    with open(path, 'rb') as f:
-        data = f.read()
-    w, h = image_size(data) if kind in ('image', 'oldnews-page', 'thumbnail', 'screenshot-fallback') else (None, None)
     if original is None:
         original = kind not in NOT_ORIGINAL
-    return {'file': os.path.basename(path), 'kind': kind, 'url': url or '', 'sha256': hashlib.sha256(data).hexdigest(),
-            'size': len(data), 'width': w or '', 'height': h or '', 'plan': plan, 'original': 'yes' if original else 'no',
-            'fetched_at': fetched_at or now_iso(), 'collection_id': collection_id, 'item_id': item_id}
-
-
-def read_manifest(path):
-    try:
-        with open(path, encoding='utf-8') as f:
-            lines = f.read().splitlines()
-    except OSError:
-        return []
-    return [dict(zip(MANIFEST_COLUMNS, l.split('\t'))) for l in lines[1:] if l]
-
-
-def write_manifest(path, rows):
-    """Merge by file name (a re-fetch replaces its row) and write sorted, so the file diffs cleanly."""
-    by_file = {r['file']: r for r in read_manifest(path)}
-    for r in rows:
-        by_file[r['file']] = r
-    out = ['\t'.join(MANIFEST_COLUMNS)]
-    for name in sorted(by_file):
-        out.append('\t'.join(re.sub(r'[\t\r\n]+', ' ', str(by_file[name].get(c, ''))) for c in MANIFEST_COLUMNS))
-    write_atomic(path, '\n'.join(out) + '\n')
+    return gwt_reader.manifest_row(path, kind, url, plan, collection_id, item_id, fetched_at, original,
+                                   image=kind in ('image', 'oldnews-page', 'thumbnail', 'screenshot-fallback'))
 
 
 # ---------------------------------------------------------------- FamilySearch-mirror test
@@ -973,5 +872,4 @@ MIRROR_COLUMNS = ('cid', 'fs_collection', 'n', 'found', 'agree', 'date', 'verdic
 
 
 def search_key(url, given='', surnames=(), by=None):
-    h = hashlib.sha256(normalize_url(url).encode()).hexdigest()[:10]
-    return '%s-%s' % (slug(' '.join([given] + list(surnames) + ([str(by)] if by else []))), h)
+    return gwt_reader.search_key(normalize_url(url), [given] + list(surnames) + ([str(by)] if by else []))

@@ -42,3 +42,8 @@ gwt_apply/dupes.py | if not any(op["op"] == "add_person" or (op["op"] == "add_fa
 gwt_apply/dupes.py | return fold(a.first) == fold(b.first) != "" and bool(words - PARTICLES) | return fold(a.first) == fold(b.first) and bool(words - PARTICLES) | two spouses with no given name are not the same spouse
 gwt_apply/dupes.py | continue  # a parent nobody can find: the apply reports it | pass | preflight leaves a family with a missing parent to the apply instead of crashing
 gwt_apply/ops.py | for f in ("children", "attach", "namesake_of", "new_couple_of", "use_loser"): | for f in ("children", "attach", "namesake_of", "use_loser"): | validate refuses a new_couple_of that is neither a list nor a text
+gwt_apply/ops.py | if handle is None and self.verify: | if False: | --verify reads an op on a Gramps ID merged away on the winner that carries the merge note
+gwt_apply/ops.py | self.reasons.append(f"differs: {after['_class']} {self.label(after)} {k} {old} != {new}") | pass | --verify names the field that differs and both values
+gwt_apply/ops.py | if len(rows) != 1: | if not rows: | --verify never picks a winner when two objects carry the same merge note
+gwt_apply/ops.py | self.c.pending, self.c.deleted = planned | pass | a retried dry-run op does not read its own earlier try's plan as already done
+gwt_apply/cli.py | rows += [{ | rows + [{ | --json lists the ops a run never reached as not run

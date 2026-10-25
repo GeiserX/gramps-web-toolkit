@@ -25,11 +25,11 @@ On a multi-tree server, the tree comes from the user: the login (`POST /api/toke
 
 Every request carries the User-Agent `gramps-web-toolkit/<version> (gwt-apply; +https://github.com/GeiserX/gramps-web-toolkit)`, so a server admin can tell the toolkit apart in the logs.
 
-Other flags: `--log PATH`, `--retries N` (default 5), `--retry-wait SECONDS` (default 30), `--snapshot FILE`, `--save-snapshot FILE` and `--since OLD` ([Snapshots](#snapshots)), `--tag NAME` ([Tags](#tags)), `--break-lock` (below).
+Other flags: `--verify` and `--json FILE` ([Prove a list landed](#prove-a-list-landed)), `--log PATH`, `--retries N` (default 5), `--retry-wait SECONDS` (default 30), `--snapshot FILE`, `--save-snapshot FILE` and `--since OLD` ([Snapshots](#snapshots)), `--tag NAME` ([Tags](#tags)), `--break-lock` (below).
 
 Every run gets a run id, `<date>-<time>-<6 hex>`. The first line of output names it and the log, before the login, so a run whose login fails still says which run it was. The log path carries `(created once logged in)`: the file appears only after the login. See [The log](#the-log).
 
-Exit codes: `0` every op done or skipped; `1` a conflict or an error stopped the run; `2` the change list or the settings are invalid, or the change list file cannot be read (nothing was read or written).
+Exit codes: `0` every op done or skipped (with `--verify`: every op skipped); `1` a conflict or an error stopped the run (with `--verify`: also any op that is not in the tree); `2` the change list or the settings are invalid, or the change list file cannot be read (nothing was read or written).
 
 ## The log
 
@@ -204,6 +204,50 @@ The merge itself is the server's (`POST /api/people/<winner>/merge/<loser>`, `PO
 
 Before the merge, the winner gets a note that records it: `Merged Person I0042 (John Smith) into this person (ruling R-12). <reason>`. The note is how a rerun knows the merge is done: when the loser is gone and the winner has that note, the op is skipped; when the loser is gone and there is no note, the op is a conflict.
 
+## Prove a list landed
+
+`--verify` answers "is this list in the tree?". It is a dry run: it writes nothing and takes no lock. It exits `0` when every op comes out `skip`, and `1` when any op would write, conflicts or errs. Under each op that would write, it says why:
+
+- `missing: <class> key <key>`: the object the op makes does not exist. A merge that has not happened reads `missing: merge Person I0002 into I0001`, an association `missing: Person I0001 DNA association with I0007`.
+- `differs: <class> <ID> <field> <in the tree> != <the list>`: the object is there, and a field the op sets has another value.
+
+```
+$ gwt-apply changes.jsonl --verify
+VERIFY (nothing written) on tree example, run 20261025-101500-a1b2c3, reading the server, 3 op(s)
+[skip] n-census (add_note, ruling R-12)
+    skip: Note N0031 already made by key 'n-census'
+    skip: Person I0001 already has it in note_list
+[skip] c-folio (add_citation, ruling R-12)
+    ...
+[done] u-raise (update_citation, ruling R-12)
+    update Citation C0001: confidence: 1 -> 3
+    differs: Citation C0001 confidence 1 != 3
+1 done, 2 skip, 0 conflict, 0 error
+VERIFY: 2 of 3 op(s) in the tree; 1 not (see the missing, differs, conflict and error lines above)
+```
+
+A merge counts as applied when the loser is gone and the winner has the note the merge op wrote ([Merges](#merges)). A later op that names the loser by its Gramps ID is read on the winner instead of stopping with `no Person with Gramps ID ...`, and the plan says `Person I0002 was merged into I0001: reading it there`. So a list applied before a merge, and the merge list, both verify after the merge. Only `--verify` follows a merge this way; a plain dry run or `--apply` still stops on the missing ID.
+
+What it does not see:
+
+- A family Gramps merged on its own, because a person merge left two families with the same spouses. Our merge op wrote no note for it, so an op that names it is a `conflict`. Check those with `gwt-check` instead ([lesson 18](hard-won.md#18-a-merge-brings-the-losers-events-along-and-a-second-run-of-the-list-does-not-skip)).
+- An object a list made by key and that was later merged away: its key no longer finds it, so the op reads `missing`.
+- A field changed after the apply on an object a list made by key: the key finds the object and the op skips, as in any rerun ([Reuse only what is the same](#reuse-only-what-is-the-same)). An `update_*` op does compare its fields, so a value someone changed back reads `differs`.
+
+`--json FILE` writes one object per op of the list, in order, for scripts. It works with any run that has a change list, not only `--verify`:
+
+```json
+[
+ {"key": "n-census", "op": "add_note", "status": "skip", "reason": ""},
+ {"key": "c-folio", "op": "add_citation", "status": "skip", "reason": ""},
+ {"key": "u-raise", "op": "update_citation", "status": "done", "reason": "differs: Citation C0001 confidence 1 != 3"}
+]
+```
+
+`status` is `done`, `skip`, `conflict`, `error`, or `not run` for an op the run never reached (after a conflict, or when the pre-flight found likely duplicates). `reason` is the missing and differs lines joined with `; ` for `done`, the conflict or error line for those, and empty for `skip`.
+
+Use `--verify --snapshot` with a fresh snapshot to verify offline ([Checking an apply quickly](#checking-an-apply-quickly)).
+
 ## Snapshots
 
 A dry run against the server reads the tree op by op, which takes hours for a list of thousands of ops. With a snapshot it reads nothing from the server:
@@ -225,14 +269,14 @@ Then it applies, reading from the snapshot. Before each `PUT` of an object read 
 
 ### Checking an apply quickly
 
-After an apply, the usual check is to run the same list again as a dry run: every op must come out `skip`. Against the server that rereads the tree op by op. Instead, bring the snapshot taken before the apply up to date and run the dry run on it, offline:
+After an apply, prove it landed with `--verify` ([Prove a list landed](#prove-a-list-landed)). Against the server that rereads the tree op by op. Instead, bring the snapshot taken before the apply up to date and verify on it, offline:
 
 ```sh
 gwt-apply --save-snapshot tree-0413.json.gz --since tree-0412.json.gz   # only what changed since 0412
-gwt-apply changes.jsonl --snapshot tree-0413.json.gz                    # every op must say skip
+gwt-apply changes.jsonl --verify --snapshot tree-0413.json.gz           # exit 0: every op is in the tree
 ```
 
-`--since` reads one list of `change` stamps per class, then only the objects whose stamp moved and the new ones, and leaves out the deleted ones. The new file holds what a full `--save-snapshot` would, so the check is as strong as a dry run against the server: an object the list touched and someone changed afterwards, or one that went away, makes its op come out `done` or `conflict` instead of `skip`. That holds for any change since the older snapshot, not only the ones the list made, so the new snapshot is also the one to plan and apply the next list on. Gramps' `change` stamp counts seconds, so take the older snapshot while nothing writes to the tree, as an apply's lock guarantees.
+`--since` reads one list of `change` stamps per class, then only the objects whose stamp moved and the new ones, and leaves out the deleted ones. The new file holds what a full `--save-snapshot` would, so the check is as strong as `--verify` against the server: an object the list touched and someone changed afterwards, or one that went away, makes its op come out `done` or `conflict` instead of `skip`. That holds for any change since the older snapshot, not only the ones the list made, so the new snapshot is also the one to plan and apply the next list on. Gramps' `change` stamp counts seconds, so take the older snapshot while nothing writes to the tree, as an apply's lock guarantees.
 
 ## Safety rules
 
@@ -250,7 +294,7 @@ gwt-apply changes.jsonl --snapshot tree-0413.json.gz                    # every 
 - **Writes are narrow.** Only a merge deletes anything, and only the loser: through Gramps' own merge, or for `merge_repository` with a `DELETE` once no source lists it. Objects are created with `POST /api/objects/`. Changes to an existing object are a `GET` followed by a `PUT` of the same object with only the named field changed. Right before the `PUT` the object is read again; if it changed since the op read it, the op starts over, so a concurrent edit is not overwritten.
 - **Busy server.** On "database is locked", any 5xx, a request that timed out or lost its connection, or an object that changed since it was read, the op waits `--retry-wait` seconds and starts over from fresh reads. A create whose answer never came is looked up again before the op tries it a second time, so a timeout cannot make an object twice. A login answered 429 (the server rate-limits logins) waits and tries again.
 - **A log of every call.** One JSONL line per API call with the op's `key` and `ruling`, the method, path, status, and the body of every write, between a `start` and an `end` line ([The log](#the-log)). The password and the token are never logged.
-- **Re-running is safe.** After a crash, run the same list again: what was written is skipped, and an object that was created but not yet linked gets linked.
+- **Re-running is safe.** After a crash, run the same list again with `--apply`: what was written is skipped, and an object that was created but not yet linked gets linked. A rerun without `--apply` is only a dry run, and it exits `0` even when ops would write; `--verify` is what proves a list landed.
 
 ## Speed
 
