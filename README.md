@@ -18,14 +18,15 @@ The toolkit works for genealogy in any country. One module, `spanish-poller`, is
 
 - `gwt-apply`: applies a JSON Lines change list to a tree, reads before every write, skips what is already there, and stays dry-run until you pass `--apply`
 - `gwt-check`: reads the whole tree after an apply and reports orphans, dangling links, broken birth and death pointers, likely duplicates, dates that contradict each other and what changed since the last copy, with a self-test that plants every error kind
-- `gwt-import-excel`: reads a research workbook (.xlsx, standard library only) with a JSON column mapping and writes a gwt-apply change list for review. Namesakes in the tree are reported and pass gwt-apply's preflight only with a written reason, places are matched to the tree and never created, people who may be alive are held back
+- `gwt-import-excel`: turns a research workbook into a gwt-apply change list for review
 - `gwt-fetch`: downloads archive images and text without a browser, with one manifest row per file: any IIIF archive, Europeana search, plus Spanish sources (DIGIBIB, the historical Gaceta de Madrid, CartoCiudad geocoding)
 - `gwt-ledger`: a shared "already searched" ledger, so parallel agents stop repeating each other's negative searches
 - `gwt-queue`: a durable "what to search next" queue that hands prioritized tasks to lanes, reopens the claims of dead lanes and backs off the tasks that keep failing
 - `gwt-leads`: reads a tree dump offline and lists the gaps (lines that stop, missing vitals, uncited facts), ranked with the root's direct ancestors first, as `gwt-queue` tasks
 - `gwt-fscache`: an on-disk HTTP cache for rate-limited genealogy APIs that never stores a block or an auth header
 - `gwt-rank`: orders record-search results by how well they fit a person in the tree, from the cached FamilySearch JSON or from page text, and never hides a row
-- `gwt-mh`: MyHeritage record search, record pages and originals through a signed-in browser, on a free account or more on a paid one, with a [free vs paid matrix](docs/myheritage.md#3-free-vs-paid)
+- `gwt-mh`: MyHeritage record search, record pages and originals through a signed-in browser
+- `gwt-read`: record search and records on FamilySearch and PARES, slow and cached so the account is not suspended
 - `gwt-gate`: one request pace shared by every agent on a machine, which backs off on a block and lets priority lanes go first
 - `gwt-rawstore`: keeps source images in an S3-compatible bucket and only a small manifest in git
 - `gwt-spanish-poller` (Spain only): watches Spanish civil-registry requests and the DEHú inbox read-only, and flags cases that vanish
