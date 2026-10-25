@@ -231,9 +231,11 @@ class Client:
         self.token = r.json()["access_token"]
         self.tree = jwt_claims(self.token).get("tree")
         if self.expected_tree and self.tree != self.expected_tree:
-            raise ApiError(
-                f"login landed in tree {self.tree!r}, expected {self.expected_tree!r}"
-            )
+            msg = f"login landed in tree {self.tree!r}, expected {self.expected_tree!r}"
+            # a refusal worth keeping: the log (under the expected tree) holds the start, this line and the end
+            self._log_ready = True
+            self.log(event="refused", reason="tree", problems=[msg])
+            raise ApiError(msg)
         self._log_ready = True
         self._open_log()
 

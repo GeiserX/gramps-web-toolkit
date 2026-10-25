@@ -27,7 +27,7 @@ Every request carries the User-Agent `gramps-web-toolkit/<version> (gwt-apply; +
 
 Other flags: `--log PATH`, `--retries N` (default 5), `--retry-wait SECONDS` (default 30), `--snapshot FILE`, `--save-snapshot FILE` and `--since OLD` ([Snapshots](#snapshots)), `--tag NAME` ([Tags](#tags)), `--break-lock` (below).
 
-Every run gets a run id, `<date>-<time>-<6 hex>`. The first line of output names it and the log, before the login, so a run whose login fails still says which run it was. See [The log](#the-log).
+Every run gets a run id, `<date>-<time>-<6 hex>`. The first line of output names it and the log, before the login, so a run whose login fails still says which run it was. The log path carries `(created once logged in)`: the file appears only after the login. See [The log](#the-log).
 
 Exit codes: `0` every op done or skipped; `1` a conflict or an error stopped the run; `2` the change list or the settings are invalid, or the change list file cannot be read (nothing was read or written).
 
@@ -40,7 +40,7 @@ Where it goes:
 | `--log PATH` | `PATH` with the run id before the extension: `--log apply.jsonl` writes `apply.20261021-101500-a1b2c3.jsonl` |
 | `--apply`, no `--log` | `$XDG_STATE_HOME/gwt-apply/<GWT_TREE>/gwt-apply-<run id>.jsonl`, or under `~/.local/state` when `XDG_STATE_HOME` is unset |
 | a dry run or `--save-snapshot`, no `--log` | none: they write nothing to the tree, so they leave nothing on disk either |
-| a run whose login fails | none, with or without `--log` |
+| a run whose login fails | none, with or without `--log`; a login that lands in another tree than `GWT_TREE` does leave one, with its `start`, a `refused` line and the `end` |
 
 The file is created with `O_EXCL`: a run never appends to or overwrites another run's log, so rerunning the same command after a crash leaves both logs. The folder per tree keeps the logs of two trees apart.
 
@@ -53,7 +53,7 @@ What it holds is one JSON object per line. Every line has `ts` (UTC) and `dry_ru
 
 - `start`: the run id, the toolkit version, the arguments, the change list's path and the sha256 of its bytes, the tree the login landed in, and the `--snapshot` file if any. A `--revert` names the log it undoes as `list` and the pre-run copy as `pre`.
 - `end`: the exit code, the count of each status (for a revert: undone, changed since the run, manual, problems), and the ops not run. `counts` is `null` when the run stopped before any op; `error` says why when an API error, a held lock or a crash stopped it, and then `exit` is `null` for a crash.
-- `refused`: a run that stopped before its first write says why, with `reason` (`preflight` for likely duplicates, `snapshot-plan` when the plan on the snapshot does not go through or the tree changed since, `snapshot-tree`, or `pre` for a revert's pre-run copy) and `problems`, the lines it printed.
+- `refused`: a run that stopped before its first write says why, with `reason` (`tree` for a login that landed in another tree than `GWT_TREE`, `preflight` for likely duplicates, `snapshot-plan` when the plan on the snapshot does not go through or the tree changed since, `snapshot-tree`, or `pre` for a revert's pre-run copy) and `problems`, the lines it printed.
 - Every API call in between: the op's `key` and `ruling`, `method`, `path`, `status`, and the body of every write. `status: null` means a real request whose answer was lost: the server may have done it. A dry run's writes carry `planned: true` and no `status`.
 - After a create, its line carries `gramps_id`, the Gramps ID the server gave the new object (from the server's answer).
 - A `PUT` body over 64 KB (a person with thousands of DNA associations) is logged as `body_digest: {sha256, bytes, change}` instead of `body`. The hash covers the object without the fields the server sets (`change`, `gramps_id`, `_class`).

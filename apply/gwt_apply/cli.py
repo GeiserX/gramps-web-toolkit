@@ -88,7 +88,8 @@ def _sha256(path: str) -> str:
 
 def _first_line(run_id: str, log: str | None) -> None:
     """Printed before the login, so a run that stops there still names its run id."""
-    print(f"run {run_id}, log {log or 'none (add --log PATH to keep one)'}", flush=True)
+    print(f"run {run_id}, log " + (f"{log} (created once logged in)" if log else "none (add --log PATH to keep one)"),
+          flush=True)
 
 
 def _ended(client: Client, run, outcome: dict) -> int:

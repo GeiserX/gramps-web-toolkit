@@ -1532,6 +1532,27 @@ def test_revert_sends_people_merges_and_deletes_to_the_backup(fake, tmp_path):
     assert any("merge" in s["why"] for s in steps) and any("restore the backup" in s["why"] for s in steps)
 
 
+def test_revert_keeps_a_note_a_changed_digest_only_object_still_points_at(tmp_path):
+    # no backlinks asked: only the live copy of the changed object shows it still points at the run's note
+    from gwt_apply import revert
+    from gwt_apply.client import digest
+    note = {"_class": "Note", "handle": "nN", "text": {"string": "made by the run"}}
+    sent = {"_class": "Person", "handle": "pP", "gender": 1, "note_list": ["nN"]}
+    entries = [
+        {"method": "POST", "path": "/objects/", "status": 201, "body": [note]},
+        {"method": "PUT", "path": "/people/pP", "status": 200,
+         "body_digest": {"sha256": digest(sent), "bytes": 70000}},
+    ]
+    log = tmp_path / "log.jsonl"
+    log.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
+    pre = {("Person", "pP"): {"_class": "Person", "handle": "pP", "gender": 1, "note_list": []}}
+    now = {**sent, "gender": 0}  # edited since the run, still lists the note
+    live = {("Person", "pP"): now, ("Note", "nN"): note}
+    steps = revert.plan(revert.read_log(str(log)), pre, lambda c, h: live.get((c, h)))
+    n = next(s for s in steps if s["handle"] == "nN")
+    assert n["action"] == "skip" and "still points at it" in n["why"]
+
+
 def test_revert_cli_needs_pre_and_stands_alone(capsys):
     for argv in (["--revert", "x.jsonl"], ["--revert", "x.jsonl", "--pre", "p.gz", "changes.json"], ["--pre", "p.gz"]):
         with pytest.raises(SystemExit):
@@ -2467,6 +2488,18 @@ def test_a_big_put_edited_since_the_run_is_left_alone(fake, tmp_path, env):
     fake.store["notes"]["n1"]["text"]["string"] = new + " edited by hand"
     assert _undo(log, pre, "--apply") == 1
     assert fake.store["notes"]["n1"]["text"]["string"] == new + " edited by hand"
+
+
+def test_a_login_into_another_tree_leaves_a_refused_line(fake, tmp_path, env, state_home, capsys):
+    fake.tree = "tree-other"
+    changes = _changes(tmp_path, [{"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}])
+    assert main([str(changes), "--apply", "--retry-wait", "0"]) == 1
+    assert "expected 'tree-test'" in capsys.readouterr().err
+    logs = list((state_home / "gwt-apply" / "tree-test").glob("gwt-apply-*.jsonl"))
+    assert len(logs) == 1
+    events = [e.get("event") for e in _lines(logs[0]) if e.get("event")]
+    assert events == ["start", "refused", "end"]
+    assert fake.writes() == []
 
 
 def test_a_missing_change_list_is_one_line_and_exit_2(tmp_path, capsys):
