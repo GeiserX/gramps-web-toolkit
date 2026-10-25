@@ -894,3 +894,130 @@ def test_root_only_report_quiet_when_ahnentafel_is_complete(tmp_path, capsys):
     dump = _write(tmp_path, "clean.json", selftest.clean_tree())
     assert main(["check", dump, "--root", "I0001"]) == 0
     assert "truncated" not in capsys.readouterr().out
+
+
+# -- check --from: refresh a saved tree instead of reading the whole tree again ---------------------------------
+
+
+def _objects(path):
+    """A dump's objects, by type and handle."""
+    return {t: {o["handle"]: o for o in rows} for t, rows in json.load(open(path))["objects"].items()}
+
+
+def _save_old(live, tmp_path, data):
+    """A live dump of `data`, the way a writer keeps one before it writes; returns the server and the path."""
+    server = live(data)
+    old = str(tmp_path / "old.json")
+    assert main(["dump", old]) == 0
+    return server, old
+
+
+def _api_calls(server):
+    return [q for path, q in server.calls if not path.endswith("/token/")]
+
+
+def test_from_on_an_unchanged_tree_lists_each_type_once(live, tmp_path):
+    from gwt_check.tree import TYPES
+    server, old = _save_old(live, tmp_path, selftest.clean_tree())
+    assert json.load(open(old))["read_started"] > 0
+    server.calls.clear()
+    new = str(tmp_path / "new.json")
+    assert main(["check", "--from", old, "--save-dump", new]) == 0
+    calls = _api_calls(server)
+    assert len(calls) == len(TYPES) and all(q == "keys=handle%2Cchange" for q in calls)
+    assert _objects(new) == _objects(old)
+
+
+def test_from_reads_again_what_a_write_changed_and_matches_a_full_read(live, tmp_path):
+    from gwt_check.client import Client
+    server, old = _save_old(live, tmp_path, selftest.clean_tree())
+    note = server.data["notes"][0]
+    note["text"] = {"string": "rewritten after the dump"}
+    server.tick(note)
+    server.data["notes"].append({**copy.deepcopy(note), "handle": "hN0777", "gramps_id": "N0777"})
+    person = next(p for p in server.data["people"] if p["gramps_id"] == "I0001")
+    person["note_list"] = [*person.get("note_list", []), "hN0777"]
+    server.tick(person)
+    new = str(tmp_path / "new.json")
+    assert main(["check", "--from", old, "--save-dump", new]) == 0
+    client = Client("https://gramps.example.org", "u", "pw")
+    client.login()
+    fresh = client.read_all()
+    assert _objects(new) == fresh
+    assert _objects(new)["notes"][note["handle"]]["text"] == {"string": "rewritten after the dump"}
+
+
+def test_from_reads_again_an_object_rewritten_in_the_second_the_old_read_saw_it(live, tmp_path):
+    data = selftest.clean_tree()
+    server, old = _save_old(live, tmp_path, data)
+    started = json.load(open(old))["read_started"]
+    for offset, expect in ((0, "rewritten"), (-2, "rewritten"), (-3, "first")):
+        # the old dump saw the note at `stamp`; the rewrite in that same second kept the stamp
+        stamp = started + offset
+        dumped = json.load(open(old))
+        n = next(o for o in dumped["objects"]["notes"] if o["gramps_id"] == "N0001")
+        n["change"], n["text"] = stamp, {"string": "first"}
+        seeded = tmp_path / f"old{offset}.json"
+        seeded.write_text(json.dumps(dumped))
+        live_note = next(o for o in server.data["notes"] if o["gramps_id"] == "N0001")
+        live_note["change"], live_note["text"] = stamp, {"string": "rewritten"}
+        new = str(tmp_path / f"new{offset}.json")
+        assert main(["check", "--from", str(seeded), "--save-dump", new]) == 0
+        assert _objects(new)["notes"][live_note["handle"]]["text"] == {"string": expect}, offset
+
+
+def test_from_reads_again_the_members_of_a_family_written_without_their_stamps(live, tmp_path):
+    data = selftest.clean_tree()
+    server, old = _save_old(live, tmp_path, data)
+    fam = next(f for f in server.data["families"] if f["gramps_id"] == "F0001")
+    child = next(p for p in server.data["people"] if p["gramps_id"] == "I0008")
+    # the family is written without one child; the server takes the family off the child, and its stamp stays
+    fam["child_ref_list"] = [c for c in fam["child_ref_list"] if c["ref"] != child["handle"]]
+    server.tick(fam)
+    child["parent_family_list"] = []
+    new = str(tmp_path / "new.json")
+    report = str(tmp_path / "r.json")
+    assert main(["check", "--from", old, "--save-dump", new, "--json", report]) == 0, json.load(open(report))["new"]
+    assert _objects(new)["people"][child["handle"]]["parent_family_list"] == []
+
+
+def test_from_refuses_another_tree_and_a_backup(live, tmp_path, capsys):
+    server, old = _save_old(live, tmp_path, selftest.clean_tree())
+    dumped = json.load(open(old))
+    dumped["tree"] = "tree-2"
+    other = _write(tmp_path, "other.json", dumped)
+    server.calls.clear()
+    assert main(["check", "--from", other]) == 2
+    assert "tree 'tree-2'" in capsys.readouterr().err
+    assert not [q for q in _api_calls(server) if "page=" in q]  # refused before any read
+    backup = tmp_path / "b.gramps"
+    backup.write_text('<?xml version="1.0"?><database xmlns="http://gramps-project.org/xml/1.7.1/"></database>')
+    assert main(["check", "--from", str(backup)]) == 2
+    assert ".gramps backup" in capsys.readouterr().err
+    assert main(["check", old, "--from", old]) == 2
+
+
+def test_from_an_old_file_without_read_started_falls_back_with_a_warning(live, tmp_path, capsys):
+    server, old = _save_old(live, tmp_path, selftest.clean_tree())
+    dumped = json.load(open(old))
+    del dumped["read_started"]
+    n = next(o for o in server.data["notes"] if o["gramps_id"] == "N0001")
+    stamp = int(__import__("time").time()) - 600  # written ten minutes before the dump, kept its stamp
+    for o in (n, next(o for o in dumped["objects"]["notes"] if o["gramps_id"] == "N0001")):
+        o["change"] = stamp
+    n["text"] = {"string": "rewritten"}
+    new = str(tmp_path / "new.json")
+    capsys.readouterr()
+    assert main(["check", "--from", _write(tmp_path, "nostart.json", dumped), "--save-dump", new]) == 0
+    assert "has no read_started" in capsys.readouterr().err
+    assert _objects(new)["notes"][n["handle"]]["text"] == {"string": "rewritten"}
+    del dumped["dumped_at"]
+    assert main(["check", "--from", _write(tmp_path, "notime.json", dumped)]) == 2
+
+
+def test_from_takes_the_old_findings_as_known_unless_told_otherwise(live, tmp_path):
+    data = selftest.clean_tree()
+    selftest.p_orphan_note(data)
+    server, old = _save_old(live, tmp_path, data)
+    assert main(["check", "--from", old]) == 0  # the orphan was already in OLD
+    assert main(["check", "--from", old, "--known", _write(tmp_path, "k.json", [])]) == 1
