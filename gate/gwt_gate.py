@@ -4,7 +4,7 @@
 Each lane (an agent, a script) asks the gate before every request. The gate hands out one slot at a time,
 for all lanes together, and looks for the limit on its own: it starts at one request every START seconds,
 shortens the gap by a fifth after every STEP_AFTER seconds without a hit (never below FLOOR), and on a hit
-(a 429, a 403, a block page) pauses every lane for PAUSE seconds and triples the gap (never above CEIL).
+(a 429, a captcha, a block page) pauses every lane for PAUSE seconds and triples the gap (never above CEIL).
 Priority lanes go first: a priority lane claims the next slot by waiting, and other lanes still get one
 slot in SHARE+1 during a long priority run. Every call, hit and pace change goes to calls.log.
 
@@ -12,10 +12,12 @@ As a CLI (the state lives in --dir, so every process pointed at the same dir sha
 
     gwt-gate wait <lane>            block until this lane may make ONE request; exit 3 at once when the
                                     pause has more than --max-wait seconds left (do other work instead)
-    gwt-gate hit <lane> <what>      a 429, a 403, a block notice: every lane pauses
-    gwt-gate dead <lane> <what>     a 401, the session is dead: a hit, then exit 4
+    gwt-gate hit <lane> <what>      a 429, a captcha, a block notice: every lane pauses, the gap triples
+    gwt-gate denied <lane> <what>   a 403 permission refusal: logged, no pause, the gap stays
+    gwt-gate dead <lane> <what>     a 401, the session is dead: every lane pauses, the gap stays, exit 4
     gwt-gate block <hours> <why>    stop every lane for that long (an IP or account block)
-    gwt-gate status                 the pace, the pause and the last calls
+    gwt-gate clear <reason>         end a pause or a block now
+    gwt-gate status                 the pace, the pause and its reason, the last hit and the last calls
 
 As a module:
 
@@ -84,6 +86,8 @@ class Gate:
                 now = self.clock()
                 if prio:  # the claim: other lanes hold back while a priority lane waits or parses an answer
                     s['prio_until'] = now + 1.5 * s['gap']
+                if s.get('why') and s['pause_until'] <= now:  # the pause is over, so is its reason
+                    s['why'] = ''
                 if now - max(s['last_hit'], s['last_step']) >= self.step_after and s['gap'] > self.floor:
                     s['gap'] = max(self.floor, round(s['gap'] * 0.8, 2)); s['last_step'] = now
                     self.log(f'pace gap={s["gap"]}s ({round(self.step_after / 60)} min without a hit)')
@@ -94,7 +98,7 @@ class Gate:
                     ready = max(ready, s['prio_until'])
                 elif now >= ready:
                     s['last'] = now
-                    self.log(f'call {lane} gap={s["gap"]}')
+                    self.log(f'call {lane} gap={round(s["gap"], 2)}')
                     if prio:
                         s['prio_until'] = now + 1.5 * s['gap']; s['prio_run'] = s.get('prio_run', 0) + 1
                     else:
@@ -110,10 +114,36 @@ class Gate:
             self.sleep(min(left, 30))
 
     def hit(self, lane, what):
+        """A rate answer (a 429, a captcha, a block page): every lane pauses and the gap triples."""
         def h(s):
             now = self.clock()
             s['gap'] = min(self.ceil, s['gap'] * 3); s['pause_until'] = now + self.pause; s['last_hit'] = now
-            self.log(f'HIT {lane} {what} -> pause {round(self.pause / 60)} min, gap={s["gap"]}s')
+            s['why'] = what
+            s['hit'] = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(now)) + f' {lane} {what}'
+            self.log(f'HIT {lane} {what} -> pause {round(self.pause / 60)} min, gap={round(s["gap"], 2)}s')
+        self._locked(h)
+
+    def denied(self, lane, what):
+        """A permission refusal (a 403 on one record): says nothing about the rate, so only log it."""
+        self._locked(lambda s: self.log(f'DENIED {lane} {what}'))
+
+    def dead(self, lane, what):
+        """A dead session (a 401): every lane pauses, but the gap stays, since it says nothing about the rate."""
+        def h(s):
+            now = self.clock()
+            if now + self.pause > s['pause_until']:  # never shorten, or relabel, a longer pause or block
+                s['pause_until'] = now + self.pause; s['why'] = what
+                self.log(f'DEAD {lane} {what} -> pause {round(self.pause / 60)} min, gap={round(s["gap"], 2)}s')
+            else:
+                self.log(f'DEAD {lane} {what} -> pause kept ({s.get("why") or "?"}), gap={round(s["gap"], 2)}s')
+        self._locked(h)
+
+    def clear(self, reason):
+        """End a pause or a block now."""
+        def h(s):
+            was = s.get('why') or '?'
+            s['pause_until'] = min(s['pause_until'], self.clock()); s['why'] = ''
+            self.log(f'CLEAR {reason} (was: {was})')
         self._locked(h)
 
     def block(self, hours, why):
@@ -124,7 +154,9 @@ class Gate:
 
     def status(self):
         s = self._locked(dict)
-        return {'gap_s': s['gap'], 'paused_for_s': max(0, round(s['pause_until'] - self.clock()))}
+        left = max(0, round(s['pause_until'] - self.clock()))
+        return {'gap_s': s['gap'], 'paused_for_s': left, 'why': s.get('why', '') if left else '',
+                'last_hit': s.get('hit', '')}
 
     def last_calls(self, n=10):
         try:
@@ -163,11 +195,12 @@ def main(argv=None):
         p.add_argument('--' + name.replace('_', '-'), type=cast, default=_env(name, cast))
     sub = p.add_subparsers(dest='cmd', required=True)
     sub.add_parser('wait').add_argument('lane')
-    for verb in ('hit', 'dead'):
+    for verb in ('hit', 'denied', 'dead'):
         sp = sub.add_parser(verb)
         sp.add_argument('lane'); sp.add_argument('what', nargs='*')
     sp = sub.add_parser('block')
     sp.add_argument('hours', type=float); sp.add_argument('why', nargs='*')
+    sub.add_parser('clear').add_argument('reason', nargs='+')
     sub.add_parser('status')
     a = p.parse_args(argv)
     gate = Gate(a.dir, priority={x.strip() for x in a.priority.split(',') if x.strip()}, start=a.start,
@@ -181,12 +214,16 @@ def main(argv=None):
             return EXIT_PAUSED
     elif a.cmd == 'hit':
         gate.hit(a.lane, ' '.join(a.what) or '?')
+    elif a.cmd == 'denied':
+        gate.denied(a.lane, 'HTTP 403 ' + ' '.join(a.what))
     elif a.cmd == 'dead':
-        gate.hit(a.lane, 'HTTP 401 session dead ' + ' '.join(a.what))
+        gate.dead(a.lane, 'HTTP 401 session dead ' + ' '.join(a.what))
         print('session dead; log in again', file=sys.stderr)
         return EXIT_DEAD
     elif a.cmd == 'block':
         gate.block(a.hours, ' '.join(a.why) or '?')
+    elif a.cmd == 'clear':
+        gate.clear(' '.join(a.reason))
     else:
         print(json.dumps(gate.status()))
         print(''.join(gate.last_calls()), end='')
