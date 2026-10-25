@@ -2000,6 +2000,18 @@ def test_validate_keeps_real_dates_and_allowed_empty_texts():
         [{"op": "add_event", "key": "a", "ruling": R, "person": "I1", "type": "Birth", "date": "1900-02-29"}]))
 
 
+
+def test_an_optional_text_left_blank_or_null_is_none_as_older_lists_write_it(fake, env, tmp_path):
+    ops = [{"op": "add_source", "key": "s", "ruling": R, "title": "Register of Testville", "author": ""},
+           {"op": "add_event", "key": "e", "ruling": R, "person": "I0001", "type": "Residence", "date": None,
+            "description": None}]
+    assert validate(ops) == []
+    assert [r.status for r in run(fake, ops)] == ["done", "done"]
+    assert any("title is a non-empty text" in e for e in validate(  # a required text still may not be blank
+        [{"op": "add_source", "key": "s", "ruling": R, "title": "  "}]))
+    assert any("author is a non-empty text" in e for e in validate(  # nor may an optional one hold spaces
+        [{"op": "add_source", "key": "s", "ruling": R, "title": "Register of Testville", "author": " "}]))
+
 def test_a_list_that_would_crash_halfway_writes_nothing(fake, env, tmp_path):
     ops = [{"op": "add_note", "key": "n", "ruling": R, "text": "a note", "attach": [{"person": "I0001"}]},
            {"op": "add_citation", "key": "c", "ruling": R, "source": "S0001", "page": "p. 1",
@@ -2095,7 +2107,7 @@ def test_a_held_write_whose_answer_was_lost_is_not_the_answer_of_the_op_that_flu
     assert [r.status for r in res] == ["done", "done"], [r.actions for r in res]
     assert not res[1].answer_lost
     assert _lost_lines(res[1]) == [
-        "answer lost on try 1: PUT /people/anna; a later try wrote again, so the server may hold this change twice"
+        "answer lost on try 1: PUT /people/anna; the re-read did not find it, so this try wrote it"
     ], res[1].actions
     anna = fake.store["people"]["anna"]
     assert len(anna["person_ref_list"]) == 1 and len(anna["attribute_list"]) == 1

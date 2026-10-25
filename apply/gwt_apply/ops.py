@@ -247,8 +247,9 @@ def validate(ops: list[dict]) -> list[str]:
         for f in sorted((required | optional) - NOT_TEXT):
             if f not in op or f in missing or (name, f) in TEXT_CHECKED_BELOW:
                 continue
-            blank_ok = (name, f) in (("add_citation", "page"), ("add_person", "surname")) or (
-                f in optional and f in ("date", "description", "desc"))  # "" = none, as older lists write it
+            if f in optional and op[f] in (None, ""):
+                continue  # an optional text left "" or null means none, as older lists write it
+            blank_ok = (name, f) in (("add_citation", "page"), ("add_person", "surname"))
             if not isinstance(op[f], str) or not (op[f].strip() or (blank_ok and op[f] == "")):
                 errors.append(f"{where}: {f} is a non-empty text")
         for f in ("children", "attach", "namesake_of", "use_loser"):
@@ -595,8 +596,8 @@ class Applier:
                 try:
                     getattr(self, op["op"])(op)
                     res.status = "done" if self.wrote else "skip"
-                    if lost and self.wrote:  # an earlier write may have landed, and this try wrote again
-                        self.actions += [f"{line}; a later try wrote again, so the server may hold this change twice"
+                    if lost and self.wrote:  # the re-read did not find the change, so this try wrote it
+                        self.actions += [f"{line}; the re-read did not find it, so this try wrote it"
                                          for line in lost]
                     elif lost:
                         # an earlier try's write landed and its answer did not: this try read the change back
