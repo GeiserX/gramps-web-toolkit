@@ -27,7 +27,7 @@ import json
 import time
 from datetime import datetime, timezone
 
-from .client import NAMESPACE, Client, Retryable, digest
+from .client import NAMESPACE, Client, Retryable
 from .lock import LOCK_HANDLE
 
 IGNORE = {"change", "extended", "profile", "backlinks", "_read", "_snap", "_class", "gramps_id"}
@@ -143,10 +143,7 @@ def _covers(live, written) -> bool:
 
 def _same(live: dict, written: dict) -> bool:
     """Does the live object still hold everything the run wrote? Top-level server fields (change, gramps_id
-    on a create) are ignored. A body the log keeps only as a digest (a PUT over 64 KB) is compared by hash: the
-    live object must be exactly what was sent, so a field the server added reads as changed and is left alone."""
-    if "_digest" in written:
-        return digest(live) == written["_digest"]["sha256"]
+    on a create) are ignored."""
     return all(_covers(live.get(k), v) for k, v in written.items() if k not in IGNORE)
 
 
@@ -205,9 +202,6 @@ def plan(entries: list[dict], pre: dict, live, links=None) -> list[dict]:
                 puts[(cls, h)] = []
             if "body" in e:
                 puts[(cls, h)].append(e["body"])
-            elif "body_digest" in e:
-                d = e["body_digest"]
-                puts[(cls, h)].append({"_digest": d, **({"change": d["change"]} if d.get("change") is not None else {})})
             else:
                 blind.add((cls, h))
         else:
@@ -238,9 +232,7 @@ def plan(entries: list[dict], pre: dict, live, links=None) -> list[dict]:
                               "why": "the pre-run copy is older than what the run read; restoring it would also undo "
                                      "edits made in between, compare by hand"})
             elif not _any_same(now, written):
-                # what it points at now, for the deletes below: a digest does not show what the run wrote
-                held = json.dumps(now) if any("_digest" in w for w in written) else None
-                steps.append({"action": "skip", "cls": cls, "handle": h, "changed": True, "held": held,
+                steps.append({"action": "skip", "cls": cls, "handle": h, "changed": True,
                               "why": "changed since the run; not overwritten, look at it by hand"})
             else:
                 body = {k: v for k, v in before.items() if k not in ("extended", "profile", "backlinks")}
@@ -263,7 +255,7 @@ def plan(entries: list[dict], pre: dict, live, links=None) -> list[dict]:
                 steps.append({"action": "delete", "cls": cls, "handle": h, "written": written,
                               "why": "made by the run"})
     # an object left alone because it changed since the run may still point at something the run made: keep that too
-    held = [s.get("held") or json.dumps(puts[(s["cls"], s["handle"])]) for s in steps
+    held = [json.dumps(puts[(s["cls"], s["handle"])]) for s in steps
             if s["action"] == "skip" and s.get("changed") and (s["cls"], s["handle"]) in puts]
     for s in steps:
         if s["action"] == "delete" and any(s["handle"] in blob for blob in held):

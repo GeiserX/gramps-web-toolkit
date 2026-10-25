@@ -41,7 +41,7 @@ Lists written for the first public commit of `gwt-apply` behave differently in t
 - `poller` is now `spanish-poller`.
 - `gwt-apply` runs about 30% faster, writes a person's associations once, and checks an apply on an updated snapshot instead of the server.
 - `gwt-check` after a write refreshes a saved tree file instead of reading the whole tree again.
-- `gwt-apply` logs a real run under `$XDG_STATE_HOME/gwt-apply/<tree>/` instead of the working directory, and a dry run or `--save-snapshot` keeps no log unless `--log` is given. Each log opens with a `start` line (arguments, change list hash, tree) and closes with an `end` line (counts, exit code), records refusals, marks dry-run writes `planned`, names the Gramps ID of each object created, and keeps a `PUT` over 64 KB as its hash; `--revert` compares those by hash.
+- `gwt-apply` logs a real run under `$XDG_STATE_HOME/gwt-apply/<tree>/` instead of the working directory, and a dry run or `--save-snapshot` keeps no log unless `--log` is given. Each log opens with a `start` line (arguments, change list hash, tree) and closes with an `end` line (counts, exit code), records refusals, marks dry-run writes `planned`, and names the Gramps ID of each object created.
 
 ### Fixed
 

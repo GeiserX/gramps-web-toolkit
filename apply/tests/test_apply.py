@@ -1554,27 +1554,6 @@ def test_revert_sends_people_merges_and_deletes_to_the_backup(fake, tmp_path):
     assert any("merge" in s["why"] for s in steps) and any("restore the backup" in s["why"] for s in steps)
 
 
-def test_revert_keeps_a_note_a_changed_digest_only_object_still_points_at(tmp_path):
-    # no backlinks asked: only the live copy of the changed object shows it still points at the run's note
-    from gwt_apply import revert
-    from gwt_apply.client import digest
-    note = {"_class": "Note", "handle": "nN", "text": {"string": "made by the run"}}
-    sent = {"_class": "Person", "handle": "pP", "gender": 1, "note_list": ["nN"]}
-    entries = [
-        {"method": "POST", "path": "/objects/", "status": 201, "body": [note]},
-        {"method": "PUT", "path": "/people/pP", "status": 200,
-         "body_digest": {"sha256": digest(sent), "bytes": 70000}},
-    ]
-    log = tmp_path / "log.jsonl"
-    log.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
-    pre = {("Person", "pP"): {"_class": "Person", "handle": "pP", "gender": 1, "note_list": []}}
-    now = {**sent, "gender": 0}  # edited since the run, still lists the note
-    live = {("Person", "pP"): now, ("Note", "nN"): note}
-    steps = revert.plan(revert.read_log(str(log)), pre, lambda c, h: live.get((c, h)))
-    n = next(s for s in steps if s["handle"] == "nN")
-    assert n["action"] == "skip" and "still points at it" in n["why"]
-
-
 def test_revert_cli_needs_pre_and_stands_alone(capsys):
     for argv in (["--revert", "x.jsonl"], ["--revert", "x.jsonl", "--pre", "p.gz", "changes.json"], ["--pre", "p.gz"]):
         with pytest.raises(SystemExit):
@@ -2539,7 +2518,7 @@ def test_a_dry_run_logs_its_writes_as_planned_never_as_status_null(fake, tmp_pat
     assert lines[0]["event"] == "start" and lines[-1]["event"] == "end" and lines[-1]["exit"] == 0
 
 
-def test_a_big_put_logs_a_hash_and_revert_still_restores_it(fake, tmp_path, env):
+def test_a_big_put_logs_its_full_body_and_revert_restores_it(fake, tmp_path, env):
     old, new = "a" * 100_000, "b" * 100_000
     _note(fake, "n1", old)
     pre = str(tmp_path / "pre.json.gz")
@@ -2547,11 +2526,10 @@ def test_a_big_put_logs_a_hash_and_revert_still_restores_it(fake, tmp_path, env)
     op = {"op": "update_note", "key": "u", "ruling": R, "note": "N0001", "set": {"text": new}, "expect": old}
     assert main([str(_changes(tmp_path, [op], "dry.changes.jsonl")), "--log", str(tmp_path / "dry.jsonl")]) == 0
     planned = [e for e in _lines(next(tmp_path.glob("dry.2*.jsonl"))) if e.get("method") == "PUT"]
-    assert len(planned) == 1 and "body" not in planned[0] and planned[0]["body_digest"]["bytes"] > 65536
+    assert len(planned) == 1 and planned[0]["body"]["text"]["string"] == new
     log = _apply_list(tmp_path, [op], "big")
     put = [e for e in _lines(log) if e.get("method") == "PUT"]
-    assert len(put) == 1 and "body" not in put[0] and put[0]["body_digest"]["bytes"] > 65536
-    assert len(put[0]["body_digest"]["sha256"]) == 64
+    assert len(put) == 1 and put[0]["body"]["text"]["string"] == new and len(json.dumps(put[0]["body"])) > 65536
     assert fake.store["notes"]["n1"]["text"]["string"] == new
     assert _undo(log, pre, "--apply") == 0
     assert fake.store["notes"]["n1"]["text"]["string"] == old
@@ -2569,14 +2547,8 @@ def test_a_big_put_edited_since_the_run_is_left_alone(fake, tmp_path, env):
     assert fake.store["notes"]["n1"]["text"]["string"] == new + " edited by hand"
 
 
-def test_a_digest_ignores_class_at_every_depth():
-    from gwt_apply.client import digest
-    assert digest({"l": [{"_class": "X", "k": 1}]}) == digest({"l": [{"k": 1}]})
-    assert digest({"l": [{"k": 1}]}) != digest({"l": [{"k": 2}]})
-
-
 def test_a_big_put_with_nested_class_is_restored_by_revert(fake, tmp_path, env):
-    # the body carries {"_class": "PersonRef", ...}; the server keeps the ref without it
+    # a big body is logged whole: the server fills defaults into the PersonRef, so a hash of the body could not match
     fake.add("people", {"handle": "k0", "primary_name": {"first_name": "K0", "surname_list": [{"surname": "Kit"}]}})
     fake.store["people"]["anna"].update(person_ref_list=[], attribute_list=[{"type": "Description", "value": "x" * 100_000}])
     pre = str(tmp_path / "pre.json.gz")
@@ -2584,7 +2556,7 @@ def test_a_big_put_with_nested_class_is_restored_by_revert(fake, tmp_path, env):
     log = _apply_list(tmp_path, [{"op": "add_association", "key": "a", "ruling": R, "person": "I0001",
                                   "target": "I0002", "relation": "DNA"}], "big")
     put = [e for e in _lines(log) if e.get("method") == "PUT"]
-    assert len(put) == 1 and "body" not in put[0] and put[0]["body_digest"]["bytes"] > 65536
+    assert len(put) == 1 and len(put[0]["body"]["person_ref_list"]) == 1 and len(json.dumps(put[0]["body"])) > 65536
     assert len(fake.store["people"]["anna"]["person_ref_list"]) == 1
     assert _undo(log, pre, "--apply") == 0
     assert fake.store["people"]["anna"]["person_ref_list"] == []

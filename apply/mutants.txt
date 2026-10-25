@@ -19,8 +19,6 @@ gwt_apply/ops.py | (row.get(f) or "").strip() == op[f].strip() | True | a source
 gwt_apply/ops.py | out.append(("date", date_key(row.get("date")) == date_key(parse_date(op["date"])), | out.append(("date", True, | a citation of the same page with another date is not reused
 gwt_apply/ops.py | rows.append(("description", theirs == op["description"].strip(), | rows.append(("description", True, | an undated event with another description is not folded into the existing one
 gwt_apply/cli.py | if not writes: | if False: | a dry run or a snapshot leaves no log anywhere unless --log is given
-gwt_apply/revert.py | return digest(live) == written["_digest"]["sha256"] | return True | a big PUT logged as a digest is not restored over an edit made since the run
-gwt_apply/client.py | return {k: _strip_class(v) for k, v in value.items() if k != "_class"} | return value | a digest drops nested `_class` like the server, so revert restores a big PUT that carried one
 gwt_apply/cli.py | outcome.setdefault("error", f"{type(exc).__name__}: {exc}"[:500]) | pass | the end line of a crashed or killed run carries the error
 gwt_apply/cli.py | writes=args.apply and not args.save_snapshot) | writes=args.apply) | --save-snapshot --apply keeps no log unless --log is given
 gwt_apply/cli.py | prefix="gwt-apply-revert", writes=args.apply) | prefix="gwt-apply-revert", writes=True) | a revert plan keeps no log unless --log is given

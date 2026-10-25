@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import copy
-import hashlib
 import json
 import os
 import time
@@ -46,35 +45,6 @@ class Retryable(ApiError):
 
 class Stale(ApiError):
     """An object read from the snapshot changed on the server since: take a new snapshot."""
-
-
-# a PUT body bigger than this is logged as its digest: one person with many associations is about 1 MB a write
-BIG_BODY = 64 * 1024
-# top-level fields a digest leaves out: the server stamps `change`, fills in `gramps_id`, and drops `_class`
-DIGEST_SKIP = {"change", "extended", "profile", "backlinks", "_read", "_snap", "_class", "gramps_id"}
-
-
-def _strip_class(value):
-    if isinstance(value, dict):
-        return {k: _strip_class(v) for k, v in value.items() if k != "_class"}
-    if isinstance(value, list):
-        return [_strip_class(v) for v in value]
-    return value
-
-
-def digest(obj: dict) -> str:
-    """sha256 of an object as the server keeps it, so a live object and the body that wrote it compare equal."""
-    kept = _strip_class({k: v for k, v in obj.items() if k not in DIGEST_SKIP})
-    return hashlib.sha256(json.dumps(kept, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
-
-
-def body_fields(method: str, body) -> dict:
-    """The log fields for a write's body: the body itself, or for a PUT over BIG_BODY its digest and size."""
-    if method == "PUT" and isinstance(body, dict):
-        size = len(json.dumps(body, ensure_ascii=False).encode("utf-8"))
-        if size > BIG_BODY:
-            return {"body_digest": {"sha256": digest(body), "bytes": size, "change": body.get("change")}}
-    return {"body": body}
 
 
 def _new_gramps_id(r, body) -> str | None:
@@ -268,7 +238,7 @@ class Client:
                 # log line, so a revert can tell whether the server holds it.
                 entry = {"method": method, "path": path, "status": None, "error": f"{type(exc).__name__}: {exc}"[:500]}
                 if write and "json" in kw:
-                    entry.update(body_fields(method, kw["json"]))
+                    entry["body"] = kw["json"]
                 self.log(**entry)
                 if write:
                     self.unknown_write.append(f"{method} {path}")
@@ -280,7 +250,7 @@ class Client:
             break
         entry = {"method": method, "path": path, "status": r.status_code}
         if write and "json" in kw:
-            entry.update(body_fields(method, kw["json"]))
+            entry["body"] = kw["json"]
             if method == "POST" and path == "/objects/" and r.status_code == 201:
                 entry["gramps_id"] = _new_gramps_id(r, kw["json"])
         if r.status_code >= 400:
@@ -454,7 +424,7 @@ class Client:
         body = {k: v for k, v in obj.items() if k not in ("_read", "_snap", "extended", "profile")}
         if self.dry_run:
             self.pending[(cls, obj["handle"])] = copy.deepcopy(body)
-            self.log(method="PUT", path=f"/{NAMESPACE[cls]}/{obj['handle']}", **body_fields("PUT", body), planned=True)
+            self.log(method="PUT", path=f"/{NAMESPACE[cls]}/{obj['handle']}", body=body, planned=True)
             return
         if "_snap" in obj:
             live = self.get_live(cls, obj["handle"])

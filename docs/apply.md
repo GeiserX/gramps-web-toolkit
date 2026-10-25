@@ -56,7 +56,6 @@ What it holds is one JSON object per line. Every line has `ts` (UTC) and `dry_ru
 - `refused`: a run that stopped before its first write says why, with `reason` (`tree` for a login that landed in another tree than `GWT_TREE`, `preflight` for likely duplicates, `snapshot-plan` when the plan on the snapshot does not go through or the tree changed since, `snapshot-tree`, or `pre` for a revert's pre-run copy) and `problems`, the lines it printed.
 - Every API call in between: the op's `key` and `ruling`, `method`, `path`, `status`, and the body of every write. `status: null` means a real request whose answer was lost: the server may have done it. A dry run's writes carry `planned: true` and no `status`.
 - After a create, its line carries `gramps_id`, the Gramps ID the server gave the new object (from the server's answer).
-- A `PUT` body over 64 KB (a person with thousands of DNA associations) is logged as `body_digest: {sha256, bytes, change}` instead of `body`. The hash covers the object without the fields the server sets (`change`, `gramps_id`, `_class`).
 
 The password and the token are never logged.
 
@@ -333,7 +332,6 @@ The revert never overwrites anything that differs from what the run left:
 - A delete reads the object's backlinks first. While anything still points at it, it is kept: a later run that used the same `--tag`, or attached the note somewhere else, keeps the tag and the note.
 - A restore is `manual` when the pre-run copy is older than what the run read. Restoring it would also undo the edits made in between.
 - An object already as before the run is a `skip` too, so running the revert twice is safe.
-- A `PUT` the log keeps only as a digest (over 64 KB) is compared by hash: the object is restored only while the server holds exactly what the run sent, so any difference, even a default the server filled in, reads as changed and is left alone.
 
 With `--apply` the tree lock is taken before the plan reads anything. Each object is read again right before it is written, and an object that changed since the plan is skipped. Busy answers are tried again. If the revert stops halfway, run the same command again: what is already undone reads as a skip. At the end it reads every restored object back and checks every deleted one again.
 
