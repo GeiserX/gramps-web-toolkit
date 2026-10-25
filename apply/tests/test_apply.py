@@ -1549,6 +1549,7 @@ def test_revert_compares_what_the_server_keeps_not_its_defaults(tmp_path):
     log = tmp_path / "l.jsonl"
     log.write_text("\n".join(json.dumps(e) for e in [
         {"method": "POST", "path": "/token/", "status": 200},
+        {"method": "POST", "path": "/token/sync/", "status": 200},  # the GWT_TOKEN login
         {"method": "DELETE", "path": "/notes/" + revert.LOCK_HANDLE, "status": 200},
         {"method": "POST", "path": "/objects/", "status": 201, "body": [{"_class": "Note", "handle": revert.LOCK_HANDLE}]},
     ]) + "\n")
