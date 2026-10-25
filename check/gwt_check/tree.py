@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import re
 import xml.etree.ElementTree as ET
 from datetime import datetime
 
@@ -138,7 +139,9 @@ def _read_started(meta: dict) -> tuple[int | None, bool]:
         return int(meta["read_started"]), False
     stamp = meta.get("taken") or meta.get("dumped_at")
     try:
-        return int(datetime.fromisoformat(stamp).timestamp()) - READ_MARGIN, True
+        # Python before 3.11 rejects a zone written +0000 (no colon), which is how a dump writes its own dumped_at
+        when = datetime.fromisoformat(stamp[:-2] + ":" + stamp[-2:] if re.search(r"[+-]\d{4}$", stamp) else stamp)
+        return int(when.timestamp()) - READ_MARGIN, True
     except (TypeError, ValueError):
         return None, True
 
