@@ -2036,7 +2036,7 @@ def _script(fake, *steps):
             if callable(what):
                 fake.calls.append((method, path))
                 return what(fake)
-            resp = real(method, url, **kw)
+            real(method, url, **kw)
             if what == "lost":
                 raise requests.ConnectionError("connection dropped after the server did the work")
             return what
