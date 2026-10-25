@@ -20,7 +20,8 @@ gwt_apply/ops.py | out.append(("date", date_key(row.get("date")) == date_key(par
 gwt_apply/ops.py | rows.append(("description", theirs == op["description"].strip(), | rows.append(("description", True, | an undated event with another description is not folded into the existing one
 gwt_apply/dupes.py | return fold(a.first) == fold(b.first) != "" and bool(words - PARTICLES) | return fold(a.first) == fold(b.first) != "" and bool(words) | preflight does not call two couples the same on a shared "de" alone
 gwt_apply/dupes.py | if not _same_couple(mine, other): | if False: | preflight flags only couples that look alike, not every pair of couples
-gwt_apply/dupes.py | if other.handle and set(other.handles) == handles: | if False: | preflight leaves a family of the tree couple's own two people to the apply, which reuses it
+gwt_apply/dupes.py | if any(c.handles == pair for c in couples + seen): | if any(c.handles == pair for c in seen): | preflight leaves an add_family of two tree parents who already have a family to the apply, which reuses it
+gwt_apply/dupes.py | if any(c.handles == pair for c in couples + seen): | if any(c.handles == pair for c in couples): | preflight leaves a second add_family of the same parents to the apply, which reuses the first one's family
 gwt_apply/dupes.py | return _person_pass(ops, tree, ids, new) + _couple_pass(ops, tree, couples, new) | return _person_pass(ops, tree, ids, new) | preflight flags a couple already in the tree
 gwt_apply/ops.py | if not str(op.get("new_couple_reason") or "").strip() or not op.get("new_couple_of"): | if False: | validate refuses an allow_new_couple without its reason and compared families
 gwt_apply/cli.py | if not writes: | if False: | a dry run or a snapshot leaves no log anywhere unless --log is given

@@ -65,7 +65,7 @@ class Couple:
     ref: str  # Gramps ID, or key:<key> for a family an op makes
     father: Who
     mother: Who
-    handles: tuple[str, str] = ("", "")  # the parents' handles, for a tree family
+    handles: tuple[str, str] = ("", "")  # the parents' handles (father, mother); for an op, the ones the apply gives them
     handle: str = ""
 
 
@@ -221,17 +221,18 @@ def _couple_pass(ops: list[dict], tree: list[Who], couples: list[Couple], new: d
             sides.append(who)
         if None in sides:
             continue  # a parent nobody can find: the apply reports it
-        mine = Couple(f"key:{op['key']}", sides[0], sides[1])
+        # the handles the apply gives these parents: a person an op makes gets stable_handle(key)
+        pair = tuple(w.handle or stable_handle(r[4:]) for r, w in zip((op["father"], op["mother"]), sides))
+        if any(c.handles == pair for c in couples + seen):
+            continue  # these very parents already have a family, in the tree or from an earlier op: the apply reuses it
+        mine = Couple(f"key:{op['key']}", sides[0], sides[1], pair)
         compared = set(_ref_list(op.get("new_couple_of") or [])) if op.get("allow_new_couple") else set()
         compared |= {stable_handle(r[4:]) for r in compared if r.startswith("key:")}
-        handles = {w.handle for w in sides}
         for other in tree_couples + seen:
             if other.ref in compared or (other.handle and other.handle in compared):
                 continue
             if not other.handle and mine.ref in set(_ref_list(by_key[other.ref].get("new_couple_of") or [])):
                 continue  # the earlier op already says these are two couples
-            if other.handle and set(other.handles) == handles:
-                continue  # these very parents: the apply reuses that family
             if not _same_couple(mine, other):
                 continue
             where = "in the tree" if other.handle else "made by another op"

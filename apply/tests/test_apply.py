@@ -2492,7 +2492,12 @@ def test_couple_in_the_list_twice_and_couples_that_only_share_given_names(fake):
         {"op": "add_person", "key": "p-tom", "ruling": R, "first_name": "Tom", "surname": "Sample"},
         {"op": "add_person", "key": "p-mary", "ruling": R, "first_name": "Mary", "surname": "Testing"},
         {"op": "add_family", "key": "f-1", "ruling": R, "father": "key:p-tom", "mother": "key:p-mary"},
-        {"op": "add_family", "key": "f-2", "ruling": R, "father": "key:p-tom", "mother": "key:p-mary", "type": "Married"},
+        # a second Tom x Mary, kept apart as people, married again: the same couple
+        {"op": "add_person", "key": "p-tom2", "ruling": R, "first_name": "Tom", "surname": "Sample",
+         "allow_namesake": True, "namesake_reason": "another parish", "namesake_of": ["key:p-tom"]},
+        {"op": "add_person", "key": "p-mary2", "ruling": R, "first_name": "Mary", "surname": "Testing",
+         "allow_namesake": True, "namesake_reason": "another parish", "namesake_of": ["key:p-mary"]},
+        {"op": "add_family", "key": "f-2", "ruling": R, "father": "key:p-tom2", "mother": "key:p-mary2", "type": "Married"},
         # Bob and Anna again, but of other families: no surname word in common with F0001's
         {"op": "add_person", "key": "p-bob-z", "ruling": R, "first_name": "Bob", "surname": "de Zed"},
         {"op": "add_person", "key": "p-anna-z", "ruling": R, "first_name": "Anna", "surname": "de la Why"},
@@ -2506,7 +2511,7 @@ def test_couple_in_the_list_twice_and_couples_that_only_share_given_names(fake):
     problems = preflight(ops, c)
     assert len(problems) == 1 and "'f-2'" in problems[0] and "family key:f-1" in problems[0], problems
     assert "made by another op" in problems[0]
-    ops[3].update(allow_new_couple=True, new_couple_reason="a second marriage", new_couple_of="key:f-1")
+    ops[5].update(allow_new_couple=True, new_couple_reason="a second marriage", new_couple_of="key:f-1")
     assert preflight(ops, c) == []
 
 
@@ -2558,7 +2563,9 @@ def test_couple_pass_skips_what_the_list_already_waived_and_blank_given_names(fa
         {"op": "add_person", "key": "p-mary", "ruling": R, "first_name": "Mary", "surname": "Testing"},
         {"op": "add_family", "key": "f-1", "ruling": R, "father": "key:p-tom", "mother": "key:p-mary",
          "allow_new_couple": True, "new_couple_reason": "a second marriage", "new_couple_of": ["key:f-2"]},
-        {"op": "add_family", "key": "f-2", "ruling": R, "father": "key:p-tom", "mother": "key:p-mary"},
+        {"op": "add_person", "key": "p-tom2", "ruling": R, "first_name": "Tom", "surname": "Sample",
+         "allow_namesake": True, "namesake_reason": "another parish", "namesake_of": ["key:p-tom"]},
+        {"op": "add_family", "key": "f-2", "ruling": R, "father": "key:p-tom2", "mother": "key:p-mary"},
     ]
     assert validate(ops) == [] and preflight(ops, c) == []
     # people with no given name match nobody, so their couples are never the same
@@ -2568,6 +2575,45 @@ def test_couple_pass_skips_what_the_list_already_waived_and_blank_given_names(fa
     fake.add("families", {"handle": "fam-xy", "father_handle": "x1", "mother_handle": "y1"})
     assert preflight([{"op": "add_family", "key": "f-b", "ruling": R, "father": blank[2]["gramps_id"],
                        "mother": blank[3]["gramps_id"]}], Client("https://gw.example", "u", "pw", session=fake)) == []
+
+
+def test_a_family_of_parents_who_already_have_one_is_reused_not_flagged(fake):
+    """Parents who already have a family together get it back from the apply, whatever namesake couples exist."""
+    from gwt_apply.dupes import preflight
+    _couple(fake)  # Bob Example (I0002) x Anna Example (I0001) as F0001
+    # a namesake couple in the tree, as F0002
+    fake.add("people", {"handle": "bob2", "gender": 1, "primary_name": {"first_name": "Bob", "surname_list": [{"surname": "Example", "primary": True}]}})
+    fake.add("people", {"handle": "anna2", "gender": 0, "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    fake.add("families", {"handle": "fam-ba2", "father_handle": "bob2", "mother_handle": "anna2"})
+    ops = [{"op": "add_person", "key": "kid", "ruling": R, "first_name": "Carl", "surname": "Example"},
+           {"op": "add_family", "key": "f", "ruling": R, "father": "I0002", "mother": "I0001", "children": ["key:kid"]}]
+    assert validate(ops) == []
+    assert preflight(ops, Client("https://gw.example", "u", "pw", session=fake)) == []
+    assert [r.status for r in run(fake, ops)] == ["done", "done"]
+    assert len(fake.store["families"]) == 2
+    # the same parents written the other way round are not that family: the apply would make a second one
+    swapped = [{"op": "add_family", "key": "f-sw", "ruling": R, "father": "I0001", "mother": "I0002"}]
+    problems = preflight(swapped, Client("https://gw.example", "u", "pw", session=fake))
+    assert any("family F0001" in p for p in problems), problems
+
+
+def test_two_ops_with_the_same_parents_make_one_family(fake):
+    """The second add_family of the same two parents gets the first one's family: nothing to waive."""
+    from gwt_apply.dupes import preflight
+    ops = [
+        {"op": "add_person", "key": "p-x", "ruling": R, "first_name": "Tom", "surname": "Sample", "gender": "M"},
+        {"op": "add_person", "key": "p-y", "ruling": R, "first_name": "Mary", "surname": "Testing", "gender": "F"},
+        {"op": "add_person", "key": "k1", "ruling": R, "first_name": "Ann", "surname": "Sample"},
+        {"op": "add_person", "key": "k2", "ruling": R, "first_name": "Ned", "surname": "Sample"},
+        {"op": "add_family", "key": "f1", "ruling": R, "father": "key:p-x", "mother": "key:p-y", "children": ["key:k1"]},
+        {"op": "add_family", "key": "f2", "ruling": R, "father": "key:p-x", "mother": "key:p-y", "children": ["key:k2"]},
+    ]
+    assert validate(ops) == []
+    assert preflight(ops, Client("https://gw.example", "u", "pw", session=fake)) == []
+    assert [r.status for r in run(fake, ops)] == ["done"] * 6
+    (fam,) = fake.store["families"].values()  # f1 only; f2 linked its child there
+    assert [c["ref"] for c in fam["child_ref_list"]] == [stable_handle("k1"), stable_handle("k2")]
+    assert preflight(ops, Client("https://gw.example", "u", "pw", session=fake)) == []
 
 
 def test_new_couple_of_must_be_a_list_or_a_text():
