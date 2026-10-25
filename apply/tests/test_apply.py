@@ -866,7 +866,8 @@ def test_merge_whose_answer_was_lost_is_not_done_twice_and_keeps_the_birth():
     fake.drop_after = ("POST", "/api/people/anna/merge/")
     op = {"op": "merge_person", "key": "mp", "ruling": R, "winner": "I0001", "loser": "I0002", "use_loser": ["birth"]}
     res = run(fake, [op])
-    assert res[0].status == "skip", res[0].actions  # the retry finds the merge done
+    assert res[0].status == "done", res[0].actions  # the retry finds the merge done: the lost answer was a write
+    assert res[0].actions[-1].startswith("answer lost on try 1: POST /people/anna/merge/")
     assert sum(1 for m, p in fake.calls if m == "POST" and "/merge/" in p) == 1
     anna = fake.store["people"]["anna"]
     assert "anna2" not in fake.store["people"] and anna["birth_ref_index"] == 0
@@ -1090,8 +1091,9 @@ def test_held_associations_are_written_when_a_later_op_crashes(fake, tmp_path):
         {"op": "add_media", "key": "m", "ruling": R, "file": str(tmp_path / "gone.jpg"), "path": "x.jpg",
          "attach": [{"person": "I0001"}]},
     ]
-    with pytest.raises(FileNotFoundError):
-        run(fake, ops)
+    res = run(fake, ops)
+    assert [r.status for r in res] == ["done", "error"]
+    assert res[1].actions[-1].startswith("error: FileNotFoundError"), res[1].actions
     assert len(fake.store["people"]["anna"]["person_ref_list"]) == 1
 
 
@@ -1580,7 +1582,7 @@ def test_revert_undoes_a_write_whose_answer_was_lost(fake, tmp_path, env):
     _note(fake, "n1", "Father read as Denis (?)")
     pre = str(tmp_path / "pre.json.gz")
     assert main(["--save-snapshot", pre]) == 0
-    fake.drop_after = ("PUT", "/api/notes/")  # the server writes, the answer never arrives; the retry says skip
+    fake.drop_after = ("PUT", "/api/notes/")  # the server writes, the answer never arrives; the retry reads it back
     log = _apply_list(tmp_path, [{"op": "update_note", "key": "u", "ruling": R, "note": "N0001",
                                   "set": {"text": "Father read as Rene (?)"}, "expect": "Father read as Denis (?)"}], "run")
     assert fake.store["notes"]["n1"]["text"]["string"] == "Father read as Rene (?)"
@@ -1926,3 +1928,81 @@ def test_revert_deletes_a_note_the_run_made_and_then_corrected(fake, tmp_path, e
     assert fake.store["notes"][stable_handle("n")]["text"]["string"] == "second draft"
     assert _undo(log, pre, "--apply") == 0
     assert fake.store["notes"] == {} and fake.store["families"]["fam"]["note_list"] == []
+
+
+# ---- honest status: a write whose answer was lost, and inputs that would crash mid-run
+
+
+def test_update_note_whose_answer_was_lost_reports_done(fake):
+    _note(fake, "n1", "Father read as Denis (?)")
+    fake.drop_after = ("PUT", "/api/notes/")  # the server writes, the answer never arrives
+    op = {"op": "update_note", "key": "u", "ruling": R, "note": "N0001",
+          "set": {"text": "Father read as Rene (?)"}, "expect": "Father read as Denis (?)"}
+    res = run(fake, [op])
+    assert res[0].status == "done", res[0].actions
+    assert any(a.startswith("answer lost on try 1: PUT /notes/n1") for a in res[0].actions), res[0].actions
+    assert fake.writes().count(("PUT", "/api/notes/n1")) == 1  # the retry read it back and wrote nothing
+    assert run(fake, [op])[0].status == "skip"  # a rerun of the applied list writes nothing
+
+
+def test_add_person_whose_answer_was_lost_reports_done(fake, env, tmp_path, capsys):
+    op = {"op": "add_person", "key": "p-tom", "ruling": R, "first_name": "Tom", "surname": "Sample"}
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text(json.dumps(op))
+    fake.drop_after = ("POST", "/api/objects/", 1)  # after the lock note: the person is made, the answer is lost
+    assert main([str(changes), "--apply", "--retry-wait", "0"]) == 0
+    out = capsys.readouterr().out
+    assert "[done] p-tom" in out and "answer lost on try 1: POST /objects/" in out, out
+    assert "1 done (answer lost: 1), 0 skip" in out, out
+    assert list(fake.store["people"]).count(stable_handle("p-tom")) == 1
+    writes = len(fake.writes())
+    assert main([str(changes), "--apply", "--retry-wait", "0"]) == 0
+    assert "0 done, 1 skip" in capsys.readouterr().out
+    assert [w for w in fake.writes()[writes:] if "/objects/" in w[1] or "/people/" in w[1]] == [
+        ("POST", "/api/objects/")]  # only the lock note: no write for the person
+
+
+@pytest.mark.parametrize("op, says", [
+    ({"op": "add_person", "first_name": "Tom", "surname": "Sample", "attach": [{"person": "I1"}]}, "unknown fields ['attach']"),
+    ({"op": "add_citation", "source": "S1", "page": "p. 1", "attach": [{"person": "I1"}], "confidence": "high"}, "confidence is a whole number 0-4"),
+    ({"op": "add_citation", "source": "S1", "page": "p. 1", "attach": [{"person": "I1"}], "confidence": 9}, "confidence is a whole number 0-4"),
+    ({"op": "add_event", "person": "I1", "type": "  "}, "type is a non-empty text"),
+    ({"op": "add_event", "person": "I1", "type": "Birth", "date": "1890-02-31"}, "impossible date '1890-02-31'"),
+    ({"op": "add_person", "first_name": 5, "surname": "Sample"}, "first_name is a non-empty text"),
+    ({"op": "add_family", "mother": "I1", "children": "I2"}, "children is a list of"),
+    ({"op": "add_note", "text": ["a"], "attach": [{"person": "I1"}]}, "text is a non-empty text"),
+    ({"op": "add_person", "first_name": "Tom", "surname": "Sample", "tag": ["ok", 3]}, "tag is a non-empty name"),
+])
+def test_validate_refuses_inputs_that_would_crash_mid_run(op, says):
+    errors = validate([dict(op, key="k", ruling=R)])
+    assert any(says in e for e in errors), errors
+
+
+def test_validate_keeps_real_dates_and_allowed_empty_texts():
+    assert validate([
+        {"op": "add_event", "key": "a", "ruling": R, "person": "I1", "type": "Birth", "date": "1892-02-29"},
+        {"op": "add_person", "key": "b", "ruling": R, "first_name": "Tom", "surname": ""},
+        {"op": "add_citation", "key": "c", "ruling": R, "source": "S1", "page": "", "attach": [{"person": "I1"}], "confidence": 0},
+    ]) == []
+    assert any("impossible date" in e for e in validate(
+        [{"op": "add_event", "key": "a", "ruling": R, "person": "I1", "type": "Birth", "date": "1900-02-29"}]))
+
+
+def test_a_list_that_would_crash_halfway_writes_nothing(fake, env, tmp_path):
+    ops = [{"op": "add_note", "key": "n", "ruling": R, "text": "a note", "attach": [{"person": "I0001"}]},
+           {"op": "add_citation", "key": "c", "ruling": R, "source": "S0001", "page": "p. 1",
+            "attach": [{"person": "I0001"}], "confidence": "high"}]
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text("".join(json.dumps(o) + "\n" for o in ops))
+    assert main([str(changes), "--apply", "--retry-wait", "0"]) == 2
+    assert fake.store["notes"] == {} and fake.writes() == []
+
+
+def test_an_op_that_crashes_is_an_error_that_stops_the_run(fake):
+    ops = [{"op": "add_note", "key": "n", "ruling": R, "text": "a note", "attach": [{"person": "I0001"}]},
+           {"op": "add_citation", "key": "c", "ruling": R, "source": "S0001", "page": "p. 1",
+            "attach": [{"person": "I0001"}], "confidence": "high"},  # what validate refuses, run without it
+           {"op": "add_note", "key": "n2", "ruling": R, "text": "never reached", "attach": [{"person": "I0001"}]}]
+    res = run(fake, ops)
+    assert [r.status for r in res] == ["done", "error"]
+    assert res[1].actions[-1].startswith("error: ValueError"), res[1].actions

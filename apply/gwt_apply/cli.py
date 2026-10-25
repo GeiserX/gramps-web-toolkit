@@ -264,5 +264,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"    {a}")
     counts = {s: sum(r.status == s for r in results) for s in ("done", "skip", "conflict", "error")}
     not_run = len(ops) - len(results)
-    print(", ".join(f"{v} {k}" for k, v in counts.items()) + (f", {not_run} not run" if not_run else ""))
+    lost = sum(r.answer_lost for r in results)
+    words = [f"{v} {k}" + (f" (answer lost: {lost})" if k == "done" and lost else "") for k, v in counts.items()]
+    print(", ".join(words) + (f", {not_run} not run" if not_run else ""))
     return 0 if not (counts["conflict"] or counts["error"]) else 1

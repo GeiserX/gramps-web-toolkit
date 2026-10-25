@@ -75,6 +75,9 @@ class Client:
         self._lists: dict[tuple[str, tuple], list[dict]] = {}  # (class, keys) -> rows from the server
         self.written: dict[tuple[str, str], dict] = {}  # what this run created or changed, for the indexes
         self.unsure: set[tuple[str, str]] = set()  # creates with no answer: the server may have them
+        # "METHOD path" of each write with no clear answer (timeout, dropped connection, 5xx, "database is
+        # locked"): the server may have done it. The applier empties it before every try of an op.
+        self.unknown_write: list[str] = []
         # With a snapshot, reads come from it, except for objects this run wrote (or made the server change)
         self.snapshot: dict[str, dict[str, dict]] | None = None
         self.offline = False  # a dry run on a snapshot: no server at all
@@ -163,6 +166,8 @@ class Client:
                 if write and "json" in kw:
                     entry["body"] = kw["json"]
                 self.log(**entry)
+                if write:
+                    self.unknown_write.append(f"{method} {path}")
                 raise Retryable(f"{method} {path}: {type(exc).__name__}") from exc
             kw["headers"] = {k: v for k, v in headers.items() if k != "Authorization"}
             if r.status_code == 401 and attempt == 1:
@@ -176,6 +181,8 @@ class Client:
             entry["error"] = r.text[:500]
         self.log(**entry)
         if r.status_code >= 500 or "database is locked" in r.text[:2000].lower():
+            if write:
+                self.unknown_write.append(f"{method} {path}")
             raise Retryable(f"{method} {path}: HTTP {r.status_code}", r.status_code)
         return r
 

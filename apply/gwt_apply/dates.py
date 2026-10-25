@@ -49,6 +49,10 @@ def _ymd(text: str) -> tuple[int, int, int]:
     day = int(m.group(3) or 0)
     if not 0 <= month <= 12 or not 0 <= day <= 31 or (day and not month):
         raise DateError(f"impossible date {text!r}")
+    if day and year:
+        leap = year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+        if day > (31, 29 if leap else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)[month - 1]:
+            raise DateError(f"impossible date {text!r}: that month has no day {day}")
     return day, month, year
 
 
