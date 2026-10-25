@@ -298,6 +298,25 @@ def p_dup_person_fuzzy_same_named_parents(d):
     _namesakes(d, 66, ("Pablo", "Pablo Luis"), "Moreno Díaz", parents, parents)
 
 
+def p_dup_person_fuzzy_same_named_mother(d):
+    mother = ("Nuria", "Vidal Ros")
+    _namesakes(d, 72, ("Tomás", "Tomás Javier"), "Serra Vidal",
+               (("Félix", "Serra Pons"), mother), (("Ignacio", "Serra Mas"), mother))
+
+
+def p_dup_person_fuzzy_same_named_father(d):
+    father = ("Álvaro", "Cano Ruiz")
+    _namesakes(d, 78, ("Lucía", "Lucía Inés"), "Cano Torres",
+               (father, ("Rosa", "Torres Gil")), (father, ("Clara", "Torres Vela")))
+
+
+def p_dup_person_fuzzy_adoptive_parents(d):
+    """Other names on both sides, but one side is the adopted child of that couple: not its birth parents."""
+    _namesakes(d, 84, ("Diego", "Diego Martín"), "Ortiz Lara",
+               (("Rafael", "Ortiz Bravo"), ("Inés", "Lara Pino")), (("Óscar", "Ortiz Sanz"), ("Eva", "Lara Cid")))
+    _get(d, "families", "F0085")["child_ref_list"][0].update(frel="Adopted", mrel="Adopted")
+
+
 def p_family_backlink(d):
     _get(d, "people", "I0008")["parent_family_list"] = []
 
@@ -479,6 +498,9 @@ PLANTS = [
     (p_dup_person_fuzzy_spouse, "dup-person-fuzzy", "I0004,I0091", False),
     (p_dup_person_fuzzy_named_parents, "info:dup-person-fuzzy skipped, parents differ by name", "I0062,I0065", False),
     (p_dup_person_fuzzy_same_named_parents, "dup-person-fuzzy", "I0068,I0071", False),
+    (p_dup_person_fuzzy_same_named_mother, "dup-person-fuzzy", "I0074,I0077", False),
+    (p_dup_person_fuzzy_same_named_father, "dup-person-fuzzy", "I0080,I0083", False),
+    (p_dup_person_fuzzy_adoptive_parents, "dup-person-fuzzy", "I0086,I0089", False),
     (p_family_backlink, "family-backlink", "F0001 child I0008", False),
     (p_empty_family, "empty-family", "F0095", False),
     (p_citation_no_source, "citation-no-source", "C0002", False),
@@ -502,10 +524,6 @@ PLANTS = [
 ]
 
 
-# findings a plant must NOT produce: namesakes whose parents have other names are two people
-ABSENT = [
-    (p_dup_person_fuzzy_named_parents, "dup-person-fuzzy", "I0062,I0065"),
-]
 SKIPPED = "dup-person-fuzzy skipped, parents differ by name"
 
 # left out of the all-in-one tree because they undo another plant there: the lost backlink hides the
@@ -562,17 +580,13 @@ def _selftest(verbose: bool) -> int:
         failed += not hit
         say(f"{'ok  ' if hit else 'FAIL'} {plant.__name__[2:]}: {check_name} {key}"
             + ("" if hit else f"  (got {sorted(got)})"))
-        for c, k in {(c, k) for p, c, k in ABSENT if p is plant}:
-            quiet = (c, k) not in got
-            failed += not quiet
-            say(f"{'ok  ' if quiet else 'FAIL'} {plant.__name__[2:]}: no {c} {k}")
         if plant not in done and plant not in TOGETHER_SKIP:
             plant(together)
             done.add(plant)
 
     got, _ = _run(together, clean)
     expected = {(c, k) for p, c, k, _ in PLANTS if p in done}
-    missed = (expected - got) | ({(c, k) for p, c, k in ABSENT if p in done} & got)
+    missed = expected - got
     failed += bool(missed)
     say(f"{'ok  ' if not missed else 'FAIL'} all {len(done)} plants in one tree: {len(expected - missed)} of "
         f"{len(expected)} found" + (f", missed {sorted(missed)}" if missed else ""))
