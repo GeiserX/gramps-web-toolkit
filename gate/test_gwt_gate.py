@@ -125,6 +125,16 @@ class GateTest(unittest.TestCase):
         g.block(6, 'account suspended')
         g.dead('a', 'HTTP 401')
         self.assertEqual(g.status()['paused_for_s'], 6 * 3600)
+        self.assertEqual(g.status()['why'], 'account suspended')
+        self.assertIn('DEAD a HTTP 401 -> pause kept (account suspended), gap=15.0s', self.calls())
+        g.clear('relogged')
+        self.assertIn('CLEAR relogged (was: account suspended)', self.calls())
+
+    def test_status_drops_a_reason_once_its_pause_has_run_out(self):
+        g = self.gate(start=10)
+        g.block(1, 'old')
+        self.clock.t += 7200  # no wait in between
+        self.assertEqual(g.status()['why'], '')
 
     def test_denied_neither_pauses_nor_moves_the_gap(self):
         g = self.gate(start=10)
@@ -142,6 +152,7 @@ class GateTest(unittest.TestCase):
         g.clear('unblocked by support')
         self.assertEqual(g.status()['paused_for_s'], 0)
         self.assertEqual(g.status()['why'], '')
+        self.assertEqual(G.json.load(open(os.path.join(self.tmp.name, 'state.json')))['why'], '')
         self.assertIn('CLEAR unblocked by support (was: ip blocked)', self.calls())
         g.wait('a')  # no exit 3, no long sleep
         self.assertLessEqual(sum(self.clock.slept), 10)
@@ -150,6 +161,9 @@ class GateTest(unittest.TestCase):
         g = self.gate(start=8.2)
         g.hit('a', 'x')
         self.assertIn('HIT a x -> pause 20 min, gap=24.6s', self.calls())
+        self.clock.t += 1200  # wait out the pause
+        g.wait('a')
+        self.assertIn('call a gap=24.6', self.calls())
 
     def test_an_existing_state_file_is_kept(self):
         with open(os.path.join(self.tmp.name, 'state.json'), 'w') as f:

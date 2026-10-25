@@ -130,8 +130,12 @@ class Gate:
     def dead(self, lane, what):
         """A dead session (a 401): every lane pauses, but the gap stays, since it says nothing about the rate."""
         def h(s):
-            s['pause_until'] = max(s['pause_until'], self.clock() + self.pause); s['why'] = what
-            self.log(f'DEAD {lane} {what} -> pause {round(self.pause / 60)} min, gap={round(s["gap"], 2)}s')
+            now = self.clock()
+            if now + self.pause > s['pause_until']:  # never shorten, or relabel, a longer pause or block
+                s['pause_until'] = now + self.pause; s['why'] = what
+                self.log(f'DEAD {lane} {what} -> pause {round(self.pause / 60)} min, gap={round(s["gap"], 2)}s')
+            else:
+                self.log(f'DEAD {lane} {what} -> pause kept ({s.get("why") or "?"}), gap={round(s["gap"], 2)}s')
         self._locked(h)
 
     def clear(self, reason):
