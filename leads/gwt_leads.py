@@ -26,6 +26,7 @@ DEFAULT_KINDS = ('branch-end', 'missing-vital', 'uncited')  # unsupported-link n
 LINK_GAPS = {'no record names a parent': 'no record in the tree names either parent',
              'cited, names neither': 'a cited record names neither parent',
              'a record names one': 'records name only one of the two parents'}
+LINK_NOT_GAPS = ('birth record names both', 'other record names both')  # the other levels gwt-check links writes
 BIRTH_LIKE = ('Birth', 'Baptism', 'Christening')   # in order of preference
 DEATH_LIKE = ('Death', 'Burial', 'Cremation')
 MARRIAGE_LIKE = ('Marriage',)
@@ -358,9 +359,19 @@ def leads(T, root_gid=None, kinds=DEFAULT_KINDS, living_after=None, hold=True, l
                         break
     if 'unsupported-link' in kinds:
         by_gid = {p.get('gramps_id'): p for p in T['people'].values()}
+        fam_by_gid = {f.get('gramps_id'): f for f in T['families'].values()}
+        stale = 0
         for row in (links or {}).get('rows', []):
-            p, gap = by_gid.get(row.get('child')), LINK_GAPS.get(row.get('level'))
-            if p is None or gap is None:
+            if not (isinstance(row, dict) and all(isinstance(row.get(k), str) for k in ('family', 'child', 'level'))):
+                raise BadInput('not a gwt-check links report: every row needs a family, a child and a level')
+            if row['level'] not in LINK_GAPS and row['level'] not in LINK_NOT_GAPS:
+                raise BadInput('links report: unknown level %r (is it from a newer gwt-check?)' % row['level'])
+            p, f = by_gid.get(row['child']), fam_by_gid.get(row['family'])
+            if p is None or f is None or not any(c.get('ref') == p['handle'] for c in f.get('child_ref_list', [])):
+                stale += 1
+                continue
+            gap = LINK_GAPS.get(row['level'])
+            if gap is None:
                 continue
             why = held_back(T, p, living_after, old) if hold else ''
             if why:
@@ -368,6 +379,9 @@ def leads(T, root_gid=None, kinds=DEFAULT_KINDS, living_after=None, hold=True, l
                 continue
             add(p, 'unsupported-link', 'link-%s' % row.get('family'),
                 'family %s: %s (words only: the link is not shown wrong)' % (row.get('family'), gap))
+        if stale:
+            raise BadInput('%d rows of the links report name a child who is not in that family in this dump: the '
+                           'report is from another tree or an older dump, so run gwt-check links on this one' % stale)
     out.sort(key=lambda r: (-r['priority'], id_order(r['person']), r['kind'], r['gap']))
     return out, held
 

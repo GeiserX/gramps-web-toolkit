@@ -530,8 +530,7 @@ class LeadsTest(unittest.TestCase):
         T = tree()
         links = {'rows': [{'family': 'F1', 'child': 'I1', 'level': 'no record names a parent', 'flags': []},
                           {'family': 'F2', 'child': 'I3', 'level': 'a record names one', 'flags': []},
-                          {'family': 'F2', 'child': 'I3', 'level': 'birth record names both', 'flags': []},
-                          {'family': 'F9', 'child': 'I99', 'level': 'no record names a parent', 'flags': []}]}
+                          {'family': 'F2', 'child': 'I3', 'level': 'birth record names both', 'flags': []}]}
         rows, _ = L.leads(T, None, ('unsupported-link',), 1925, links=links)
         self.assertEqual({(r['person'], r['gap']) for r in rows}, {('I1', 'link-F1'), ('I3', 'link-F2')})
         self.assertTrue(all('not shown wrong' in r['what'] for r in rows))
@@ -558,6 +557,26 @@ class LeadsTest(unittest.TestCase):
         rc, out, _ = self.cli(d, '--kinds', 'unsupported-link', '--links', good, '--format', 'queue', '--include-living')
         self.assertEqual(rc, 0)
         self.assertEqual(json.loads(out.splitlines()[0])['person'], 'I1')
+
+    def test_a_links_report_that_does_not_fit_the_dump_stops_instead_of_giving_wrong_or_no_tasks(self):
+        T = tree()
+        ok = {'family': 'F1', 'child': 'I1', 'level': 'a record names one', 'flags': []}
+        for bad in ({'rows': [dict(ok, level='A record names one')]},     # a renamed level: never a silent empty list
+                    {'rows': [1]},                                          # a row that is not an object
+                    {'rows': [{'child': 'I1', 'level': 'a record names one'}]},  # no family
+                    {'rows': [dict(ok, child='I3')]},                       # I3 is not a child of F1 here
+                    {'rows': [dict(ok, family='F7')]}):                     # no family F7 in this dump
+            with self.assertRaises(L.BadInput, msg=bad):
+                L.leads(T, None, ('unsupported-link',), 1925, hold=False, links=bad)
+        with self.assertRaisesRegex(L.BadInput, 'another tree or an older dump'):
+            L.leads(T, None, ('unsupported-link',), 1925, hold=False, links={'rows': [dict(ok, family='F2')]})
+        d = self.dump(T)
+        for bad in ({'rows': [1]}, {'rows': [dict(ok, level='a record names one (v2)')]}):
+            f = os.path.join(self.td.name, 'bad-links.json')
+            json.dump(bad, open(f, 'w'))
+            rc, out, err = self.cli(d, '--kinds', 'unsupported-link', '--links', f)
+            self.assertEqual((rc, out), (2, ''), err)
+            self.assertNotIn('Traceback', err)
 
 
 if __name__ == '__main__':
