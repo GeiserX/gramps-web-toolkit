@@ -24,6 +24,7 @@ Lists written for the first public commit of `gwt-apply` behave differently in t
 - A value of the wrong kind, a citation `confidence` outside 0-4, or a full date that is not a real calendar day (`1890-02-31`) is refused before the first write.
 - A write whose answer was lost (timeout, dropped connection, 5xx) but which landed reports `done` instead of `skip`.
 - `gwt-import-excel` stops with exit 2 on an unknown mapping field instead of dropping that column.
+- An `add_family` with both parents whose couple looks like a tree family's couple, or another `add_family` of the list, is flagged before the first write even when each parent carries `allow_namesake`; `allow_new_couple` with `new_couple_reason` and `new_couple_of` clears it.
 
 ### Added
 

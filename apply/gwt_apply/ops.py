@@ -41,7 +41,8 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "update_child_ref": ({"family", "child"}, {"set", "confirm_probable", "expect"}),
     "detach": ({"target", "object"}, set()),
     "add_event": ({"type"}, {"person", "family", "role", "date", "place", "description", "gramps_id"}),
-    "add_family": (set(), {"father", "mother", "children", "type", "gramps_id"}),
+    "add_family": (set(), {"father", "mother", "children", "type", "gramps_id", "allow_new_couple", "new_couple_reason",
+                           "new_couple_of"}),
     "link_child": ({"family", "child"}, {"frel", "mrel", "probable", "probable_reason"}),
     "add_place": ({"name", "type"}, {"enclosed_by", "lat", "long", "gramps_id"}),
     "add_source": ({"title"}, {"author", "pubinfo", "abbrev", "gramps_id"}),
@@ -75,7 +76,7 @@ REF_OWN_LISTS = ("note_list", "citation_list", "attribute_list")  # what a Media
 # gets that text check by default: list it here if it is not text, or in TEXT_CHECKED_BELOW if validate() checks it
 # by hand further down.
 NOT_TEXT = {"set", "target", "object", "attach", "children", "namesake_of", "use_loser", "address",
-            "allow_namesake", "probable", "confidence", "lat", "long", "expect"}
+            "allow_namesake", "new_couple_of", "allow_new_couple", "probable", "confidence", "lat", "long", "expect"}
 TEXT_CHECKED_BELOW = {("add_repository", "name"), ("add_repository", "type"), ("link_repository", "media_type"),
                       ("add_association", "relation"), ("add_transcription", "margin_reading"),
                       ("update_child_ref", "confirm_probable"), ("add_person", "gender"),
@@ -263,8 +264,8 @@ def validate(ops: list[dict]) -> list[str]:
             blank_ok = (name, f) in (("add_citation", "page"), ("add_person", "surname"))
             if not isinstance(op[f], str) or not (op[f].strip() or (blank_ok and op[f] == "")):
                 errors.append(f"{where}: {f} is a non-empty text")
-        for f in ("children", "attach", "namesake_of", "use_loser"):
-            if f in op and not isinstance(op[f], list) and not (f == "namesake_of" and isinstance(op[f], str)):
+        for f in ("children", "attach", "namesake_of", "new_couple_of", "use_loser"):
+            if f in op and not isinstance(op[f], list) and not (f.endswith("_of") and isinstance(op[f], str)):
                 errors.append(f"{where}: {f} is a list of " + ("targets" if f == "attach" else "names" if
                                                                  f == "use_loser" else "Gramps IDs or key:<key>"))
                 op = {k: v for k, v in op.items() if k != f}  # checked no further
@@ -290,6 +291,7 @@ def validate(ops: list[dict]) -> list[str]:
         if name == "add_association":
             refs.append(op.get("target"))
         refs += _ref_list(op.get("namesake_of")) if op.get("namesake_of") else []
+        refs += _ref_list(op.get("new_couple_of")) if op.get("new_couple_of") else []
         for t in [op.get("target"), *(op.get("attach") or [])]:
             refs += _target_refs(t)
         if name == "detach":
@@ -312,6 +314,18 @@ def validate(ops: list[dict]) -> list[str]:
                     )
             elif name == "add_person" and ("namesake_reason" in op or "namesake_of" in op):
                 raise ValueError("namesake_reason and namesake_of go with allow_namesake: true")
+            if name == "add_family" and op.get("allow_new_couple"):
+                if op["allow_new_couple"] is not True:
+                    raise ValueError("allow_new_couple is true or absent")
+                if not (op.get("father") and op.get("mother")):
+                    raise ValueError("allow_new_couple goes on a family with both a father and a mother")
+                if not str(op.get("new_couple_reason") or "").strip() or not op.get("new_couple_of"):
+                    raise ValueError(
+                        "allow_new_couple needs new_couple_reason (why this is another couple) and "
+                        "new_couple_of (the Gramps ID or key:<key> of each family you compared)"
+                    )
+            elif name == "add_family" and ("new_couple_reason" in op or "new_couple_of" in op):
+                raise ValueError("new_couple_reason and new_couple_of go with allow_new_couple: true")
             if name == "link_child":
                 if op.get("probable", True) is not True:
                     raise ValueError("probable is true or absent")

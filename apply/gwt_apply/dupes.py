@@ -7,6 +7,11 @@ A new person is flagged when another person (in the tree, or made by another op 
   a parent in common, or a spouse in common.
 
 unless the op says `allow_namesake` with a `namesake_reason` and names that person in `namesake_of`.
+
+A new family with both parents is flagged when another couple (a tree family with both parents, or another
+`add_family` of the list) looks like the same pair: each spouse has the same given names and shares a surname word
+with one of the other couple, either way round. Waiving each parent as a namesake does not waive the couple; the op
+says `allow_new_couple` with a `new_couple_reason` and names that family in `new_couple_of`.
 Names are compared without case, accents or extra spaces.
 """
 
@@ -55,8 +60,32 @@ def _year(date) -> int | None:
     return val[2] if len(val) > 2 and val[2] else None
 
 
-def tree_people(client) -> tuple[list[Who], dict[str, set[str]]]:
-    """Everyone in the tree, with birth years, parents and spouses, and each family's parents, from three list reads."""
+@dataclass
+class Couple:
+    ref: str  # Gramps ID, or key:<key> for a family an op makes
+    father: Who
+    mother: Who
+    handles: tuple[str, str] = ("", "")  # the parents' handles (father, mother); for an op, the ones the apply gives them
+    handle: str = ""
+
+
+# words of a surname that say nothing about the family on their own
+PARTICLES = {"de", "del", "la", "las", "los", "y", "e", "i", "da", "das", "do", "dos", "di", "van", "von", "der", "den"}
+
+
+def _same_spouse(a: Who, b: Who) -> bool:
+    words = set(fold(a.surname).split()) & set(fold(b.surname).split())
+    return fold(a.first) == fold(b.first) != "" and bool(words - PARTICLES)
+
+
+def _same_couple(a: Couple, b: Couple) -> bool:
+    return ((_same_spouse(a.father, b.father) and _same_spouse(a.mother, b.mother))
+            or (_same_spouse(a.father, b.mother) and _same_spouse(a.mother, b.father)))
+
+
+def tree_people(client) -> tuple[list[Who], dict[str, set[str]], list[Couple]]:
+    """Everyone in the tree, with birth years, parents and spouses, each family's parents, and every family with
+    both parents, from three list reads."""
     people = client.list_all("Person", ["primary_name", "gramps_id", "event_ref_list", "parent_family_list", "family_list"])
     events = {e["handle"]: e for e in client.list_all("Event", ["type", "date"])}
     families = {f["handle"]: f for f in client.list_all("Family", ["father_handle", "mother_handle", "gramps_id"])}
@@ -83,7 +112,11 @@ def tree_people(client) -> tuple[list[Who], dict[str, set[str]]]:
             fam = families.get(fh) or {}
             who.spouses |= {ids[h] for h in (fam.get("father_handle"), fam.get("mother_handle")) if h in ids} - {who.ref}
         out.append(who)
-    return out, family_parents
+    by_handle = {w.handle: w for w in out}
+    couples = [Couple(f.get("gramps_id") or h, by_handle[f["father_handle"]], by_handle[f["mother_handle"]],
+                      (f["father_handle"], f["mother_handle"]), h)
+               for h, f in families.items() if f.get("father_handle") in by_handle and f.get("mother_handle") in by_handle]
+    return out, family_parents, couples
 
 
 def list_people(ops: list[dict], family_parents: dict[str, set[str]]) -> dict[str, Who]:
@@ -131,14 +164,19 @@ def _alike(a: Who, b: Who) -> str | None:
 
 def preflight(ops: list[dict], client) -> list[str]:
     """Every likely duplicate the list would create, as one message each. Reads only."""
-    if not any(op["op"] == "add_person" for op in ops):
+    if not any(op["op"] == "add_person" or (op["op"] == "add_family" and op.get("father") and op.get("mother"))
+               for op in ops):
         return []
-    tree, family_parents = tree_people(client)
+    tree, family_parents, couples = tree_people(client)
     # people an earlier run of this list already made are the ops themselves, not duplicates of them
     made = {stable_handle(op["key"]) for op in ops if op["op"] == "add_person"}
     tree = [w for w in tree if w.handle not in made]
     ids = {w.ref for w in tree}
     new = list_people(ops, family_parents)
+    return _person_pass(ops, tree, ids, new) + _couple_pass(ops, tree, couples, new)
+
+
+def _person_pass(ops: list[dict], tree: list[Who], ids: set[str], new: dict[str, Who]) -> list[str]:
     by_loose: dict[tuple[str, str], list[Who]] = {}
     for w in tree:
         by_loose.setdefault(w.loose, []).append(w)
@@ -161,4 +199,52 @@ def preflight(ops: list[dict], client) -> list[str]:
             problems.append(f"op {op['key']!r}: {who.label()} looks like {other.label()} {where} ({why}); "
                             "use that person, or set allow_namesake with namesake_reason and namesake_of naming them")
         seen.append(who)
+    return problems
+
+
+def _couple_pass(ops: list[dict], tree: list[Who], couples: list[Couple], new: dict[str, Who]) -> list[str]:
+    """Every add_family with both parents whose couple looks like a couple already there, or made earlier in the list."""
+    people = {w.ref: w for w in tree} | {w.handle: w for w in tree} | new
+    namesake_of = {f"key:{op['key']}": set(_ref_list(op.get("namesake_of") or []))
+                   for op in ops if op["op"] == "add_person" and op.get("allow_namesake")}
+    in_tree = {c.handle for c in couples}
+    by_key = {f"key:{op['key']}": op for op in ops if op["op"] == "add_family"}
+    # a family an earlier run of this list made is in the tree under stable_handle(key): it is still that op
+    made = {stable_handle(k[4:]): k for k in by_key}
+    problems = []
+    seen: list[Couple] = []
+    for op in ops:
+        if op["op"] != "add_family" or not (op.get("father") and op.get("mother")):
+            continue
+        if stable_handle(op["key"]) in in_tree:
+            continue  # an earlier run of this list made this family: the apply skips the op
+        sides = []
+        for r in (op["father"], op["mother"]):
+            who = people.get(r) or (people.get(stable_handle(r[4:])) if r.startswith("key:") else None)
+            sides.append(who)
+        if None in sides:
+            continue  # a parent nobody can find: the apply reports it
+        # the handles the apply gives these parents: a person an op makes gets stable_handle(key)
+        pair = tuple(w.handle or stable_handle(r[4:]) for r, w in zip((op["father"], op["mother"]), sides))
+        if any(c.handles == pair for c in couples + seen):
+            continue  # these very parents already have a family, in the tree or from an earlier op: the apply reuses it
+        mine = Couple(f"key:{op['key']}", sides[0], sides[1], pair)
+        compared = set(_ref_list(op.get("new_couple_of") or [])) if op.get("allow_new_couple") else set()
+        compared |= {stable_handle(r[4:]) for r in compared if r.startswith("key:")}
+        for other in couples + seen:
+            if other.ref in compared or (other.handle and other.handle in compared):
+                continue
+            earlier = made.get(other.handle) if other.handle else other.ref
+            if earlier and mine.ref in set(_ref_list(by_key[earlier].get("new_couple_of") or [])):
+                continue  # the earlier op already says these are two couples
+            if not _same_couple(mine, other):
+                continue
+            where = "in the tree" if other.handle else "made by another op"
+            waived = [w.ref for w in sides if namesake_of.get(w.ref, set()) & {other.father.ref, other.mother.ref}]
+            note = (f"; allow_namesake on {', '.join(waived)} keeps the person apart, not the couple" if waived else "")
+            problems.append(f"op {op['key']!r}: the couple {mine.father.label()} x {mine.mother.label()} looks like "
+                            f"family {other.ref} ({other.father.label()} x {other.mother.label()}) {where}{note}; "
+                            "use that family, or set allow_new_couple with new_couple_reason and new_couple_of "
+                            "naming it")
+        seen.append(mine)
     return problems
