@@ -94,3 +94,44 @@ def test_a_word_that_only_starts_with_an_act_word_is_not_that_act():
 def test_a_page_that_names_the_events_own_kind_is_not_another_act(etype, page):
     other = "acta de nacimiento" if etype == "Death" else "acta de defuncion"
     assert not _rows(_tree(page=f"{page}; {other}", etype=etype), "other-act")
+
+
+def test_an_event_of_no_act_kind_is_never_another_act():
+    # a residence or occupation cited by a birth act is that act's ordinary use, not a mismatch
+    assert not _rows(_tree(page="Acta de nacimiento n°3", etype="Residence"))
+
+
+def test_a_baptism_and_a_burial_are_read_as_birth_and_death_acts():
+    assert not _rows(_tree(page="Partida de bautismo", etype="Baptism"))
+    assert _rows(_tree(page="acte de mariage", etype="Baptism"), "other-act")
+    assert not _rows(_tree(page="Libro de entierros", etype="Burial"))
+    assert _rows(_tree(page="acte de mariage", etype="Burial"), "other-act")
+
+
+def test_an_act_word_inside_a_longer_word_is_not_that_act():
+    assert not _rows(_tree(page="Colegio del Renacimiento, folio 2", etype="Death"))
+
+
+def test_a_birth_cited_by_a_marginal_mention_is_not_flagged():
+    assert not _rows(_tree(page="Mención marginal n°2", etype="Birth"))
+
+
+def test_a_citation_missing_from_the_dump_is_skipped():
+    d = _tree(page="acte de mariage")
+    selftest._get(d, "events", "E0001")["citation_list"] = ["hC0001", "hGONE"]
+    assert [r["citation"] for r in _rows(d)] == ["C0001"]
+
+
+def test_the_command_refuses_a_gramps_backup(tmp_path, capsys):
+    from test_check import _to_xml
+    backup = tmp_path / "t.gramps"
+    backup.write_bytes(_to_xml(selftest.clean_tree()))
+    assert main(["cites", str(backup)]) == 2
+    assert "has no citation pages" in capsys.readouterr().err
+
+
+def test_fill_places_text_output_counts_the_held_back(tmp_path, capsys):
+    p = tmp_path / "d.json"
+    p.write_text(json.dumps({"tree": "t", "objects": _tree(page="acte de mariage, Villaejemplo", place=False)}))
+    assert main(["fill-places", str(p)]) == 0
+    assert "held back, not proposed: 1" in capsys.readouterr().out

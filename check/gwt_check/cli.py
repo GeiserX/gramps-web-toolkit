@@ -346,7 +346,7 @@ def main(argv: list[str] | None = None) -> int:
             from .cites import cites_report, print_cites
             tree = load(args.tree) if args.tree else Tree(live_dump(args)["objects"], source="live tree")
             if tree.partial:
-                raise BadInput(f"{tree.source}: a .gramps backup has no citation text; use a dump")
+                raise BadInput(f"{tree.source}: a .gramps backup has no citation pages; use a dump")
             rep = cites_report(tree)
             if args.json:
                 print(json.dumps(rep, ensure_ascii=False, indent=1))

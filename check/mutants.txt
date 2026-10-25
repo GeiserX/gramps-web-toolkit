@@ -7,3 +7,11 @@ gwt_check/cites.py | "boda", | "bodx", | a marriage cited by a «Bodas» page is
 gwt_check/cites.py | if want in ("death", "marriage") and any(m in _fold(page) for m in MARGINAL): | if False: | a death or marriage cited by a marginal mention is flagged
 gwt_check/fill.py | (flagged if prob else parts).extend(text) | parts.extend(text) | fill-places does not propose a place that only a flagged citation names
 gwt_check/fill.py | if only: | if False: | a place only a flagged citation names is listed under held_back
+gwt_check/cites.py | if want and acts and want not in acts: | if acts and want not in acts: | an event of no act kind (a residence) is never another act
+gwt_check/cites.py | "baptism": "birth", | "baptismx": "birth", | a baptism is read as a birth act
+gwt_check/cites.py | "burial": "death", | "burialx": "death", | a burial is read as a death act
+gwt_check/cites.py | rf"(?<!\w){w} | rf"{w} | an act word inside a longer word (renacimiento) is not that act
+gwt_check/cites.py | if want in ("death", "marriage") and any | if any | a birth cited by a marginal mention is not flagged
+gwt_check/cites.py | prob = citation_problem(e, c) if c else None | prob = citation_problem(e, c) | a citation missing from the dump is skipped
+gwt_check/cli.py | raise BadInput(f"{tree.source}: a .gramps backup has no citation pages; use a dump") | pass | cites refuses a .gramps backup
+gwt_check/fill.py | if rep.get("held_back"): | if False: | the text output counts the held-back events
