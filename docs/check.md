@@ -20,7 +20,7 @@ Without installing, run `check/gwt-check` from a clone.
 
 Settings come from the environment, or from a `KEY=VALUE` file passed with `--config`, the same as [`gwt-apply`](apply.md): `GWT_URL`, `GWT_USERNAME`, `GWT_PASSWORD`, and `GWT_TREE`, the tree id the login must land in. If `GWT_TREE` is set and the token's `tree` claim differs, it stops. One login serves the whole run, and the password never reaches the output.
 
-It exits `0` with no new findings and `1` with new findings. Findings of a check marked for information only, today `unconnected`, `parent-age`, `marriage-age`, `sibling-spacing` and `lifespan`, are printed as `info` and never count as new. It exits `2` on bad input, which covers a file that is not a dump, missing settings, a failed login, and a live tree that never settles (below).
+It exits `0` with no new findings and `1` with new findings. Findings of a check marked for information only, today `unconnected`, `parent-age`, `marriage-age`, `sibling-spacing`, `lifespan` and `dup-citation`, are printed as `info` and never count as new. It exits `2` on bad input, which covers a file that is not a dump, missing settings, a failed login, and a live tree that never settles (below).
 
 ## Reading a tree that is being written to
 
@@ -51,7 +51,7 @@ A `gwt-apply` snapshot (`gwt-apply --save-snapshot`, or `--save-snapshot NEW --s
 | `--pagesize`, `--workers` | Objects per request (default 1000) and requests in flight (default 4) |
 | `--live` | The old strict read of the live tree, which stops when the tree changes during it |
 
-**Scope.** The structural and dated checks always run on the whole tree. The fuzzy duplicate checks (`dup-couple-names`, `dup-person-birth`, `dup-person-relative`, `dup-person-fuzzy`, `dup-vital-event`) report a pair only when at least one side is in scope, so a run is not blamed for duplicates that were already there. Without `--since` or `--tag`, everything is in scope.
+**Scope.** The structural and dated checks always run on the whole tree. The fuzzy duplicate checks (`dup-couple-names`, `dup-person-birth`, `dup-person-relative`, `dup-person-fuzzy`, `dup-vital-event`, `dup-citation`) report a pair only when at least one side is in scope, so a run is not blamed for duplicates that were already there. Without `--since` or `--tag`, everything is in scope.
 
 **Reasons.** Rows of a known file may carry a `reason`, and the report prints it (`known N0099: kept on purpose`). `gwt-check mark-known REPORT.json --check NAME --key KEY [--key KEY ...] --reason "..." --out known.json` adds findings of a report to a known file with the reason; it refuses a key the report does not have and a blank reason, and adding one twice changes nothing.
 
@@ -109,6 +109,7 @@ gwt-check repos dump.json.gz --json                   # repositories with their 
 | `living-media-sensitive` | Media of a person with no death or burial event of their own (role `Primary`) who was born within 110 years (or has no dated birth), whose path, description or attributes hold an ID number or an ID or address word. Media already private (the person, the media or the reference) is skipped. It reads metadata only, never the image or its notes, and never prints the match. The patterns are Spanish-first: a DNI or NIE counts only with the right check letter, and the words are passport, home-address and ID-card terms in Spanish, English and French, plus `c/` before a street name. Another country adds its ID number to `ID_NUMBERS` and its words to `ID_WORDS` in `check/gwt_check/checks.py`. Accept a false positive with `--known` |
 | `private` | Any object or sub-reference marked private |
 | `dup-repository` | Two repositories with the same name, compared like people's names (below) |
+| `dup-citation` | For information only. Two or more citations of one source with the same page text, ignoring case and repeated spaces (`folio 12v` and `folio 12` are different pages). Usually one record entered twice; merge them, or keep both with `--known` when they cite different entries on one page |
 | `place-no-coords` | A place that an event uses, without latitude or longitude |
 | `surname-marker` | A surname containing `[`, such as `Vidal [¿?]` |
 | `missing-object` | With `--since`: an object of the earlier tree that is gone |
