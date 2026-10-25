@@ -183,6 +183,8 @@ def print_report(report: dict, limit: int) -> None:
     info = report["info"]
     print(f"\nevents without place: {info['events without place']}"
           + (f", {len(info['events without place, in scope'])} in scope" if "events without place, in scope" in info else ""))
+    if info.get("dates not read"):
+        print(f"dates not read by the dated checks: {info['dates not read']} (another calendar, from/to, dual-dated or free text)")
     if "sources without repository" in info:
         print(f"sources without repository: {info['sources without repository']} (list them with gwt-check repos --unlinked)")
     if "diff" in report:

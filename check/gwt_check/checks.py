@@ -7,6 +7,7 @@ import re
 import unicodedata
 from collections import defaultdict
 
+from . import dates
 from .tree import Tree
 
 # list of handles -> type they point at
@@ -76,10 +77,31 @@ CHECKS = {
     "ahnentafel-changed": "Ahnentafel number that now holds another person",
     "ahnentafel-truncated": "pedigree too large to compare whole; only the generations named were compared",
     "unconnected": "family component with no family link to the root's component (or the largest one)",
+    "event-order": "a person's own dates in an impossible order: death before birth or baptism, baptism before "
+                   "birth, burial before death",
+    "child-before-parent": "child born before a parent",
+    "child-after-parent-death": "child born after the mother's death, or more than 300 days after the father's",
+    "marriage-before-birth": "marriage before a spouse was born",
+    "marriage-after-death": "marriage after a spouse's death",
+    "own-ancestor": "a person who is their own ancestor",
+    "parent-age": "mother under 14 or over 52, or father under 14 or over 85, at a child's birth",
+    "marriage-age": "bride under 12 or groom under 14 at the marriage",
+    "sibling-spacing": "two children of one mother born less than 240 days apart, not twins",
+    "lifespan": "a life of more than 105 years",
 }
 
 # Checks reported without failing: a finding of these is never new, so it never sets the exit code.
-INFO_CHECKS = {"unconnected"}
+INFO_CHECKS = {"unconnected", "parent-age", "marriage-age", "sibling-spacing", "lifespan"}
+
+# limits of the dated checks
+POSTHUMOUS_DAYS = 300                       # a child can be born this long after the father's death
+PARENT_AGE = {"mother": (14, 52), "father": (14, 85)}
+MARRIAGE_AGE = {0: 12, 1: 14}               # by gender; canon law allowed girls 12 and boys 14 until 1917
+TWIN_DAYS = 1
+MIN_SPACING = 240
+MAX_LIFESPAN = 105
+# child_ref relations whose parent is taken as the biological one
+BIOLOGICAL = {"", "birth", "unknown"}
 
 
 # What gives away an identity document or a home address. Metadata only: the check cannot read pixels.
@@ -529,4 +551,197 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
                     f"{len(ids)} people: {', '.join(ids[:5])}{', ...' if len(ids) > 5 else ''}; "
                     f"main component ({lowest[main]}) has {len(comps[main])}")
 
+    dated_checks(T, out, info)
     return out.items, info
+
+
+def dated_checks(T: dict, out: Findings, info: dict) -> None:
+    """Dates that contradict each other. Whole tree, like the structural checks.
+
+    Every date is an interval (dates.span); a finding needs the intervals to be disjoint, so a vague date only
+    widens what is allowed. The detail says `firm` when every date behind it is a plain day, month or year.
+    A person with no Birth event is taken as born up to a year before their baptism (an infant baptism).
+    """
+    P, F, E = T["people"], T["families"], T["events"]
+    unread = 0
+
+    def gid(t: str, h: str) -> str:
+        return (T[t].get(h) or {}).get("gramps_id") or h
+
+    def pick(p: dict, types: set, pointer: str | None):
+        """(event, span) of the person's Primary event of these types: the pointed-at one, else the first readable."""
+        nonlocal unread
+        refs = [r for r in p.get("event_ref_list", []) if r.get("role") == "Primary"]
+        events = [E.get(r.get("ref")) for r in refs]
+        events = [e for e in events if e and dates.kind(e.get("type")) in types]
+        i = p.get(pointer, -1) if pointer else -1
+        erl = p.get("event_ref_list", [])
+        pointed = E.get(erl[i].get("ref")) if 0 <= i < len(erl) else None
+        if pointed in events:
+            events.remove(pointed)
+            events.insert(0, pointed)
+        for e in events:
+            s = dates.span(e.get("date"))
+            if s:
+                return e, s
+            d = e.get("date") or {}
+            if any((d.get("dateval") or [])[:3]) or d.get("text"):
+                unread += 1
+        return None
+
+    vit: dict[str, dict] = {}
+    for h, p in P.items():
+        v = {"birth": pick(p, dates.BIRTH, "birth_ref_index"), "baptism": pick(p, dates.BAPTISM, None),
+             "death": pick(p, dates.DEATH, "death_ref_index"), "burial": pick(p, dates.BURIAL, None)}
+        vit[h] = {k: x for k, x in v.items() if x}
+
+    def ev(kind_: str, pair) -> str:
+        e, s = pair
+        return f"{kind_} {e.get('gramps_id')} {s.text}"
+
+    def firm(*spans) -> str:
+        return "firm" if all(s.firm for s in spans) else "soft"
+
+    def born(h: str):
+        """(label, span) of a birth: the Birth event, else the baptism as its upper bound."""
+        v = vit.get(h, {})
+        if "birth" in v:
+            return ev("Birth", v["birth"]), v["birth"][1]
+        if "baptism" in v:
+            return ev("Baptism", v["baptism"]), dates.birth_from_baptism(v["baptism"][1])
+        return None
+
+    def died(h: str):
+        """(label, span) of a death: the Death event, else the burial, which bounds it from above."""
+        v = vit.get(h, {})
+        if "death" in v:
+            return ev("Death", v["death"]), v["death"][1]
+        if "burial" in v:
+            return ev("Burial", v["burial"]), v["burial"][1]
+        return None
+
+    # a person's own events
+    order = (("birth", "baptism"), ("birth", "death"), ("baptism", "death"), ("death", "burial"))
+    for h, v in vit.items():
+        pid = gid("people", h)
+        for first, then in order:
+            if first in v and then in v and v[then][1].hi < v[first][1].lo:
+                a, b = v[first], v[then]
+                out.add("event-order", f"{pid} {a[0].get('gramps_id')} {b[0].get('gramps_id')}",
+                        f"{ev(then.capitalize(), b)} is before {ev(first.capitalize(), a)} ({firm(a[1], b[1])})")
+        start = v.get("birth") or v.get("baptism")
+        end = v.get("death") or v.get("burial")
+        if start and end:
+            least, _ = dates.years_between(start[1], end[1])
+            if least > MAX_LIFESPAN:
+                out.add("lifespan", pid, f"at least {least:.0f} years: {ev('from', start)} to {ev('to', end)} "
+                                         f"({firm(start[1], end[1])})")
+
+    # parents and children
+    for fh, f in F.items():
+        fid = f.get("gramps_id") or fh
+        for role, ph in (("father", f.get("father_handle")), ("mother", f.get("mother_handle"))):
+            if ph not in P:
+                continue
+            pb, pd = born(ph), died(ph)
+            pg = gid("people", ph)
+            for c in f.get("child_ref_list", []):
+                ch = c.get("ref") if isinstance(c, dict) else None
+                cb = born(ch) if ch in P else None
+                if not cb or dates.kind(c.get("frel" if role == "father" else "mrel")) not in BIOLOGICAL:
+                    continue
+                key = f"{fid} {pg} {gid('people', ch)}"
+                if pb and cb[1].hi < pb[1].lo:
+                    out.add("child-before-parent", key, f"child {cb[0]} is before {role} {pb[0]} ({firm(cb[1], pb[1])})")
+                elif pb:
+                    young, old = PARENT_AGE[role]
+                    least, most = dates.years_between(pb[1], cb[1])
+                    if most < young:
+                        out.add("parent-age", key, f"{role} at most {most:.1f} at the birth: {role} {pb[0]}, "
+                                                   f"child {cb[0]} ({firm(cb[1], pb[1])})")
+                    elif least > old:
+                        out.add("parent-age", key, f"{role} at least {least:.1f} at the birth: {role} {pb[0]}, "
+                                                   f"child {cb[0]} ({firm(cb[1], pb[1])})")
+                if pd and cb[1].lo > pd[1].hi + (POSTHUMOUS_DAYS if role == "father" else 0):
+                    out.add("child-after-parent-death", key,
+                            f"child {cb[0]} is after {role} {pd[0]} ({firm(cb[1], pd[1])})")
+
+    # marriages
+    for fh, f in F.items():
+        fid = f.get("gramps_id") or fh
+        for r in f.get("event_ref_list", []):
+            e = E.get(r.get("ref"))
+            mar = e and dates.kind(e.get("type")) in dates.MARRIAGE and dates.span(e.get("date"))
+            if not mar:
+                continue
+            ml = ev("Marriage", (e, mar))
+            for role, ph in (("father", f.get("father_handle")), ("mother", f.get("mother_handle"))):
+                if ph not in P:
+                    continue
+                key = f"{fid} {e.get('gramps_id')} {gid('people', ph)}"
+                pb, pd = born(ph), died(ph)
+                if pd and mar.lo > pd[1].hi:
+                    out.add("marriage-after-death", key, f"{ml} is after {role} {pd[0]} ({firm(mar, pd[1])})")
+                if pb and mar.hi < pb[1].lo:
+                    out.add("marriage-before-birth", key, f"{ml} is before {role} {pb[0]} ({firm(mar, pb[1])})")
+                elif pb:
+                    least_age = MARRIAGE_AGE.get(P[ph].get("gender"), min(MARRIAGE_AGE.values()))
+                    _, most = dates.years_between(pb[1], mar)
+                    if most < least_age:
+                        out.add("marriage-age", key, f"{role} at most {most:.1f} at {ml}, {pb[0]} "
+                                                     f"({firm(mar, pb[1])})")
+
+    # children of one mother too close together: Birth events with an exact day only
+    kids: dict[str, dict] = defaultdict(dict)
+    for f in F.values():
+        mh = f.get("mother_handle")
+        if mh not in P:
+            continue
+        for c in f.get("child_ref_list", []):
+            ch = c.get("ref") if isinstance(c, dict) else None
+            b = vit.get(ch, {}).get("birth")
+            if b and b[1].firm and b[1].lo == b[1].hi and dates.kind(c.get("mrel")) in BIOLOGICAL:
+                kids[mh][ch] = b
+    for mh, got in kids.items():
+        rows = sorted(got.items(), key=lambda x: x[1][1].lo)
+        for i, (a, ba) in enumerate(rows):
+            for b, bb in rows[i + 1:]:
+                gap = bb[1].lo - ba[1].lo
+                if gap >= MIN_SPACING:
+                    break
+                if gap > TWIN_DAYS:
+                    pair = sorted((gid("people", a), gid("people", b)), key=id_order)
+                    out.add("sibling-spacing", f"{gid('people', mh)} {','.join(pair)}",
+                            f"{gap} days apart: {ev('Birth', ba)}, {ev('Birth', bb)}")
+
+    # a person who is their own ancestor: a depth-first walk up the parents, without recursion
+    parents: dict[str, list] = defaultdict(list)
+    for f in F.values():
+        for c in f.get("child_ref_list", []):
+            ch = c.get("ref") if isinstance(c, dict) else None
+            for par in (f.get("father_handle"), f.get("mother_handle")):
+                if ch in P and par in P and par not in parents[ch]:
+                    parents[ch].append(par)
+    state: dict[str, int] = {}  # 1 on the current path, 2 done
+    for start in sorted(parents):
+        if start in state:
+            continue
+        path, pos, stack = [start], {start: 0}, [iter(sorted(parents[start]))]
+        state[start] = 1
+        while stack:
+            nxt = next(stack[-1], None)
+            if nxt is None:
+                state[path[-1]] = 2
+                del pos[path.pop()]
+                stack.pop()
+            elif state.get(nxt) == 1:
+                cyc = [gid("people", x) for x in path[pos[nxt]:]]
+                out.add("own-ancestor", ",".join(sorted(set(cyc), key=id_order)),
+                        " -> ".join(cyc + [cyc[0]]) + " (each the child of the next)")
+            elif nxt not in state:
+                state[nxt] = 1
+                pos[nxt] = len(path)
+                path.append(nxt)
+                stack.append(iter(sorted(parents.get(nxt, ()))))
+
+    info["dates not read"] = unread
