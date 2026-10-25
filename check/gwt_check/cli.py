@@ -185,6 +185,9 @@ def print_report(report: dict, limit: int) -> None:
           + (f", {len(info['events without place, in scope'])} in scope" if "events without place, in scope" in info else ""))
     if info.get("dates not read"):
         print(f"dates not read by the dated checks: {info['dates not read']} (another calendar, from/to, dual-dated or free text)")
+    if info.get("dup-person-fuzzy skipped, parents differ by name"):
+        print(f"dup-person-fuzzy pairs skipped, father and mother differ by name: "
+              f"{len(info['dup-person-fuzzy skipped, parents differ by name'])} (listed with --json)")
     if "sources without repository" in info:
         print(f"sources without repository: {info['sources without repository']} (list them with gwt-check repos --unlinked)")
     if "diff" in report:

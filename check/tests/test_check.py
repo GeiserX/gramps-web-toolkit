@@ -134,6 +134,22 @@ def test_fuzzy_names_leave_siblings_alone(tmp_path):
     assert main(["check", _write(tmp_path, "s.json", tree)]) == 0
 
 
+def test_fuzzy_names_skip_namesakes_with_other_named_parents(tmp_path, capsys):
+    """Each has a father and a mother, both named otherwise: two people, counted in info; a missing parent keeps it."""
+    tree = selftest.clean_tree()
+    selftest.p_dup_person_fuzzy_named_parents(tree)
+    assert main(["check", _write(tmp_path, "n.json", tree), "--root", "I0060"]) == 0
+    assert "dup-person-fuzzy pairs skipped, father and mother differ by name: 1" in capsys.readouterr().out
+
+    selftest._get(tree, "families", "F0061")["mother_handle"] = ""
+    selftest._get(tree, "people", "I0064")["family_list"] = []
+    report = str(tmp_path / "r.json")
+    assert main(["check", _write(tmp_path, "m.json", tree), "--json", report]) == 1
+    r = json.load(open(report))
+    assert ("dup-person-fuzzy", "I0062,I0065") in {(f["check"], f["key"]) for f in r["findings"]}
+    assert r["info"]["dup-person-fuzzy skipped, parents differ by name"] == []
+
+
 def test_names_fold_accents_bv_iy_and_de():
     assert checks.norm("Benita  de Yuste Bázquez") == checks.norm("venita iuste vazquez")
 

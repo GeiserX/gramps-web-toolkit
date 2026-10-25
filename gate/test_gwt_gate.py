@@ -47,7 +47,7 @@ class GateTest(unittest.TestCase):
         g.hit('a', 'HTTP 429')
         with self.assertRaises(G.Paused):
             g.wait('b')
-        self.assertEqual(g.status(), {'gap_s': 30, 'paused_for_s': 1200})
+        self.assertEqual({k: g.status()[k] for k in ('gap_s', 'paused_for_s')}, {'gap_s': 30, 'paused_for_s': 1200})
         self.clock.t += 1200 - 60  # one minute left: short enough to wait for
         g.wait('b')
         self.assertEqual(g.status()['paused_for_s'], 0)
@@ -92,6 +92,79 @@ class GateTest(unittest.TestCase):
         self.assertIn('account suspended', str(cm.exception))
         self.assertEqual(round(cm.exception.left), 6 * 3600)
 
+    def test_wait_reports_the_text_of_the_hit(self):
+        g = self.gate()
+        g.hit('lane-a', 'HTTP 429 /search')
+        with self.assertRaises(G.Paused) as cm:
+            g.wait('lane-b')
+        self.assertEqual(cm.exception.why, 'HTTP 429 /search')
+        self.assertEqual(g.status()['why'], 'HTTP 429 /search')
+        self.assertTrue(g.status()['last_hit'].endswith(' lane-a HTTP 429 /search'))
+
+    def test_a_reason_ends_with_its_pause(self):
+        g = self.gate(start=10)
+        g.block(1, 'old block')
+        self.clock.t += 7200
+        g.wait('a')
+        self.assertEqual(g.status()['why'], '')
+        self.assertEqual(G.json.load(open(os.path.join(self.tmp.name, 'state.json')))['why'], '')
+        g.hit('a', 'HTTP 429 new')
+        with self.assertRaises(G.Paused) as cm:
+            g.wait('b')
+        self.assertEqual(cm.exception.why, 'HTTP 429 new')
+
+    def test_dead_pauses_without_touching_the_gap(self):
+        g = self.gate(start=10, pause=1200)
+        g.dead('a', 'HTTP 401 session dead')
+        self.assertEqual(g.status()['gap_s'], 10)
+        self.assertEqual(g.status()['paused_for_s'], 1200)
+        self.assertEqual(g.status()['why'], 'HTTP 401 session dead')
+
+    def test_dead_does_not_shorten_a_block(self):
+        g = self.gate(pause=1200)
+        g.block(6, 'account suspended')
+        g.dead('a', 'HTTP 401')
+        self.assertEqual(g.status()['paused_for_s'], 6 * 3600)
+        self.assertEqual(g.status()['why'], 'account suspended')
+        self.assertIn('DEAD a HTTP 401 -> pause kept (account suspended), gap=15.0s', self.calls())
+        g.clear('relogged')
+        self.assertIn('CLEAR relogged (was: account suspended)', self.calls())
+
+    def test_status_drops_a_reason_once_its_pause_has_run_out(self):
+        g = self.gate(start=10)
+        g.block(1, 'old')
+        self.clock.t += 7200  # no wait in between
+        self.assertEqual(g.status()['why'], '')
+
+    def test_denied_neither_pauses_nor_moves_the_gap(self):
+        g = self.gate(start=10)
+        g.wait('a')
+        before = dict(G.json.load(open(os.path.join(self.tmp.name, 'state.json'))))
+        g.denied('a', 'HTTP 403 /record/1')
+        after = G.json.load(open(os.path.join(self.tmp.name, 'state.json')))
+        self.assertEqual(after['pause_until'], before['pause_until'])
+        self.assertEqual(after['gap'], 10)
+        self.assertIn('DENIED a HTTP 403 /record/1', self.calls())
+
+    def test_clear_ends_a_pause_and_logs_why(self):
+        g = self.gate(start=10)
+        g.block(24, 'ip blocked')
+        g.clear('unblocked by support')
+        self.assertEqual(g.status()['paused_for_s'], 0)
+        self.assertEqual(g.status()['why'], '')
+        self.assertEqual(G.json.load(open(os.path.join(self.tmp.name, 'state.json')))['why'], '')
+        self.assertIn('CLEAR unblocked by support (was: ip blocked)', self.calls())
+        g.wait('a')  # no exit 3, no long sleep
+        self.assertLessEqual(sum(self.clock.slept), 10)
+
+    def test_the_gap_is_rounded_in_the_log(self):
+        g = self.gate(start=8.2)
+        g.hit('a', 'x')
+        self.assertIn('HIT a x -> pause 20 min, gap=24.6s', self.calls())
+        self.clock.t += 1200  # wait out the pause
+        g.wait('a')
+        self.assertIn('call a gap=24.6', self.calls())
+
     def test_an_existing_state_file_is_kept(self):
         with open(os.path.join(self.tmp.name, 'state.json'), 'w') as f:
             json.dump({'gap': 22.5, 'last': 0.0, 'pause_until': self.clock.t + 3000, 'last_hit': self.clock.t,
@@ -132,16 +205,33 @@ class CliTest(unittest.TestCase):
         self.assertEqual(code, 3)
         self.assertIn('paused for 20 more minutes', err)
         code, out, _ = self.cli('status')
-        self.assertEqual(json.loads(out.splitlines()[0])['gap_s'], 45.0)
-        self.assertIn('HIT a HTTP 401 session dead records', out)
+        self.assertEqual(json.loads(out.splitlines()[0])['gap_s'], 15.0)  # a 401 says nothing about the rate
+        self.assertIn('DEAD a HTTP 401 session dead records', out)
 
     def test_settings_from_the_environment_and_flags(self):
         self.cli('hit', 'a', 'x', env={'GWT_GATE_PAUSE': '600', 'GWT_GATE_START': '2'})
         code, out, _ = self.cli('status')
-        self.assertEqual(json.loads(out.splitlines()[0]), {'gap_s': 6.0, 'paused_for_s': 600})
+        self.assertEqual(json.loads(out.splitlines()[0])['paused_for_s'], 600)
+        self.assertEqual(json.loads(out.splitlines()[0])['gap_s'], 6.0)
         self.assertEqual(self.cli('wait', 'a')[0], 3)
         self.cli('--pause', '300', 'hit', 'a', 'y', env={'GWT_GATE_PAUSE': '600'})  # a flag beats the environment
         self.assertEqual(json.loads(self.cli('status')[1].splitlines()[0])['paused_for_s'], 300)
+
+    def test_status_denied_and_clear(self):
+        self.cli('hit', 'a', 'HTTP 429 /search')
+        code, out, _ = self.cli('status')
+        st = json.loads(out.splitlines()[0])
+        self.assertEqual(st['why'], 'HTTP 429 /search')
+        self.assertTrue(st['last_hit'].endswith('a HTTP 429 /search'))
+        code, _, err = self.cli('wait', 'b')
+        self.assertIn('HTTP 429 /search', err)
+        self.assertEqual(self.cli('denied', 'b', '/record/1')[0], 0)
+        self.assertEqual(json.loads(self.cli('status')[1].splitlines()[0])['gap_s'], st['gap_s'])
+        self.assertEqual(self.cli('clear', 'false', 'alarm')[0], 0)
+        self.assertEqual(self.cli('wait', 'b')[0], 0)
+        out = self.cli('status')[1]
+        self.assertIn('DENIED b HTTP 403 /record/1', out)
+        self.assertIn('CLEAR false alarm (was: HTTP 429 /search)', out)
 
     def test_two_processes_share_the_state(self):
         exe = [sys.executable, '-I', os.path.join(HERE, 'gwt-gate'), '--dir', self.tmp.name]
