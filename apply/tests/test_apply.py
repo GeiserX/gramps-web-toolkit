@@ -29,6 +29,14 @@ def fake():
     return f
 
 
+@pytest.fixture(autouse=True)
+def state_home(tmp_path, monkeypatch):
+    """Where a real run's default log goes: never the user's own ~/.local/state."""
+    d = tmp_path / "state"
+    monkeypatch.setenv("XDG_STATE_HOME", str(d))
+    return d
+
+
 @pytest.fixture
 def scan(tmp_path):
     p = tmp_path / "baptism-1890.jpg"
@@ -78,7 +86,7 @@ def test_full_apply_then_rerun_writes_nothing(fake, scan, tmp_path):
     birth = fake.store["events"][stable_handle("e-john-birth")]
     assert birth["place"] == "plc1"  # the Gramps ID P0001 became a handle
     assert birth["date"]["dateval"] == [14, 3, 1890, False]
-    assert john["event_ref_list"] == [{"_class": "EventRef", "ref": birth["handle"], "role": "Primary"}]
+    assert john["event_ref_list"] == [{"ref": birth["handle"], "role": "Primary"}]
     assert john["birth_ref_index"] == 0
     fam = fake.store["families"][stable_handle("f-anna")]
     assert fam["mother_handle"] == "anna" and fam["child_ref_list"][0]["ref"] == john["handle"]
@@ -87,8 +95,8 @@ def test_full_apply_then_rerun_writes_nothing(fake, scan, tmp_path):
     media = fake.store["media"][stable_handle("m-bapt")]
     assert media["checksum"] == __import__("hashlib").md5(scan.read_bytes()).hexdigest()
     assert fake.files[media["handle"]] == scan.read_bytes()
-    assert fake.store["citations"][cit]["media_list"] == [{"_class": "MediaRef", "ref": media["handle"]}]
-    assert john["attribute_list"] == [{"_class": "Attribute", "type": "Occupation", "value": "miller"}]
+    assert fake.store["citations"][cit]["media_list"] == [{"ref": media["handle"]}]
+    assert john["attribute_list"] == [{"type": "Occupation", "value": "miller"}]
     assert fake.store["people"]["anna"]["primary_name"]["first_name"] == "Anna Maria"
     # media went in through /api/objects/ and the upload-missing file route, never POST /api/media/
     assert ("POST", "/api/media/") not in fake.calls
@@ -208,7 +216,7 @@ def test_add_place_dedupes_on_name_type_parent_and_feeds_event_places(fake):
     res = run(fake, ops)
     assert [r.status for r in res] == ["skip", "done", "done", "done"], [r.actions for r in res]
     parish = fake.store["places"][stable_handle("pl-st-mary")]
-    assert parish["placeref_list"] == [{"_class": "PlaceRef", "ref": "town"}]  # the existing town, found by dedupe
+    assert parish["placeref_list"] == [{"ref": "town"}]  # the existing town, found by dedupe
     assert (parish["lat"], parish["long"]) == ("51.5", "-1.25")
     assert fake.store["events"][stable_handle("e")]["place"] == parish["handle"]
     assert [r.status for r in run(fake, ops)] == ["skip"] * 4
@@ -227,7 +235,7 @@ def test_add_repository_and_link_it_to_a_source(fake):
     repo = fake.store["repositories"][stable_handle("r-archive")]
     assert (repo["name"], repo["type"]) == ("Example County Archives", "Archive")
     src = fake.store["sources"]["src1"]
-    assert src["reporef_list"] == [{"_class": "RepoRef", "ref": repo["handle"], "call_number": "5MI149/R13"}]
+    assert src["reporef_list"] == [{"ref": repo["handle"], "call_number": "5MI149/R13"}]
     assert [r.status for r in run(fake, ops)] == ["skip", "skip"]  # nothing is made or linked twice
     again = [{"op": "add_repository", "key": "r-other-key", "ruling": R, "name": "example county archives", "type": "Archive"}]
     assert [r.status for r in run(fake, again)] == ["skip"]  # same name, found by name
@@ -634,7 +642,7 @@ class NoServer:
 @pytest.fixture
 def env(monkeypatch, fake, tmp_path):
     import gwt_apply.client as clientmod
-    monkeypatch.chdir(tmp_path)  # the default log lands here
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(clientmod.requests, "Session", lambda: fake)
     for k, v in {"GWT_URL": "https://gw.example", "GWT_USERNAME": "u", "GWT_PASSWORD": "pw", "GWT_TREE": "tree-test"}.items():
         monkeypatch.setenv(k, v)
@@ -653,8 +661,10 @@ def test_snapshot_dry_run_needs_no_server_and_plans_like_the_server(fake, scan, 
     for k in ("GWT_URL", "GWT_USERNAME", "GWT_PASSWORD"):
         monkeypatch.delenv(k)
     capsys.readouterr()
-    assert main([str(changes), "--snapshot", str(snap)]) == 0
+    assert main([str(changes), "--snapshot", str(snap), "--log", str(tmp_path / "plan.jsonl")]) == 0
     out = capsys.readouterr().out
+    plan = list(tmp_path.glob("plan.2*.jsonl"))
+    assert len(plan) == 1 and _lines(plan[0])[0]["event"] == "start"  # no server, still the log asked for
     for r in live:  # the same plan, op by op
         assert f"[{r.status}] {r.key}" in out
         for a in r.actions:
@@ -669,9 +679,12 @@ def test_apply_on_a_snapshot_refuses_what_changed_since(fake, scan, tmp_path, en
     # someone renames Anna after the snapshot: the plan updates her, so the apply refuses
     fake.store["people"]["anna"].update(gender=1, change=fake.tick())
     before = len(fake.writes())
-    assert main([str(changes), "--snapshot", str(snap), "--apply"]) == 1
+    assert main([str(changes), "--snapshot", str(snap), "--apply", "--log", str(tmp_path / "run.jsonl")]) == 1
     err = capsys.readouterr().err
     assert "Person I0001 changed after the snapshot" in err and "take a new one" in err
+    lines = _lines(next(tmp_path.glob("run.2*.jsonl")))
+    assert [e["event"] for e in lines if e.get("event")] == ["start", "refused", "end"]
+    assert next(e for e in lines if e.get("event") == "refused")["reason"] == "snapshot-plan"
     from gwt_apply.lock import LOCK_HANDLE
     assert fake.writes()[before:] == [("POST", "/api/objects/"), ("DELETE", f"/api/notes/{LOCK_HANDLE}")]  # the lock only
     # a new person after the snapshot: the plan searched every person for namesakes
@@ -680,6 +693,23 @@ def test_apply_on_a_snapshot_refuses_what_changed_since(fake, scan, tmp_path, en
     fake.add("people", {"handle": "late", "primary_name": {"first_name": "Late", "surname_list": [{"surname": "Comer"}]}})
     assert main([str(changes), "--snapshot", str(snap2), "--apply"]) == 1
     assert "1 Person object(s) added" in capsys.readouterr().err
+
+
+def test_apply_on_a_snapshot_of_another_tree_is_refused_and_logged(fake, tmp_path, env, capsys):
+    import gzip
+    snap = tmp_path / "tree.json.gz"
+    assert main(["--save-snapshot", str(snap)]) == 0
+    with gzip.open(snap, "rt") as fh:
+        data = json.load(fh)
+    other = tmp_path / "other.json.gz"
+    with gzip.open(other, "wt") as fh:
+        json.dump(dict(data, tree="another-tree"), fh)
+    changes = _changes(tmp_path, [{"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}])
+    assert main([str(changes), "--snapshot", str(other), "--apply", "--log", str(tmp_path / "run.jsonl")]) == 1
+    assert "another-tree" in capsys.readouterr().err
+    lines = _lines(next(tmp_path.glob("run.2*.jsonl")))
+    assert [(e["event"], e.get("reason")) for e in lines if e.get("event")] == [
+        ("start", None), ("refused", "snapshot-tree"), ("end", None)]
 
 
 def test_apply_on_a_current_snapshot_reads_almost_nothing(fake, scan, tmp_path, env, capsys):
@@ -1697,10 +1727,13 @@ def test_revert_refuses_a_pre_copy_that_is_not_from_before_the_run(fake, tmp_pat
     with gzip.open(future, "wt") as fh:
         json.dump(dict(snap, taken="2999-01-01T00:00:00+00:00"), fh)
     before = fake.writes()
-    for bad, why in ((late, "the run made"), (other, "another-tree"), (future, "after the run's first write")):
+    for i, (bad, why) in enumerate(((late, "the run made"), (other, "another-tree"), (future, "after the run's first write"))):
         capsys.readouterr()
-        assert _undo(log, bad, "--apply") == 2, bad
+        assert _undo(log, bad, "--apply", "--log", str(tmp_path / f"undo{i}.jsonl")) == 2, bad
         assert why in capsys.readouterr().err
+        lines = _lines(next(tmp_path.glob(f"undo{i}.2*.jsonl")))
+        assert [(e["event"], e.get("reason")) for e in lines if e.get("event")] == [
+            ("start", None), ("refused", "pre"), ("end", None)]
         assert fake.writes() == before  # nothing written, not even the lock
     assert fake.store["families"]["fam"]["type"] == "Married"
     assert _undo(log, good, "--apply") == 0
@@ -2207,7 +2240,8 @@ def test_preflight_flags_a_namesake_who_shares_a_spouse(fake):
         {"op": "add_family", "key": "f", "ruling": R, "father": "I0002", "mother": "key:p"},
     ]
     problems = preflight(ops, Client("https://gw.example", "u", "pw", session=fake))
-    assert len(problems) == 1 and "I0001" in problems[0] and "a spouse in common" in problems[0], problems
+    assert len(problems) == 2 and "I0001" in problems[0] and "a spouse in common" in problems[0], problems
+    assert "'f'" in problems[1] and "family F0001" in problems[1]  # and the couple is the tree's couple
 
 
 def test_an_event_type_in_another_case_is_the_same_event(fake):
@@ -2361,3 +2395,882 @@ def test_a_source_with_the_same_title_but_another_author_is_not_reused(fake):
     assert len(fake.store["sources"]) == 1
     res = run(fake, [dict(op, author="Parish of Springfield")])
     assert res[0].status == "skip" and any(x.startswith("reused S0001 (same ") for x in res[0].actions), res[0].actions
+
+
+def _couple(fake):
+    """Bob Example x Anna Example as F0001."""
+    fake.add("people", {"handle": "bob", "gender": 1, "primary_name": {"first_name": "Bob", "surname_list": [{"surname": "Example", "primary": True}]}})
+    return fake.add("families", {"handle": "fam-ba", "father_handle": "bob", "mother_handle": "anna"})
+
+
+def _readd_couple():
+    return [
+        {"op": "add_person", "key": "p-bob", "ruling": R, "first_name": "Bob", "surname": "Example", "gender": "M",
+         "allow_namesake": True, "namesake_reason": "another parish", "namesake_of": ["I0002"]},
+        {"op": "add_person", "key": "p-anna", "ruling": R, "first_name": "Anna", "surname": "Example", "gender": "F",
+         "allow_namesake": True, "namesake_reason": "another parish", "namesake_of": ["I0001"]},
+        {"op": "add_family", "key": "f-ba", "ruling": R, "father": "key:p-bob", "mother": "key:p-anna"},
+    ]
+
+
+
+def test_preflight_flags_a_couple_already_in_the_tree(fake):
+    """Each person waived as a namesake, the pair together is still the tree's couple: flag it, write nothing."""
+    from gwt_apply.dupes import preflight
+    fam = _couple(fake)
+    assert fam["gramps_id"] == "F0001"
+    ops = _readd_couple()
+    assert validate(ops) == []
+    c = Client("https://gw.example", "u", "pw", session=fake)
+    problems = preflight(ops, c)
+    assert len(problems) == 1 and "'f-ba'" in problems[0] and "family F0001" in problems[0], problems
+    assert "allow_namesake on key:p-bob, key:p-anna keeps the person apart, not the couple" in problems[0]
+    assert fake.writes() == []
+    # the tree couple's own two people: the apply reuses F0001, nothing to flag
+    assert preflight([{"op": "add_family", "key": "f-same", "ruling": R, "father": "I0002", "mother": "I0001"}], c) == []
+    # the waiver names the family it compared: the list goes in, and a rerun flags nothing
+    ops[2].update(allow_new_couple=True, new_couple_reason="married in another parish thirty years later",
+                  new_couple_of=["F0001"])
+    assert validate(ops) == [] and preflight(ops, c) == []
+    assert [r.status for r in run(fake, ops)] == ["done"] * 3
+    assert len(fake.store["families"]) == 2
+    # a fresh client: the old one caches the tree as it was before the apply
+    assert preflight(ops, Client("https://gw.example", "u", "pw", session=fake)) == []
+
+
+def test_new_couple_waiver_is_validated():
+    fam = {"op": "add_family", "key": "f", "ruling": R, "father": "I0002", "mother": "I0001"}
+    def errors(**kw):
+        return "\n".join(validate([dict(fam, **kw)]))
+    assert errors() == ""
+    assert "allow_new_couple needs new_couple_reason" in errors(allow_new_couple=True, new_couple_of=["F0001"])
+    assert "allow_new_couple needs new_couple_reason" in errors(allow_new_couple=True, new_couple_reason="other")
+    assert "allow_new_couple needs new_couple_reason" in errors(allow_new_couple=True, new_couple_reason=" ",
+                                                                new_couple_of=["F0001"])
+    assert "allow_new_couple is true or absent" in errors(allow_new_couple="yes", new_couple_reason="r",
+                                                          new_couple_of=["F0001"])
+    assert "go with allow_new_couple" in errors(new_couple_reason="r", new_couple_of=["F0001"])
+    assert "neither key:<key> nor a Gramps ID" in errors(allow_new_couple=True, new_couple_reason="r",
+                                                          new_couple_of=["a1b2c3handle!"])
+    assert "both a father and a mother" in "\n".join(validate([{
+        "op": "add_family", "key": "f", "ruling": R, "mother": "I0001",
+        "allow_new_couple": True, "new_couple_reason": "r", "new_couple_of": ["F0001"]}]))
+    assert errors(allow_new_couple=True, new_couple_reason="r", new_couple_of="F0001") == ""
+
+
+def test_a_waiver_must_name_every_couple_compared(fake):
+    from gwt_apply.dupes import preflight
+    _couple(fake)  # F0001
+    # a second Bob x Anna Example already in the tree, as F0002
+    fake.add("people", {"handle": "bob2", "gender": 1, "primary_name": {"first_name": "bob", "surname_list": [{"surname": "Example", "primary": True}]}})
+    fake.add("people", {"handle": "anna2", "gender": 0, "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Exámple", "primary": True}, {"surname": "Other", "primary": False}]}})
+    fake.add("families", {"handle": "fam-ba2", "father_handle": "bob2", "mother_handle": "anna2"})
+    ops = _readd_couple()
+    ops[2].update(allow_new_couple=True, new_couple_reason="r", new_couple_of=["F0001"])
+    c = Client("https://gw.example", "u", "pw", session=fake)
+    problems = [p for p in preflight(ops, c) if "'f-ba'" in p]  # p-bob and p-anna are also namesakes of F0002's
+    assert len(problems) == 1 and "family F0002" in problems[0], problems
+
+
+def test_namesake_married_to_the_namesakes_spouse_is_flagged(fake):
+    """A new Bob kept apart from the tree's Bob, then married to the tree Bob's own wife: the same couple."""
+    from gwt_apply.dupes import preflight
+    _couple(fake)
+    ops = [_readd_couple()[0],
+           {"op": "add_family", "key": "f-b", "ruling": R, "father": "key:p-bob", "mother": "I0001"}]
+    c = Client("https://gw.example", "u", "pw", session=fake)
+    problems = preflight(ops, c)
+    assert len(problems) == 1 and "'f-b'" in problems[0] and "family F0001" in problems[0], problems
+    assert "allow_namesake on key:p-bob" in problems[0]
+    assert [r.status for r in run(fake, ops[:1])] == ["done"]  # the person alone goes in
+
+
+def test_couple_in_the_list_twice_and_couples_that_only_share_given_names(fake):
+    from gwt_apply.dupes import preflight
+    _couple(fake)
+    ops = [
+        {"op": "add_person", "key": "p-tom", "ruling": R, "first_name": "Tom", "surname": "Sample"},
+        {"op": "add_person", "key": "p-mary", "ruling": R, "first_name": "Mary", "surname": "Testing"},
+        {"op": "add_family", "key": "f-1", "ruling": R, "father": "key:p-tom", "mother": "key:p-mary"},
+        # a second Tom x Mary, kept apart as people, married again: the same couple
+        {"op": "add_person", "key": "p-tom2", "ruling": R, "first_name": "Tom", "surname": "Sample",
+         "allow_namesake": True, "namesake_reason": "another parish", "namesake_of": ["key:p-tom"]},
+        {"op": "add_person", "key": "p-mary2", "ruling": R, "first_name": "Mary", "surname": "Testing",
+         "allow_namesake": True, "namesake_reason": "another parish", "namesake_of": ["key:p-mary"]},
+        {"op": "add_family", "key": "f-2", "ruling": R, "father": "key:p-tom2", "mother": "key:p-mary2", "type": "Married"},
+        # Bob and Anna again, but of other families: no surname word in common with F0001's
+        {"op": "add_person", "key": "p-bob-z", "ruling": R, "first_name": "Bob", "surname": "de Zed"},
+        {"op": "add_person", "key": "p-anna-z", "ruling": R, "first_name": "Anna", "surname": "de la Why"},
+        {"op": "add_family", "key": "f-3", "ruling": R, "father": "key:p-bob-z", "mother": "key:p-anna-z"},
+        # and a third Bob and Anna whose only common surname word with f-3's is "de"
+        {"op": "add_person", "key": "p-bob-w", "ruling": R, "first_name": "Bob", "surname": "de Why"},
+        {"op": "add_person", "key": "p-anna-w", "ruling": R, "first_name": "Anna", "surname": "de Zed"},
+        {"op": "add_family", "key": "f-4", "ruling": R, "father": "key:p-bob-w", "mother": "key:p-anna-w"},
+    ]
+    c = Client("https://gw.example", "u", "pw", session=fake)
+    problems = preflight(ops, c)
+    assert len(problems) == 1 and "'f-2'" in problems[0] and "family key:f-1" in problems[0], problems
+    assert "made by another op" in problems[0]
+    ops[5].update(allow_new_couple=True, new_couple_reason="a second marriage", new_couple_of="key:f-1")
+    assert preflight(ops, c) == []
+
+
+def test_a_rerun_does_not_flag_the_couple_the_list_made(fake):
+    """A plain new couple, applied once: a rerun meets its own family in the tree and must leave it alone."""
+    from gwt_apply.dupes import preflight
+    ops = [
+        {"op": "add_person", "key": "p-tom", "ruling": R, "first_name": "Tom", "surname": "Sample", "gender": "M"},
+        {"op": "add_person", "key": "p-mary", "ruling": R, "first_name": "Mary", "surname": "Testing", "gender": "F"},
+        {"op": "add_family", "key": "f-1", "ruling": R, "father": "key:p-tom", "mother": "key:p-mary"},
+    ]
+    assert preflight(ops, Client("https://gw.example", "u", "pw", session=fake)) == []
+    assert [r.status for r in run(fake, ops)] == ["done"] * 3
+    assert preflight(ops, Client("https://gw.example", "u", "pw", session=fake)) == []
+    # someone then fixed the family in Gramps to a namesake Tom: the apply still skips the op by its key
+    tom2 = fake.add("people", {"handle": "tom2", "gender": 1, "primary_name": {"first_name": "Tom", "surname_list": [{"surname": "Sample", "primary": True}]}})
+    fake.store["families"][stable_handle("f-1")]["father_handle"] = "tom2"
+    ops[0].update(allow_namesake=True, namesake_reason="another parish", namesake_of=[tom2["gramps_id"]])
+    assert preflight(ops, Client("https://gw.example", "u", "pw", session=fake)) == []
+    assert [r.status for r in run(fake, ops)] == ["skip"] * 3
+
+
+def test_a_later_list_waives_a_couple_an_earlier_list_made_by_its_key(fake):
+    """new_couple_of may name a family an earlier list made by that list's key:<key>, once it is in the tree."""
+    from gwt_apply.dupes import preflight
+    first = [
+        {"op": "add_person", "key": "p-tom", "ruling": R, "first_name": "Tom", "surname": "Sample", "gender": "M"},
+        {"op": "add_person", "key": "p-mary", "ruling": R, "first_name": "Mary", "surname": "Testing", "gender": "F"},
+        {"op": "add_family", "key": "f-1", "ruling": R, "father": "key:p-tom", "mother": "key:p-mary"},
+    ]
+    assert [r.status for r in run(fake, first)] == ["done"] * 3
+    later = [
+        {"op": "add_person", "key": "p-tom2", "ruling": R, "first_name": "Tom", "surname": "Sample", "gender": "M",
+         "allow_namesake": True, "namesake_reason": "another parish", "namesake_of": ["key:p-tom"]},
+        {"op": "add_person", "key": "p-mary2", "ruling": R, "first_name": "Mary", "surname": "Testing", "gender": "F",
+         "allow_namesake": True, "namesake_reason": "another parish", "namesake_of": ["key:p-mary"]},
+        {"op": "add_family", "key": "f-2", "ruling": R, "father": "key:p-tom2", "mother": "key:p-mary2"},
+    ]
+    problems = preflight(later, Client("https://gw.example", "u", "pw", session=fake))
+    assert len(problems) == 1 and "'f-2'" in problems[0], problems
+    later[2].update(allow_new_couple=True, new_couple_reason="married in another parish", new_couple_of=["key:f-1"])
+    assert validate(later) == []
+    assert preflight(later, Client("https://gw.example", "u", "pw", session=fake)) == []
+
+
+def test_couple_pass_rules(fake):
+    """Both spouses must match, either way round; a list of only add_family ops is still compared."""
+    from gwt_apply.dupes import preflight
+    _couple(fake)  # Bob Example (I0002) x Anna Example (I0001) as F0001
+
+    def check(ops):
+        return preflight(ops, Client("https://gw.example", "u", "pw", session=fake))
+    # a second marriage: Bob matches, the new wife does not
+    assert check([
+        {"op": "add_person", "key": "p-clara", "ruling": R, "first_name": "Clara", "surname": "Other"},
+        {"op": "add_family", "key": "f-2", "ruling": R, "father": "I0002", "mother": "key:p-clara"},
+    ]) == []
+    # the same couple written the other way round
+    ops = _readd_couple()
+    ops[2].update(father="key:p-anna", mother="key:p-bob")
+    problems = check(ops)
+    assert len(problems) == 1 and "'f-ba'" in problems[0] and "family F0001" in problems[0], problems
+    # no add_person at all: a second Bob x Anna Example in the tree, married again by Gramps IDs
+    bob2 = fake.add("people", {"handle": "bob2", "gender": 1, "primary_name": {"first_name": "Bob", "surname_list": [{"surname": "Example", "primary": True}]}})
+    anna2 = fake.add("people", {"handle": "anna2", "gender": 0, "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    problems = check([{"op": "add_family", "key": "f-x", "ruling": R, "father": bob2["gramps_id"], "mother": anna2["gramps_id"]}])
+    assert len(problems) == 1 and "'f-x'" in problems[0] and "family F0001" in problems[0], problems
+    # a parent nobody can find is left to the apply, not a crash
+    assert check([{"op": "add_family", "key": "f-y", "ruling": R, "father": "I0999", "mother": "I0001"}]) == []
+
+
+def test_couple_pass_skips_what_the_list_already_waived_and_blank_given_names(fake):
+    from gwt_apply.dupes import preflight
+    c = Client("https://gw.example", "u", "pw", session=fake)
+    # the earlier op names the later one as a different couple: the later one needs no waiver of its own
+    ops = [
+        {"op": "add_person", "key": "p-tom", "ruling": R, "first_name": "Tom", "surname": "Sample"},
+        {"op": "add_person", "key": "p-mary", "ruling": R, "first_name": "Mary", "surname": "Testing"},
+        {"op": "add_family", "key": "f-1", "ruling": R, "father": "key:p-tom", "mother": "key:p-mary",
+         "allow_new_couple": True, "new_couple_reason": "a second marriage", "new_couple_of": ["key:f-2"]},
+        {"op": "add_person", "key": "p-tom2", "ruling": R, "first_name": "Tom", "surname": "Sample",
+         "allow_namesake": True, "namesake_reason": "another parish", "namesake_of": ["key:p-tom"]},
+        {"op": "add_family", "key": "f-2", "ruling": R, "father": "key:p-tom2", "mother": "key:p-mary"},
+    ]
+    assert validate(ops) == [] and preflight(ops, c) == []
+    # resumed after a partial run: f-1 is now a tree family, and its waiver still covers f-2
+    assert [r.status for r in run(fake, ops[:3])] == ["done", "done", "done"]
+    assert preflight(ops, Client("https://gw.example", "u", "pw", session=fake)) == []
+    # people with no given name match nobody, so their couples are never the same
+    blank = []
+    for h in ("x1", "y1", "x2", "y2"):
+        blank.append(fake.add("people", {"handle": h, "gender": 1 if h[0] == "x" else 0, "primary_name": {"first_name": "", "surname_list": [{"surname": "Blank", "primary": True}]}}))
+    fake.add("families", {"handle": "fam-xy", "father_handle": "x1", "mother_handle": "y1"})
+    assert preflight([{"op": "add_family", "key": "f-b", "ruling": R, "father": blank[2]["gramps_id"],
+                       "mother": blank[3]["gramps_id"]}], Client("https://gw.example", "u", "pw", session=fake)) == []
+
+
+def test_a_family_of_parents_who_already_have_one_is_reused_not_flagged(fake):
+    """Parents who already have a family together get it back from the apply, whatever namesake couples exist."""
+    from gwt_apply.dupes import preflight
+    _couple(fake)  # Bob Example (I0002) x Anna Example (I0001) as F0001
+    # a namesake couple in the tree, as F0002
+    fake.add("people", {"handle": "bob2", "gender": 1, "primary_name": {"first_name": "Bob", "surname_list": [{"surname": "Example", "primary": True}]}})
+    fake.add("people", {"handle": "anna2", "gender": 0, "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    fake.add("families", {"handle": "fam-ba2", "father_handle": "bob2", "mother_handle": "anna2"})
+    ops = [{"op": "add_person", "key": "kid", "ruling": R, "first_name": "Carl", "surname": "Example"},
+           {"op": "add_family", "key": "f", "ruling": R, "father": "I0002", "mother": "I0001", "children": ["key:kid"]}]
+    assert validate(ops) == []
+    assert preflight(ops, Client("https://gw.example", "u", "pw", session=fake)) == []
+    assert [r.status for r in run(fake, ops)] == ["done", "done"]
+    assert len(fake.store["families"]) == 2
+    # the same parents written the other way round are not that family: the apply would make a second one
+    swapped = [{"op": "add_family", "key": "f-sw", "ruling": R, "father": "I0001", "mother": "I0002"}]
+    problems = preflight(swapped, Client("https://gw.example", "u", "pw", session=fake))
+    assert any("family F0001" in p for p in problems), problems
+
+
+def test_two_ops_with_the_same_parents_make_one_family(fake):
+    """The second add_family of the same two parents gets the first one's family: nothing to waive."""
+    from gwt_apply.dupes import preflight
+    ops = [
+        {"op": "add_person", "key": "p-x", "ruling": R, "first_name": "Tom", "surname": "Sample", "gender": "M"},
+        {"op": "add_person", "key": "p-y", "ruling": R, "first_name": "Mary", "surname": "Testing", "gender": "F"},
+        {"op": "add_person", "key": "k1", "ruling": R, "first_name": "Ann", "surname": "Sample"},
+        {"op": "add_person", "key": "k2", "ruling": R, "first_name": "Ned", "surname": "Sample"},
+        {"op": "add_family", "key": "f1", "ruling": R, "father": "key:p-x", "mother": "key:p-y", "children": ["key:k1"]},
+        {"op": "add_family", "key": "f2", "ruling": R, "father": "key:p-x", "mother": "key:p-y", "children": ["key:k2"]},
+    ]
+    assert validate(ops) == []
+    assert preflight(ops, Client("https://gw.example", "u", "pw", session=fake)) == []
+    assert [r.status for r in run(fake, ops)] == ["done"] * 6
+    (fam,) = fake.store["families"].values()  # f1 only; f2 linked its child there
+    assert [c["ref"] for c in fam["child_ref_list"]] == [stable_handle("k1"), stable_handle("k2")]
+    assert preflight(ops, Client("https://gw.example", "u", "pw", session=fake)) == []
+
+
+def test_new_couple_of_must_be_a_list_or_a_text():
+    fam = {"op": "add_family", "key": "f", "ruling": R, "father": "I0002", "mother": "I0001",
+           "allow_new_couple": True, "new_couple_reason": "r"}
+    for bad in (7, {"F0001": True}):
+        assert "new_couple_of is a list of Gramps IDs or key:<key>" in "\n".join(validate([dict(fam, new_couple_of=bad)]))
+
+
+def test_one_parent_family_reuses_the_partnerless_one(fake):
+    """A mother-only family beside her family with no father is no duplicate: the apply reuses that family."""
+    from gwt_apply.dupes import preflight
+    fake.add("families", {"handle": "fam-a", "mother_handle": "anna"})  # F0001, no father
+    ops = [{"op": "add_family", "key": "f-a2", "ruling": R, "mother": "I0001"}]
+    c = Client("https://gw.example", "u", "pw", session=fake)
+    assert preflight(ops, c) == []
+    res = run(fake, ops)
+    assert res[0].status == "skip" and "F0001" in res[0].actions[-1]
+    assert len(fake.store["families"]) == 1
+
+
+# ---- where the log goes and what it says
+
+
+def _lines(path):
+    return [json.loads(x) for x in open(path, encoding="utf-8").read().splitlines() if x]
+
+
+def _changes(tmp_path, ops, name="changes.jsonl"):
+    p = tmp_path / name
+    p.write_text("".join(json.dumps(o) + "\n" for o in ops))
+    return p
+
+
+def test_a_dry_run_and_a_snapshot_leave_no_log_anywhere(fake, tmp_path, env, state_home, monkeypatch):
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
+    changes = _changes(tmp_path, [{"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}])
+    assert main([str(changes)]) == 0
+    assert main(["--save-snapshot", str(tmp_path / "s.json.gz")]) == 0
+    assert main(["--save-snapshot", str(tmp_path / "s2.json.gz"), "--apply"]) == 0  # --apply does not make it a write
+    assert list(cwd.iterdir()) == []
+    assert not state_home.exists()
+
+
+def test_a_revert_plan_leaves_no_log_and_a_revert_logs_its_counts(fake, tmp_path, env, state_home, monkeypatch, capsys):
+    _note(fake, "n1", "old text")
+    pre = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", pre]) == 0
+    log = _apply_list(tmp_path, [{"op": "update_note", "key": "u", "ruling": R, "note": "N0001",
+                                  "set": {"text": "new text"}, "expect": "old text"}], "run")
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
+    capsys.readouterr()
+    assert _undo(log, pre) == 0  # a plan
+    first = capsys.readouterr().out.splitlines()[0]
+    assert first.startswith("run 2") and "log none" in first, first
+    assert list(cwd.iterdir()) == [] and not state_home.exists()
+    assert _undo(log, pre, "--apply") == 0
+    first = capsys.readouterr().out.splitlines()[0]
+    logs = list((state_home / "gwt-apply" / "tree-test").glob("gwt-apply-revert-*.jsonl"))
+    assert len(logs) == 1 and first.startswith("run 2") and str(logs[0]) in first, first
+    assert list(cwd.iterdir()) == []
+    lines = _lines(logs[0])
+    assert lines[0]["event"] == "start" and lines[0]["list"] == log and lines[0]["pre"] == pre
+    assert lines[-1]["event"] == "end" and lines[-1]["exit"] == 0
+    assert lines[-1]["counts"] == {"undone": 1, "changed": 0, "manual": 0, "problems": 0}
+    assert fake.store["notes"]["n1"]["text"]["string"] == "old text"
+
+
+@pytest.mark.parametrize("tree, folder", [("..", "_"), (".", "_"), ("", "_"), ("a/b", "a_b"), ("tree-1", "tree-1")])
+def test_the_log_folder_stays_inside_the_state_dir(tree, folder, state_home):
+    from types import SimpleNamespace
+    from gwt_apply.cli import _log_path
+    got = _log_path(SimpleNamespace(log=None), "RUN", tree, prefix="gwt-apply", writes=True)
+    assert got == str(state_home / "gwt-apply" / folder / "gwt-apply-RUN.jsonl")
+
+
+def test_dry_merge_delete_and_upload_lines_are_planned_never_status(fake, tmp_path):
+    log = tmp_path / "dry.jsonl"
+    client = Client("https://gw.example", "u", "s3cret-pw", tree="tree-test", dry_run=True, session=fake,
+                    log_path=str(log))
+    client.login()
+    client.merge("Event", "e1", "e2", {"x": 1})
+    client.remove("Repository", "r2")
+    assert client.upload_missing_file("m1", b"data", "image/jpeg") == "would upload"
+    client.end_log(exit=0)
+    writes = [e for e in _lines(log) if e.get("method") and not e["path"].startswith("/token/")]
+    assert [(e["method"], e["path"]) for e in writes] == [
+        ("POST", "/events/e1/merge/e2"), ("DELETE", "/repositories/r2"), ("PUT", "/media/m1/file?uploadmissing=1")]
+    assert all(e.get("planned") is True and "status" not in e for e in writes), writes
+    assert fake.writes() == []
+
+
+def test_a_real_run_logs_under_the_state_dir_and_names_it_first(fake, tmp_path, env, state_home, monkeypatch, capsys):
+    import hashlib
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
+    changes = _changes(tmp_path, [{"op": "add_person", "key": "p-tom", "ruling": R, "first_name": "Tom", "surname": "Sample"}])
+    argv = [str(changes), "--apply", "--retry-wait", "0"]
+    assert main(argv) == 0
+    first = capsys.readouterr().out.splitlines()[0]
+    logs = list((state_home / "gwt-apply" / "tree-test").glob("gwt-apply-*.jsonl"))
+    assert len(logs) == 1 and str(logs[0]) in first, first
+    assert list(cwd.iterdir()) == []
+    lines = _lines(logs[0])
+    start, end = lines[0], lines[-1]
+    assert start["event"] == "start" and start["argv"] == argv and start["list"] == str(changes)
+    assert start["list_sha256"] == hashlib.sha256(changes.read_bytes()).hexdigest()
+    assert start["tree"] == "tree-test" and start["snapshot"] is None and start["run"] in first and start["version"]
+    assert end["event"] == "end" and end["exit"] == 0 and end["not_run"] == 0
+    assert end["counts"] == {"done": 1, "skip": 0, "conflict": 0, "error": 0}
+    # the create's line names the Gramps ID the server gave the new person
+    made = [e for e in lines if e.get("method") == "POST" and e.get("path") == "/objects/"
+            and e["body"][0]["_class"] == "Person"]
+    assert [e["gramps_id"] for e in made] == [fake.store["people"][stable_handle("p-tom")]["gramps_id"]]
+
+
+def test_a_preflight_refusal_is_in_the_log(fake, tmp_path, env, state_home):
+    changes = _changes(tmp_path, [
+        {"op": "add_person", "key": "p2", "ruling": R, "first_name": "Rose", "surname": "Sample"},
+        {"op": "add_person", "key": "p3", "ruling": R, "first_name": "rose", "surname": "Sámple"},
+    ])
+    log = tmp_path / "run.jsonl"
+    assert main([str(changes), "--apply", "--log", str(log), "--retry-wait", "0"]) == 1
+    lines = _lines(next(tmp_path.glob("run.2*.jsonl")))
+    refused = [e for e in lines if e.get("event") == "refused"]
+    assert len(refused) == 1 and refused[0]["reason"] == "preflight" and "'p3'" in refused[0]["problems"][0]
+    assert lines[-1]["event"] == "end" and lines[-1]["exit"] == 1
+
+
+def test_a_dry_run_logs_its_writes_as_planned_never_as_status_null(fake, tmp_path, env, scan):
+    changes = _changes(tmp_path, full_list(scan))
+    assert main([str(changes), "--log", str(tmp_path / "dry.jsonl")]) == 0
+    lines = _lines(next(tmp_path.glob("dry.2*.jsonl")))
+    writes = [e for e in lines if e.get("method") in ("POST", "PUT", "DELETE") and not e["path"].startswith("/token/")]
+    assert writes and all(e.get("planned") is True and "status" not in e for e in writes), writes
+    assert lines[0]["event"] == "start" and lines[-1]["event"] == "end" and lines[-1]["exit"] == 0
+
+
+def test_a_big_put_logs_its_full_body_and_revert_restores_it(fake, tmp_path, env):
+    old, new = "a" * 100_000, "b" * 100_000
+    _note(fake, "n1", old)
+    pre = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", pre]) == 0
+    op = {"op": "update_note", "key": "u", "ruling": R, "note": "N0001", "set": {"text": new}, "expect": old}
+    assert main([str(_changes(tmp_path, [op], "dry.changes.jsonl")), "--log", str(tmp_path / "dry.jsonl")]) == 0
+    planned = [e for e in _lines(next(tmp_path.glob("dry.2*.jsonl"))) if e.get("method") == "PUT"]
+    assert len(planned) == 1 and planned[0]["body"]["text"]["string"] == new
+    log = _apply_list(tmp_path, [op], "big")
+    put = [e for e in _lines(log) if e.get("method") == "PUT"]
+    assert len(put) == 1 and put[0]["body"]["text"]["string"] == new and len(json.dumps(put[0]["body"])) > 65536
+    assert fake.store["notes"]["n1"]["text"]["string"] == new
+    assert _undo(log, pre, "--apply") == 0
+    assert fake.store["notes"]["n1"]["text"]["string"] == old
+
+
+def test_a_big_put_edited_since_the_run_is_left_alone(fake, tmp_path, env):
+    old, new = "a" * 100_000, "b" * 100_000
+    _note(fake, "n1", old)
+    pre = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", pre]) == 0
+    log = _apply_list(tmp_path, [{"op": "update_note", "key": "u", "ruling": R, "note": "N0001",
+                                  "set": {"text": new}, "expect": old}], "big")
+    fake.store["notes"]["n1"]["text"]["string"] = new + " edited by hand"
+    assert _undo(log, pre, "--apply") == 1
+    assert fake.store["notes"]["n1"]["text"]["string"] == new + " edited by hand"
+
+
+def test_a_big_put_with_nested_class_is_restored_by_revert(fake, tmp_path, env):
+    # a big body is logged whole: the server fills defaults into the PersonRef, so a hash of the body could not match
+    fake.add("people", {"handle": "k0", "primary_name": {"first_name": "K0", "surname_list": [{"surname": "Kit"}]}})
+    fake.store["people"]["anna"].update(person_ref_list=[], attribute_list=[{"type": "Description", "value": "x" * 100_000}])
+    pre = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", pre]) == 0
+    log = _apply_list(tmp_path, [{"op": "add_association", "key": "a", "ruling": R, "person": "I0001",
+                                  "target": "I0002", "relation": "DNA"}], "big")
+    put = [e for e in _lines(log) if e.get("method") == "PUT"]
+    assert len(put) == 1 and len(put[0]["body"]["person_ref_list"]) == 1 and len(json.dumps(put[0]["body"])) > 65536
+    assert len(fake.store["people"]["anna"]["person_ref_list"]) == 1
+    assert _undo(log, pre, "--apply") == 0
+    assert fake.store["people"]["anna"]["person_ref_list"] == []
+
+
+def _kill(fake):
+    raise KeyboardInterrupt
+
+
+@pytest.mark.parametrize("how, exc", [("crash", RuntimeError), ("kill", KeyboardInterrupt)])
+def test_a_crash_or_a_kill_ends_the_log_with_the_error(fake, tmp_path, env, monkeypatch, how, exc):
+    if how == "crash":
+        monkeypatch.setattr("gwt_apply.cli.preflight", lambda ops, client: _crash(fake))
+    else:
+        _script(fake, ("POST", "/api/objects/", _kill))
+    changes = _changes(tmp_path, [{"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}])
+    with pytest.raises(exc):
+        main([str(changes), "--apply", "--log", str(tmp_path / "run.jsonl"), "--retry-wait", "0"])
+    end = _lines(next(tmp_path.glob("run.2*.jsonl")))[-1]
+    assert end["event"] == "end" and end["exit"] is None, end
+    assert end["error"].startswith(exc.__name__), end
+
+
+def test_a_run_stopped_by_sigterm_ends_the_log_with_exit_1(fake, tmp_path, env, monkeypatch):
+    import signal
+    monkeypatch.setattr("gwt_apply.cli.preflight", lambda ops, client: signal.raise_signal(signal.SIGTERM))
+    changes = _changes(tmp_path, [{"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}])
+    with pytest.raises(SystemExit):
+        main([str(changes), "--apply", "--log", str(tmp_path / "run.jsonl"), "--retry-wait", "0"])
+    end = _lines(next(tmp_path.glob("run.2*.jsonl")))[-1]
+    assert end["event"] == "end" and end["exit"] == 1, end
+    from gwt_apply.lock import LOCK_HANDLE
+    assert LOCK_HANDLE not in fake.store["notes"]  # the kill still released the lock
+
+
+def test_a_login_into_another_tree_leaves_a_refused_line(fake, tmp_path, env, state_home, capsys):
+    fake.tree = "tree-other"
+    changes = _changes(tmp_path, [{"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}])
+    assert main([str(changes), "--apply", "--retry-wait", "0"]) == 1
+    assert "expected 'tree-test'" in capsys.readouterr().err
+    logs = list((state_home / "gwt-apply" / "tree-test").glob("gwt-apply-*.jsonl"))
+    assert len(logs) == 1
+    events = [e.get("event") for e in _lines(logs[0]) if e.get("event")]
+    assert events == ["start", "refused", "end"]
+    assert fake.writes() == []
+
+
+def test_a_missing_change_list_is_one_line_and_exit_2(tmp_path, capsys):
+    assert main([str(tmp_path / "missing.jsonl")]) == 2
+    err = capsys.readouterr().err
+    assert err.count("\n") == 1 and "missing.jsonl" in err, err
+
+
+def test_a_failed_login_prints_the_run_id_and_writes_no_log(fake, tmp_path, env, state_home, monkeypatch, capsys):
+    monkeypatch.setenv("GWT_TOKEN", "a-revoked-token")  # the fake answers 403 to a token it does not know
+    changes = _changes(tmp_path, [{"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}])
+    assert main([str(changes), "--apply", "--retry-wait", "0"]) == 1
+    out = capsys.readouterr()
+    assert "run 2" in out.out and "login failed" in out.err, out
+    assert not state_home.exists()
+
+
+# -- --verify: prove a list landed -------------------------------------------
+
+
+def _verify_list(tmp_path):
+    p = tmp_path / "landed.jsonl"
+    p.write_text("\n".join(json.dumps(op) for op in [
+        {"op": "add_note", "key": "v-note", "ruling": R, "text": "Seen in the 1901 census.", "attach": [{"person": "I0001"}]},
+        {"op": "add_citation", "key": "v-cit", "ruling": R, "source": "S0001", "page": "folio 7", "confidence": 3,
+         "attach": [{"person": "I0001"}]},
+        {"op": "update_citation", "key": "v-raise", "ruling": R, "citation": "C0001", "set": {"confidence": 3}},
+    ]) + "\n")
+    return p
+
+
+def test_verify_exits_1_and_names_the_field_that_differs(fake, tmp_path, env, capsys):
+    fake.add("citations", {"handle": "cit1", "source_handle": "src1", "page": "folio 2", "confidence": 2})  # C0001
+    changes = _verify_list(tmp_path)
+    assert main([str(changes), "--verify"]) == 1  # nothing applied yet: every op is missing or differs
+    out = capsys.readouterr().out
+    assert "missing: Note key v-note" in out and "missing: Citation key v-cit" in out
+    assert "differs: Citation C0001 confidence 2 != 3" in out
+    assert main([str(changes), "--apply"]) == 0
+    capsys.readouterr()
+    assert main([str(changes), "--verify"]) == 0  # an untouched applied list
+    assert "3 of 3 op(s) in the tree" in capsys.readouterr().out
+    before = len(fake.writes())
+    fake.store["citations"]["cit1"]["confidence"] = 1  # someone lowered it after the apply
+    assert main([str(changes)]) == 0  # a plain rerun is a dry run: its exit code proves nothing
+    capsys.readouterr()
+    report = tmp_path / "verify.json"
+    assert main([str(changes), "--verify", "--json", str(report)]) == 1
+    out = capsys.readouterr().out
+    assert "[done] v-raise" in out and "differs: Citation C0001 confidence 1 != 3" in out
+    assert fake.writes()[before:] == []  # never writes, never takes the lock
+    assert json.loads(report.read_text()) == [
+        {"key": "v-note", "op": "add_note", "status": "skip", "reason": ""},
+        {"key": "v-cit", "op": "add_citation", "status": "skip", "reason": ""},
+        {"key": "v-raise", "op": "update_citation", "status": "done", "reason": "differs: Citation C0001 confidence 1 != 3"},
+    ]
+
+
+def test_verify_refuses_apply(tmp_path, capsys):
+    p = _verify_list(tmp_path)
+    with pytest.raises(SystemExit):
+        main([str(p), "--verify", "--apply"])
+    assert "--verify is a dry run" in capsys.readouterr().err
+
+
+def test_verify_follows_a_merged_away_person_to_its_winner(tmp_path, monkeypatch, capsys):
+    import gwt_apply.client as clientmod
+    fake = MergingFake()
+    fake.add("people", {"handle": "anna", "gender": 0, "attribute_list": [],
+                        "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    fake.add("people", {"handle": "anna2", "gender": 0, "attribute_list": [],
+                        "primary_name": {"first_name": "Ana", "surname_list": [{"surname": "Example", "primary": True}]}})
+    fake.add("sources", {"handle": "src1", "title": "Parish register, book 3"})
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: fake)
+    for k, v in {"GWT_URL": "https://gw.example", "GWT_USERNAME": "u", "GWT_PASSWORD": "pw", "GWT_TREE": "tree-test"}.items():
+        monkeypatch.setenv(k, v)
+    first = tmp_path / "first.jsonl"
+    first.write_text("\n".join(json.dumps(op) for op in [
+        {"op": "add_note", "key": "m-note", "ruling": R, "text": "Godmother at a baptism.", "attach": [{"person": "I0002"}]},
+        {"op": "add_citation", "key": "m-cit", "ruling": R, "source": "S0001", "page": "folio 9", "attach": [{"person": "I0002"}]},
+    ]) + "\n")
+    merge = tmp_path / "merge.jsonl"
+    merge.write_text(json.dumps({"op": "merge_person", "key": "m-merge", "ruling": R, "winner": "I0001", "loser": "I0002"}) + "\n")
+    assert main([str(first), "--apply"]) == 0
+    assert main([str(merge), "--verify"]) == 1
+    assert "missing: merge Person I0002 into I0001" in capsys.readouterr().out
+    assert main([str(merge), "--apply"]) == 0
+    assert "anna2" not in fake.store["people"]
+    capsys.readouterr()
+    assert main([str(merge), "--verify"]) == 0
+    assert main([str(first), "--verify"]) == 0, capsys.readouterr()
+    assert "I0002 was merged into I0001" in capsys.readouterr().out
+    assert main([str(first)]) == 1  # the plain dry run still stops on the person that went away
+    # the merge note on a second person too: no way to tell the winner, so --verify stops instead of picking one
+    note = next(h for h, n in fake.store["notes"].items() if n["text"]["string"].startswith("Merged Person I0002 "))
+    fake.add("people", {"handle": "anna3", "gramps_id": "I0003", "gender": 0, "note_list": [note],
+                        "primary_name": {"first_name": "Annie", "surname_list": [{"surname": "Example", "primary": True}]}})
+    capsys.readouterr()
+    assert main([str(first), "--verify"]) == 1
+    out = capsys.readouterr().out
+    assert "[conflict] m-note" in out and "no Person with Gramps ID I0002" in out and "was merged into" not in out
+
+
+def test_json_rows_for_a_conflict_and_the_ops_it_never_reached(fake, tmp_path, env, capsys):
+    changes = _changes(tmp_path, [
+        {"op": "add_note", "key": "j-a", "ruling": R, "text": "x", "attach": [{"person": "I0099"}]},
+        {"op": "add_note", "key": "j-b", "ruling": R, "text": "y", "attach": [{"person": "I0001"}]},
+    ])
+    report = tmp_path / "run.json"
+    assert main([str(changes), "--json", str(report)]) == 1
+    assert json.loads(report.read_text()) == [
+        {"key": "j-a", "op": "add_note", "status": "conflict", "reason": "conflict: no Person with Gramps ID I0099"},
+        {"key": "j-b", "op": "add_note", "status": "not run", "reason": "not run: an earlier op stopped the list"},
+    ]
+
+
+def test_json_rows_when_the_preflight_refuses_the_list(fake, tmp_path, env, capsys):
+    changes = _changes(tmp_path, [
+        {"op": "add_person", "key": "d-1", "ruling": R, "first_name": "Rose", "surname": "Sample"},
+        {"op": "add_person", "key": "d-2", "ruling": R, "first_name": "Rose", "surname": "Sample", "gender": "F"},
+    ])
+    report = tmp_path / "run.json"
+    assert main([str(changes), "--json", str(report)]) == 1
+    assert "likely duplicate" in capsys.readouterr().err
+    assert json.loads(report.read_text()) == [
+        {"key": k, "op": "add_person", "status": "not run", "reason": "not run: the list stopped on likely duplicates"}
+        for k in ("d-1", "d-2")
+    ]
+
+
+def test_json_needs_a_change_list(tmp_path, capsys):
+    with pytest.raises(SystemExit):
+        main(["--save-snapshot", str(tmp_path / "s.json.gz"), "--json", str(tmp_path / "r.json")])
+    assert "--json goes with a change list" in capsys.readouterr().err
+
+
+def test_verify_reasons_of_a_retried_op_are_said_once(fake, monkeypatch):
+    from gwt_apply.client import Retryable
+    fake.add("citations", {"handle": "cit1", "source_handle": "src1", "page": "folio 2", "confidence": 2})  # C0001
+    real, tries = Applier.update_citation, []
+
+    def flaky(self, op):  # the first try finds the difference, then loses the server
+        real(self, op)
+        tries.append(1)
+        if len(tries) == 1:
+            raise Retryable("GET citations: HTTP 503", 503)
+
+    monkeypatch.setattr(Applier, "update_citation", flaky)
+    client = Client("https://gw.example", "u", "pw", tree="tree-test", dry_run=True, session=fake)
+    client.login()
+    res = Applier(client, retries=3, retry_wait=0, verify=True).run(
+        [{"op": "update_citation", "key": "r", "ruling": R, "citation": "C0001", "set": {"confidence": 3}}])
+    assert len(tries) == 2 and res[0].status == "done"
+    assert res[0].reasons == ["differs: Citation C0001 confidence 2 != 3"]
+
+
+# -- unlink_child: take a child out of a family linked by mistake ------------
+
+
+def _linked_kid(fake, ref_notes=(), ref_cits=()):
+    """Tom Example (I0002), child of Family F0001 (mother Anna), both sides of the link in place."""
+    fake.add("people", {"handle": "kid", "gender": 1, "primary_name": {"first_name": "Tom", "surname_list": [{"surname": "Example", "primary": True}]}})
+    fake.add("families", {"handle": "fam", "mother_handle": "anna", "type": "Unknown", "child_ref_list": [
+        {"ref": "kid", "frel": "Birth", "mrel": "Birth", "note_list": list(ref_notes), "citation_list": list(ref_cits)}]})
+    assert fake.store["people"]["kid"]["parent_family_list"] == ["fam"]
+
+
+def _unlink(**extra):
+    return {"op": "unlink_child", "key": "u-tom", "ruling": R, "family": "F0001", "child": "I0002",
+            "reason": "the baptism names another mother", **extra}
+
+
+def test_unlink_child_takes_both_sides_and_keeps_people_and_family(fake):
+    _linked_kid(fake)
+    res = run(fake, [_unlink()])
+    assert res[0].status == "done", res[0].actions
+    assert fake.store["families"]["fam"]["child_ref_list"] == [] and fake.store["families"]["fam"]["mother_handle"] == "anna"
+    kid = fake.store["people"]["kid"]
+    assert kid["parent_family_list"] == [] and len(fake.store["people"]) == 2
+    (note,) = [fake.store["notes"][h] for h in kid["note_list"]]
+    assert note["text"]["string"] == "[unlinked from Family F0001] the baptism names another mother"
+    assert note["type"] == "Research"
+    assert not any(a.startswith("warning") for a in res[0].actions)  # the family still has its mother
+    writes = len(fake.writes())
+    again = run(fake, [_unlink()])
+    assert again[0].status == "skip" and "not a child of Family F0001" in again[0].actions[-1]
+    assert len(fake.writes()) == writes
+    # linked again by mistake and taken out again under another key: the same note is reused, not repeated
+    fake.store["families"]["fam"]["child_ref_list"] = [{"ref": "kid", "frel": "Birth", "mrel": "Birth"}]
+    kid["parent_family_list"] = ["fam"]
+    assert run(fake, [_unlink(key="u-tom-2")])[0].status == "done"
+    assert len(fake.store["people"]["kid"]["note_list"]) == 1 and len(fake.store["notes"]) == 1
+
+
+def test_unlink_child_repairs_a_one_sided_link_and_warns_on_an_empty_family(fake):
+    _linked_kid(fake)
+    fake.store["people"]["kid"]["parent_family_list"] = []  # only the family has it
+    res = run(fake, [_unlink()])
+    assert res[0].status == "done"
+    assert any("fixed the family's side only" in a for a in res[0].actions), res[0].actions
+    assert fake.store["families"]["fam"]["child_ref_list"] == []
+    # only the person has it, in a family with nobody else
+    fake.add("families", {"handle": "fam2", "type": "Unknown"})  # F0002
+    fake.store["people"]["kid"]["parent_family_list"] = ["fam2"]
+    res = run(fake, [_unlink(key="u2", family="F0002")])
+    assert res[0].status == "done"
+    assert any("fixed the person's side only" in a for a in res[0].actions), res[0].actions
+    assert fake.store["people"]["kid"]["parent_family_list"] == [] and "fam2" in fake.store["families"]
+    assert not any(a.startswith("warning") for a in res[0].actions)  # this op took no child out of it
+    # the last member taken out: the family stays, with a warning
+    fake.store["families"]["fam2"]["child_ref_list"] = [{"ref": "kid", "frel": "Birth", "mrel": "Birth"}]
+    res = run(fake, [_unlink(key="u3", family="F0002")])
+    assert "warning: Family F0002 now has no father, no mother and no children; it is not deleted" in res[0].actions
+    assert "fam2" in fake.store["families"]
+
+
+def test_unlink_child_removes_the_probable_mark_with_the_link(fake):
+    _linked_kid(fake)
+    assert run(fake, [{"op": "link_child", "key": "l", "ruling": R, "family": "F0001", "child": "I0002",
+                       "probable": True, "probable_reason": "parents from the index only"}])[0].status == "done"
+    mark = fake.store["families"]["fam"]["child_ref_list"][0]["note_list"][0]
+    res = run(fake, [_unlink()])
+    assert res[0].status == "done", res[0].actions
+    assert mark not in fake.store["notes"]
+    assert any(a.startswith("delete Note") and "[probable]" in a for a in res[0].actions)
+    assert fake.store["families"]["fam"]["child_ref_list"] == []
+
+
+def test_unlink_child_keeps_what_else_the_link_carries(fake):
+    _note(fake, "wl", "[wrong link] the godmother, not the mother")  # N0001
+    _note(fake, "why", "Read in the 1890 census")  # N0002
+    fake.add("citations", {"handle": "cit1", "source_handle": "src1", "page": "folio 3"})  # C0001
+    _linked_kid(fake, ref_notes=["wl", "why"], ref_cits=["cit1"])
+    res = run(fake, [_unlink()])
+    assert res[0].status == "conflict"
+    assert "Note N0002, Citation C0001" in res[0].actions[-1] and "N0001" not in res[0].actions[-1]
+    assert fake.writes() == [] or all(w[0] != "PUT" for w in fake.writes())
+    assert fake.store["people"]["kid"]["parent_family_list"] == ["fam"]
+    res = run(fake, [_unlink(drop_link_sources=True)])
+    assert res[0].status == "done", res[0].actions
+    assert "why" in fake.store["notes"] and "cit1" in fake.store["citations"]  # detached, still in the tree
+    assert "wl" not in fake.store["notes"]  # the mark went with the link
+    assert any("detached from the link" in a and "Note N0002" in a for a in res[0].actions)
+
+
+def test_unlink_child_keeps_a_mark_that_is_also_held_elsewhere(fake):
+    _note(fake, "wl", "[wrong link] the godmother, not the mother")  # N0001
+    _linked_kid(fake, ref_notes=["wl"])
+    fake.store["people"]["kid"]["note_list"] = ["wl"]  # the same note on the person too
+    res = run(fake, [_unlink()])
+    assert res[0].status == "conflict" and "Note N0001" in res[0].actions[-1]
+    fake.store["people"]["kid"]["note_list"] = []
+    fake.store["families"]["fam"]["note_list"] = ["wl"]  # on the family itself, outside the link
+    res = run(fake, [_unlink()])
+    assert res[0].status == "conflict" and "Note N0001" in res[0].actions[-1]
+
+
+def test_unlink_child_whose_second_write_lost_its_answer_is_done(fake):
+    _linked_kid(fake)
+    fake.drop_after = ("PUT", "/api/people/", 1)  # the reason note goes on Tom, then his parent families: answer lost
+    res = run(fake, [_unlink()])
+    assert res[0].status == "done" and res[0].answer_lost, res[0].actions
+    assert any(a.startswith("answer lost on try 1: PUT /people/kid") and "shows the change in place" in a
+               for a in res[0].actions), res[0].actions
+    assert fake.store["people"]["kid"]["parent_family_list"] == []
+    assert fake.writes().count(("PUT", "/api/people/kid")) == 2
+
+
+def test_unlink_child_finishes_deleting_the_mark_after_a_lost_answer(fake):
+    _note(fake, "wl", "[wrong link] the godmother, not the mother")
+    _linked_kid(fake, ref_notes=["wl"])
+    fake.drop_after = ("PUT", "/api/people/", 1)
+    res = run(fake, [_unlink()])
+    assert res[0].status == "done", res[0].actions
+    assert "wl" not in fake.store["notes"] and fake.store["people"]["kid"]["parent_family_list"] == []
+
+
+def test_unlink_child_keeps_a_mark_taken_up_between_its_tries(fake, monkeypatch):
+    _note(fake, "wl", "[wrong link] the godmother, not the mother")
+    _linked_kid(fake, ref_notes=["wl"])
+    fake.drop_after = ("PUT", "/api/people/", 1)
+    drop = Applier._drop_mark
+
+    def taken_up(self, handle):  # another writer puts the mark on Anna after the pre-check
+        fake.store["people"]["anna"]["note_list"] = ["wl"]
+        return drop(self, handle)
+
+    monkeypatch.setattr(Applier, "_drop_mark", taken_up)
+    res = run(fake, [_unlink()])
+    assert res[0].status == "done", res[0].actions
+    assert "wl" in fake.store["notes"]
+    assert any(a.startswith("kept Note N0001: still held by person anna") for a in res[0].actions), res[0].actions
+
+
+def test_unlink_child_whose_mark_delete_lost_its_answer_is_done(fake):
+    _note(fake, "wl", "[wrong link] the godmother, not the mother")
+    _linked_kid(fake, ref_notes=["wl"])
+    fake.drop_after = ("DELETE", "/api/notes/")  # the mark is deleted, the answer never arrives
+    res = run(fake, [_unlink()])
+    assert res[0].status == "done", res[0].actions
+    assert "wl" not in fake.store["notes"] and fake.store["people"]["kid"]["parent_family_list"] == []
+    assert fake.writes().count(("DELETE", "/api/notes/wl")) == 1
+
+
+def test_unlink_child_conflicts_when_the_server_names_no_holder_of_the_mark(fake, monkeypatch):
+    _note(fake, "wl", "[wrong link] the godmother, not the mother")
+    _linked_kid(fake, ref_notes=["wl"])
+    monkeypatch.setattr(fake, "backlinks", lambda handle: {})  # a server that ignores the backlinks parameter
+    res = run(fake, [_unlink()])
+    assert res[0].status == "conflict" and "Note N0001" in res[0].actions[-1], res[0].actions
+    assert "wl" in fake.store["notes"] and fake.store["people"]["kid"]["parent_family_list"] == ["fam"]
+
+
+def test_validate_unlink_child():
+    assert validate([_unlink()]) == [] and validate([_unlink(drop_link_sources=False)]) == []
+    op = _unlink()
+    del op["reason"]
+    assert "missing ['reason']" in "\n".join(validate([op]))
+    assert "reason is a non-empty text" in "\n".join(validate([_unlink(reason="   ")]))
+    assert "drop_link_sources is true or false" in "\n".join(validate([_unlink(drop_link_sources="yes")]))
+    assert "never a handle" in "\n".join(validate([_unlink(family="0123b4e9269542049080d7a4c798")]))
+
+
+def test_revert_puts_an_unlinked_child_and_its_mark_back(fake, tmp_path, env):
+    _note(fake, "wl", "[wrong link] the godmother, not the mother")
+    _linked_kid(fake, ref_notes=["wl"])
+    pre = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", pre]) == 0
+    log = _apply_list(tmp_path, [_unlink()], "run")
+    assert "wl" not in fake.store["notes"] and fake.store["families"]["fam"]["child_ref_list"] == []
+    assert _undo(log, pre, "--apply") == 0
+    assert fake.store["families"]["fam"]["child_ref_list"][0]["ref"] == "kid"
+    assert fake.store["families"]["fam"]["child_ref_list"][0]["note_list"] == ["wl"]
+    assert fake.store["people"]["kid"]["parent_family_list"] == ["fam"]
+    assert fake.store["notes"]["wl"]["text"]["string"] == "[wrong link] the godmother, not the mother"
+    assert fake.store["notes"]["wl"]["gramps_id"] == "N0001"
+    assert list(fake.store["notes"]) == ["wl"] and fake.store["people"]["kid"]["note_list"] == []  # reason note gone
+
+
+def test_revert_of_an_unlink_twice_and_after_a_lost_answer(fake, tmp_path, env):
+    from gwt_apply import revert
+    _note(fake, "wl", "[wrong link] the godmother, not the mother")
+    _linked_kid(fake, ref_notes=["wl"])
+    pre = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", pre]) == 0
+    log = _apply_list(tmp_path, [_unlink()], "run")
+    snap = revert.load_pre(pre)
+    client = _live_client(fake)
+    steps = revert.plan(revert.read_log(log), snap, client.get_live)
+    assert next(s for s in steps if s["handle"] == "wl")["action"] == "recreate"
+    posts = fake.writes().count(("POST", "/api/objects/"))
+    fake.drop_after = ("POST", "/api/objects/")  # the note is made again, the answer never arrives
+    assert revert.execute(client, steps, snap, retries=3, retry_wait=0) == []
+    assert fake.writes().count(("POST", "/api/objects/")) == posts + 1  # the retry saw it back and posted nothing
+    assert fake.store["notes"]["wl"]["text"]["string"] == "[wrong link] the godmother, not the mother"
+    assert fake.store["families"]["fam"]["child_ref_list"][0]["note_list"] == ["wl"]
+    again = revert.plan(revert.read_log(log), snap, client.get_live)  # a revert run twice
+    step = next(s for s in again if s["handle"] == "wl")
+    assert step["action"] == "skip" and step["why"] == "already in the tree"
+
+
+def test_revert_skips_a_mark_the_same_run_made_and_unlinked(fake, tmp_path, env):
+    from gwt_apply import revert
+    _linked_kid(fake)
+    pre = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", pre]) == 0
+    log = _apply_list(tmp_path, [
+        {"op": "add_note", "key": "m", "ruling": R, "type": "Research", "text": "[wrong link] the godmother, not the mother",
+         "attach": [{"child_ref": {"family": "F0001", "child": "I0002"}}]},
+        _unlink()], "run")
+    mark = stable_handle("m")
+    assert mark not in fake.store["notes"] and fake.store["families"]["fam"]["child_ref_list"] == []
+    steps = revert.plan(revert.read_log(log), revert.load_pre(pre), _live_client(fake).get_live)
+    step = next(s for s in steps if s["handle"] == mark and s["cls"] == "Note")
+    assert step["action"] == "skip" and step["why"] == "made and deleted by this run"
+    assert not any(s["action"] == "manual" for s in steps), steps
+    assert _undo(log, pre, "--apply") == 0
+    assert fake.store["families"]["fam"]["child_ref_list"][0]["ref"] == "kid" and fake.store["notes"] == {}
+
+
+def test_unlink_child_dry_run_on_a_snapshot_and_verify(fake, tmp_path, env, monkeypatch, capsys):
+    _note(fake, "wl", "[wrong link] the godmother, not the mother")
+    _linked_kid(fake, ref_notes=["wl"])
+    changes = _changes(tmp_path, [_unlink()])
+    assert main([str(changes), "--verify"]) == 1  # pending: a write
+    out = capsys.readouterr().out
+    assert "[done] u-tom" in out and "differs: Family F0001 child_ref_list" in out and "missing: delete Note N0001" in out
+    snap = tmp_path / "tree.json.gz"
+    assert main(["--save-snapshot", str(snap)]) == 0
+    import gwt_apply.client as clientmod
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: NoServer())
+    capsys.readouterr()
+    assert main([str(changes), "--snapshot", str(snap)]) == 0
+    out = capsys.readouterr().out
+    assert "update Family F0001: child_ref_list" in out and "update Person I0002: parent_family_list" in out, out
+    assert "delete Note N0001" in out
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: fake)
+    assert main([str(changes), "--apply"]) == 0
+    capsys.readouterr()
+    assert main([str(changes), "--verify"]) == 0  # applied: a skip
+    assert "[skip] u-tom" in capsys.readouterr().out

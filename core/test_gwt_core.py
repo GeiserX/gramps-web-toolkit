@@ -9,7 +9,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 for sub in ("apply", "check", "fetch", "ledger", "gate", "fscache", "queue", "leads", "rank", "importxl",
-            "rawstore", "myheritage"):
+            "rawstore", "myheritage", "read"):
     sys.path.insert(0, os.path.join(ROOT, sub))
 
 from gwt_core import cli, version  # noqa: E402
