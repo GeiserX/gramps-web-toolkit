@@ -284,6 +284,45 @@ def p_dup_person_fuzzy_spouse(d):
     _get(d, "people", "I0005")["family_list"].append("hF0091")
 
 
+def _namesakes(d, n, first, surname, parents_a, parents_b):
+    """Two children named alike, born a year apart, each with a father and a mother of their own."""
+    for k, (fam, parents) in enumerate((("F%04d" % n, parents_a), ("F%04d" % (n + 1), parents_b))):
+        fa, mo, kid = ("I%04d" % (n + 3 * k + i) for i in range(3))
+        _new_person(d, fa, *parents[0], family="h" + fam)
+        _new_person(d, mo, *parents[1], family="h" + fam)
+        _new_person(d, kid, first[k], surname, birth=(1880 + k, 0, 0), parent_family="h" + fam)
+        _new_family(d, fam, "h" + fa, "h" + mo, kids=["h" + kid])
+
+
+def p_dup_person_fuzzy_named_parents(d):
+    _namesakes(d, 60, ("Juan", "Juan José"), "Pérez López",
+               (("Ramón", "Pérez Gil"), ("Elena", "López Mar")), (("Andrés", "Pérez Soto"), ("Marta", "López Rey")))
+
+
+def p_dup_person_fuzzy_same_named_parents(d):
+    parents = (("Hugo", "Moreno Gil"), ("Sara", "Díaz Mar"))
+    _namesakes(d, 66, ("Pablo", "Pablo Luis"), "Moreno Díaz", parents, parents)
+
+
+def p_dup_person_fuzzy_same_named_mother(d):
+    mother = ("Nuria", "Vidal Ros")
+    _namesakes(d, 72, ("Tomás", "Tomás Javier"), "Serra Vidal",
+               (("Félix", "Serra Pons"), mother), (("Ignacio", "Serra Mas"), mother))
+
+
+def p_dup_person_fuzzy_same_named_father(d):
+    father = ("Álvaro", "Cano Ruiz")
+    _namesakes(d, 78, ("Lucía", "Lucía Inés"), "Cano Torres",
+               (father, ("Rosa", "Torres Gil")), (father, ("Clara", "Torres Vela")))
+
+
+def p_dup_person_fuzzy_adoptive_parents(d):
+    """Other names on both sides, but one side is the adopted child of that couple: not its birth parents."""
+    _namesakes(d, 84, ("Diego", "Diego Martín"), "Ortiz Lara",
+               (("Rafael", "Ortiz Bravo"), ("Inés", "Lara Pino")), (("Óscar", "Ortiz Sanz"), ("Eva", "Lara Cid")))
+    _get(d, "families", "F0085")["child_ref_list"][0].update(frel="Adopted", mrel="Adopted")
+
+
 def p_family_backlink(d):
     _get(d, "people", "I0008")["parent_family_list"] = []
 
@@ -464,6 +503,11 @@ PLANTS = [
     (p_dup_person_child, "dup-person-relative", "I0002,I0094", False),
     (p_dup_person_fuzzy_year, "dup-person-fuzzy", "I0008,I0092", False),
     (p_dup_person_fuzzy_spouse, "dup-person-fuzzy", "I0004,I0091", False),
+    (p_dup_person_fuzzy_named_parents, "info:dup-person-fuzzy skipped, parents differ by name", "I0062,I0065", False),
+    (p_dup_person_fuzzy_same_named_parents, "dup-person-fuzzy", "I0068,I0071", False),
+    (p_dup_person_fuzzy_same_named_mother, "dup-person-fuzzy", "I0074,I0077", False),
+    (p_dup_person_fuzzy_same_named_father, "dup-person-fuzzy", "I0080,I0083", False),
+    (p_dup_person_fuzzy_adoptive_parents, "dup-person-fuzzy", "I0086,I0089", False),
     (p_family_backlink, "family-backlink", "F0001 child I0008", False),
     (p_empty_family, "empty-family", "F0095", False),
     (p_citation_no_source, "citation-no-source", "C0002", False),
@@ -487,6 +531,8 @@ PLANTS = [
 ]
 
 
+SKIPPED = "dup-person-fuzzy skipped, parents differ by name"
+
 # left out of the all-in-one tree because they undo another plant there: the lost backlink hides the
 # repeated child, the empty source hides the ghost source, the new grandfather breaks the repeated couple
 TOGETHER_SKIP = (p_family_backlink, p_citation_no_source, p_ahnentafel_changed)
@@ -504,6 +550,8 @@ def _run(data: dict, clean: dict):
     got |= {("info:events without place", e["gramps_id"]) for e in data["events"] if not e.get("place")}
     if report["info"].get("sources without repository"):  # a count too, so the ids come from the tree
         got |= {("info:sources without repository", s["gramps_id"]) for s in data["sources"] if not s.get("reporef_list")}
+    # the pairs dup-person-fuzzy left out are listed in info, so a plant can look for them
+    got |= {("info:" + SKIPPED, k) for k in report["info"].get(SKIPPED, [])}
     return got, report
 
 
