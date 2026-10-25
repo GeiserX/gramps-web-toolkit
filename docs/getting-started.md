@@ -73,7 +73,9 @@ gramps-web-toolkit/<version> (gwt-apply; +https://github.com/GeiserX/gramps-web-
     gwt check selftest
     ```
 
-    It plants every kind of error in a made-up tree and ends with `OK: 38 planted errors, 0 problem(s)`.
+    It plants every kind of error in a made-up tree and ends with `OK: <n> planted errors, 0 problem(s)`. Any other ending means a check did not fire.
+
+    To watch `gwt apply` refuse a duplicate before you connect a tree, run the offline demo in `examples/` of the clone (`./demo.sh`). Its 30-person tree and change lists are invented, and the [README quick start](https://github.com/GeiserX/gramps-web-toolkit#quick-start) lists its commands.
 
 2. Save the tree once, then check it offline:
 

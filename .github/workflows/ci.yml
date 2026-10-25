@@ -46,6 +46,11 @@ jobs:
           python-version: "3.11"  # the oldest Python the package allows
       - name: build, install in a clean venv, run every tool from it
         run: .github/scripts/check_wheel.sh
+      - name: the README quick start runs as written (examples/demo.sh in a fresh venv)
+        run: |
+          python -m venv /tmp/demo-venv
+          /tmp/demo-venv/bin/pip install -q .
+          PATH=/tmp/demo-venv/bin:$PATH examples/demo.sh
 
   spanish-poller:
     runs-on: ubuntu-latest
