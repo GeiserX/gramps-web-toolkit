@@ -2526,6 +2526,12 @@ def test_a_rerun_does_not_flag_the_couple_the_list_made(fake):
     assert preflight(ops, Client("https://gw.example", "u", "pw", session=fake)) == []
     assert [r.status for r in run(fake, ops)] == ["done"] * 3
     assert preflight(ops, Client("https://gw.example", "u", "pw", session=fake)) == []
+    # someone then fixed the family in Gramps to a namesake Tom: the apply still skips the op by its key
+    tom2 = fake.add("people", {"handle": "tom2", "gender": 1, "primary_name": {"first_name": "Tom", "surname_list": [{"surname": "Sample", "primary": True}]}})
+    fake.store["families"][stable_handle("f-1")]["father_handle"] = "tom2"
+    ops[0].update(allow_namesake=True, namesake_reason="another parish", namesake_of=[tom2["gramps_id"]])
+    assert preflight(ops, Client("https://gw.example", "u", "pw", session=fake)) == []
+    assert [r.status for r in run(fake, ops)] == ["skip"] * 3
 
 
 def test_couple_pass_rules(fake):

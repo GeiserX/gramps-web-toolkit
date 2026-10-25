@@ -207,14 +207,15 @@ def _couple_pass(ops: list[dict], tree: list[Who], couples: list[Couple], new: d
     people = {w.ref: w for w in tree} | {w.handle: w for w in tree} | new
     namesake_of = {f"key:{op['key']}": set(_ref_list(op.get("namesake_of") or []))
                    for op in ops if op["op"] == "add_person" and op.get("allow_namesake")}
-    made = {stable_handle(op["key"]) for op in ops if op["op"] == "add_family"}
-    tree_couples = [c for c in couples if c.handle not in made]  # a family this list made on an earlier run
+    in_tree = {c.handle for c in couples}
     by_key = {f"key:{op['key']}": op for op in ops if op["op"] == "add_family"}
     problems = []
     seen: list[Couple] = []
     for op in ops:
         if op["op"] != "add_family" or not (op.get("father") and op.get("mother")):
             continue
+        if stable_handle(op["key"]) in in_tree:
+            continue  # an earlier run of this list made this family: the apply skips the op
         sides = []
         for r in (op["father"], op["mother"]):
             who = people.get(r) or (people.get(stable_handle(r[4:])) if r.startswith("key:") else None)
@@ -228,7 +229,7 @@ def _couple_pass(ops: list[dict], tree: list[Who], couples: list[Couple], new: d
         mine = Couple(f"key:{op['key']}", sides[0], sides[1], pair)
         compared = set(_ref_list(op.get("new_couple_of") or [])) if op.get("allow_new_couple") else set()
         compared |= {stable_handle(r[4:]) for r in compared if r.startswith("key:")}
-        for other in tree_couples + seen:
+        for other in couples + seen:
             if other.ref in compared or (other.handle and other.handle in compared):
                 continue
             if not other.handle and mine.ref in set(_ref_list(by_key[other.ref].get("new_couple_of") or [])):

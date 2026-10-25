@@ -34,7 +34,7 @@ gwt_apply/client.py | self.log(method="PUT", path=f"/media/{handle}/file?uploadm
 gwt_apply/cli.py | code = exc.code if isinstance(exc.code, int) else 1 | code = None | a run stopped by SIGTERM ends its log with exit 1
 gwt_apply/cli.py | outcome["counts"] = {"undone" | outcome["xcounts"] = {"undone" | a revert's end line carries its counts
 gwt_apply/cli.py | folder = "_" if folder in ("", ".", "..") else folder | folder = folder or "_" | a tree named .. never puts the log outside the state dir
-gwt_apply/dupes.py | tree_couples = [c for c in couples if c.handle not in made] | tree_couples = couples | a rerun of a list that made a couple does not flag that couple's own family
+gwt_apply/dupes.py | if stable_handle(op["key"]) in in_tree: | if False: | a rerun does not flag the family the list made, even after its parents were edited in the tree
 gwt_apply/dupes.py | return ((_same_spouse(a.father, b.father) and _same_spouse(a.mother, b.mother)) | return ((_same_spouse(a.father, b.father) or _same_spouse(a.mother, b.mother)) | preflight needs both spouses to match, so a second marriage is not flagged
 gwt_apply/dupes.py | or (_same_spouse(a.father, b.mother) and _same_spouse(a.mother, b.father))) | or False) | preflight flags a tree couple written the other way round
 gwt_apply/dupes.py | continue  # the earlier op already says these are two couples | pass | an op named in an earlier op's new_couple_of needs no waiver of its own
