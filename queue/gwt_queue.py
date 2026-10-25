@@ -36,10 +36,11 @@ DEFAULT_BACKOFF_MINUTES = 60
 
 
 def normalize(text):
-    """Lowercase, strip accents and punctuation, collapse spaces: «Peiró, José» -> «peiro jose»."""
-    text = unicodedata.normalize('NFKD', text or '')
-    text = ''.join(c for c in text if not unicodedata.combining(c)).lower()
-    return ' '.join(re.sub(r'[^0-9a-z]+', ' ', text).split())
+    """Casefold, strip accents and punctuation, collapse spaces: «Peiró, José» -> «peiro jose». Letters and
+    digits of every script stay (Иван -> иван, Ørsted -> ørsted); the underscore separates words."""
+    text = unicodedata.normalize('NFKD', (text or '').casefold())
+    text = ''.join(c for c in text if not unicodedata.combining(c))
+    return ' '.join(re.findall(r'[^\W_]+', text))
 
 
 def key(text):

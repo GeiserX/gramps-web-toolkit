@@ -4,8 +4,10 @@
 One TSV file, one row per search: who was searched, where, with what query, when, and what came of it.
 Agents run `check` before a search and `add` after it, so two lanes never pay for the same search twice.
 
-  gwt-ledger check --person KEY --source SRC --query "..."   exit 0 and print rows if done, 1 if not
-                                                             (--exact: same source, identical normalized query)
+  gwt-ledger check --person KEY --source SRC --query "..."   print matching rows; exit 0 if one is a search that ran
+                                                             (hit, none, partial) and is not due again, else 1
+                                                             (--exact: same source, identical normalized query;
+                                                             --any-result: any matching row counts)
   gwt-ledger add --person KEY --label "..." --source SRC --query "..." --result none [--evidence F] [--agent A]
   gwt-ledger list --person KEY [--source SRC]
   gwt-ledger due [--on YYYY-MM-DD]                           rows whose next_date has arrived (appeal windows, retries)
@@ -19,14 +21,16 @@ import argparse, collections, datetime, difflib, fcntl, glob, os, re, sys, unico
 
 COLUMNS = ('person_key', 'person_label', 'source', 'query', 'date', 'result', 'evidence', 'agent', 'next_date')
 RESULTS = ('hit', 'none', 'partial', 'blocked', 'denied')
+SEARCHED = ('hit', 'none', 'partial')  # results of a search that ran; blocked and denied did not answer it
 DEFAULT_THRESHOLD = 0.75
 
 
 def normalize(text):
-    """Lowercase, strip accents and punctuation, collapse spaces: «Peiró, José» -> «peiro jose»."""
-    text = unicodedata.normalize('NFKD', text or '')
-    text = ''.join(c for c in text if not unicodedata.combining(c)).lower()
-    return ' '.join(re.sub(r'[^0-9a-z]+', ' ', text).split())
+    """Casefold, strip accents and punctuation, collapse spaces: «Peiró, José» -> «peiro jose». Letters and
+    digits of every script stay (Иван -> иван, Ørsted -> ørsted); the underscore separates words."""
+    text = unicodedata.normalize('NFKD', (text or '').casefold())
+    text = ''.join(c for c in text if not unicodedata.combining(c))
+    return ' '.join(re.findall(r'[^\W_]+', text))
 
 
 def key(text):
@@ -162,11 +166,14 @@ def main(argv=None):
     p.add_argument('--ledger-dir', default=os.environ.get('GWT_LEDGER_DIR', ''),
                    help='one file per lane: add writes <dir>/<agent>.tsv, readers read the ledger and every file here')
     sub = p.add_subparsers(dest='cmd', required=True)
-    c = sub.add_parser('check', help='has this search been done? exit 0 with the rows if so, 1 if not')
+    c = sub.add_parser('check', help='has this search been done? print the matching rows; exit 0 if one is a '
+                                     'search that ran and is not due again, 1 if not')
     c.add_argument('--person'); c.add_argument('--source'); c.add_argument('--query', required=True)
     c.add_argument('--threshold', type=float, default=DEFAULT_THRESHOLD)
     c.add_argument('--exact', action='store_true',
                    help='only rows of this --source (required) with the identical normalized query; safe for automatic reuse')
+    c.add_argument('--any-result', action='store_true',
+                   help='exit 0 on any matching row, blocked, denied or due again included')
     a = sub.add_parser('add', help='append a row (safe with concurrent writers)')
     a.add_argument('--person', required=True); a.add_argument('--label', default='')
     a.add_argument('--source', required=True); a.add_argument('--query', required=True)
@@ -180,6 +187,11 @@ def main(argv=None):
     l.add_argument('--person', required=True); l.add_argument('--source')
     sub.add_parser('stats', help='counts by result, source and agent')
     args = p.parse_args(argv)
+    # A query or person that normalizes to nothing (only punctuation, say) would match every row.
+    for name in ('query', 'person'):
+        value = getattr(args, name, None)
+        if value is not None and not normalize(value):
+            p.error('--%s %r: nothing left to match after normalising' % (name, value))
 
     if args.cmd == 'add':
         path = args.ledger
@@ -202,7 +214,9 @@ def main(argv=None):
             p.error('check --exact needs a non-empty --source')
         scored = find(rows, args.person, args.source, args.query, args.threshold, args.exact)
         print_rows(scored, with_score=True)
-        return 0 if scored else 1
+        today = datetime.date.today().isoformat()
+        done = [r for _, r in scored if r['result'] in SEARCHED and (not r['next_date'] or r['next_date'] > today)]
+        return 0 if (scored if args.any_result else done) else 1
     if args.cmd == 'due':
         due = [(1.0, r) for r in rows if r['next_date'] and r['next_date'] <= args.on]
         due.sort(key=lambda x: x[1]['next_date'])

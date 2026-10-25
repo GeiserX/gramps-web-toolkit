@@ -1,0 +1,40 @@
+name: Bug or trap
+description: A tool did the wrong thing, or a failure bit you and should not bite the next person.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use invented names and ids. Do not paste real people's names, tree ids, hostnames or accounts.
+        Security problems go to SECURITY.md, not here.
+  - type: input
+    id: tool
+    attributes:
+      label: Tool
+      placeholder: gwt-apply
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what you got.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: The command and the smallest invented input that shows it.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: rule
+    attributes:
+      label: The rule it should follow
+      description: For a trap, the rule that would have stopped it, in one sentence.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
