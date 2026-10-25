@@ -21,13 +21,15 @@ Lists written for the first public commit of `gwt-apply` behave differently in t
 - A Gramps ID with a suffix (`I0042-b`) is accepted in every op; a bare handle is still refused.
 - A person with one name and no surname is accepted.
 - `namesake_of` by `key:` resolves people an earlier list created.
+- A value of the wrong kind, a citation `confidence` outside 0-4, or a full date that is not a real calendar day (`1890-02-31`) is refused before the first write.
+- A write whose answer was lost (timeout, dropped connection, 5xx) but which landed reports `done` instead of `skip`.
 - `gwt-import-excel` stops with exit 2 on an unknown mapping field instead of dropping that column.
 
 ### Added
 
 - `gwt`, one command for every Python tool (`gwt <tool> ...`), installed with one `pip install gramps-web-toolkit`; each `gwt-<tool>` command stays.
 - `gwt-apply`: offline planning on a snapshot (`--save-snapshot`, `--since`), merges of people, families and events through Gramps' own merge, DNA matches as associations, `attach_existing`, `dedupe_list`, `update_place`, repositories, `update_note`, `update_citation`, `update_family`, `update_child_ref`, `detach`, and `--revert` to undo one run from its log.
-- `gwt-check`: read-only whole-tree checks, `--baseline`, `--ignore-check`, accepted findings with a reason, disconnected family components, contradictory dates, living-people privacy checks, missing event places found in their citations, and offline checks of saved snapshots.
+- `gwt-check`: read-only whole-tree checks, `--baseline`, `--ignore-check`, accepted findings with a reason, disconnected family components, contradictory dates, living-people privacy checks, missing event places found in their citations, citations entered twice, and offline checks of saved snapshots.
 - `gwt-ledger` (shared search ledger, one file per lane), `gwt-gate` (one request pace per machine), `gwt-queue` (search tasks for parallel lanes), `gwt-leads` (tree gaps as queue tasks), `gwt-rank` (orders FamilySearch results), `gwt-import-excel` (workbooks to change lists), `gwt-rawstore` (originals in S3) and `gwt-mh` (MyHeritage through a signed-in browser).
 - Both Gramps Web clients send a toolkit User-Agent and log in with a sync token (`GWT_TOKEN`).
 - A documentation site at https://geiserx.github.io/gramps-web-toolkit/.

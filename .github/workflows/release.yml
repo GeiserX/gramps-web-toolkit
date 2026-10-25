@@ -102,7 +102,8 @@ jobs:
           skip-existing: true
 
   pypi:
-    if: github.ref_type == 'tag'
+    # Only a pushed tag: a manual run on a tag ref is still a dry run.
+    if: github.event_name == 'push' && github.ref_type == 'tag'
     needs: build
     runs-on: ubuntu-latest
     environment:
