@@ -2695,3 +2695,64 @@ def test_verify_follows_a_merged_away_person_to_its_winner(tmp_path, monkeypatch
     assert main([str(first), "--verify"]) == 0, capsys.readouterr()
     assert "I0002 was merged into I0001" in capsys.readouterr().out
     assert main([str(first)]) == 1  # the plain dry run still stops on the person that went away
+    # the merge note on a second person too: no way to tell the winner, so --verify stops instead of picking one
+    note = next(h for h, n in fake.store["notes"].items() if n["text"]["string"].startswith("Merged Person I0002 "))
+    fake.add("people", {"handle": "anna3", "gramps_id": "I0003", "gender": 0, "note_list": [note],
+                        "primary_name": {"first_name": "Annie", "surname_list": [{"surname": "Example", "primary": True}]}})
+    capsys.readouterr()
+    assert main([str(first), "--verify"]) == 1
+    out = capsys.readouterr().out
+    assert "[conflict] m-note" in out and "no Person with Gramps ID I0002" in out and "was merged into" not in out
+
+
+def test_json_rows_for_a_conflict_and_the_ops_it_never_reached(fake, tmp_path, env, capsys):
+    changes = _changes(tmp_path, [
+        {"op": "add_note", "key": "j-a", "ruling": R, "text": "x", "attach": [{"person": "I0099"}]},
+        {"op": "add_note", "key": "j-b", "ruling": R, "text": "y", "attach": [{"person": "I0001"}]},
+    ])
+    report = tmp_path / "run.json"
+    assert main([str(changes), "--json", str(report)]) == 1
+    assert json.loads(report.read_text()) == [
+        {"key": "j-a", "op": "add_note", "status": "conflict", "reason": "conflict: no Person with Gramps ID I0099"},
+        {"key": "j-b", "op": "add_note", "status": "not run", "reason": "not run: an earlier op stopped the list"},
+    ]
+
+
+def test_json_rows_when_the_preflight_refuses_the_list(fake, tmp_path, env, capsys):
+    changes = _changes(tmp_path, [
+        {"op": "add_person", "key": "d-1", "ruling": R, "first_name": "Rose", "surname": "Sample"},
+        {"op": "add_person", "key": "d-2", "ruling": R, "first_name": "Rose", "surname": "Sample", "gender": "F"},
+    ])
+    report = tmp_path / "run.json"
+    assert main([str(changes), "--json", str(report)]) == 1
+    assert "likely duplicate" in capsys.readouterr().err
+    assert json.loads(report.read_text()) == [
+        {"key": k, "op": "add_person", "status": "not run", "reason": "not run: the list stopped on likely duplicates"}
+        for k in ("d-1", "d-2")
+    ]
+
+
+def test_json_needs_a_change_list(tmp_path, capsys):
+    with pytest.raises(SystemExit):
+        main(["--save-snapshot", str(tmp_path / "s.json.gz"), "--json", str(tmp_path / "r.json")])
+    assert "--json goes with a change list" in capsys.readouterr().err
+
+
+def test_verify_reasons_of_a_retried_op_are_said_once(fake, monkeypatch):
+    from gwt_apply.client import Retryable
+    fake.add("citations", {"handle": "cit1", "source_handle": "src1", "page": "folio 2", "confidence": 2})  # C0001
+    real, tries = Applier.update_citation, []
+
+    def flaky(self, op):  # the first try finds the difference, then loses the server
+        real(self, op)
+        tries.append(1)
+        if len(tries) == 1:
+            raise Retryable("GET citations: HTTP 503", 503)
+
+    monkeypatch.setattr(Applier, "update_citation", flaky)
+    client = Client("https://gw.example", "u", "pw", tree="tree-test", dry_run=True, session=fake)
+    client.login()
+    res = Applier(client, retries=3, retry_wait=0, verify=True).run(
+        [{"op": "update_citation", "key": "r", "ruling": R, "citation": "C0001", "set": {"confidence": 3}}])
+    assert len(tries) == 2 and res[0].status == "done"
+    assert res[0].reasons == ["differs: Citation C0001 confidence 2 != 3"]

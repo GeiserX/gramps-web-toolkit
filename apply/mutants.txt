@@ -30,3 +30,6 @@ gwt_apply/cli.py | outcome["counts"] = {"undone" | outcome["xcounts"] = {"undone
 gwt_apply/cli.py | folder = "_" if folder in ("", ".", "..") else folder | folder = folder or "_" | a tree named .. never puts the log outside the state dir
 gwt_apply/ops.py | if handle is None and self.verify: | if False: | --verify reads an op on a Gramps ID merged away on the winner that carries the merge note
 gwt_apply/ops.py | self.reasons.append(f"differs: {after['_class']} {self.label(after)} {k} {old} != {new}") | pass | --verify names the field that differs and both values
+gwt_apply/ops.py | if len(rows) != 1: | if not rows: | --verify never picks a winner when two objects carry the same merge note
+gwt_apply/ops.py | self.c.pending, self.c.deleted = planned | pass | a retried dry-run op does not read its own earlier try's plan as already done
+gwt_apply/cli.py | rows += [{ | rows + [{ | --json lists the ops a run never reached as not run

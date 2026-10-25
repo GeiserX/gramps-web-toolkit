@@ -516,24 +516,23 @@ class Applier:
             raise Conflict(f"no {cls} with Gramps ID {ref}")
         return handle
 
-    def _merged_into(self, cls: str, ref: str, depth: int = 0) -> str | None:
+    def _merged_into(self, cls: str, ref: str) -> str | None:
         """The handle of the object `ref` was merged into: the one whose note list holds the note our merge op
-        wrote, `Merged <cls> <ref> ...` (followed again if the winner was merged away too)."""
+        wrote, `Merged <cls> <ref> ...`. Gramps moves that note on to the next winner when the winner is merged
+        away too, so one lookup finds the object that holds it now. None when no object, or more than one, does."""
         if self._merges is None:
             self._merges = {}
-            for n in self.c.list_all("Note", ["text", "gramps_id"]):
+            for n in self.c.list_all("Note", ["text"]):
                 m = re.match(r"Merged (Person|Family|Event|Repository) (\S+) ", (n.get("text") or {}).get("string") or "")
                 if m:
                     self._merges.setdefault(m[1], []).append((m[2], n["handle"]))
         notes = {h for loser, h in self._merges.get(cls, []) if loser == ref}
-        if not notes or depth > 10:
+        if not notes:
             return None
         rows = [r for r in self.c.list_all(cls, ["note_list", "gramps_id"]) if notes & set(r.get("note_list") or [])]
-        if len(rows) != 1:
+        if len(rows) != 1:  # two holders: no way to tell which one is the winner, so the op stays a conflict
             return None
         winner = rows[0]
-        if not self.c.exists(cls, winner["handle"]):
-            return None
         self.actions.append(f"{cls} {ref} was merged into {self.label(winner)}: reading it there")
         return winner["handle"]
 
@@ -654,6 +653,8 @@ class Applier:
                     self.lock.refresh()
                 self.actions, self.reasons, self.wrote, self._holding = [], [], False, None
                 self.c.unknown_write = []
+                # a dry run's plan of this try: dropped on a retry, or the next try reads it as already done
+                planned = (dict(self.c.pending), set(self.c.deleted)) if self.c.dry_run else None
                 try:
                     getattr(self, op["op"])(op)
                     res.status = "done" if self.wrote else "skip"
@@ -667,6 +668,8 @@ class Applier:
                     break
                 except Retryable as exc:
                     lost += [f"answer lost on try {attempt}: {w}" for w in self.c.unknown_write]
+                    if planned is not None:
+                        self.c.pending, self.c.deleted = planned
                     if attempt == self.retries:
                         res.status = "error"
                         self.actions += [f"{line}; the server may hold that write" for line in lost]
