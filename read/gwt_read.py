@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 """gwt-read: run a record search or read one record on a record site, slowly, cached, and stopping on any block.
 
+  gwt-read pares search [--given G] [--surname S [--surname S2]] [--words "W ..."] --out DIR
+  gwt-read pares record ID --out DIR                  ID: a PARES description id or its URL
   gwt-read familysearch search [--given G] [--surname S [--surname S2]] [--by Y] [--dy Y] [--years N]
                                [--place P] [--father "G S"] [--mother "G S"] [--collection ID]
                                [--count N] --out DIR
   gwt-read familysearch record ARK --out DIR          ARK: 1:1:XXXX-XXX or its https://.../ark:/61903/ URL
 
-The session token is the one the signed-in browser already holds (its `fssessionid` cookie), read from
+PARES (the Spanish state archives' catalogue) is public: no account and no token.
+
+The FamilySearch session token is the one the signed-in browser already holds (its `fssessionid` cookie), read from
 $GWT_FS_TOKEN or the file named in $GWT_FS_TOKEN_FILE. The tool never asks for a password and never logs in.
 
-Every request is served from gwt-fscache when it can be, and otherwise waits for its slot in the account's
-gwt-gate (default one request every 30 s at best, see docs/read.md), so a search already run costs nothing.
+Every request is served from gwt-fscache when it can be, and otherwise waits for its slot in the site's or
+account's gwt-gate (FamilySearch one request every 30 s at best, PARES one every 15 s, see docs/read.md), so a
+search already run costs nothing.
 
 Writes <out>/<key>.json (the answer) and <out>/<key>.candidates.json (what gwt-rank reads), and prints
 `source`, `evidence`, `candidates` and `results` lines. It never writes the ledger.
@@ -26,7 +31,8 @@ import argparse, json, os, re, sys, urllib.error, urllib.parse, urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 try:                     # installed: the other tools are modules beside this one
     import gwt_reader
-    from gwt_fscache import FSCache, FAMILYSEARCH_RULES
+    import gwt_pares
+    from gwt_fscache import FSCache, FAMILYSEARCH_RULES, PARES_RULES
     from gwt_gate import Gate, Paused
     import gwt_rank
 except ImportError:      # a clone: they live in ../gate, ../fscache, ../rank
@@ -35,7 +41,8 @@ except ImportError:      # a clone: they live in ../gate, ../fscache, ../rank
         if p not in sys.path:
             sys.path.insert(0, p)
     import gwt_reader
-    from gwt_fscache import FSCache, FAMILYSEARCH_RULES
+    import gwt_pares
+    from gwt_fscache import FSCache, FAMILYSEARCH_RULES, PARES_RULES
     from gwt_gate import Gate, Paused
     import gwt_rank
 
@@ -119,11 +126,12 @@ FINAL_URL_HEADER = 'x-gwt-final-url'
 
 
 def urllib_fetcher(token, user_agent, urlopen=urllib.request.urlopen):
-    """A gwt-fscache fetcher that adds the token itself, so the headers the cache sees never carry it.
-    HTTP errors come back as their status, never raised."""
+    """A gwt-fscache fetcher that adds the token itself (when there is one), so the headers the cache sees
+    never carry it. HTTP errors come back as their status, never raised."""
     def fetch(method, url, headers, data):
         h = dict(headers or {})
-        h['authorization'] = 'Bearer ' + token
+        if token:
+            h['authorization'] = 'Bearer ' + token
         h['user-agent'] = user_agent
         req = urllib.request.Request(url, data=data, headers=h, method=method)
         try:
@@ -195,20 +203,72 @@ def cmd_record(a, R):
                  lambda d: None)
 
 
+def cmd_pares_search(a, R):
+    if not (a.given or a.surname or a.words):
+        err('give --given, --surname, --words or any of them')
+        return EXIT_USAGE
+    url = gwt_pares.search_url(a.given, a.surname, a.words)
+    h = {'accept': gwt_pares.ACCEPT, 'accept-language': gwt_pares.LANGUAGE}
+    # the site answers a search only inside a session: unless the answer is already cached, fetch the search
+    # form first (through the gate like any request) so the cookie jar holds the session cookie
+    if a.refresh or R.cache.lookup('GET', url, h) is None:
+        R.get(gwt_pares.FORM_URL, h, refresh=True, page=gwt_pares.is_form)
+    key = gwt_reader.search_key(url, ['pares', a.given] + list(a.surname) + [a.words])
+    return _save_page(a, R, url, h, gwt_pares.is_results, key, gwt_pares.search_candidates, gwt_pares.total)
+
+
+def cmd_pares_record(a, R):
+    did = gwt_pares.description_id(a.id)
+    if not did:
+        err('%r is not a PARES description id (digits) or its URL' % a.id)
+        return EXIT_USAGE
+    h = {'accept': gwt_pares.ACCEPT, 'accept-language': gwt_pares.LANGUAGE}
+    return _save_page(a, R, gwt_pares.description_url(did), h, gwt_pares.is_description, 'pares-record-' + did,
+                      lambda p: gwt_pares.record_candidates(p, did), lambda p: None)
+
+
+def _save_page(a, R, url, h, page_ok, key, to_cands, total_of):
+    status, rh, body, cached = R.get(url, h, refresh=a.refresh, page=page_ok)
+    page = body.decode('utf-8', 'replace')
+    cands = to_cands(page)
+    env = gwt_reader.envelope(url, (rh or {}).get(FINAL_URL_HEADER), text=gwt_pares.text(page), html=page,
+                              status=status, from_cache=cached)
+    base = gwt_reader.write_search(a.out, key, env, cands)
+    gwt_reader.print_paths(gwt_pares.SOURCE, base, out)
+    total = total_of(page)
+    out('results\t%s total, %d read%s' % ('?' if total is None else total, len(cands), ' (cache)' if cached else ''))
+    return EXIT_OK if cands else EXIT_EMPTY
+
+
+def _common(sp, ua_env):
+    sp.add_argument('--lane', default=os.environ.get('GWT_AGENT', 'gwt-read'), help='who is asking, for the gate log')
+    sp.add_argument('--cache-dir', default=os.environ.get('GWT_FSCACHE_DIR', '~/.cache/gwt-fscache'))
+    sp.add_argument('--user-agent', default=os.environ.get(ua_env, 'gramps-web-toolkit (+https://github.com/GeiserX/gramps-web-toolkit)'))
+    sp.add_argument('--refresh', action='store_true', help='skip the cache (the request still waits for the gate)')
+
+
 def parser():
     p = argparse.ArgumentParser(prog='gwt-read', description=__doc__.split('\n')[0],
                                 epilog=__doc__[__doc__.index('Exit codes:'):],
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     sites = p.add_subparsers(dest='site', required=True)
+    pa = sites.add_parser('pares', help="PARES, the Spanish state archives' catalogue; public, no account")
+    _common(pa, 'GWT_PARES_USER_AGENT')
+    pa.add_argument('--gate-dir', help='default ~/.cache/gwt-gate-pares')
+    psub = pa.add_subparsers(dest='cmd', required=True)
+    s = psub.add_parser('search', help='a catalogue search; writes the page and its candidates')
+    s.add_argument('--given', default='')
+    s.add_argument('--surname', action='append', default=[], help='first surname, then again for the second')
+    s.add_argument('--words', default='', help='more words to find anywhere in a description')
+    s.add_argument('--out', required=True)
+    r = psub.add_parser('record', help='one archival description by its id')
+    r.add_argument('id')
+    r.add_argument('--out', required=True)
     fs = sites.add_parser('familysearch', help='FamilySearch historical records, with your own session token')
     fs.add_argument('--account', default=os.environ.get('GWT_FS_ACCOUNT', 'default'),
                     help='names the account; each account gets its own gate (pace)')
-    fs.add_argument('--lane', default=os.environ.get('GWT_AGENT', 'gwt-read'), help='who is asking, for the gate log')
-    fs.add_argument('--cache-dir', default=os.environ.get('GWT_FSCACHE_DIR', '~/.cache/gwt-fscache'))
+    _common(fs, 'GWT_FS_USER_AGENT')
     fs.add_argument('--gate-dir', help='default ~/.cache/gwt-gate-fs-<account>')
-    fs.add_argument('--user-agent', default=os.environ.get('GWT_FS_USER_AGENT',
-                                                           'gramps-web-toolkit (+https://github.com/GeiserX/gramps-web-toolkit)'))
-    fs.add_argument('--refresh', action='store_true', help='skip the cache (the request still waits for the gate)')
     sub = fs.add_subparsers(dest='cmd', required=True)
     s = sub.add_parser('search', help='a records search; writes the answer and its candidates')
     s.add_argument('--given', default='')
@@ -228,8 +288,16 @@ def parser():
     return p
 
 
-def main(argv=None, urlopen=urllib.request.urlopen, gate=None):
+def main(argv=None, urlopen=None, gate=None):
     a = parser().parse_args(argv)
+    if a.site == 'pares':
+        # cookies live in memory for this run only: the session cookie never reaches the cache or a file
+        urlopen = urlopen or urllib.request.build_opener(urllib.request.HTTPCookieProcessor()).open
+        gate = gate or Gate(a.gate_dir or '~/.cache/gwt-gate-pares', **gwt_pares.PACE)
+        R = gwt_reader.Reader(FSCache(a.cache_dir, rules=PARES_RULES), gate, a.lane,
+                              urllib_fetcher(None, a.user_agent, urlopen), log=err)
+        return _run(R, {'search': cmd_pares_search, 'record': cmd_pares_record}[a.cmd], a)
+    urlopen = urlopen or urllib.request.urlopen
     token = token_from_env()
     if not token:
         err('no session token: set GWT_FS_TOKEN, or GWT_FS_TOKEN_FILE to a file holding it (mode 600)')
@@ -238,8 +306,12 @@ def main(argv=None, urlopen=urllib.request.urlopen, gate=None):
     gate = gate or Gate(a.gate_dir or '~/.cache/gwt-gate-fs-%s' % acct, **FS_PACE)
     cache = FSCache(a.cache_dir, rules=FAMILYSEARCH_RULES)
     R = gwt_reader.Reader(cache, gate, a.lane, urllib_fetcher(token, a.user_agent, urlopen), log=err)
+    return _run(R, {'search': cmd_search, 'record': cmd_record}[a.cmd], a)
+
+
+def _run(R, cmd, a):
     try:
-        return {'search': cmd_search, 'record': cmd_record}[a.cmd](a, R)
+        return cmd(a, R)
     except gwt_reader.Stop as e:
         err(str(e))
         return e.exit_code

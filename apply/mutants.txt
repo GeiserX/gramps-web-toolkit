@@ -18,6 +18,12 @@ gwt_apply/ops.py | str(n.get("type")).lower() == op["type"].lower() | True | a n
 gwt_apply/ops.py | (row.get(f) or "").strip() == op[f].strip() | True | a source with the same title but another author is not reused
 gwt_apply/ops.py | out.append(("date", date_key(row.get("date")) == date_key(parse_date(op["date"])), | out.append(("date", True, | a citation of the same page with another date is not reused
 gwt_apply/ops.py | rows.append(("description", theirs == op["description"].strip(), | rows.append(("description", True, | an undated event with another description is not folded into the existing one
+gwt_apply/dupes.py | return fold(a.first) == fold(b.first) != "" and bool(words - PARTICLES) | return fold(a.first) == fold(b.first) != "" and bool(words) | preflight does not call two couples the same on a shared "de" alone
+gwt_apply/dupes.py | if not _same_couple(mine, other): | if False: | preflight flags only couples that look alike, not every pair of couples
+gwt_apply/dupes.py | if any(c.handles == pair for c in couples + seen): | if any(c.handles == pair for c in seen): | preflight leaves an add_family of two tree parents who already have a family to the apply, which reuses it
+gwt_apply/dupes.py | if any(c.handles == pair for c in couples + seen): | if any(c.handles == pair for c in couples): | preflight leaves a second add_family of the same parents to the apply, which reuses the first one's family
+gwt_apply/dupes.py | return _person_pass(ops, tree, ids, new) + _couple_pass(ops, tree, couples, new) | return _person_pass(ops, tree, ids, new) | preflight flags a couple already in the tree
+gwt_apply/ops.py | if not str(op.get("new_couple_reason") or "").strip() or not op.get("new_couple_of"): | if False: | validate refuses an allow_new_couple without its reason and compared families
 gwt_apply/cli.py | if not writes: | if False: | a dry run or a snapshot leaves no log anywhere unless --log is given
 gwt_apply/cli.py | outcome.setdefault("error", f"{type(exc).__name__}: {exc}"[:500]) | pass | the end line of a crashed or killed run carries the error
 gwt_apply/cli.py | writes=args.apply and not args.save_snapshot) | writes=args.apply) | --save-snapshot --apply keeps no log unless --log is given
@@ -28,8 +34,34 @@ gwt_apply/client.py | self.log(method="PUT", path=f"/media/{handle}/file?uploadm
 gwt_apply/cli.py | code = exc.code if isinstance(exc.code, int) else 1 | code = None | a run stopped by SIGTERM ends its log with exit 1
 gwt_apply/cli.py | outcome["counts"] = {"undone" | outcome["xcounts"] = {"undone" | a revert's end line carries its counts
 gwt_apply/cli.py | folder = "_" if folder in ("", ".", "..") else folder | folder = folder or "_" | a tree named .. never puts the log outside the state dir
+gwt_apply/dupes.py | if stable_handle(op["key"]) in in_tree: | if False: | a rerun does not flag the family the list made, even after its parents were edited in the tree
+gwt_apply/dupes.py | return ((_same_spouse(a.father, b.father) and _same_spouse(a.mother, b.mother)) | return ((_same_spouse(a.father, b.father) or _same_spouse(a.mother, b.mother)) | preflight needs both spouses to match, so a second marriage is not flagged
+gwt_apply/dupes.py | or (_same_spouse(a.father, b.mother) and _same_spouse(a.mother, b.father))) | or False) | preflight flags a tree couple written the other way round
+gwt_apply/dupes.py | continue  # the earlier op already says these are two couples | pass | an op named in an earlier op's new_couple_of needs no waiver of its own
+gwt_apply/dupes.py | if not any(op["op"] == "add_person" or (op["op"] == "add_family" and op.get("father") and op.get("mother")) | if not any(op["op"] == "add_person" | a list of only add_family ops is still compared with the tree's couples
+gwt_apply/dupes.py | return fold(a.first) == fold(b.first) != "" and bool(words - PARTICLES) | return fold(a.first) == fold(b.first) and bool(words - PARTICLES) | two spouses with no given name are not the same spouse
+gwt_apply/dupes.py | continue  # a parent nobody can find: the apply reports it | pass | preflight leaves a family with a missing parent to the apply instead of crashing
+gwt_apply/ops.py | for f in ("children", "attach", "namesake_of", "new_couple_of", "use_loser"): | for f in ("children", "attach", "namesake_of", "use_loser"): | validate refuses a new_couple_of that is neither a list nor a text
 gwt_apply/ops.py | if handle is None and self.verify: | if False: | --verify reads an op on a Gramps ID merged away on the winner that carries the merge note
 gwt_apply/ops.py | self.reasons.append(f"differs: {after['_class']} {self.label(after)} {k} {old} != {new}") | pass | --verify names the field that differs and both values
 gwt_apply/ops.py | if len(rows) != 1: | if not rows: | --verify never picks a winner when two objects carry the same merge note
 gwt_apply/ops.py | self.c.pending, self.c.deleted = planned | pass | a retried dry-run op does not read its own earlier try's plan as already done
 gwt_apply/cli.py | rows += [{ | rows + [{ | --json lists the ops a run never reached as not run
+gwt_apply/dupes.py | earlier = made.get(other.handle) if other.handle else other.ref | earlier = None if other.handle else other.ref | an earlier op's new_couple_of still waives the later op when a partial run already made the earlier family
+gwt_apply/dupes.py | if other.ref in compared or (other.handle and other.handle in compared): | if other.ref in compared: | new_couple_of may name a family an earlier list made by its key:<key>
+gwt_apply/ops.py | if name == "unlink_child" and "drop_link_sources" in op and not isinstance(op["drop_link_sources"], bool): | if False: | validate refuses an unlink_child drop_link_sources that is not true or false
+gwt_apply/ops.py | if other and not op.get("drop_link_sources"): | if False: | unlink_child refuses to lose the other notes and citations of a link unless drop_link_sources says so
+gwt_apply/ops.py | if n and text.startswith(LINK_MARKS) and | if n and text.startswith(PROBABLE) and | unlink_child removes a [wrong link] mark with the link, not only a [probable] one
+gwt_apply/ops.py | and h not in rest and self._referrers | and self._referrers | unlink_child keeps a link mark that the family also holds outside the link
+gwt_apply/ops.py | and self._referrers("Note", h) == {("family", fam)}: | : | unlink_child keeps a link mark that another object also holds
+gwt_apply/ops.py | if entry is None and not listed and not retry: | if entry is None and not retry: | unlink_child repairs a link only the person's side has, instead of skipping it
+gwt_apply/ops.py | if fam in (child.get("parent_family_list") or []): | if False: | unlink_child takes the family off the child's parent families too
+gwt_apply/ops.py | retry = op["key"] in self._unlink_notes  # | retry = False  # | unlink_child whose answer was lost still deletes the link's mark on the retry
+gwt_apply/ops.py | if entry is not None and not (family.get("father_handle") or family.get("mother_handle") | if False and not (family.get("father_handle") or family.get("mother_handle") | unlink_child warns when it leaves a family with nobody in it
+gwt_apply/revert.py | elif m == "DELETE" and _cls_of_path(path)[0] == "Note": | elif False: | --revert makes a note the run deleted again from the pre-run copy
+gwt_apply/ops.py | if held: | if False: | unlink_child keeps a link mark another writer took up between its tries
+gwt_apply/ops.py | if not self.c.exists("Note", handle): | if False: | unlink_child whose mark delete lost its answer finds the mark gone and is done
+gwt_apply/ops.py | self._referrers("Note", h) == {("family", fam)}: | self._referrers("Note", h) <= {("family", fam)}: | unlink_child never deletes a mark when the server names no holder for it
+gwt_apply/revert.py | if client.get_live(s["cls"], s["handle"]) is None: | if True: | --revert recreating a note whose answer was lost does not post it twice
+gwt_apply/revert.py | if (cls, h) in created:  # e.g. a mark | if False:  # e.g. a mark | --revert skips a note the same run made and deleted instead of asking for it by hand
+gwt_apply/revert.py | elif live(cls, h) is not None: | elif False: | --revert run twice skips a deleted note that is already back

@@ -41,8 +41,10 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "update_child_ref": ({"family", "child"}, {"set", "confirm_probable", "expect"}),
     "detach": ({"target", "object"}, set()),
     "add_event": ({"type"}, {"person", "family", "role", "date", "place", "description", "gramps_id"}),
-    "add_family": (set(), {"father", "mother", "children", "type", "gramps_id"}),
+    "add_family": (set(), {"father", "mother", "children", "type", "gramps_id", "allow_new_couple", "new_couple_reason",
+                           "new_couple_of"}),
     "link_child": ({"family", "child"}, {"frel", "mrel", "probable", "probable_reason"}),
+    "unlink_child": ({"family", "child", "reason"}, {"drop_link_sources"}),
     "add_place": ({"name", "type"}, {"enclosed_by", "lat", "long", "gramps_id"}),
     "add_source": ({"title"}, {"author", "pubinfo", "abbrev", "gramps_id"}),
     "add_repository": ({"name", "type"}, {"gramps_id", "url", "address"}),
@@ -75,7 +77,8 @@ REF_OWN_LISTS = ("note_list", "citation_list", "attribute_list")  # what a Media
 # gets that text check by default: list it here if it is not text, or in TEXT_CHECKED_BELOW if validate() checks it
 # by hand further down.
 NOT_TEXT = {"set", "target", "object", "attach", "children", "namesake_of", "use_loser", "address",
-            "allow_namesake", "probable", "confidence", "lat", "long", "expect"}
+            "allow_namesake", "new_couple_of", "allow_new_couple", "probable", "confidence", "lat", "long", "expect",
+            "drop_link_sources"}
 TEXT_CHECKED_BELOW = {("add_repository", "name"), ("add_repository", "type"), ("link_repository", "media_type"),
                       ("add_association", "relation"), ("add_transcription", "margin_reading"),
                       ("update_child_ref", "confirm_probable"), ("add_person", "gender"),
@@ -93,6 +96,8 @@ CONFIRMED = "[confirmed]"  # what a [probable] mark becomes once a document sett
 GENDER = {"F": 0, "M": 1, "U": 2}
 SINGLE_VITAL = {"Birth": "birth_ref_index", "Death": "death_ref_index"}
 PROBABLE = "[probable]"  # how a doubtful parent link is marked: a note on its child_ref starting with this
+WRONG_LINK = "[wrong link]"  # how a parent link pending removal is marked, the same way
+LINK_MARKS = (PROBABLE, CONFIRMED, WRONG_LINK)  # marks that only describe the link: unlink_child removes them with it
 # what each target kind can carry
 CARRIES = {
     "citation_list": {"Person", "Family", "Event", "Media", "Place"},
@@ -263,8 +268,8 @@ def validate(ops: list[dict]) -> list[str]:
             blank_ok = (name, f) in (("add_citation", "page"), ("add_person", "surname"))
             if not isinstance(op[f], str) or not (op[f].strip() or (blank_ok and op[f] == "")):
                 errors.append(f"{where}: {f} is a non-empty text")
-        for f in ("children", "attach", "namesake_of", "use_loser"):
-            if f in op and not isinstance(op[f], list) and not (f == "namesake_of" and isinstance(op[f], str)):
+        for f in ("children", "attach", "namesake_of", "new_couple_of", "use_loser"):
+            if f in op and not isinstance(op[f], list) and not (f.endswith("_of") and isinstance(op[f], str)):
                 errors.append(f"{where}: {f} is a list of " + ("targets" if f == "attach" else "names" if
                                                                  f == "use_loser" else "Gramps IDs or key:<key>"))
                 op = {k: v for k, v in op.items() if k != f}  # checked no further
@@ -290,6 +295,7 @@ def validate(ops: list[dict]) -> list[str]:
         if name == "add_association":
             refs.append(op.get("target"))
         refs += _ref_list(op.get("namesake_of")) if op.get("namesake_of") else []
+        refs += _ref_list(op.get("new_couple_of")) if op.get("new_couple_of") else []
         for t in [op.get("target"), *(op.get("attach") or [])]:
             refs += _target_refs(t)
         if name == "detach":
@@ -312,11 +318,25 @@ def validate(ops: list[dict]) -> list[str]:
                     )
             elif name == "add_person" and ("namesake_reason" in op or "namesake_of" in op):
                 raise ValueError("namesake_reason and namesake_of go with allow_namesake: true")
+            if name == "add_family" and op.get("allow_new_couple"):
+                if op["allow_new_couple"] is not True:
+                    raise ValueError("allow_new_couple is true or absent")
+                if not (op.get("father") and op.get("mother")):
+                    raise ValueError("allow_new_couple goes on a family with both a father and a mother")
+                if not str(op.get("new_couple_reason") or "").strip() or not op.get("new_couple_of"):
+                    raise ValueError(
+                        "allow_new_couple needs new_couple_reason (why this is another couple) and "
+                        "new_couple_of (the Gramps ID or key:<key> of each family you compared)"
+                    )
+            elif name == "add_family" and ("new_couple_reason" in op or "new_couple_of" in op):
+                raise ValueError("new_couple_reason and new_couple_of go with allow_new_couple: true")
             if name == "link_child":
                 if op.get("probable", True) is not True:
                     raise ValueError("probable is true or absent")
                 if bool(op.get("probable")) != bool(str(op.get("probable_reason") or "").strip()):
                     raise ValueError("probable: true and probable_reason go together")
+            if name == "unlink_child" and "drop_link_sources" in op and not isinstance(op["drop_link_sources"], bool):
+                raise ValueError("drop_link_sources is true or false")
             if name == "add_association":
                 if op.get("person") == op.get("target"):
                     raise ValueError("person and target are the same")
@@ -495,6 +515,7 @@ class Applier:
         self._held: dict[str, dict] = {}
         self._holding: str | None = None  # set by an add_association whose write is held
         self._flushing = False
+        self._unlink_notes: dict[str, list[str]] = {}  # op key -> link marks unlink_child still has to delete
         client.touch = self._touch
 
     # -- references -------------------------------------------------------
@@ -1068,6 +1089,101 @@ class Applier:
                 },
                 marker=PROBABLE,
             )
+
+    def unlink_child(self, op):
+        """Take a child out of a family: the ChildRef off the family, then the family off the child's parent
+        families, then the reason on the child as a Research note "[unlinked from Family F] <reason>". Nobody is
+        deleted, the family neither. A mark on the link ([probable], [confirmed], [wrong link]) that nothing else
+        holds goes with it; any other note or citation on the link is a conflict, or with drop_link_sources an
+        orphan. The family goes first, so --revert, newest write first, restores the child after its family."""
+        family = self.obj("Family", op["family"])
+        family.setdefault("_class", "Family")
+        child = self.obj("Person", op["child"])
+        fam, kid = family["handle"], child["handle"]
+        flabel, clabel = self.label(family), self.label(child)
+        entry = next((r for r in family.get("child_ref_list") or [] if r.get("ref") == kid), None)
+        listed = fam in (child.get("parent_family_list") or [])
+        retry = op["key"] in self._unlink_notes  # an earlier try of this op wrote, and its answer was lost
+        if entry is None and not listed and not retry:
+            self.actions.append(f"skip: Person {clabel} is not a child of Family {flabel}")
+            return
+        drop, other = [], []  # every check before the first write: a conflict leaves the server as it was
+        if entry is not None:
+            rest = json.dumps({**{k: v for k, v in family.items() if not k.startswith("_")},  # not _read: a copy
+                               "child_ref_list": [r for r in family["child_ref_list"] if r is not entry]})
+            notes = {n["handle"]: n for n in self.c.get_many("Note", entry.get("note_list") or [])}
+            for h in entry.get("note_list") or []:
+                n = notes.get(h)
+                text = ((n or {}).get("text") or {}).get("string") or ""
+                if n and text.startswith(LINK_MARKS) and h not in rest and self._referrers("Note", h) == {("family", fam)}:  # empty: the server named no holder
+                    drop.append(n)
+                else:
+                    other.append(f"Note {self.label(n) if n else h}")
+            cits = {c["handle"]: c for c in self.c.get_many("Citation", entry.get("citation_list") or [])}
+            other += [f"Citation {self.label(cits[h]) if h in cits else h}" for h in entry.get("citation_list") or []]
+        if other and not op.get("drop_link_sources"):
+            raise Conflict(f"the link of Person {clabel} to Family {flabel} carries {', '.join(other)}, which would be "
+                           "lost with it; move them first, or set drop_link_sources: true to detach them (they stay in "
+                           "the tree as orphans gwt-check lists)")
+        marks = self._unlink_notes.setdefault(op["key"], [])
+        marks += [n["handle"] for n in drop if n["handle"] not in marks]
+        if entry is not None:
+            before = copy.deepcopy(family)
+            family["child_ref_list"] = [r for r in family["child_ref_list"] if r is not entry]
+            self.save(before, family)
+            if other:
+                self.actions.append(f"detached from the link, left in the tree: {', '.join(other)}")
+            if not listed and not retry:
+                self.actions.append(f"the tree was inconsistent: Person {clabel} did not list Family {flabel} as a "
+                                    "parent family; fixed the family's side only")
+        self.add_note({"key": op["key"] + "#unlinked", "type": "Research",
+                       "text": f"[unlinked from Family {flabel}] {op['reason'].strip()}",
+                       "attach": [{"person": op["child"]}]})
+        child = self.c.get("Person", kid)  # again: the note went on it, and the family write may have changed it
+        child.setdefault("_class", "Person")
+        if fam in (child.get("parent_family_list") or []):
+            before = copy.deepcopy(child)
+            child["parent_family_list"] = [h for h in child["parent_family_list"] if h != fam]
+            self.save(before, child)
+            if entry is None and not retry:
+                self.actions.append(f"the tree was inconsistent: Family {flabel} did not list Person {clabel} as a "
+                                    "child; fixed the person's side only")
+        elif listed:
+            self.actions.append(f"Person {clabel} no longer lists Family {flabel}: the server took it off with the family")
+        for h in marks:
+            self._drop_mark(h)
+        del self._unlink_notes[op["key"]]
+        if entry is not None and not (family.get("father_handle") or family.get("mother_handle")
+                                      or family.get("child_ref_list")):
+            self.actions.append(f"warning: Family {flabel} now has no father, no mother and no children; it is not "
+                                "deleted")
+
+    def _referrers(self, cls: str, handle: str) -> set[tuple[str, str]]:
+        """(lower-case class, handle) of every object that holds this one: the server's backlinks, or on an
+        offline snapshot a search of the snapshot and this run's planned writes."""
+        if not self.c.offline:
+            links = (self.c.get_live(cls, handle, backlinks=True) or {}).get("backlinks") or {}
+            return {(k, h) for k, hs in links.items() for h in hs or []}
+        objs = {(c, h): o for c, rows in (self.c.snapshot or {}).items() for h, o in rows.items()}
+        objs.update(self.c.pending)
+        return {(c.lower(), h) for (c, h), o in objs.items()
+                if h != handle and (c, h) not in self.c.deleted and handle in json.dumps(o)}
+
+    def _drop_mark(self, handle: str) -> None:
+        """Delete a link mark unlink_child took off its link, unless something has taken it up since."""
+        if not self.c.exists("Note", handle):
+            return
+        note = self.c.get("Note", handle)
+        if not self.c.dry_run:  # a dry run's family write is only planned, so the server still names the family
+            held = self._referrers("Note", handle)
+            if held:
+                self.actions.append(f"kept Note {self.label(note)}: still held by "
+                                    + ", ".join(f"{c} {h}" for c, h in sorted(held)))
+                return
+        self.actions.append(f"delete Note {self.label(note)}: {((note.get('text') or {}).get('string') or '')!r}")
+        self.reasons.append(f"missing: delete Note {self.label(note)}")
+        self.c.remove("Note", handle)
+        self.wrote = True
 
     def update_note(self, op):
         """Correct a note the tree has. A new text needs `expect`, the text it has now: a note someone changed
