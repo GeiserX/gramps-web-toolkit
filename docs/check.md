@@ -103,6 +103,33 @@ gwt-check fill-places dump.json.gz --json             # every proposal and every
 
 The output quotes citations and notes, so it is as private as the tree.
 
+## What the records say about parent links (`links`)
+
+`gwt-check links [DUMP]` lists, for each child of each family, whether the text of the records names both parents. It reads the tree (a dump, or the live tree) and writes nothing. It never sets the exit code and never marks a link probable, proven or wrong.
+
+```sh
+gwt-check links dump.json.gz                      # counts per level, then the first rows
+gwt-check links dump.json.gz --level flagged      # only the rows with a flag
+gwt-check links dump.json.gz --json
+```
+
+For each link it reads the page text and the notes of the citations of the child's birth or baptism, then of the child's other events, the child's own citations and the family's. A parent counts as named when the words of the given name and the first surname are in one sentence of that text, ignoring case and accents and words of fewer than 3 letters.
+
+| Level | Meaning |
+|---|---|
+| birth record names both | the citations of the child's birth or baptism name both parents |
+| other record names both | both are named, but not both in the birth record |
+| a record names one | only one parent is named anywhere |
+| cited, names neither | the birth or baptism has a citation that names neither parent |
+| no record names a parent | no citation text names a parent |
+
+These are words in text. A record can name two people as parents of someone else, mention them in passing or deny the link, and a link proved by a document that is in no citation (an identity card, a family book) shows as the lowest level. Rows carry a flag to read first when:
+
+- another person in the tree bears the same name as a parent;
+- a denial word (`no`, `not`, `sin`, `pas`...) is in the same sentence as a parent's name;
+- the tree marks the relation as anything but by birth (adopted, foster, stepchild);
+- the child has more than one parental family (each is its own row).
+
 ## Finding repositories
 
 `gwt-check repos` reads a dump or the live tree and prints each repository with its source count. It never writes.

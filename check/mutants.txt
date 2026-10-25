@@ -1,0 +1,3 @@
+gwt_check/links.py | if len(w) >= MIN_WORD] | if len(w) >= 0] | words of fewer than 3 letters never count as a name
+gwt_check/links.py | return bool(hit), any(w & DENIAL for w in hit) | return bool(hit), False | a sentence that denies the parent is flagged, not counted as naming
+gwt_check/links.py | if len([1 for h in ch.get("parent_family_list") or [] if h in O["families"]]) > 1: | if False: | a child with several parental families gets one row per family and a flag
