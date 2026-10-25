@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security problem
+    url: https://github.com/GeiserX/gramps-web-toolkit/blob/main/SECURITY.md
+    about: Report security problems privately through the security policy, never in a public issue.
+  - name: Contributing guide
+    url: https://github.com/GeiserX/gramps-web-toolkit/blob/main/CONTRIBUTING.md
+    about: Where new work goes and what its tests must prove.
