@@ -113,10 +113,11 @@ gwt-check links dump.json.gz --level flagged      # only the rows with a flag
 gwt-check links dump.json.gz --json
 ```
 
-For each link it reads the page text and the notes of the citations of the child's birth or baptism, then of the child's other events, the child's own citations and the family's. A parent counts as named when the words of the given name and the first surname are in one sentence of that text, ignoring case and accents and words of fewer than 3 letters.
+For each link it looks at the link itself first: a citation on the child_ref (the link between the child and the family) puts the link at the top level, and a note on the child_ref that starts with `[probable]`, `[confirmed]` or `[wrong link]` (the marks `gwt-apply` writes) is shown as the row's `mark`. Then it reads the page text and the notes of the citations of the child's own birth or baptism (events where the child's role is Primary, so a sibling's baptism where the child stood godparent does not count), then of the child's other events, the child's own citations and the family's. Citations and notes marked private are not read. A parent counts as named when one sentence of that text holds the parent's first surname and either every given name, or one of the given names and a filiation word (`hijo`, `hija`, `padres`, `son of`, `filius`...), ignoring case and accents and words of fewer than 3 letters. Old spellings, Latin forms and abbreviations of a name are not matched, so a parent written differently in the record shows a level lower: the matching stays strict on purpose.
 
 | Level | Meaning |
 |---|---|
+| the link itself is cited | the child_ref carries a citation |
 | birth record names both | the citations of the child's birth or baptism name both parents |
 | other record names both | both are named, but not both in the birth record |
 | a record names one | only one parent is named anywhere |
@@ -125,10 +126,12 @@ For each link it reads the page text and the notes of the citations of the child
 
 These are words in text. A record can name two people as parents of someone else, mention them in passing or deny the link, and a link proved by a document that is in no citation (an identity card, a family book) shows as the lowest level. Rows carry a flag to read first when:
 
-- another person in the tree bears the same name as a parent;
-- a denial word (`no`, `not`, `sin`, `pas`...) is in the same sentence as a parent's name;
-- the tree marks the relation as anything but by birth (adopted, foster, stepchild);
-- the child has more than one parental family (each is its own row).
+- the link is marked `[probable]` or `[wrong link]`;
+- the tree marks the relation as anything but by birth (adopted, foster, stepchild); empty and `Unknown` count as by birth, as in the other checks;
+- the child has more than one parental family (each is its own row);
+- a parent's name has no word of 3 or more letters, so it can never match.
+
+The output holds IDs, levels and flags only, no record text.
 
 ## Finding repositories
 

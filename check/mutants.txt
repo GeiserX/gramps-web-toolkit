@@ -1,3 +1,9 @@
 gwt_check/links.py | if len(w) >= MIN_WORD] | if len(w) >= 0] | words of fewer than 3 letters never count as a name
-gwt_check/links.py | return bool(hit), any(w & DENIAL for w in hit) | return bool(hit), False | a sentence that denies the parent is flagged, not counted as naming
 gwt_check/links.py | if len([1 for h in ch.get("parent_family_list") or [] if h in O["families"]]) > 1: | if False: | a child with several parental families gets one row per family and a flag
+gwt_check/links.py | if x.get("ref") in E and kind(x.get("role")) == "primary"] | if x.get("ref") in E] | an event where the child is only a godparent is not the child's record
+gwt_check/links.py | if any(x not in BIOLOGICAL for x in rel): | if any(x and x != "birth" for x in rel): | an Unknown relation counts as by birth, as in the other checks
+gwt_check/links.py | return [C[h] for h in handles or [] if h in C and not C[h].get("private")] | return [C[h] for h in handles or [] if h in C] | a private citation is not read
+gwt_check/links.py | if n in N and not N[n].get("private")] | if n in N] | a private note is not read
+gwt_check/links.py | (w & given and w & FILIATION) | (w & given) | one given name of several counts only beside a filiation word
+gwt_check/links.py | if _public_cits(tree, r.get("citation_list")): | if False: | a citation on the link itself is the top level
+gwt_check/links.py | flags = [f"the link is marked {mark}"] if mark in FLAG_MARKS else [] | flags = [] | an open [probable] or [wrong link] mark is flagged
