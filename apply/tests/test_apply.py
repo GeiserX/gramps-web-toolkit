@@ -29,6 +29,14 @@ def fake():
     return f
 
 
+@pytest.fixture(autouse=True)
+def state_home(tmp_path, monkeypatch):
+    """Where a real run's default log goes: never the user's own ~/.local/state."""
+    d = tmp_path / "state"
+    monkeypatch.setenv("XDG_STATE_HOME", str(d))
+    return d
+
+
 @pytest.fixture
 def scan(tmp_path):
     p = tmp_path / "baptism-1890.jpg"
@@ -634,7 +642,7 @@ class NoServer:
 @pytest.fixture
 def env(monkeypatch, fake, tmp_path):
     import gwt_apply.client as clientmod
-    monkeypatch.chdir(tmp_path)  # the default log lands here
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(clientmod.requests, "Session", lambda: fake)
     for k, v in {"GWT_URL": "https://gw.example", "GWT_USERNAME": "u", "GWT_PASSWORD": "pw", "GWT_TREE": "tree-test"}.items():
         monkeypatch.setenv(k, v)
@@ -2361,3 +2369,116 @@ def test_a_source_with_the_same_title_but_another_author_is_not_reused(fake):
     assert len(fake.store["sources"]) == 1
     res = run(fake, [dict(op, author="Parish of Springfield")])
     assert res[0].status == "skip" and any(x.startswith("reused S0001 (same ") for x in res[0].actions), res[0].actions
+
+
+# ---- where the log goes and what it says
+
+
+def _lines(path):
+    return [json.loads(x) for x in open(path, encoding="utf-8").read().splitlines() if x]
+
+
+def _changes(tmp_path, ops, name="changes.jsonl"):
+    p = tmp_path / name
+    p.write_text("".join(json.dumps(o) + "\n" for o in ops))
+    return p
+
+
+def test_a_dry_run_and_a_snapshot_leave_no_log_anywhere(fake, tmp_path, env, state_home, monkeypatch):
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
+    changes = _changes(tmp_path, [{"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}])
+    assert main([str(changes)]) == 0
+    assert main(["--save-snapshot", str(tmp_path / "s.json.gz")]) == 0
+    assert list(cwd.iterdir()) == []
+    assert not state_home.exists()
+
+
+def test_a_real_run_logs_under_the_state_dir_and_names_it_first(fake, tmp_path, env, state_home, monkeypatch, capsys):
+    import hashlib
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
+    changes = _changes(tmp_path, [{"op": "add_person", "key": "p-tom", "ruling": R, "first_name": "Tom", "surname": "Sample"}])
+    argv = [str(changes), "--apply", "--retry-wait", "0"]
+    assert main(argv) == 0
+    first = capsys.readouterr().out.splitlines()[0]
+    logs = list((state_home / "gwt-apply" / "tree-test").glob("gwt-apply-*.jsonl"))
+    assert len(logs) == 1 and str(logs[0]) in first, first
+    assert list(cwd.iterdir()) == []
+    lines = _lines(logs[0])
+    start, end = lines[0], lines[-1]
+    assert start["event"] == "start" and start["argv"] == argv and start["list"] == str(changes)
+    assert start["list_sha256"] == hashlib.sha256(changes.read_bytes()).hexdigest()
+    assert start["tree"] == "tree-test" and start["snapshot"] is None and start["run"] in first and start["version"]
+    assert end["event"] == "end" and end["exit"] == 0 and end["not_run"] == 0
+    assert end["counts"] == {"done": 1, "skip": 0, "conflict": 0, "error": 0}
+    # the create's line names the Gramps ID the server gave the new person
+    made = [e for e in lines if e.get("method") == "POST" and e.get("path") == "/objects/"
+            and e["body"][0]["_class"] == "Person"]
+    assert [e["gramps_id"] for e in made] == [fake.store["people"][stable_handle("p-tom")]["gramps_id"]]
+
+
+def test_a_preflight_refusal_is_in_the_log(fake, tmp_path, env, state_home):
+    changes = _changes(tmp_path, [
+        {"op": "add_person", "key": "p2", "ruling": R, "first_name": "Rose", "surname": "Sample"},
+        {"op": "add_person", "key": "p3", "ruling": R, "first_name": "rose", "surname": "Sámple"},
+    ])
+    log = tmp_path / "run.jsonl"
+    assert main([str(changes), "--apply", "--log", str(log), "--retry-wait", "0"]) == 1
+    lines = _lines(next(tmp_path.glob("run.2*.jsonl")))
+    refused = [e for e in lines if e.get("event") == "refused"]
+    assert len(refused) == 1 and refused[0]["reason"] == "preflight" and "'p3'" in refused[0]["problems"][0]
+    assert lines[-1]["event"] == "end" and lines[-1]["exit"] == 1
+
+
+def test_a_dry_run_logs_its_writes_as_planned_never_as_status_null(fake, tmp_path, env, scan):
+    changes = _changes(tmp_path, full_list(scan))
+    assert main([str(changes), "--log", str(tmp_path / "dry.jsonl")]) == 0
+    lines = _lines(next(tmp_path.glob("dry.2*.jsonl")))
+    writes = [e for e in lines if e.get("method") in ("POST", "PUT", "DELETE") and not e["path"].startswith("/token/")]
+    assert writes and all(e.get("planned") is True and "status" not in e for e in writes), writes
+    assert lines[0]["event"] == "start" and lines[-1]["event"] == "end" and lines[-1]["exit"] == 0
+
+
+def test_a_big_put_logs_a_hash_and_revert_still_restores_it(fake, tmp_path, env):
+    old, new = "a" * 100_000, "b" * 100_000
+    _note(fake, "n1", old)
+    pre = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", pre]) == 0
+    log = _apply_list(tmp_path, [{"op": "update_note", "key": "u", "ruling": R, "note": "N0001",
+                                  "set": {"text": new}, "expect": old}], "big")
+    put = [e for e in _lines(log) if e.get("method") == "PUT"]
+    assert len(put) == 1 and "body" not in put[0] and put[0]["body_digest"]["bytes"] > 65536
+    assert len(put[0]["body_digest"]["sha256"]) == 64
+    assert fake.store["notes"]["n1"]["text"]["string"] == new
+    assert _undo(log, pre, "--apply") == 0
+    assert fake.store["notes"]["n1"]["text"]["string"] == old
+
+
+def test_a_big_put_edited_since_the_run_is_left_alone(fake, tmp_path, env):
+    old, new = "a" * 100_000, "b" * 100_000
+    _note(fake, "n1", old)
+    pre = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", pre]) == 0
+    log = _apply_list(tmp_path, [{"op": "update_note", "key": "u", "ruling": R, "note": "N0001",
+                                  "set": {"text": new}, "expect": old}], "big")
+    fake.store["notes"]["n1"]["text"]["string"] = new + " edited by hand"
+    assert _undo(log, pre, "--apply") == 1
+    assert fake.store["notes"]["n1"]["text"]["string"] == new + " edited by hand"
+
+
+def test_a_missing_change_list_is_one_line_and_exit_2(tmp_path, capsys):
+    assert main([str(tmp_path / "missing.jsonl")]) == 2
+    err = capsys.readouterr().err
+    assert err.count("\n") == 1 and "missing.jsonl" in err, err
+
+
+def test_a_failed_login_prints_the_run_id_and_writes_no_log(fake, tmp_path, env, state_home, monkeypatch, capsys):
+    monkeypatch.setenv("GWT_TOKEN", "a-revoked-token")  # the fake answers 403 to a token it does not know
+    changes = _changes(tmp_path, [{"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}])
+    assert main([str(changes), "--apply", "--retry-wait", "0"]) == 1
+    out = capsys.readouterr()
+    assert "run 2" in out.out and "login failed" in out.err, out
+    assert not state_home.exists()

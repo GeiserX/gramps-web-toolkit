@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import base64
 import copy
+import hashlib
 import json
+import os
 import time
 import urllib.parse
 from datetime import datetime, timezone
@@ -44,6 +46,45 @@ class Retryable(ApiError):
 
 class Stale(ApiError):
     """An object read from the snapshot changed on the server since: take a new snapshot."""
+
+
+# a PUT body bigger than this is logged as its digest: one person with many associations is about 1 MB a write
+BIG_BODY = 64 * 1024
+# top-level fields a digest leaves out: the server stamps `change`, fills in `gramps_id`, and drops `_class`
+DIGEST_SKIP = {"change", "extended", "profile", "backlinks", "_read", "_snap", "_class", "gramps_id"}
+
+
+def _strip_class(value):
+    if isinstance(value, dict):
+        return {k: _strip_class(v) for k, v in value.items() if k != "_class"}
+    if isinstance(value, list):
+        return [_strip_class(v) for v in value]
+    return value
+
+
+def digest(obj: dict) -> str:
+    """sha256 of an object as the server keeps it, so a live object and the body that wrote it compare equal."""
+    kept = _strip_class({k: v for k, v in obj.items() if k not in DIGEST_SKIP})
+    return hashlib.sha256(json.dumps(kept, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def body_fields(method: str, body) -> dict:
+    """The log fields for a write's body: the body itself, or for a PUT over BIG_BODY its digest and size."""
+    if method == "PUT" and isinstance(body, dict):
+        size = len(json.dumps(body, ensure_ascii=False).encode("utf-8"))
+        if size > BIG_BODY:
+            return {"body_digest": {"sha256": digest(body), "bytes": size, "change": body.get("change")}}
+    return {"body": body}
+
+
+def _new_gramps_id(r, body) -> str | None:
+    """The Gramps ID the server gave the object a POST /objects/ made, from its answer (or the one we sent)."""
+    try:
+        made = {e.get("handle"): (e.get("new") or {}).get("gramps_id") for e in r.json() if e.get("type") == "add"}
+    except (ValueError, AttributeError, TypeError):
+        made = {}
+    first = body[0] if isinstance(body, list) and body else {}
+    return made.get(first.get("handle")) or first.get("gramps_id") or None
 
 
 def api_base(url: str) -> str:
@@ -109,8 +150,14 @@ class Client:
         self.listed: set[str] = set()  # every class the run searched as a whole
         self.deleted: set[tuple[str, str]] = set()  # objects a merge removed
         self.unsnapped: set[str] = set()  # classes a merge changed all over: read from the server from then on
-        # "x": a log file is never appended to or overwritten; each run writes its own
-        self._log = open(log_path, "x", encoding="utf-8") if log_path else None
+        # "x": a log file is never appended to or overwritten; each run writes its own. It is opened once the
+        # login went through (or an offline snapshot is loaded), with a `start` line of `run_info` and the tree;
+        # lines before that wait in `_pending_log`, so a run that never logs in leaves no file.
+        self._log_path = log_path
+        self._log = None
+        self._log_ready = False
+        self._pending_log: list[dict] = []
+        self.run_info: dict = {}
         self.context: dict = {}  # op key and ruling, stamped on every log line
         # called with (class, handle) before an object is read, written or merged, and with (class, None) when a
         # whole class may change: the applier writes what it holds for that object first
@@ -119,17 +166,42 @@ class Client:
 
     # -- plumbing ---------------------------------------------------------
 
-    def log(self, **entry):
-        if self._log is None:
-            return
-        entry = {
-            "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "dry_run": self.dry_run,
-            **self.context,
-            **entry,
-        }
+    def _stamp(self, entry: dict) -> dict:
+        return {"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"), "dry_run": self.dry_run, **entry}
+
+    def _write(self, entry: dict) -> None:
         self._log.write(json.dumps(entry, ensure_ascii=False) + "\n")
         self._log.flush()
+
+    def log(self, **entry):
+        if not self._log_path:
+            return
+        entry = self._stamp({**self.context, **entry})
+        if self._log is None:
+            self._pending_log.append(entry)
+            self._open_log()
+        else:
+            self._write(entry)
+
+    def _open_log(self) -> None:
+        """Once the run is in: open the log with its `start` line, then the lines held back until now."""
+        if not self._log_path or self._log is not None or not self._log_ready:
+            return
+        os.makedirs(os.path.dirname(os.path.abspath(self._log_path)), exist_ok=True)
+        self._log = open(self._log_path, "x", encoding="utf-8")
+        self._write(self._stamp({"event": "start", **self.run_info, "tree": self.tree}))
+        for entry in self._pending_log:
+            self._write(entry)
+        self._pending_log = []
+
+    def end_log(self, **end) -> None:
+        """The `end` line, then close. Nothing if the run never got in."""
+        self._open_log()
+        if self._log is None:
+            return
+        self._write(self._stamp({"event": "end", **end}))
+        self._log.close()
+        self._log = None
 
     def login(self):
         # the server rate-limits logins (429): space them out and wait when told to
@@ -162,12 +234,16 @@ class Client:
             raise ApiError(
                 f"login landed in tree {self.tree!r}, expected {self.expected_tree!r}"
             )
+        self._log_ready = True
+        self._open_log()
 
     def use_snapshot(self, data: dict, *, offline: bool = False) -> None:
         self.snapshot = {cls: {o["handle"]: o for o in rows} for cls, rows in data["objects"].items()}
         self.offline = offline
         if offline:
             self.tree = data.get("tree")
+            self._log_ready = True
+            self._open_log()
 
     def _snapped(self, cls: str, handle: str) -> bool:
         return self.snapshot is not None and cls not in self.unsnapped and (cls, handle) not in self.stale
@@ -190,7 +266,7 @@ class Client:
                 # log line, so a revert can tell whether the server holds it.
                 entry = {"method": method, "path": path, "status": None, "error": f"{type(exc).__name__}: {exc}"[:500]}
                 if write and "json" in kw:
-                    entry["body"] = kw["json"]
+                    entry.update(body_fields(method, kw["json"]))
                 self.log(**entry)
                 if write:
                     self.unknown_write.append(f"{method} {path}")
@@ -202,7 +278,9 @@ class Client:
             break
         entry = {"method": method, "path": path, "status": r.status_code}
         if write and "json" in kw:
-            entry["body"] = kw["json"]
+            entry.update(body_fields(method, kw["json"]))
+            if method == "POST" and path == "/objects/" and r.status_code == 201:
+                entry["gramps_id"] = _new_gramps_id(r, kw["json"])
         if r.status_code >= 400:
             entry["error"] = r.text[:500]
         self.log(**entry)
@@ -343,7 +421,7 @@ class Client:
         cls = obj["_class"]
         if self.dry_run:
             self.pending[(cls, obj["handle"])] = copy.deepcopy(obj)
-            self.log(method="POST", path="/objects/", body=[obj], status=None)
+            self.log(method="POST", path="/objects/", body=[obj], planned=True)
             return
         self.unsure.add((cls, obj["handle"]))
         self._wrote(cls, obj)  # before the request: if its answer is lost, the retry reads the server
@@ -374,7 +452,7 @@ class Client:
         body = {k: v for k, v in obj.items() if k not in ("_read", "_snap", "extended", "profile")}
         if self.dry_run:
             self.pending[(cls, obj["handle"])] = copy.deepcopy(body)
-            self.log(method="PUT", path=f"/{NAMESPACE[cls]}/{obj['handle']}", body=body, status=None)
+            self.log(method="PUT", path=f"/{NAMESPACE[cls]}/{obj['handle']}", **body_fields("PUT", body), planned=True)
             return
         if "_snap" in obj:
             live = self.get_live(cls, obj["handle"])
@@ -404,7 +482,7 @@ class Client:
         """DELETE an object an op has emptied of references. A dry run only marks it as gone."""
         self.deleted.add((cls, handle))
         if self.dry_run:
-            self.log(method="DELETE", path=f"/{NAMESPACE[cls]}/{handle}", status=None)
+            self.log(method="DELETE", path=f"/{NAMESPACE[cls]}/{handle}", planned=True)
             return
         try:
             self.delete(cls, handle)
@@ -427,7 +505,7 @@ class Client:
         path = f"/{NAMESPACE[cls]}/{winner}/merge/{loser}"
         self.deleted.add((cls, loser))
         if self.dry_run:
-            self.log(method="POST", path=path, body=body or {}, status=None)
+            self.log(method="POST", path=path, body=body or {}, planned=True)
             return
         # a merge rewrites people, families and notes that pointed at the loser: stop trusting the snapshot for them
         self.unsnapped |= {"Person", "Family", "Note"}
@@ -449,7 +527,7 @@ class Client:
     def upload_missing_file(self, handle: str, data: bytes, mime: str) -> str:
         """Store the file of a media object created by `create`. Returns what happened."""
         if self.dry_run:
-            self.log(method="PUT", path=f"/media/{handle}/file?uploadmissing=1", status=None)
+            self.log(method="PUT", path=f"/media/{handle}/file?uploadmissing=1", planned=True)
             return "would upload"
         r = self._request(
             "PUT",

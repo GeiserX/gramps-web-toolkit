@@ -27,9 +27,38 @@ Every request carries the User-Agent `gramps-web-toolkit/<version> (gwt-apply; +
 
 Other flags: `--log PATH`, `--retries N` (default 5), `--retry-wait SECONDS` (default 30), `--snapshot FILE`, `--save-snapshot FILE` and `--since OLD` ([Snapshots](#snapshots)), `--tag NAME` ([Tags](#tags)), `--break-lock` (below).
 
-Every run gets a run id, `<date>-<time>-<6 hex>`, printed on the first line. The log goes to `PATH` with the run id before the extension (`--log apply.jsonl` writes `apply.20261021-101500-a1b2c3.jsonl`), or to `gwt-apply-<run id>.jsonl`. The file is created with `O_EXCL`: a run never appends to or overwrites another run's log, so rerunning the same command after a crash leaves both logs.
+Every run gets a run id, `<date>-<time>-<6 hex>`. The first line of output names it and the log, before the login, so a run whose login fails still says which run it was. See [The log](#the-log).
 
-Exit codes: `0` every op done or skipped; `1` a conflict or an error stopped the run; `2` the change list or the settings are invalid (nothing was read or written).
+Exit codes: `0` every op done or skipped; `1` a conflict or an error stopped the run; `2` the change list or the settings are invalid, or the change list file cannot be read (nothing was read or written).
+
+## The log
+
+Where it goes:
+
+| Run | Log |
+|---|---|
+| `--log PATH` | `PATH` with the run id before the extension: `--log apply.jsonl` writes `apply.20261021-101500-a1b2c3.jsonl` |
+| `--apply`, no `--log` | `$XDG_STATE_HOME/gwt-apply/<GWT_TREE>/gwt-apply-<run id>.jsonl`, or under `~/.local/state` when `XDG_STATE_HOME` is unset |
+| a dry run or `--save-snapshot`, no `--log` | none: they write nothing to the tree, so they leave nothing on disk either |
+| a run whose login fails | none, with or without `--log` |
+
+The file is created with `O_EXCL`: a run never appends to or overwrites another run's log, so rerunning the same command after a crash leaves both logs. The folder per tree keeps the logs of two trees apart.
+
+What it holds is one JSON object per line. Every line has `ts` (UTC) and `dry_run`. The first and last lines say what ran and how it ended:
+
+```jsonl
+{"ts": "2026-10-21T10:15:00+00:00", "dry_run": false, "event": "start", "run": "20261021-101500-a1b2c3", "version": "0.2.0", "argv": ["changes.jsonl", "--apply"], "list": "changes.jsonl", "list_sha256": "9f2c...", "snapshot": null, "tree": "tree-example"}
+{"ts": "2026-10-21T10:15:02+00:00", "dry_run": false, "event": "end", "exit": 0, "counts": {"done": 3, "skip": 1, "conflict": 0, "error": 0}, "not_run": 0}
+```
+
+- `start`: the run id, the toolkit version, the arguments, the change list's path and the sha256 of its bytes, the tree the login landed in, and the `--snapshot` file if any. A `--revert` names the log it undoes as `list` and the pre-run copy as `pre`.
+- `end`: the exit code, the count of each status (for a revert: undone, changed since the run, manual, problems), and the ops not run. `counts` is `null` when the run stopped before any op; `error` says why when an API error, a held lock or a crash stopped it, and then `exit` is `null` for a crash.
+- `refused`: a run that stopped before its first write says why, with `reason` (`preflight` for likely duplicates, `snapshot-plan` when the plan on the snapshot does not go through or the tree changed since, `snapshot-tree`, or `pre` for a revert's pre-run copy) and `problems`, the lines it printed.
+- Every API call in between: the op's `key` and `ruling`, `method`, `path`, `status`, and the body of every write. `status: null` means a real request whose answer was lost: the server may have done it. A dry run's writes carry `planned: true` and no `status`.
+- After a create, its line carries `gramps_id`, the Gramps ID the server gave the new object (from the server's answer).
+- A `PUT` body over 64 KB (a person with thousands of DNA associations) is logged as `body_digest: {sha256, bytes, change}` instead of `body`. The hash covers the object without the fields the server sets (`change`, `gramps_id`, `_class`).
+
+The password and the token are never logged.
 
 ## The change list
 
@@ -220,7 +249,7 @@ gwt-apply changes.jsonl --snapshot tree-0413.json.gz                    # every 
 - **Stop at the first conflict or error.** Later ops are not run, because they may depend on this one.
 - **Writes are narrow.** Only a merge deletes anything, and only the loser: through Gramps' own merge, or for `merge_repository` with a `DELETE` once no source lists it. Objects are created with `POST /api/objects/`. Changes to an existing object are a `GET` followed by a `PUT` of the same object with only the named field changed. Right before the `PUT` the object is read again; if it changed since the op read it, the op starts over, so a concurrent edit is not overwritten.
 - **Busy server.** On "database is locked", any 5xx, a request that timed out or lost its connection, or an object that changed since it was read, the op waits `--retry-wait` seconds and starts over from fresh reads. A create whose answer never came is looked up again before the op tries it a second time, so a timeout cannot make an object twice. A login answered 429 (the server rate-limits logins) waits and tries again.
-- **A log of every call.** One JSONL line per API call with the op's `key` and `ruling`, the method, path, status, and the body of every write. The password and the token are never logged.
+- **A log of every call.** One JSONL line per API call with the op's `key` and `ruling`, the method, path, status, and the body of every write, between a `start` and an `end` line ([The log](#the-log)). The password and the token are never logged.
 - **Re-running is safe.** After a crash, run the same list again: what was written is skipped, and an object that was created but not yet linked gets linked.
 
 ## Speed
@@ -290,7 +319,7 @@ gwt-apply --revert run.<run id>.jsonl --pre before.json.gz --apply   # undo, the
 
 `--pre` must be a `--save-snapshot` or a `gwt-check dump` of the same tree, taken right before the run. A `.gramps` export is not accepted. The revert refuses, with exit 2 and nothing written, a copy of another tree, a copy taken after the run's first write, and a copy that already holds an object the run made.
 
-`--revert` reads the real run's log (dry-run lines are ignored) and the pre-run copy, and goes through the writes newest first. A write whose answer was lost, or that came back 5xx, counts as a write: the server may have done it.
+`--revert` reads the real run's log: the file `--log` named, or the one under `$XDG_STATE_HOME/gwt-apply/<tree>/` (or `~/.local/state/gwt-apply/<tree>/`) that the run printed on its first line. It ignores dry-run lines and the `start`, `end` and `refused` lines, and reads the pre-run copy, and goes through the writes newest first. A write whose answer was lost, or that came back 5xx, counts as a write: the server may have done it.
 
 | In the log | Step |
 |---|---|
@@ -304,7 +333,8 @@ The revert never overwrites anything that differs from what the run left:
 - A delete reads the object's backlinks first. While anything still points at it, it is kept: a later run that used the same `--tag`, or attached the note somewhere else, keeps the tag and the note.
 - A restore is `manual` when the pre-run copy is older than what the run read. Restoring it would also undo the edits made in between.
 - An object already as before the run is a `skip` too, so running the revert twice is safe.
+- A `PUT` the log keeps only as a digest (over 64 KB) is compared by hash: the object is restored only while the server holds exactly what the run sent, so any difference, even a default the server filled in, reads as changed and is left alone.
 
 With `--apply` the tree lock is taken before the plan reads anything. Each object is read again right before it is written, and an object that changed since the plan is skipped. Busy answers are tried again. If the revert stops halfway, run the same command again: what is already undone reads as a skip. At the end it reads every restored object back and checks every deleted one again.
 
-The exit code is 0 when the run is undone. It is 1 on a problem, when a `manual` step is left, or when an object changed since the run and was left alone. The revert writes its own log: `gwt-apply-revert-<run id>.jsonl`, or `<stem>.<run id><suffix>` next to `--log`, as for an apply. A revert is a tree write like any other, so run it as that tree's only writer and check the tree after it.
+The exit code is 0 when the run is undone. It is 1 on a problem, when a `manual` step is left, or when an object changed since the run and was left alone. The revert writes its own log, as an apply does: with `--apply`, `gwt-apply-revert-<run id>.jsonl` in the same per-tree folder, or `<stem>.<run id><suffix>` next to `--log`; a plan writes one only with `--log`. A revert is a tree write like any other, so run it as that tree's only writer and check the tree after it.

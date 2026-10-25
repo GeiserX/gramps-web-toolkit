@@ -153,12 +153,15 @@ class FakeGrampsWeb:
     def _route(self, method, path, headers, params, body, data):
         parts = [p for p in path.split("/") if p][1:]  # drop "api"
         if parts == ["objects"] and method == "POST":
+            made = []
             for obj in body:
                 ns = CLASS_NS[obj["_class"]]
                 if obj["handle"] in self.store[ns]:
                     return Resp(400, "Handle already exists.")
-                self.add(ns, obj)
-            return Resp(201, [{"type": "add", "handle": o["handle"]} for o in body])
+                made.append((obj["_class"], self.add(ns, obj)))
+            # like the server: the transaction, each added object as stored (with its new Gramps ID) under "new"
+            return Resp(201, [{"type": "add", "handle": o["handle"], "_class": cls, "old": None, "new": copy.deepcopy(o)}
+                              for cls, o in made])
         if parts[0] == "media" and len(parts) == 3 and parts[2] == "file" and method == "PUT":
             media = self.store["media"][parts[1]]
             if hashlib.md5(data).hexdigest() != media["checksum"]:
