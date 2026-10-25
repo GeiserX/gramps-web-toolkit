@@ -3,3 +3,4 @@ gwt_check/act.py | if registered: | if False: | a tree date that is the registra
 gwt_check/act.py | if r.get("role") == "Primary" and r.get("ref") in E | if r.get("ref") in E | a godparent's or witness's ref to an event is never read as the person's own event
 gwt_check/act.py | if p.get("private"):  # counted | if False:  # counted | a person marked private is counted but nothing of them is shown
 gwt_check/act.py | if not c or c.get("private"): | if not c: | a private citation is never searched for the act's reference
+gwt_check/act.py | and all(isinstance(who.get(k) or "", str) for k in ("given", "surname"))) | and True) | a name given as a list or a number is refused as bad input, not a crash

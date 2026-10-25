@@ -192,3 +192,14 @@ def test_a_private_citation_or_note_is_not_searched_for_the_reference():
     c["page"], c["private"] = "folio 1", True
     [r] = compare_act(t, _act())["candidates"]
     assert r["events"][0]["cited"] == "no citation text contains it"
+
+
+@pytest.mark.parametrize("bad", [{"date": 1900}, {"kind": ["birth"]}, {"father": "Mateo Ortega"}, {"subject": 5},
+                                 {"place": 5}, {"reference": 1}, {"registered": 1900},
+                                 {"subject": {"given": ["Lucía"], "surname": "Ortega"}}])
+def test_a_badly_typed_act_is_refused_as_bad_input_not_a_crash(tmp_path, capsys, bad):
+    a = tmp_path / "a.json"
+    a.write_text(json.dumps({**_act(), **bad}))
+    d = tmp_path / "t.json"
+    d.write_text(json.dumps({"tree": "x", "dumped_at": "", "objects": selftest.clean_tree()}))
+    assert main(["act", str(a), str(d)]) == 2

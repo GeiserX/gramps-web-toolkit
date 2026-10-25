@@ -22,34 +22,37 @@ KINDS = {"birth": BIRTH, "baptism": BAPTISM, "death": DEATH, "burial": BURIAL, "
 _ISO = re.compile(r"^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$")
 
 
+def _iso_ok(v) -> bool:
+    m = _ISO.match(v) if isinstance(v, str) else None
+    try:
+        return bool(m) and bool(datetime.date(int(m[1]), int(m[2] or 1), int(m[3] or 1)))
+    except ValueError:
+        return False
+
+
 def load_act(path: str) -> dict:
     try:
         with open(path, encoding="utf-8") as fh:
             act = json.load(fh)
     except (OSError, ValueError) as exc:
         raise BadInput(f"{path}: {exc}") from exc
-    if not isinstance(act, dict) or act.get("kind") not in KINDS:
+    if not isinstance(act, dict) or not isinstance(act.get("kind"), str) or act["kind"] not in KINDS:
         raise BadInput(f"{path}: 'kind' must be one of {', '.join(KINDS)}")
-    m = _ISO.match(str(act.get("date") or ""))
-    try:
-        ok = bool(m) and bool(datetime.date(int(m[1]), int(m[2] or 1), int(m[3] or 1)))
-    except ValueError:
-        ok = False
-    if not ok:
-        raise BadInput(f"{path}: 'date' must be YYYY, YYYY-MM or YYYY-MM-DD")
-    subj = act.get("subject")
-    if not isinstance(subj, dict) or not (subj.get("given") or subj.get("surname")):
+    for key in ("date", "registered"):
+        if (key == "date" or act.get(key) is not None) and not _iso_ok(act.get(key)):
+            raise BadInput(f"{path}: '{key}' must be text: YYYY, YYYY-MM or YYYY-MM-DD")
+    for key in ("place", "reference"):
+        if act.get(key) is not None and not isinstance(act[key], str):
+            raise BadInput(f"{path}: '{key}' must be text")
+    for key in ("subject", "father", "mother", "spouse"):
+        who = act.get(key)
+        if who is not None and not (isinstance(who, dict)
+                                    and all(isinstance(who.get(k) or "", str) for k in ("given", "surname"))):
+            raise BadInput(f"{path}: '{key}' must be an object whose given and surname are text")
+    if not act.get("subject") or not (act["subject"].get("given") or act["subject"].get("surname")):
         raise BadInput(f"{path}: 'subject' needs a given name or a surname")
-    if act["kind"] == "marriage" and not isinstance(act.get("spouse"), dict):
+    if act["kind"] == "marriage" and not act.get("spouse"):
         raise BadInput(f"{path}: a marriage act needs a 'spouse'")
-    if act.get("registered") is not None:
-        m = _ISO.match(str(act["registered"]))
-        try:
-            ok = bool(m) and bool(datetime.date(int(m[1]), int(m[2] or 1), int(m[3] or 1)))
-        except ValueError:
-            ok = False
-        if not ok:
-            raise BadInput(f"{path}: 'registered' must be YYYY, YYYY-MM or YYYY-MM-DD")
     return act
 
 
@@ -208,7 +211,7 @@ def compare_act(tree: Tree, act: dict) -> dict:
         if not evs:
             row["event"] = "tree has no such event" + (" (no family with that spouse)" if act["kind"] == "marriage" and not fams else "")
         else:
-            row["events"] = [{"event": tree.gid("events", e["handle"]), "date": _date_status(e.get("date"), act["date"], str(act["registered"]) if act.get("registered") else None),
+            row["events"] = [{"event": tree.gid("events", e["handle"]), "date": _date_status(e.get("date"), act["date"], act.get("registered")),
                               "place": _place_status(tree, e, act.get("place") or ""),
                               "cited": _cited(tree, e, act.get("reference") or "")} for e in evs]
         rows.append(row)
