@@ -591,6 +591,15 @@ class LeadsTest(unittest.TestCase):
         T['families']['f1']['child_ref_list'][0]['frel'] = 'Adopted'  # not a birth link: nothing to prove by a birth record
         self.assertEqual(got(dict(one, level='cited, names neither')), set())
 
+    def test_an_unsupported_link_task_says_what_to_do_carries_the_flags_and_is_a_verify_task(self):
+        flag = "another person in the tree bears the father's name"
+        links = {'rows': [{'family': 'F1', 'child': 'I1', 'level': 'a record names one', 'flags': [flag]}]}
+        rows, _ = L.leads(tree(), None, ('unsupported-link',), 1925, hold=False, links=links)
+        self.assertEqual(len(rows), 1)
+        self.assertIn('transcribe', rows[0]['what'])
+        self.assertIn(flag, rows[0]['what'])
+        self.assertEqual(L.queue_task(rows[0])['kind'], 'verify')  # record work, not a search for a new record
+
 
 if __name__ == '__main__':
     unittest.main()

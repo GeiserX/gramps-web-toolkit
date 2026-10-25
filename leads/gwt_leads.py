@@ -382,8 +382,11 @@ def leads(T, root_gid=None, kinds=DEFAULT_KINDS, living_after=None, hold=True, l
             if why:
                 held[p.get('gramps_id', p['handle'])] = why
                 continue
-            add(p, 'unsupported-link', 'link-%s' % row.get('family'),
-                'family %s: %s (words only: the link is not shown wrong)' % (row.get('family'), gap))
+            flags = [x for x in row.get('flags') or [] if isinstance(x, str)]
+            add(p, 'unsupported-link', 'link-%s' % row['family'],
+                'family %s: %s; transcribe the parents from the cited record into its citation, or find a record '
+                'that names both (words only: the link is not shown wrong)%s'
+                % (row['family'], gap, ' [read first: %s]' % '; '.join(flags) if flags else ''))
         if stale:
             raise BadInput('%d rows of the links report name a child who is not in that family in this dump: the '
                            'report is from another tree or an older dump, so run gwt-check links on this one' % stale)
@@ -398,7 +401,7 @@ def id_order(gid):
 
 
 def task_of(row):
-    return 'verify' if row['kind'] == 'uncited' else 'search'
+    return 'verify' if row['kind'] in ('uncited', 'unsupported-link') else 'search'
 
 
 def query_of(row):
