@@ -1,0 +1,38 @@
+name: New capability
+description: Propose something a tool cannot do yet.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the "Where a new capability goes" table in CONTRIBUTING.md first. Most new work fits an existing tool.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you are trying to do with your tree, and what stops you today.
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where it goes
+      options:
+        - A gwt-check kind that fails a gate
+        - A gwt-check report that never fails
+        - A gwt-leads kind or scoring input
+        - gwt-ledger search history
+        - A gwt-apply op
+        - A shared rule (living, vital events, dates, names)
+        - Words in a particular language
+        - A new top-level tool
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What the tool would do, with an invented example of input and output.
+    validations:
+      required: true

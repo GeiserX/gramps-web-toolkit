@@ -20,7 +20,7 @@ Without installing, run `check/gwt-check` from a clone.
 
 Settings come from the environment, or from a `KEY=VALUE` file passed with `--config`, the same as [`gwt-apply`](apply.md): `GWT_URL`, `GWT_USERNAME`, `GWT_PASSWORD`, and `GWT_TREE`, the tree id the login must land in. If `GWT_TREE` is set and the token's `tree` claim differs, it stops. One login serves the whole run, and the password never reaches the output.
 
-It exits `0` with no new findings and `1` with new findings. Findings of a check marked for information only, today `unconnected`, `parent-age`, `marriage-age`, `sibling-spacing` and `lifespan`, are printed as `info` and never count as new. It exits `2` on bad input, which covers a file that is not a dump, missing settings, a failed login, and a live tree that never settles (below).
+It exits `0` with no new findings and `1` with new findings. Findings of a check marked for information only, today `unconnected`, `parent-age`, `marriage-age`, `sibling-spacing`, `lifespan` and `dup-citation`, are printed as `info` and never count as new. It exits `2` on bad input, which covers a file that is not a dump, missing settings, a failed login, and a live tree that never settles (below).
 
 ## Reading a tree that is being written to
 
@@ -51,13 +51,32 @@ A `gwt-apply` snapshot (`gwt-apply --save-snapshot`, or `--save-snapshot NEW --s
 | `--pagesize`, `--workers` | Objects per request (default 1000) and requests in flight (default 4) |
 | `--live` | The old strict read of the live tree, which stops when the tree changes during it |
 
-**Scope.** The structural and dated checks always run on the whole tree. The fuzzy duplicate checks (`dup-couple-names`, `dup-person-birth`, `dup-person-relative`, `dup-person-fuzzy`, `dup-vital-event`) report a pair only when at least one side is in scope, so a run is not blamed for duplicates that were already there. Without `--since` or `--tag`, everything is in scope.
+**Scope.** The structural and dated checks always run on the whole tree. The fuzzy duplicate checks (`dup-couple-names`, `dup-person-birth`, `dup-person-relative`, `dup-person-fuzzy`, `dup-vital-event`, `dup-citation`) report a pair only when at least one side is in scope, so a run is not blamed for duplicates that were already there. Without `--since` or `--tag`, everything is in scope.
 
 **Reasons.** Rows of a known file may carry a `reason`, and the report prints it (`known N0099: kept on purpose`). `gwt-check mark-known REPORT.json --check NAME --key KEY [--key KEY ...] --reason "..." --out known.json` adds findings of a report to a known file with the reason; it refuses a key the report does not have and a blank reason, and adding one twice changes nothing.
 
 **Parent and child.** When one of a same-name pair is a parent of the other in the tree, a shared relative no longer makes them a duplicate (`dup-person-relative`, and the shared-relative branch of `dup-person-fuzzy`): a father and a son with one name share relatives by name across three generations. A shared birth date still does: `dup-person-birth` and "birth within 2 years" report the pair, because a person entered twice and then linked as their own child is a real duplicate.
 
 **Known findings.** Every finding has a `check` and a `key` built from Gramps IDs, for example `repeated-ref` / `F0012 citation_list C0034`. The key stays the same from run to run while the problem does. Pass the first run's report as `--known` and the exit code then reflects only new problems.
+
+## Places for events that have none (`fill-places`)
+
+`gwt-check fill-places [DUMP]` reads a dump (or the live tree) and writes nothing to it. For each event with no place, it looks for a place named in the page text and the notes of the event's own citations, and prints the place with the passage that names it.
+
+```sh
+gwt-check fill-places dump.json.gz                    # proposals, with a quote each
+gwt-check fill-places dump.json.gz --ops fill.jsonl   # the same as gwt-apply ops, for review
+gwt-check fill-places dump.json.gz --json             # every proposal and every ambiguous event
+```
+
+- A candidate is a place that some event of the tree already uses, so a country or province that only encloses other places is never proposed on its own. Names of fewer than 4 letters are left out.
+- Names are compared without case or accents, and only as whole words: `Villaejemplo` does not match inside `Villaejemplonuevo`.
+- When the text names a place and also one that encloses it (`Villaejemplo, Provincia Imaginaria`), the enclosing one is dropped. One place left is a proposal. More than one, such as two towns with the same name, is listed as ambiguous with each place ID, and nothing is proposed.
+- A citation can name where the record was made rather than where the event happened: a census town, the parish of a death record, a newspaper's city. Read each proposal against the record before you apply it.
+
+`--ops FILE` writes one [`gwt-apply`](apply.md) `update_event` op per proposal, with `"ruling": ""`. `gwt-apply` refuses an op with no ruling, so the file applies only after someone has read each record, written the ruling and deleted the ops they reject. An `update_event` op replaces whatever place the event has when it is applied, so build the file from a fresh dump and apply it soon after; an event someone has placed in the meantime should have its op deleted. An existing file is never replaced.
+
+The output quotes citations and notes, so it is as private as the tree.
 
 ## Finding repositories
 
@@ -93,6 +112,7 @@ gwt-check repos dump.json.gz --json                   # repositories with their 
 | `living-media-sensitive` | Media of a person with no death or burial event of their own (role `Primary`) who was born within 110 years (or has no dated birth), whose path, description or attributes hold an ID number or an ID or address word. Media already private (the person, the media or the reference) is skipped. It reads metadata only, never the image or its notes, and never prints the match. The patterns are Spanish-first: a DNI or NIE counts only with the right check letter, and the words are passport, home-address and ID-card terms in Spanish, English and French, plus `c/` before a street name. Another country adds its ID number to `ID_NUMBERS` and its words to `ID_WORDS` in `check/gwt_check/checks.py`. Accept a false positive with `--known` |
 | `private` | Any object or sub-reference marked private |
 | `dup-repository` | Two repositories with the same name, compared like people's names (below) |
+| `dup-citation` | For information only. Two or more citations of one source with the same page text, ignoring case and repeated spaces (`folio 12v` and `folio 12` are different pages). Usually one record entered twice; merge them, or keep both with `--known` when they cite different entries on one page |
 | `place-no-coords` | A place that an event uses, without latitude or longitude |
 | `surname-marker` | A surname containing `[`, such as `Vidal [¿?]` |
 | `missing-object` | With `--since`: an object of the earlier tree that is gone |
