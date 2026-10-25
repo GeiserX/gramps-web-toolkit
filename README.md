@@ -26,6 +26,7 @@ The toolkit works for genealogy in any country. One module, `spanish-poller`, is
 - `gwt-fscache`: an on-disk HTTP cache for rate-limited genealogy APIs that never stores a block or an auth header
 - `gwt-rank`: orders record-search results by how well they fit a person in the tree, from the cached FamilySearch JSON or from page text, and never hides a row
 - `gwt-mh`: MyHeritage record search, record pages and originals through a signed-in browser, on a free account or more on a paid one, with a [free vs paid matrix](docs/myheritage.md#3-free-vs-paid)
+- `gwt-read`: FamilySearch record search and records with your own session token, slow and cached so the account is not suspended
 - `gwt-gate`: one request pace shared by every agent on a machine, which backs off on a block and lets priority lanes go first
 - `gwt-rawstore`: keeps source images in an S3-compatible bucket and only a small manifest in git
 - `gwt-spanish-poller` (Spain only): watches Spanish civil-registry requests and the DEHú inbox read-only, and flags cases that vanish

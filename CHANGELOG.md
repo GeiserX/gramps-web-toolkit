@@ -34,6 +34,7 @@ Lists written for the first public commit of `gwt-apply` behave differently in t
 - Both Gramps Web clients send a toolkit User-Agent and log in with a sync token (`GWT_TOKEN`).
 - A documentation site at https://geiserx.github.io/gramps-web-toolkit/.
 - Tagged releases publish to PyPI, and `gwt --version` in a clone prints a version read from git.
+- `gwt-read familysearch`: FamilySearch record search and records with your own session token, through the cache and a slow per-account gate (one request every 30 s at best), stopping on a 403, 429, captcha, sign-in page or empty frame; it writes the same envelope and candidates files as `gwt-mh`, whose shared parts now live in `read/gwt_reader.py`.
 
 ### Changed
 
