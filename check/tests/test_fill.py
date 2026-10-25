@@ -124,3 +124,67 @@ def test_cli_prints_and_writes_ops_with_an_empty_ruling(tmp_path, capsys):
     assert main(["fill-places", str(dump), "--ops", str(ops)]) == 2  # an existing file is never replaced
     assert main(["fill-places", str(dump), "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["proposals"][0]["place"] == "P0001"
+
+
+def test_the_notes_of_a_citation_are_read_too():
+    d = _placeless(selftest.clean_tree(), "Bautismos, folio 3")
+    selftest._get(d, "citations", "C0002")["note_list"] = ["hN0001"]
+    selftest._get(d, "notes", "N0001")["text"]["string"] = "Transcripción: bautizado en Villaejemplo"
+    assert [p["place"] for p in propose_places(_tree(d))["proposals"]] == ["P0001"]
+
+
+def test_a_name_at_the_end_of_a_longer_word_does_not_match():
+    d = _placeless(selftest.clean_tree(), "Libro de Nuevavillaejemplo")
+    assert propose_places(_tree(d))["proposals"] == []
+
+
+def test_the_longest_name_wins_over_one_it_starts_with():
+    d = selftest.clean_tree()
+    _place(d, "P0050", "Santa Inventada")
+    _place(d, "P0051", "Santa Inventada de Arriba")
+    selftest._get(d, "events", "E0101")["place"] = "hP0050"  # both are candidates
+    _placeless(d, "nacido en Santa Inventada de Arriba")
+    assert [p["place"] for p in propose_places(_tree(d))["proposals"]] == ["P0051"]
+
+
+def test_names_shorter_than_four_letters_are_left_out():
+    d = selftest.clean_tree()
+    _place(d, "P0050", "Ezq")
+    _placeless(d, "nacido en Ezq")
+    assert propose_places(_tree(d))["proposals"] == []
+
+
+def test_decomposed_accents_in_the_place_or_the_text_still_match():
+    d = selftest.clean_tree()
+    _place(d, "P0050", "Valdeníspero")  # NFD: i plus a combining acute
+    _placeless(d, "nacido en Valdenispero")
+    assert [p["place"] for p in propose_places(_tree(d))["proposals"]] == ["P0050"]
+    d = selftest.clean_tree()
+    _place(d, "P0050", "Valdeníspero")
+    _placeless(d, "nacido en VALDENÍSPERO")
+    assert [p["place"] for p in propose_places(_tree(d))["proposals"]] == ["P0050"]
+
+
+def test_every_enclosing_level_is_dropped_and_a_dangling_link_is_ignored():
+    # the province is not named, so the kingdom is dropped only through the town's chain
+    d = _placeless(selftest.clean_tree(), "Villaejemplo, Reino Inventado")
+    _place(d, "P0050", "Reino Inventado")
+    selftest._get(d, "places", "P0002")["placeref_list"] = [{"ref": "hP0050"}, {"ref": "ghost-place"}]
+    selftest._get(d, "events", "E0101")["place"] = "hP0002"  # the province is a candidate too
+    rep = propose_places(_tree(d))
+    assert [p["place"] for p in rep["proposals"]] == ["P0001"]
+    assert rep["ambiguous"] == []
+
+
+def test_the_quote_is_taken_at_the_first_mention():
+    d = _placeless(selftest.clean_tree(), "bautizado en Villaejemplo " + "x" * 200 + " vecino de Villaejemplo")
+    [p] = propose_places(_tree(d))["proposals"]
+    assert "bautizado en Villaejemplo" in p["quote"]
+
+
+def test_the_quote_points_at_the_name_in_a_script_that_decomposes():
+    d = selftest.clean_tree()
+    _place(d, "P0050", "가나다라")
+    _placeless(d, "각" * 60 + " 가나다라 " + "x" * 200)
+    [p] = propose_places(_tree(d))["proposals"]
+    assert "가나다라" in p["quote"]

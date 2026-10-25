@@ -926,3 +926,26 @@ def test_dup_citation_is_info_and_never_fails_the_run(tmp_path, capsys):
     dump.write_text(json.dumps(d), encoding="utf-8")
     assert main(["check", str(dump)]) == 0
     assert "info dup-citation" in capsys.readouterr().out
+
+
+def test_dup_citation_needs_a_source():
+    d = selftest.clean_tree()
+    _cite(d, "C0090", "folio 7", source="")
+    _cite(d, "C0091", "folio 7", source="")
+    assert _dups(d) == []
+
+
+def test_dup_citation_needs_one_side_in_scope():
+    d = selftest.clean_tree()
+    _cite(d, "C0090", "folio 1")
+    tree = Tree(copy.deepcopy(d))
+    found = lambda scope: [f["key"] for f in checks.run_checks(tree, scope)[0] if f["check"] == "dup-citation"]
+    assert found({("citations", "hC0090")}) == ["C0001,C0090"]
+    assert found({("people", "hI0001")}) == []
+
+
+def test_fill_places_refuses_a_backup(tmp_path, capsys):
+    backup = tmp_path / "t.gramps"
+    backup.write_bytes(_to_xml(selftest.clean_tree()))
+    assert main(["fill-places", str(backup)]) == 2
+    assert "no citation text" in capsys.readouterr().err
