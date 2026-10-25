@@ -1000,6 +1000,26 @@ def test_from_reads_again_the_members_of_a_family_written_without_their_stamps(l
     assert _objects(new)["people"][child["handle"]]["parent_family_list"] == []
 
 
+def test_from_reads_again_a_person_a_family_takes_in_without_their_stamp(live, tmp_path):
+    data = selftest.clean_tree()
+    copy = __import__("copy")
+    loner = copy.deepcopy(next(p for p in data["people"] if p["gramps_id"] == "I0008"))
+    loner.update(handle="hI0009", gramps_id="I0009", gender=0, parent_family_list=[])
+    loner["primary_name"]["first_name"] = "Elena"
+    data["people"].append(loner)  # in the tree with no parents when OLD is saved
+    server, old = _save_old(live, tmp_path, data)
+    fam = next(f for f in server.data["families"] if f["gramps_id"] == "F0001")
+    person = next(p for p in server.data["people"] if p["gramps_id"] == "I0009")
+    # the family is written with the person as a new child; the server adds the family to the person, stamp kept
+    fam["child_ref_list"] = fam["child_ref_list"] + [dict(fam["child_ref_list"][0], ref=person["handle"])]
+    server.tick(fam)
+    person["parent_family_list"] = [fam["handle"]]
+    new = str(tmp_path / "new.json")
+    report = str(tmp_path / "r.json")
+    assert main(["check", "--from", old, "--save-dump", new, "--json", report]) == 0, json.load(open(report))["new"]
+    assert _objects(new)["people"][person["handle"]]["parent_family_list"] == [fam["handle"]]
+
+
 def test_from_refuses_another_tree_and_a_backup(live, tmp_path, capsys):
     server, old = _save_old(live, tmp_path, selftest.clean_tree())
     dumped = json.load(open(old))

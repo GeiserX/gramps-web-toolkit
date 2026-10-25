@@ -51,7 +51,7 @@ Two kinds of write leave a stamp that says nothing moved, and `--from` reads the
 - A stamp counts whole seconds, so an object written again in the second the earlier read saw it keeps the stamp the file holds. Every dump `gwt-check` writes records `read_started`, the Unix time its read began, and `--from` reads again every object stamped at or after that moment minus 2 s. A file without it (written by an older `gwt-check`, or a `gwt-apply` snapshot) is taken to have started its read an hour before its `dumped_at` or `taken`, with a warning; one with neither is refused.
 - Writing a family edits its members' family lists, and nothing proves their stamps move with it. So the father, mother and children of every family that moved or went away, before and after the write, are read again. A live read does the same on every pass.
 
-Objects read again this way that come back unchanged do not count as moved, so they never add a pass. The one exception is a lock note left behind by a `gwt-apply` that died: `--from` leaves it out of the tree it starts from, so it reads that note again every time and takes one more round of stamp lists.
+Objects read again this way that come back unchanged do not count as moved, so they never add a pass. The one exception is a lock note left behind by a `gwt-apply` that died: `--from` leaves it out of the tree it starts from, so it reads that note again every time and takes one more round of stamp lists. The note is still in the tree, so that reread puts it in `POST`, and the next `--from` pays the same round until the note is removed.
 
 `read_started` comes from the clock of the machine that ran the read and stamps from the server's clock, so keep both in step (NTP).
 

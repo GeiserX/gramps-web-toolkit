@@ -73,8 +73,8 @@ def live_dump(args, settled=None, seed: Tree | None = None) -> dict:
             since = None
             if seed is not None:
                 if seed.tree_id != client.tree:
-                    raise BadInput(f"--from {seed.source}: a dump of tree {seed.tree_id!r}, but the login is in "
-                                   f"tree {client.tree!r}")
+                    what = f"a dump of tree {seed.tree_id!r}" if seed.tree_id else "a file that records no tree"
+                    raise BadInput(f"--from {seed.source}: {what}, but the login is in tree {client.tree!r}")
                 if seed.read_started is None:
                     raise BadInput(f"--from {seed.source}: says nowhere when it was read "
                                    "(no read_started, dumped_at or taken)")
@@ -370,7 +370,8 @@ def main(argv: list[str] | None = None) -> int:
         base = load(args.baseline) if args.baseline else seed if seed is not None and not args.known else None
         if base is not None:
             if base.partial:
-                raise BadInput(f"{args.baseline or args.from_tree}: a .gramps backup has no objects to check; --baseline needs a dump")
+                raise BadInput(f"{args.baseline or args.from_tree}: a .gramps backup has no objects to check; "
+                               "--baseline needs a dump")
             old = check(base)["findings"]
             known = {**{(f["check"], f["key"]): "" for f in old}, **(known or {})}
         since = load(args.since) if args.since else None
