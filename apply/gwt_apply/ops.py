@@ -71,7 +71,9 @@ USE_LOSER = {"birth": "birth_ref_index", "death": "death_ref_index"}
 ATTACHABLE = {"citation": ("Citation", "citation_list"), "media": ("Media", "media_list"),  # attach_existing
               "note": ("Note", "note_list")}
 REF_OWN_LISTS = ("note_list", "citation_list", "attribute_list")  # what a MediaRef carries besides its ref
-# fields that are not one line of text; every other field in SPECS is a non-blank string
+# fields that are not one line of text; every other field in SPECS is a non-blank string. A field added to SPECS
+# gets that text check by default: list it here if it is not text, or in TEXT_CHECKED_BELOW if validate() checks it
+# by hand further down.
 NOT_TEXT = {"set", "target", "object", "attach", "children", "namesake_of", "use_loser", "address",
             "allow_namesake", "probable", "confidence", "lat", "long", "expect"}
 TEXT_CHECKED_BELOW = {("add_repository", "name"), ("add_repository", "type"), ("link_repository", "media_type"),
@@ -245,7 +247,8 @@ def validate(ops: list[dict]) -> list[str]:
         for f in sorted((required | optional) - NOT_TEXT):
             if f not in op or f in missing or (name, f) in TEXT_CHECKED_BELOW:
                 continue
-            blank_ok = (name, f) in (("add_citation", "page"), ("add_person", "surname"))
+            blank_ok = (name, f) in (("add_citation", "page"), ("add_person", "surname")) or (
+                f in optional and f in ("date", "description", "desc"))  # "" = none, as older lists write it
             if not isinstance(op[f], str) or not (op[f].strip() or (blank_ok and op[f] == "")):
                 errors.append(f"{where}: {f} is a non-empty text")
         for f in ("children", "attach", "namesake_of", "use_loser"):
@@ -329,7 +332,8 @@ def validate(ops: list[dict]) -> list[str]:
                     raise ValueError(f"set takes only {sorted(EVENT_FIELDS)}")
                 if "date" in s:
                     parse_date(s["date"])
-                if s.get("place") and not (s["place"].startswith("key:") or _GRAMPS_ID.match(s["place"])):
+                if s.get("place") and not (isinstance(s["place"], str) and (
+                        s["place"].startswith("key:") or _GRAMPS_ID.match(s["place"]))):
                     raise ValueError(f"{s['place']!r} is neither key:<key> nor a Gramps ID (never a handle)")
             if name == "update_place":
                 s = op.get("set")
@@ -591,7 +595,10 @@ class Applier:
                 try:
                     getattr(self, op["op"])(op)
                     res.status = "done" if self.wrote else "skip"
-                    if lost and not self.wrote:
+                    if lost and self.wrote:  # an earlier write may have landed, and this try wrote again
+                        self.actions += [f"{line}; a later try wrote again, so the server may hold this change twice"
+                                         for line in lost]
+                    elif lost:
                         # an earlier try's write landed and its answer did not: this try read the change back
                         res.status, res.answer_lost = "done", True
                         self.actions += [f"{line}; the re-read shows the change in place" for line in lost]
