@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
+import re
 import secrets
 import signal
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from . import revert, snapshot
+from . import revert, snapshot, version
 from .client import ApiError, Client, url_problem
 from .dupes import preflight
 from .lock import LockHeld, TreeLock, read_lock
@@ -62,14 +64,53 @@ def _plan_on_snapshot(ops: list[dict], snap: dict, client: Client, *, tag: str |
     return []
 
 
-def _log_path(args, run_id: str, default: str) -> str:
+def state_dir() -> Path:
+    """$XDG_STATE_HOME, or ~/.local/state when it is unset or not an absolute path (the XDG rule)."""
+    env = os.environ.get("XDG_STATE_HOME", "")
+    return Path(env) if os.path.isabs(env) else Path.home() / ".local" / "state"
+
+
+def _log_path(args, run_id: str, tree: str | None, *, prefix: str, writes: bool) -> str | None:
+    """`--log PATH` with the run id before the extension; else, for a run that writes, a file under the state
+    dir, one folder per tree; else (a dry run, a snapshot) no log."""
     if args.log:
         p = Path(args.log)
         return str(p.with_name(f"{p.stem}.{run_id}{p.suffix or '.jsonl'}"))
-    return default
+    if not writes:
+        return None
+    folder = re.sub(r"[^A-Za-z0-9._-]", "_", tree or "")
+    folder = "_" if folder in ("", ".", "..") else folder  # never the state dir itself or the one above it
+    return str(state_dir() / "gwt-apply" / folder / f"{prefix}-{run_id}.jsonl")
 
 
-def _revert(args) -> int:
+def _sha256(path: str) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def _first_line(run_id: str, log: str | None) -> None:
+    """Printed before the login, so a run that stops there still names its run id."""
+    print(f"run {run_id}, log " + (f"{log} (created once logged in)" if log else "none (add --log PATH to keep one)"),
+          flush=True)
+
+
+def _ended(client: Client, run, outcome: dict) -> int:
+    """Run `run()` and close the log with an `end` line that says how it ended, also on a kill or a crash."""
+    code = None
+    try:
+        code = run()
+        return code
+    except SystemExit as exc:
+        code = exc.code if isinstance(exc.code, int) else 1
+        raise
+    except BaseException as exc:
+        outcome.setdefault("error", f"{type(exc).__name__}: {exc}"[:500])
+        raise
+    finally:
+        client.end_log(exit=code, counts=outcome.get("counts"), not_run=outcome.get("not_run"),
+                       **({"error": outcome["error"]} if "error" in outcome else {}))
+
+
+def _revert(args, argv: list[str]) -> int:
     try:
         entries = revert.read_log(args.revert)
         snap = revert.read_pre(args.pre)
@@ -86,13 +127,22 @@ def _revert(args) -> int:
         print("--apply needs GWT_TREE (the tree id the login must land in)", file=sys.stderr)
         return 2
     run_id = f"{datetime.now():%Y%m%d-%H%M%S}-{secrets.token_hex(3)}"
-    client = _client(conf, dry_run=not args.apply,
-                     log_path=_log_path(args, run_id, f"gwt-apply-revert-{run_id}.jsonl"))
+    log = _log_path(args, run_id, conf.get("GWT_TREE"), prefix="gwt-apply-revert", writes=args.apply)
+    client = _client(conf, dry_run=not args.apply, log_path=log)
+    _first_line(run_id, log)
+    outcome: dict = {}
+    return _ended(client, lambda: _revert_run(args, argv, client, run_id, entries, snap, pre, outcome), outcome)
+
+
+def _revert_run(args, argv, client: Client, run_id: str, entries, snap, pre, outcome: dict) -> int:
     lock, handlers = None, {}
+    client.run_info = {"run": run_id, "version": version(), "argv": argv, "list": args.revert,
+                       "list_sha256": _sha256(args.revert), "snapshot": None, "pre": args.pre}
     try:
         client.login()
         bad = revert.pre_problems(snap, client.tree, entries)
         if bad:
+            client.log(event="refused", reason="pre", problems=bad)
             print("\n".join(f"revert: {b}" for b in bad), file=sys.stderr)
             print("revert: --pre must be a --save-snapshot or gwt-check dump of this tree taken right before the run;"
                   " nothing was written", file=sys.stderr)
@@ -122,10 +172,12 @@ def _revert(args) -> int:
             print(f"PROBLEM: {p}", file=sys.stderr)
         done = sum(s["action"] in ("restore", "delete") for s in todo)
         changed = sum(bool(s.get("changed")) for s in steps)
+        outcome["counts"] = {"undone": done, "changed": changed, "manual": len(manual), "problems": len(problems)}
         print(f"{done} undone and read back, {changed} changed since the run and left alone, "
               f"{len(manual)} for the backup, {len(problems)} problem(s)")
         return 1 if problems or manual or changed else 0
     except (LockHeld, ApiError) as exc:
+        outcome["error"] = str(exc)
         print(exc, file=sys.stderr)
         if lock is not None:
             print("stopped; running the same command again is safe: what is already undone reads as a skip",
@@ -146,8 +198,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("change_list", nargs="?", help="JSON array, {\"ops\": [...]}, or JSONL")
     ap.add_argument("--apply", action="store_true", help="write; without it nothing is written")
     ap.add_argument("--config", help="KEY=VALUE file with GWT_URL, GWT_USERNAME and GWT_PASSWORD (or GWT_TOKEN), GWT_TREE")
-    ap.add_argument("--log", help="JSONL log of every API call; the run id is added to the name "
-                    "(default gwt-apply-<run id>.jsonl)")
+    ap.add_argument("--log", help="JSONL log of every API call; the run id is added to the name (default: a real run "
+                    "logs under $XDG_STATE_HOME/gwt-apply/<tree>/, a dry run keeps no log)")
     ap.add_argument("--snapshot", metavar="FILE",
                     help="a tree snapshot: a dry run reads only it, with no server; --apply checks it is current, then reads it")
     ap.add_argument("--save-snapshot", metavar="FILE", help="read the whole tree into a new FILE (gzip JSON) and stop")
@@ -161,13 +213,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--retry-wait", type=float, default=30.0, help="seconds after a busy server")
     ap.add_argument("--break-lock", action="store_true",
                     help="take the tree's lock even if another apply's lock has not expired (only if that apply is dead)")
+    argv = list(sys.argv[1:] if argv is None else argv)
     args = ap.parse_args(argv)
     if args.revert:
         if args.change_list or args.save_snapshot or args.snapshot:
             ap.error("--revert stands alone: no change list, --snapshot or --save-snapshot")
         if not args.pre:
             ap.error("--revert needs --pre FILE, the tree as it was before the run")
-        return _revert(args)
+        return _revert(args, argv)
     if args.pre:
         ap.error("--pre goes with --revert")
     if not args.change_list and not args.save_snapshot:
@@ -175,7 +228,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.since and not args.save_snapshot:
         ap.error("--since goes with --save-snapshot")
 
-    ops = load_change_list(args.change_list) if args.change_list else []
+    try:
+        ops = load_change_list(args.change_list) if args.change_list else []
+    except (OSError, ValueError) as exc:
+        print(f"change list: {exc}", file=sys.stderr)
+        return 2
     errors = validate(ops)
     if args.tag is not None and not args.tag.strip():
         errors.append("--tag: a tag is a non-empty name")
@@ -201,8 +258,18 @@ def main(argv: list[str] | None = None) -> int:
         print("--apply needs GWT_TREE (the tree id the login must land in)", file=sys.stderr)
         return 2
     run_id = f"{datetime.now():%Y%m%d-%H%M%S}-{secrets.token_hex(3)}"
-    log = _log_path(args, run_id, f"gwt-apply-{run_id}.jsonl")
+    log = _log_path(args, run_id, conf.get("GWT_TREE"), prefix="gwt-apply",
+                    writes=args.apply and not args.save_snapshot)
     client = _client(conf, dry_run=not args.apply, log_path=log)
+    _first_line(run_id, log)
+    outcome: dict = {}
+    return _ended(client, lambda: _run(args, argv, client, run_id, ops, snap, old, offline, outcome), outcome)
+
+
+def _run(args, argv, client: Client, run_id: str, ops, snap, old, offline: bool, outcome: dict) -> int:
+    client.run_info = {"run": run_id, "version": version(), "argv": argv, "list": args.change_list,
+                       "list_sha256": _sha256(args.change_list) if args.change_list else None,
+                       "snapshot": args.snapshot}
     try:
         if offline:
             client.use_snapshot(snap, offline=True)
@@ -225,11 +292,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"snapshot: {exc}", file=sys.stderr)
         return 2
     except ApiError as exc:
+        outcome["error"] = str(exc)
         print(exc, file=sys.stderr)
         return 1
     mode = "APPLY" if args.apply else "DRY-RUN (nothing written)"
     where = f"snapshot {args.snapshot} of {snap['taken']}" if snap else "the server"
-    print(f"{mode} on tree {client.tree}, run {run_id}, reading {where}, {len(ops)} op(s), log {log}")
+    print(f"{mode} on tree {client.tree}, run {run_id}, reading {where}, {len(ops)} op(s)")
     lock, handlers = None, {}
     try:
         if args.apply:
@@ -245,20 +313,25 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"note: run {held.get('run')} on {held.get('host')} holds this tree; it may change under this plan")
         if snap is not None and args.apply:
             if snap.get("tree") != client.tree:
-                print(f"the snapshot is of tree {snap.get('tree')!r}, the login is in {client.tree!r}", file=sys.stderr)
+                msg = f"the snapshot is of tree {snap.get('tree')!r}, the login is in {client.tree!r}"
+                client.log(event="refused", reason="snapshot-tree", problems=[msg])
+                print(msg, file=sys.stderr)
                 return 1
             refused = _plan_on_snapshot(ops, snap, client, tag=args.tag)
             if refused:
+                client.log(event="refused", reason="snapshot-plan", problems=refused)
                 print("\n".join(refused) + "; nothing was written", file=sys.stderr)
                 return 1
             client.use_snapshot(snap)
         problems = preflight(ops, client)
         if problems:
+            client.log(event="refused", reason="preflight", problems=problems)
             print("\n".join(problems), file=sys.stderr)
             print(f"{len(problems)} likely duplicate(s); nothing was written", file=sys.stderr)
             return 1
         results = Applier(client, retries=args.retries, retry_wait=args.retry_wait, lock=lock, tag=args.tag).run(ops)
     except (LockHeld, ApiError) as exc:
+        outcome["error"] = str(exc)
         print(exc, file=sys.stderr)
         return 1
     finally:
@@ -272,6 +345,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"    {a}")
     counts = {s: sum(r.status == s for r in results) for s in ("done", "skip", "conflict", "error")}
     not_run = len(ops) - len(results)
+    outcome.update(counts=counts, not_run=not_run)
     lost = sum(r.answer_lost for r in results)
     words = [f"{v} {k}" + (f" (answer lost: {lost})" if k == "done" and lost else "") for k, v in counts.items()]
     print(", ".join(words) + (f", {not_run} not run" if not_run else ""))

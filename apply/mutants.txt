@@ -18,3 +18,13 @@ gwt_apply/ops.py | str(n.get("type")).lower() == op["type"].lower() | True | a n
 gwt_apply/ops.py | (row.get(f) or "").strip() == op[f].strip() | True | a source with the same title but another author is not reused
 gwt_apply/ops.py | out.append(("date", date_key(row.get("date")) == date_key(parse_date(op["date"])), | out.append(("date", True, | a citation of the same page with another date is not reused
 gwt_apply/ops.py | rows.append(("description", theirs == op["description"].strip(), | rows.append(("description", True, | an undated event with another description is not folded into the existing one
+gwt_apply/cli.py | if not writes: | if False: | a dry run or a snapshot leaves no log anywhere unless --log is given
+gwt_apply/cli.py | outcome.setdefault("error", f"{type(exc).__name__}: {exc}"[:500]) | pass | the end line of a crashed or killed run carries the error
+gwt_apply/cli.py | writes=args.apply and not args.save_snapshot) | writes=args.apply) | --save-snapshot --apply keeps no log unless --log is given
+gwt_apply/cli.py | prefix="gwt-apply-revert", writes=args.apply) | prefix="gwt-apply-revert", writes=True) | a revert plan keeps no log unless --log is given
+gwt_apply/client.py | self.log(method="DELETE", path=f"/{NAMESPACE[cls]}/{handle}", planned=True) | self.log(method="DELETE", path=f"/{NAMESPACE[cls]}/{handle}", status=None) | a dry-run delete is logged as planned, never status null
+gwt_apply/client.py | self.log(method="POST", path=path, body=body or {}, planned=True) | self.log(method="POST", path=path, body=body or {}, status=None) | a dry-run merge is logged as planned, never status null
+gwt_apply/client.py | self.log(method="PUT", path=f"/media/{handle}/file?uploadmissing=1", planned=True) | self.log(method="PUT", path=f"/media/{handle}/file?uploadmissing=1", status=None) | a dry-run upload is logged as planned, never status null
+gwt_apply/cli.py | code = exc.code if isinstance(exc.code, int) else 1 | code = None | a run stopped by SIGTERM ends its log with exit 1
+gwt_apply/cli.py | outcome["counts"] = {"undone" | outcome["xcounts"] = {"undone" | a revert's end line carries its counts
+gwt_apply/cli.py | folder = "_" if folder in ("", ".", "..") else folder | folder = folder or "_" | a tree named .. never puts the log outside the state dir
