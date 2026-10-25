@@ -37,6 +37,12 @@ FAMILYSEARCH_RULES = (
     (r'/platform/tree/|/tree/', 1 * DAY),      # the shared tree changes every day
     (r'/search/|/service/search/', 7 * DAY),
 )
+# PARES (Spanish state archives, pares.cultura.gob.es): catalogue descriptions change rarely, searches weekly.
+PARES_RULES = (
+    (r'/catalogo/search(\?|$)', 0),            # the search form: fetched only for the session cookie, never served
+    (r'/catalogo/description/', 90 * DAY),     # one archival description
+    (r'/catalogo/find\?', 7 * DAY),            # a search
+)
 DEFAULT_TTL = 7 * DAY
 STORE_STATUSES = range(200, 300)
 PRIVATE_HEADERS = ('set-cookie', 'authorization', 'www-authenticate')  # never written to disk

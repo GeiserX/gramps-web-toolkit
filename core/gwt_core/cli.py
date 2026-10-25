@@ -20,7 +20,7 @@ TOOLS = {  # name: (module with main(argv), one line)
     "fscache": ("gwt_fscache", "an on-disk cache for rate-limited genealogy APIs"),
     "rawstore": ("gwt_rawstore", "keep source images in an S3-compatible bucket"),
     "mh": ("gwt_mh_cli", "MyHeritage records through a signed-in browser (extra: mh)"),
-    "read": ("gwt_read", "FamilySearch record search and records, slow and cached, with your session token"),
+    "read": ("gwt_read", "FamilySearch and PARES record search and records, slow and cached"),
 }
 
 

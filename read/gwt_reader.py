@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """gwt_reader: the shape every record-site reader in the toolkit writes, and the one path its requests take.
 
-A reader (gwt-mh for MyHeritage, gwt-read for FamilySearch) turns one search or one record into files a
+A reader (gwt-mh for MyHeritage, gwt-read for FamilySearch and PARES) turns one search or one record into files a
 lane and the other tools can read without knowing the site:
 
     <out>/<key>.json             the envelope: what was asked and what came back
@@ -203,11 +203,12 @@ LOGIN_MARKERS = ('type="password"', "type='password'", 'sign in to familysearch'
                  'sign in', '/auth/', 'ident.familysearch.org')
 
 
-def classify_answer(status, headers, body, expect=None):
+def classify_answer(status, headers, body, expect=None, page=None):
     """'ok', 'blocked' (HTTP 403: the site refused the account or the IP), 'wall' (HTTP 429, a rate page or a
     captcha), 'dead' (signed out), 'empty' (an empty frame: no body or a page with no readable answer, read as
     a block), 'unexpected' (JSON of the wrong shape) or 'http' (any other non-2xx). A JSON reader passes
-    `expect(parsed) -> bool`."""
+    `expect(parsed) -> bool`; a page reader passes `page(html) -> bool`, true only when the page carries the
+    record text it asked for, so any other page (an empty frame, an error page) is a STOP."""
     if status == 403:
         return 'blocked'
     if status == 429:
@@ -225,6 +226,8 @@ def classify_answer(status, headers, body, expect=None):
         low = data[:65536].decode('utf-8', 'replace').lower()
         if any(m in low for m in WALL_MARKERS):
             return 'wall'
+        if page is not None and page(data.decode('utf-8', 'replace')):
+            return 'ok'
         if any(m in low for m in LOGIN_MARKERS):
             return 'dead'
         return 'empty'
@@ -255,14 +258,15 @@ class Reader:
         self.cache, self.gate, self.lane, self.fetcher = cache, gate, lane, fetcher
         self.log = log or (lambda m: None)
 
-    def get(self, url, headers=None, expect=None, refresh=False):
-        """(status, headers, body, from_cache) for a 2xx answer the site really gave; raises Stop otherwise."""
+    def get(self, url, headers=None, expect=None, refresh=False, page=None):
+        """(status, headers, body, from_cache) for a 2xx answer the site really gave; raises Stop otherwise.
+        `expect` checks a JSON answer, `page` an HTML one (see classify_answer)."""
         state = {}
 
         def gated(method, u, h, data):
             self.gate.wait(self.lane)       # raises gwt_gate.Paused: the caller exits without a request
             st, rh, body = self.fetcher(method, u, h, data)
-            verdict = classify_answer(st, rh, body, expect)
+            verdict = classify_answer(st, rh, body, expect, page)
             state.update(status=st, verdict=verdict)
             self.log('%s %s -> HTTP %s %s' % (method, u, st, verdict))
             return (st if verdict == 'ok' or not 200 <= st < 300 else NOT_STORED), rh, body
