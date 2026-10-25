@@ -52,8 +52,11 @@ LOGIN = b'<html><body><form action="/auth/login"><input type="password" name="p"
 
 
 class Resp:
-    def __init__(self, status, body, ctype='application/json'):
-        self.status, self.body, self.headers = status, body, {'content-type': ctype}
+    def __init__(self, status, body, ctype='application/json', url=None):
+        self.status, self.body, self.headers, self.url = status, body, {'content-type': ctype}, url
+
+    def geturl(self):
+        return self.url
 
     def read(self):
         return self.body
@@ -96,10 +99,11 @@ class FakeNet:
     def __call__(self, req, timeout=None):
         self.requests.append(req)
         assert len(self.gate.waits) == len(self.requests), 'network call without a gate slot'
-        status, body = self.answers.pop(0)
+        status, body, *final = self.answers.pop(0)
         if status >= 400:
             raise urllib.error.HTTPError(req.full_url, status, 'x', {'content-type': 'text/html'}, io.BytesIO(body))
-        return Resp(status, body, 'application/json' if body[:1] in (b'{', b'[') else 'text/html')
+        return Resp(status, body, 'application/json' if body[:1] in (b'{', b'[') else 'text/html',
+                    final[0] if final else req.full_url)
 
 
 class Base(unittest.TestCase):
@@ -154,6 +158,18 @@ class Search(Base):
         ranked = gwt_rank.rank(rows, 'Ana', ['Zorvalo', 'Quirell'], gwt_rank.parse_facts('by=1851 bp=Villazul'))
         self.assertEqual((ranked[0]['id'], ranked[0]['tier']), ('QZZ1-AAA', 'strong'))
         self.assertEqual(ranked[1]['tier'], 'conflict')
+
+    def test_redirect_is_recorded_as_final_url_and_survives_the_cache(self):
+        gate = FakeGate()
+        moved = 'https://www.familysearch.org/service/search/hr/v3/personas?q.givenName=Ana'
+        net = FakeNet(gate, (200, json.dumps(SEARCH).encode(), moved))
+        code, lines, _ = self.search(net, gate)
+        self.assertEqual(code, 0)
+        env = json.load(open(lines['evidence']))
+        self.assertEqual((env['url'], env['final_url']), (net.requests[0].full_url, moved))
+        code, lines, _ = self.search(net, gate)
+        self.assertEqual(json.load(open(lines['evidence']))['final_url'], moved)
+        self.assertEqual(len(net.requests), 1)
 
     def test_search_url_carries_the_query(self):
         url = gwt_read.search_url('Ana', ['Zorvalo', 'Quirell'], by=1851, years=2, place='Villazul',

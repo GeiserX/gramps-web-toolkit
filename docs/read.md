@@ -72,9 +72,11 @@ The search uses the JSON endpoint the site's own search page calls (`/service/se
 
 ### The default pace, and why
 
-One account gets at best one request every **30 seconds** (120 an hour), never faster than one every 20 seconds, and after a hit one every 120 seconds. The gate's own defaults (15 s, floor 8 s) are for a machine-wide pace shared by many tools; this one is for one account and stays well under the volume that got an IP blocked in 2026: 461 requests in 42 minutes, one every 4.8 to 6 seconds ([hard-won lesson 2](hard-won.md#2-the-per-ip-ceiling-is-below-about-10-requests-a-minute-sustained)). A repeated search costs nothing, because the cache answers it before the gate is asked.
+One account starts at one request every **30 seconds** (120 an hour). After an hour without a hit the gate shortens the gap by a fifth, never below one every 20 seconds, and a hit triples it, up to one every 120 seconds. The gate's own defaults (15 s, floor 8 s) are for a machine-wide pace shared by many tools; this one is for one account and stays well under the volume that got an IP blocked in 2026: 461 requests in 42 minutes, one every 4.8 to 6 seconds ([hard-won lesson 2](hard-won.md#2-the-per-ip-ceiling-is-below-about-10-requests-a-minute-sustained)). A repeated search costs nothing, because the cache answers it before the gate is asked.
 
-To change the pace for an account, drive its gate directly, for example `gwt gate --dir ~/.cache/gwt-gate-fs-default status`. After a 403, the gate stays blocked for 24 hours; `gwt gate --dir ... clear <reason>` ends the block early, which you should only do once you know why it happened.
+These numbers are fixed in `gwt-read` (`FS_PACE`); `gwt gate --dir ~/.cache/gwt-gate-fs-default status` shows where an account's pace stands now. After a 403, the gate stays blocked for 24 hours; `gwt gate --dir ... clear <reason>` ends the block early, which you should only do once you know why it happened.
+
+Every 403 counts as a block, even one that only refuses a single restricted record. That can park an account for a day over one record its access level cannot see. We chose it on purpose: from the outside, a 403 for one record looks the same as a 403 for the account or the IP, and guessing wrong the other way is how an account gets suspended. `gwt gate denied` exists for tools that can tell the two apart; `gwt-read` cannot.
 
 ### Account safety rules
 
@@ -82,7 +84,7 @@ To change the pace for an account, drive its gate directly, for example `gwt gat
 - **Never run parallel lanes on one account.** Lanes on the same account share its gate and wait their turn. Do not add accounts to go faster, and do not move to another account or IP to dodge a block.
 - **Stop on 429 and 403.** The tool exits 3 and the gate pauses or blocks every lane on the account. Do other work. A search made after a block time that says "no results" is not a negative ([hard-won lesson 3](hard-won.md#3-a-no-result-during-a-block-is-not-a-negative)).
 - **Keep a daily budget per lane.** We use about 80 requests a day.
-- **Cache first.** Share one cache directory between lanes, so a record any lane has read is never asked for again.
+- **Cache first.** Share one cache directory between lanes, so a record any lane has read is never asked for again. The cache does not record which account fetched an answer: a record read with an affiliate library's access is replayed to a free account that shares the cache. Give an account its own `--cache-dir` if that matters.
 
 ### What each kind of access sees
 

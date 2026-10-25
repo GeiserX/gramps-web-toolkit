@@ -115,6 +115,9 @@ def record_candidates(doc, ark):
 # ---------------------------------------------------------------- network
 
 
+FINAL_URL_HEADER = 'x-gwt-final-url'
+
+
 def urllib_fetcher(token, user_agent, urlopen=urllib.request.urlopen):
     """A gwt-fscache fetcher that adds the token itself, so the headers the cache sees never carry it.
     HTTP errors come back as their status, never raised."""
@@ -125,7 +128,11 @@ def urllib_fetcher(token, user_agent, urlopen=urllib.request.urlopen):
         req = urllib.request.Request(url, data=data, headers=h, method=method)
         try:
             with urlopen(req, timeout=60) as r:
-                return r.status, dict(r.headers), r.read()
+                rh, body = dict(r.headers), r.read()
+                final = r.geturl()
+                if final and final != url:
+                    rh[FINAL_URL_HEADER] = final    # a redirect; the cache keeps it with the answer
+                return r.status, rh, body
         except urllib.error.HTTPError as e:
             return e.code, dict(e.headers or {}), e.read()
         except (urllib.error.URLError, OSError) as e:
@@ -157,10 +164,11 @@ def err(msg):
 
 
 def _save(a, R, url, accept, expect, key, to_cands, total_of):
-    status, _, body, cached = R.get(url, {'accept': accept}, expect=expect, refresh=a.refresh)
+    status, rh, body, cached = R.get(url, {'accept': accept}, expect=expect, refresh=a.refresh)
     doc = json.loads(body)
     cands = to_cands(doc)
-    env = gwt_reader.envelope(url, json_body=doc, status=status, from_cache=cached)
+    env = gwt_reader.envelope(url, (rh or {}).get(FINAL_URL_HEADER), json_body=doc, status=status,
+                              from_cache=cached)
     base = gwt_reader.write_search(a.out, key, env, cands)
     gwt_reader.print_paths(SOURCE, base, out)
     total = total_of(doc)
