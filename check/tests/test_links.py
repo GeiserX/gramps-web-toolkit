@@ -174,3 +174,30 @@ def test_an_unknown_level_is_refused(tmp_path):
     p.write_text(json.dumps({"tree": "x", "dumped_at": "", "objects": _d("folio 1")}))
     with pytest.raises(SystemExit):
         main(["links", str(p), "--level", "birth"])
+
+
+def test_a_parent_without_a_surname_is_flagged_and_never_matches():
+    d = _d("hija de Mateo Ortega y Clara Sanz")
+    selftest._get(d, "people", "I0002")["primary_name"]["surname_list"] = [{"surname": ""}]
+    r = _row(d)
+    assert r["level"] == LEVELS[3] and r["named"] == {"mother": "birth record"}
+    assert any("father's name has no word of 3 or more letters" in f for f in r["flags"])
+
+
+def test_the_level_and_the_limit_pick_the_printed_rows(tmp_path, capsys):
+    d = _d("hija de Mateo Ortega y Clara Sanz")
+    _link(d)["frel"] = "Adopted"
+    p = tmp_path / "t.json"
+    p.write_text(json.dumps({"tree": "x", "dumped_at": "", "objects": d}))
+    rows = lambda *a: [x for x in (main(["links", str(p), *a]), capsys.readouterr().out)[1].splitlines() if x.startswith("  F")]
+    assert rows("--level", "flagged") == [x for x in rows() if "not by birth" in x] and len(rows("--level", "flagged")) == 1
+    assert [x.split(":")[0] for x in rows("--level", LEVELS[5])] == ["  F0001 I0008", "  F0002 I0002", "  F0003 I0003"]
+    assert len(rows("--limit", "2")) == 2
+
+
+def test_a_gramps_backup_is_refused(tmp_path, capsys):
+    from test_check import _to_xml
+    backup = tmp_path / "t.gramps"
+    backup.write_bytes(_to_xml(selftest.clean_tree()))
+    assert main(["links", str(backup)]) == 2
+    assert "no citation text" in capsys.readouterr().err

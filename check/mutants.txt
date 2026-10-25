@@ -7,3 +7,5 @@ gwt_check/links.py | if n in N and not N[n].get("private")] | if n in N] | a pri
 gwt_check/links.py | (w & given and w & FILIATION) | (w & given) | one given name of several counts only beside a filiation word
 gwt_check/links.py | if _public_cits(tree, r.get("citation_list")): | if False: | a citation on the link itself is the top level
 gwt_check/links.py | flags = [f"the link is marked {mark}"] if mark in FLAG_MARKS else [] | flags = [] | an open [probable] or [wrong link] mark is flagged
+gwt_check/links.py | rows = [r for r in rep["rows"] if only is None or r["level"] == only or (only == "flagged" and r["flags"])] | rows = rep["rows"] | --level prints only the rows of that level
+gwt_check/links.py | for r in rows[:limit]: | for r in rows: | --limit caps the printed rows
