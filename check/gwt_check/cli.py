@@ -346,7 +346,7 @@ def main(argv: list[str] | None = None) -> int:
         base = load(args.baseline) if args.baseline else seed if seed is not None and not args.known else None
         if base is not None:
             if base.partial:
-                raise BadInput(f"{args.baseline}: a .gramps backup has no objects to check; --baseline needs a dump")
+                raise BadInput(f"{args.baseline or args.from_tree}: a .gramps backup has no objects to check; --baseline needs a dump")
             old = check(base)["findings"]
             known = {**{(f["check"], f["key"]): "" for f in old}, **(known or {})}
         since = load(args.since) if args.since else None

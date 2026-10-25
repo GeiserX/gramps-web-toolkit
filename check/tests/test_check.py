@@ -928,6 +928,25 @@ def test_from_on_an_unchanged_tree_lists_each_type_once(live, tmp_path):
     assert _objects(new) == _objects(old)
 
 
+def test_from_reading_again_unchanged_objects_costs_no_extra_pass(live, tmp_path):
+    # a note and a family stamped in the second the old read started are read again, and so are the family's
+    # members; none of them came back different, so the stamps are not listed a second time
+    from gwt_check.tree import TYPES
+    server, old = _save_old(live, tmp_path, selftest.clean_tree())
+    dumped = json.load(open(old))
+    for t, gid in (("notes", "N0001"), ("families", "F0001")):
+        for o in (next(o for o in rows if o["gramps_id"] == gid) for rows in (dumped["objects"][t], server.data[t])):
+            o["change"] = dumped["read_started"]
+    seeded = _write(tmp_path, "window.json", dumped)
+    server.calls.clear()
+    new = str(tmp_path / "new.json")
+    assert main(["check", "--from", seeded, "--save-dump", new]) == 0
+    calls = _api_calls(server)
+    assert sum(q == "keys=handle%2Cchange" for q in calls) == len(TYPES)
+    assert [q for q in calls if "handles=" in q]  # the window and the members were read again
+    assert _objects(new) == _objects(seeded)
+
+
 def test_from_reads_again_what_a_write_changed_and_matches_a_full_read(live, tmp_path):
     from gwt_check.client import Client
     server, old = _save_old(live, tmp_path, selftest.clean_tree())
@@ -992,8 +1011,10 @@ def test_from_refuses_another_tree_and_a_backup(live, tmp_path, capsys):
     assert not [q for q in _api_calls(server) if "page=" in q]  # refused before any read
     backup = tmp_path / "b.gramps"
     backup.write_text('<?xml version="1.0"?><database xmlns="http://gramps-project.org/xml/1.7.1/"></database>')
-    assert main(["check", "--from", str(backup)]) == 2
-    assert ".gramps backup" in capsys.readouterr().err
+    for extra in ([], ["--known", _write(tmp_path, "k.json", [])], ["--baseline", old]):
+        assert main(["check", "--from", str(backup), *extra]) == 2
+        err = capsys.readouterr().err
+        assert f"--from {backup}: a .gramps backup has no objects to start from; use a dump" in err, extra
     assert main(["check", old, "--from", old]) == 2
 
 
