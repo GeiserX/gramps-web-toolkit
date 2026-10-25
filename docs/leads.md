@@ -18,7 +18,7 @@ The same tree gives the same leads from either file. A file in any other shape, 
 | `branch-end` | a person with no birth parents recorded: where a line stops |
 | `missing-vital` | no birth or baptism; no death or burial for someone born in `--living-after` or earlier; a birth or death (or its stand-in) with no date or no place; a family with children and no marriage event |
 | `uncited` | a birth or death (or its stand-in) with no citation: a fact nobody can check |
-| `unsupported-link` | a parent link that exists, but no cited record names both parents. Needs `--links FILE`, the JSON `gwt-check links --json` writes. It is a gap in the record text, not a sign the link is wrong, and the same hold-back of the possibly living applies |
+| `unsupported-link` | a birth link whose cited records name neither parent, or only one of the two. `--links FILE` turns it on: the JSON `gwt-check links --json` wrote from the same dump. A report that does not fit the dump (an unknown level, or a child not in that family) stops with exit 2. Left out: a family with one parent whose record names that parent, adoptive, step or foster links, and a child with no cited birth or baptism (`uncited` and `missing-vital` list that). The task carries the report's flags. It is a gap in the record text, not a sign the link is wrong, and it is only as good as the name matching of `gwt-check links` |
 
 `--kinds` picks a subset. Only a person's own events count, the same way `gwt-check` and `gwt-apply` read them:
 
@@ -56,7 +56,7 @@ With `--root I0001` (a Gramps id), the root's ancestors rank first: 100 minus on
 
 - `--format tsv` (default): `priority`, person id, label, kind, what. Tabs and newlines inside a value become spaces.
 - `--format json`: one JSON object per gap, with `gap` (a stable code such as `birth-place` or `branch-end`), `generation`, `weak` and `facts`.
-- `--format queue`: one JSON line per task for `gwt-queue add --jsonl`. One task per person and task kind (`search` for branch ends and missing vitals, `verify` for uncited facts), with every gap in the note. `--per-gap` gives one task per gap instead.
+- `--format queue`: one JSON line per task for `gwt-queue add --jsonl`. One task per person and task kind (`search` for branch ends and missing vitals, `verify` for uncited facts and unsupported links), with every gap in the note. `--per-gap` gives one task per gap instead.
 
 `--limit N` keeps the N highest-priority rows; in queue format it counts tasks.
 

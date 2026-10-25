@@ -600,6 +600,14 @@ class LeadsTest(unittest.TestCase):
         self.assertIn(flag, rows[0]['what'])
         self.assertEqual(L.queue_task(rows[0])['kind'], 'verify')  # record work, not a search for a new record
 
+    def test_links_alone_turns_the_kind_on(self):
+        d = self.dump(tree())
+        f = os.path.join(self.td.name, 'links.json')
+        json.dump({'rows': [{'family': 'F1', 'child': 'I1', 'level': 'cited, names neither'}]}, open(f, 'w'))
+        rc, out, err = self.cli(d, '--links', f, '--kinds', 'branch-end', '--format', 'json', '--include-living')
+        self.assertEqual(rc, 0, err)
+        self.assertIn('unsupported-link', {json.loads(x)['kind'] for x in out.splitlines()})
+
 
 if __name__ == '__main__':
     unittest.main()

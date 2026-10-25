@@ -5,13 +5,16 @@ Reads an offline dump (the JSON `gwt-check dump` writes, or a `gwt-apply` snapsh
 touches the tree. Exit 2 on a file that is not a dump, never a silent empty list. Prints the gaps highest priority first: direct ancestors of --root count
 100 minus a point per generation (never below 40), everyone else 10.
 
-  gwt-leads [--root I0001] [--kinds branch-end,missing-vital,uncited] [--limit N] [--format tsv|json|queue] DUMP
+  gwt-leads [--root I0001] [--kinds branch-end,missing-vital,uncited] [--links FILE] [--limit N]
+            [--format tsv|json|queue] DUMP
 
 Gaps:
   branch-end     a person with no birth parents recorded: where a line stops
   missing-vital  no birth (or baptism), no marriage (a family with children but no marriage event) or, for people
                  born in --living-after or earlier, no death (or burial); or such an event with no date or no place
   uncited        a birth or death event (or its baptism or burial stand-in) with no citation
+  unsupported-link  (only with --links, the report `gwt-check links --json` wrote from the same dump) a birth
+                 link whose cited records name neither parent, or only one of two: words only, never a wrong link
 
 Only the person's own events count: refs with role Primary, the birth and death the person points at first.
 People who may be living (no death, burial or cremation, and no date of theirs or of a descendant that proves a
@@ -451,7 +454,8 @@ def main(argv=None):
     p.add_argument('dump')
     p.add_argument('--root', help='Gramps id of the person whose ancestors rank first')
     p.add_argument('--kinds', default=','.join(DEFAULT_KINDS))
-    p.add_argument('--links', metavar='FILE', help='the JSON `gwt-check links --json` wrote: needed for the unsupported-link kind')
+    p.add_argument('--links', metavar='FILE',
+                   help='the JSON `gwt-check links --json` wrote from this same dump: adds the unsupported-link kind')
     p.add_argument('--limit', type=int, default=0, help='keep the N highest-priority rows (tasks, in queue format)')
     p.add_argument('--format', choices=('queue', 'tsv', 'json'), default='tsv')
     p.add_argument('--living-after', type=int, default=default_living_after(), metavar='YEAR',
@@ -474,8 +478,10 @@ def main(argv=None):
     bad = [k for k in kinds if k not in KINDS]
     if bad:
         p.error('unknown kind: %s' % ', '.join(bad))
-    if ('unsupported-link' in kinds) != bool(args.links):
-        p.error('the unsupported-link kind and --links go together')
+    if args.links and 'unsupported-link' not in kinds:
+        kinds += ('unsupported-link',)  # --links can only mean this kind
+    if 'unsupported-link' in kinds and not args.links:
+        p.error('the unsupported-link kind needs --links FILE, the JSON `gwt-check links --json` writes')
     links = None
     if args.links:
         try:
