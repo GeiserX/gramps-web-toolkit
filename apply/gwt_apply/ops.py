@@ -469,13 +469,18 @@ class Result:
     status: str = "done"  # done | skip | conflict | error
     actions: list[str] = field(default_factory=list)
     answer_lost: bool = False  # done because an earlier try's write landed, though its answer never came
+    reasons: list[str] = field(default_factory=list)  # why a `done` op is not in the tree yet: missing / differs
 
 
 
 
 class Applier:
-    def __init__(self, client: Client, *, retries: int = 5, retry_wait: float = 30.0, lock=None, tag: str | None = None):
+    def __init__(self, client: Client, *, retries: int = 5, retry_wait: float = 30.0, lock=None, tag: str | None = None,
+                 verify: bool = False):
         self.c = client
+        self.verify = verify  # a Gramps ID that was merged away resolves to its winner through the merge note
+        self._merges: dict[str, list[tuple[str, str]]] | None = None  # class -> (merge note text, note handle)
+        self.reasons: list[str] = []
         self.lock = lock  # a TreeLock to keep fresh before every try, during --apply
         self.run_tag = tag  # every object the run creates gets this tag, plus the op's own `tag`
         self._tags: dict[str, str] = {}  # tag name -> handle
@@ -505,9 +510,31 @@ class Applier:
         if not _GRAMPS_ID.match(ref):
             raise Conflict(f"{ref!r} is neither key:<key> nor a Gramps ID")
         handle = self.c.handle_for_gramps_id(cls, ref)
+        if handle is None and self.verify:
+            handle = self._merged_into(cls, ref)
         if handle is None:
             raise Conflict(f"no {cls} with Gramps ID {ref}")
         return handle
+
+    def _merged_into(self, cls: str, ref: str) -> str | None:
+        """The handle of the object `ref` was merged into: the one whose note list holds the note our merge op
+        wrote, `Merged <cls> <ref> ...`. Gramps moves that note on to the next winner when the winner is merged
+        away too, so one lookup finds the object that holds it now. None when no object, or more than one, does."""
+        if self._merges is None:
+            self._merges = {}
+            for n in self.c.list_all("Note", ["text"]):
+                m = re.match(r"Merged (Person|Family|Event|Repository) (\S+) ", (n.get("text") or {}).get("string") or "")
+                if m:
+                    self._merges.setdefault(m[1], []).append((m[2], n["handle"]))
+        notes = {h for loser, h in self._merges.get(cls, []) if loser == ref}
+        if not notes:
+            return None
+        rows = [r for r in self.c.list_all(cls, ["note_list", "gramps_id"]) if notes & set(r.get("note_list") or [])]
+        if len(rows) != 1:  # two holders: no way to tell which one is the winner, so the op stays a conflict
+            return None
+        winner = rows[0]
+        self.actions.append(f"{cls} {ref} was merged into {self.label(winner)}: reading it there")
+        return winner["handle"]
 
     def obj(self, cls: str, ref: str) -> dict:
         obj = self.c.get(cls, self.resolve(cls, ref))
@@ -545,6 +572,9 @@ class Applier:
         if self._op_tags:
             obj["tag_list"] = [self.tag_handle(t) for t in self._op_tags]
         self.actions.append(f"create {obj['_class']}{extra}: {json.dumps(obj, ensure_ascii=False)}")
+        key = (self.c.context or {}).get("key") or ""
+        key = next((k for k in (key, key + "#merge") if stable_handle(k) == obj["handle"]), None)
+        self.reasons.append(f"missing: {obj['_class']} " + (f"key {key}" if key else f"handle {obj['handle']}"))
         self.c.create(obj)
         self.wrote = True
 
@@ -553,10 +583,9 @@ class Applier:
         for k in sorted(set(before) | set(after)):
             if k.startswith("_") or before.get(k) == after.get(k):
                 continue
-            changes.append(
-                f"{k}: {json.dumps(before.get(k), ensure_ascii=False)} -> "
-                f"{json.dumps(after.get(k), ensure_ascii=False)}"
-            )
+            old, new = json.dumps(before.get(k), ensure_ascii=False), json.dumps(after.get(k), ensure_ascii=False)
+            changes.append(f"{k}: {old} -> {new}")
+            self.reasons.append(f"differs: {after['_class']} {self.label(after)} {k} {old} != {new}")
         self.actions.append(f"update {after['_class']} {self.label(after)}: " + "; ".join(changes))
         self.c.update(after)
         self.wrote = True
@@ -622,8 +651,10 @@ class Applier:
             for attempt in range(1, self.retries + 1):
                 if self.lock is not None:  # every try: a slow server can make one op outlast the lock
                     self.lock.refresh()
-                self.actions, self.wrote, self._holding = [], False, None
+                self.actions, self.reasons, self.wrote, self._holding = [], [], False, None
                 self.c.unknown_write = []
+                # a dry run's plan of this try: dropped on a retry, or the next try reads it as already done
+                planned = (dict(self.c.pending), set(self.c.deleted)) if self.c.dry_run else None
                 try:
                     getattr(self, op["op"])(op)
                     res.status = "done" if self.wrote else "skip"
@@ -637,6 +668,8 @@ class Applier:
                     break
                 except Retryable as exc:
                     lost += [f"answer lost on try {attempt}: {w}" for w in self.c.unknown_write]
+                    if planned is not None:
+                        self.c.pending, self.c.deleted = planned
                     if attempt == self.retries:
                         res.status = "error"
                         self.actions += [f"{line}; the server may hold that write" for line in lost]
@@ -659,7 +692,7 @@ class Applier:
                     self.actions += [f"{line}; the server may hold that write" for line in lost]
                     self.actions.append(f"error: {type(exc).__name__}: {exc}")
                     break
-            res.actions = self.actions
+            res.actions, res.reasons = self.actions, self.reasons
             results.append(res)
             if self._holding:  # logged when the held write is made
                 self._held[self._holding]["results"].append(res)
@@ -1016,6 +1049,7 @@ class Applier:
         held["new"].append(new)
         self.actions.append(f"update Person {held['label']}: person_ref_list +{json.dumps([new], ensure_ascii=False)} "
                             "(one write with the other associations of this person)")
+        self.reasons.append(f"missing: Person {held['label']} {op['relation']} association with {op['target']}")
         self.wrote = True
         self._holding = handle
 
@@ -1322,6 +1356,7 @@ class Applier:
             src["reporef_list"] = out
             self.save(b, src)
         self.actions.append(f"delete Repository {self.label(loser)}")
+        self.reasons.append(f"missing: merge Repository {self.label(loser)} into {self.label(winner)}")
         self.c.remove("Repository", loser["handle"])
         self.wrote = True
 
@@ -1556,6 +1591,7 @@ class Applier:
             if loser.get("gramps_id"):
                 moved.append(f'attribute_list +[Merged Gramps ID = {loser["gramps_id"]}]')
         self.actions.append(f"merge {cls} {self.label(loser)} into {self.label(winner)}: " + "; ".join(moved or ["nothing to move"]))
+        self.reasons.append(f"missing: merge {cls} {self.label(loser)} into {self.label(winner)}")
         if cls == "Person":
             for fh in loser.get("family_list") or []:
                 fam = self.c.get("Family", fh) or {}
