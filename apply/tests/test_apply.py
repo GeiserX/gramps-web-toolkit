@@ -2617,3 +2617,81 @@ def test_a_failed_login_prints_the_run_id_and_writes_no_log(fake, tmp_path, env,
     out = capsys.readouterr()
     assert "run 2" in out.out and "login failed" in out.err, out
     assert not state_home.exists()
+
+
+# -- --verify: prove a list landed -------------------------------------------
+
+
+def _verify_list(tmp_path):
+    p = tmp_path / "landed.jsonl"
+    p.write_text("\n".join(json.dumps(op) for op in [
+        {"op": "add_note", "key": "v-note", "ruling": R, "text": "Seen in the 1901 census.", "attach": [{"person": "I0001"}]},
+        {"op": "add_citation", "key": "v-cit", "ruling": R, "source": "S0001", "page": "folio 7", "confidence": 3,
+         "attach": [{"person": "I0001"}]},
+        {"op": "update_citation", "key": "v-raise", "ruling": R, "citation": "C0001", "set": {"confidence": 3}},
+    ]) + "\n")
+    return p
+
+
+def test_verify_exits_1_and_names_the_field_that_differs(fake, tmp_path, env, capsys):
+    fake.add("citations", {"handle": "cit1", "source_handle": "src1", "page": "folio 2", "confidence": 2})  # C0001
+    changes = _verify_list(tmp_path)
+    assert main([str(changes), "--verify"]) == 1  # nothing applied yet: every op is missing or differs
+    out = capsys.readouterr().out
+    assert "missing: Note key v-note" in out and "missing: Citation key v-cit" in out
+    assert "differs: Citation C0001 confidence 2 != 3" in out
+    assert main([str(changes), "--apply"]) == 0
+    capsys.readouterr()
+    assert main([str(changes), "--verify"]) == 0  # an untouched applied list
+    assert "3 of 3 op(s) in the tree" in capsys.readouterr().out
+    before = len(fake.writes())
+    fake.store["citations"]["cit1"]["confidence"] = 1  # someone lowered it after the apply
+    assert main([str(changes)]) == 0  # a plain rerun is a dry run: its exit code proves nothing
+    capsys.readouterr()
+    report = tmp_path / "verify.json"
+    assert main([str(changes), "--verify", "--json", str(report)]) == 1
+    out = capsys.readouterr().out
+    assert "[done] v-raise" in out and "differs: Citation C0001 confidence 1 != 3" in out
+    assert fake.writes()[before:] == []  # never writes, never takes the lock
+    assert json.loads(report.read_text()) == [
+        {"key": "v-note", "op": "add_note", "status": "skip", "reason": ""},
+        {"key": "v-cit", "op": "add_citation", "status": "skip", "reason": ""},
+        {"key": "v-raise", "op": "update_citation", "status": "done", "reason": "differs: Citation C0001 confidence 1 != 3"},
+    ]
+
+
+def test_verify_refuses_apply(tmp_path, capsys):
+    p = _verify_list(tmp_path)
+    with pytest.raises(SystemExit):
+        main([str(p), "--verify", "--apply"])
+    assert "--verify is a dry run" in capsys.readouterr().err
+
+
+def test_verify_follows_a_merged_away_person_to_its_winner(tmp_path, monkeypatch, capsys):
+    import gwt_apply.client as clientmod
+    fake = MergingFake()
+    fake.add("people", {"handle": "anna", "gender": 0, "attribute_list": [],
+                        "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    fake.add("people", {"handle": "anna2", "gender": 0, "attribute_list": [],
+                        "primary_name": {"first_name": "Ana", "surname_list": [{"surname": "Example", "primary": True}]}})
+    fake.add("sources", {"handle": "src1", "title": "Parish register, book 3"})
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: fake)
+    for k, v in {"GWT_URL": "https://gw.example", "GWT_USERNAME": "u", "GWT_PASSWORD": "pw", "GWT_TREE": "tree-test"}.items():
+        monkeypatch.setenv(k, v)
+    first = tmp_path / "first.jsonl"
+    first.write_text("\n".join(json.dumps(op) for op in [
+        {"op": "add_note", "key": "m-note", "ruling": R, "text": "Godmother at a baptism.", "attach": [{"person": "I0002"}]},
+        {"op": "add_citation", "key": "m-cit", "ruling": R, "source": "S0001", "page": "folio 9", "attach": [{"person": "I0002"}]},
+    ]) + "\n")
+    merge = tmp_path / "merge.jsonl"
+    merge.write_text(json.dumps({"op": "merge_person", "key": "m-merge", "ruling": R, "winner": "I0001", "loser": "I0002"}) + "\n")
+    assert main([str(first), "--apply"]) == 0
+    assert main([str(merge), "--verify"]) == 1
+    assert "missing: merge Person I0002 into I0001" in capsys.readouterr().out
+    assert main([str(merge), "--apply"]) == 0
+    assert "anna2" not in fake.store["people"]
+    capsys.readouterr()
+    assert main([str(merge), "--verify"]) == 0
+    assert main([str(first), "--verify"]) == 0, capsys.readouterr()
+    assert "I0002 was merged into I0001" in capsys.readouterr().out
+    assert main([str(first)]) == 1  # the plain dry run still stops on the person that went away
