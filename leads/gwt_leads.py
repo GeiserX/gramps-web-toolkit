@@ -23,10 +23,11 @@ import argparse, collections, datetime, gzip, json, re, sys
 
 KINDS = ('branch-end', 'missing-vital', 'uncited', 'unsupported-link')
 DEFAULT_KINDS = ('branch-end', 'missing-vital', 'uncited')  # unsupported-link needs --links, so it is asked for
-LINK_GAPS = {'no record names a parent': 'no record in the tree names either parent',
-             'cited, names neither': 'a cited record names neither parent',
+LINK_GAPS = {'cited, names neither': 'a cited record names neither parent',
              'a record names one': 'records name only one of the two parents'}
-LINK_NOT_GAPS = ('birth record names both', 'other record names both')  # the other levels gwt-check links writes
+# the other levels gwt-check links writes; 'no record names a parent' means no cited birth or baptism at all,
+# which uncited and missing-vital already list
+LINK_NOT_GAPS = ('birth record names both', 'other record names both', 'no record names a parent')
 BIRTH_LIKE = ('Birth', 'Baptism', 'Christening')   # in order of preference
 DEATH_LIKE = ('Death', 'Burial', 'Cremation')
 MARRIAGE_LIKE = ('Marriage',)
@@ -367,12 +368,16 @@ def leads(T, root_gid=None, kinds=DEFAULT_KINDS, living_after=None, hold=True, l
             if row['level'] not in LINK_GAPS and row['level'] not in LINK_NOT_GAPS:
                 raise BadInput('links report: unknown level %r (is it from a newer gwt-check?)' % row['level'])
             p, f = by_gid.get(row['child']), fam_by_gid.get(row['family'])
-            if p is None or f is None or not any(c.get('ref') == p['handle'] for c in f.get('child_ref_list', [])):
+            ref = next((c for c in (f or {}).get('child_ref_list', []) if p and c.get('ref') == p['handle']), None)
+            if ref is None:
                 stale += 1
                 continue
             gap = LINK_GAPS.get(row['level'])
-            if gap is None:
-                continue
+            if gap is None or not (is_birth_relation(ref.get('frel')) and is_birth_relation(ref.get('mrel'))):
+                continue  # supported, listed by another kind, or not a birth link a birth record could prove
+            if row['level'] == 'a record names one' and \
+                    sum(f.get(k) in T['people'] for k in ('father_handle', 'mother_handle')) < 2:
+                continue  # the one parent the family has is named
             why = held_back(T, p, living_after, old) if hold else ''
             if why:
                 held[p.get('gramps_id', p['handle'])] = why

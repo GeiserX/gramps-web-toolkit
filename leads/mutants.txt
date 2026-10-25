@@ -1,5 +1,7 @@
-gwt_leads.py | if p is None or gap is None: | if p is None: | only a link no record fully supports is listed, never one a birth record names both parents for
+gwt_leads.py | if gap is None or not | if not | only a link no record fully supports is listed, never one a birth record names both parents for
 gwt_leads.py | if ('unsupported-link' in kinds) != bool(args.links): | if False: | the unsupported-link kind and --links are asked for together
 gwt_leads.py | if row['level'] not in LINK_GAPS and row['level'] not in LINK_NOT_GAPS: | if False: | a level gwt-leads does not know stops the run, never drops its rows in silence
-gwt_leads.py | if p is None or f is None or not any(c.get('ref') == p['handle'] for c in f.get('child_ref_list', [])): | if p is None or f is None: | a report row whose child is not in that family in this dump is caught as a stale or foreign report
+gwt_leads.py | if p and c.get('ref') == p['handle']), None) | if p), None) | a report row whose child is not in that family in this dump is caught as a stale or foreign report
 gwt_leads.py |         if stale: |         if False: | a stale or foreign report stops with exit 2 instead of queueing tasks for whoever holds those ids now
+gwt_leads.py | not (is_birth_relation(ref.get('frel')) and is_birth_relation(ref.get('mrel'))) | False | an adoptive, step or foster link is never a birth-record gap
+gwt_leads.py | for k in ('father_handle', 'mother_handle')) < 2: | for k in ('father_handle', 'mother_handle')) < 0: | a record naming the only parent a family has is full support, not a gap

@@ -528,18 +528,17 @@ class LeadsTest(unittest.TestCase):
 
     def test_unsupported_link_kind_lists_links_no_record_supports_and_never_calls_them_wrong(self):
         T = tree()
-        links = {'rows': [{'family': 'F1', 'child': 'I1', 'level': 'no record names a parent', 'flags': []},
-                          {'family': 'F2', 'child': 'I3', 'level': 'a record names one', 'flags': []},
+        links = {'rows': [{'family': 'F1', 'child': 'I1', 'level': 'cited, names neither', 'flags': []},
                           {'family': 'F2', 'child': 'I3', 'level': 'birth record names both', 'flags': []}]}
         rows, _ = L.leads(T, None, ('unsupported-link',), 1925, links=links)
-        self.assertEqual({(r['person'], r['gap']) for r in rows}, {('I1', 'link-F1'), ('I3', 'link-F2')})
+        self.assertEqual({(r['person'], r['gap']) for r in rows}, {('I1', 'link-F1')})
         self.assertTrue(all('not shown wrong' in r['what'] for r in rows))
         self.assertEqual(L.leads(T, None, ('unsupported-link',), 1925)[0], [])  # no report, no rows
 
     def test_unsupported_link_holds_back_the_possibly_living_like_every_other_kind(self):
         T = tree()
         T['people']['r']['event_ref_list'] = []  # no dates, no death: may be living
-        links = {'rows': [{'family': 'F1', 'child': 'I1', 'level': 'no record names a parent', 'flags': []}]}
+        links = {'rows': [{'family': 'F1', 'child': 'I1', 'level': 'cited, names neither', 'flags': []}]}
         rows, held = L.leads(T, None, ('unsupported-link',), 1925, links=links)
         self.assertEqual(rows, [])
         self.assertIn('I1', held)
@@ -553,7 +552,7 @@ class LeadsTest(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn('not a gwt-check links report', err)
         good = os.path.join(self.td.name, 'good.json')
-        json.dump({'rows': [{'family': 'F1', 'child': 'I1', 'level': 'no record names a parent'}]}, open(good, 'w'))
+        json.dump({'rows': [{'family': 'F1', 'child': 'I1', 'level': 'cited, names neither'}]}, open(good, 'w'))
         rc, out, _ = self.cli(d, '--kinds', 'unsupported-link', '--links', good, '--format', 'queue', '--include-living')
         self.assertEqual(rc, 0)
         self.assertEqual(json.loads(out.splitlines()[0])['person'], 'I1')
@@ -577,6 +576,20 @@ class LeadsTest(unittest.TestCase):
             rc, out, err = self.cli(d, '--kinds', 'unsupported-link', '--links', f)
             self.assertEqual((rc, out), (2, ''), err)
             self.assertNotIn('Traceback', err)
+
+    def test_unsupported_link_skips_what_is_supported_not_by_birth_or_listed_by_another_kind(self):
+        T = tree()
+        def got(*rows):
+            return {(r['person'], r['gap']) for r in L.leads(T, None, ('unsupported-link',), 1925, hold=False,
+                                                              links={'rows': list(rows)})[0]}
+        one = {'family': 'F1', 'child': 'I1', 'level': 'a record names one', 'flags': []}
+        self.assertEqual(got(one), {('I1', 'link-F1')})
+        # F2 has a mother and no father: the record naming her names every parent the family has
+        self.assertEqual(got({'family': 'F2', 'child': 'I3', 'level': 'a record names one', 'flags': []}), set())
+        # no cited birth or baptism at all: uncited and missing-vital already list that person
+        self.assertEqual(got(dict(one, level='no record names a parent')), set())
+        T['families']['f1']['child_ref_list'][0]['frel'] = 'Adopted'  # not a birth link: nothing to prove by a birth record
+        self.assertEqual(got(dict(one, level='cited, names neither')), set())
 
 
 if __name__ == '__main__':
