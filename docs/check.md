@@ -59,6 +59,22 @@ A `gwt-apply` snapshot (`gwt-apply --save-snapshot`, or `--save-snapshot NEW --s
 
 **Known findings.** Every finding has a `check` and a `key` built from Gramps IDs, for example `repeated-ref` / `F0012 citation_list C0034`. The key stays the same from run to run while the problem does. Pass the first run's report as `--known` and the exit code then reflects only new problems.
 
+## Reading the citations and notes (`insight`)
+
+`gwt-check insight [DUMP]` reads a dump (or the live tree) and writes nothing. It is a reading aid for a question the checks do not ask: given what is recorded, what do the citations and notes say, where do they seem to disagree, and where might the next search be worth making. It proves nothing and decides nothing. A reading that cannot be made safely is counted, not guessed. `--only` picks sections, `--json` prints the result, `--limit` caps the lines. `--searched FILE` reads a [`gwt-ledger`](ledger.md) TSV so the frontier shows when each person was last searched (matched by the ledger's person key or label: a Gramps ID or the name). `--csv FILE` writes the `fill` proposals to a new CSV (one row per proposal, an empty `decision` column to mark accept or reject, readable in Excel); it never replaces an existing file and applies nothing.
+
+**Its output is as private as the tree.** It quotes the citations and notes themselves and names the people in them, and it does not anonymise anything: the lines can name living people (for example as witnesses or in a note), because only the `frontier` section leaves possibly living people out. Keep the output in the same private place as the dump and never publish it, paste it into an issue or a pull request, or use it as a test fixture.
+
+| Section | What it reports |
+|---|---|
+| `citations` | How many citations state an act number, an image, a year and a link in their free text (and how many have a structured date of their own). Acts that several citations draw on, with each citation's own text, so possible duplicates can be reviewed (nothing is merged). Possible mismatches to review: citations that say they are a birth, death or marriage act in the form `n°5/1851`, are not margin notes, and carry a year outside the event they back. An act of a child or a marriage can back a parent's event with its own year, so a line is a prompt to look, not an error. Mismatches print before the duplicate groups. |
+| `discrepancies` | Notes that carry a conflict marker (discrepancy, differs, contradicts, `vs`, `≠`), with the object each sits on, the citations it names and a quote. The status is a heuristic read from words in the note, not proof: `resolved` (the note says so), `one reading kept` (it names the reading it keeps; the other is not necessarily closed) or `open` (neither). Read the quote. |
+| `fill` | Events with no place or no readable date, and the passage of their own citations that names exactly one place or one full date. Several candidates are listed as ambiguous, never picked. A proposal is text to read, not a change. |
+| `frontier` | People with no parents on record, ordered by what makes a search workable: a birth year, a birth place, citations, whether records are readable online there, and a lowered score for a recorded negative search. The online part needs `--archives FILE`, a JSON map of place name to `{"from", "to", "online"}` that you fill from what you have verified; **without it the order is partial** and ignores which records are available (the output says so). Only a person with a birth year after 1925 and no death event is left out; a person with no birth year stays in the list. |
+| `witnesses` | Names transcribed as witnesses or godparents in citations and their notes, and the names that appear in two or more citations. A recurring name may be a namesake and a witness is not a relative: it is a lead to check against the image. Names that recur with no association recorded for a person of the same name are listed first and marked; a matching name is not proof it is the same person. |
+
+Nothing in the report goes into the tree without a document, through [`gwt-apply`](apply.md).
+
 ## Finding repositories
 
 `gwt-check repos` reads a dump or the live tree and prints each repository with its source count. It never writes.
