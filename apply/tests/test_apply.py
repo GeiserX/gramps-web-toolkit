@@ -2317,6 +2317,27 @@ def test_a_second_undated_residence_with_another_place_is_not_skipped(fake):
     assert run(fake, [ops[0]])[0].status == "skip"
 
 
+
+def test_a_citation_of_the_same_page_with_another_date_is_not_reused(fake):
+    a, b = _two_baptisms(fake)
+    weak, _ = _weak_and_firm(a, b)
+    assert run(fake, [dict(weak, date="1890-03-16")])[0].status == "done"
+    res = run(fake, [dict(weak, key="w2", attach=b, date="1891")])
+    assert res[0].status == "conflict", res[0].actions
+    assert "C0001" in res[0].actions[-1] and "date 1890-03-16" in res[0].actions[-1], res[0].actions
+    assert fake.store["events"]["bap-b"]["citation_list"] == []
+    assert len(fake.store["citations"]) == 1
+
+
+def test_a_second_undated_residence_with_another_description_is_not_skipped(fake):
+    ops = [{"op": "add_event", "key": "r1", "ruling": R, "person": "I0001", "type": "Residence", "description": "farm"},
+           {"op": "add_event", "key": "r2", "ruling": R, "person": "I0001", "type": "Residence", "description": "mill"}]
+    res = run(fake, ops)
+    assert res[0].status == "done"
+    assert res[1].status == "conflict", res[1].actions
+    assert "description 'farm'" in res[1].actions[-1] and "E0001" in res[1].actions[-1], res[1].actions
+    assert len(fake.store["events"]) == 1
+
 def test_a_note_of_another_type_with_the_same_text_is_not_reused(fake):
     ops = [{"op": "add_note", "key": "n1", "ruling": R, "type": "Research", "text": "Born in the mill house.",
             "attach": [{"person": "I0001"}]},

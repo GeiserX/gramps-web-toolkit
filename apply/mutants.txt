@@ -16,3 +16,5 @@ gwt_apply/ops.py | out.append(("confidence", theirs == op["confidence"], theirs,
 gwt_apply/ops.py | rows.append(("place", ev.get("place") == place, shown, op["place"])) | rows.append(("place", True, shown, op["place"])) | an undated event with another place is not folded into the existing one
 gwt_apply/ops.py | str(n.get("type")).lower() == op["type"].lower() | True | a note of another type with the same text is not reused
 gwt_apply/ops.py | (row.get(f) or "").strip() == op[f].strip() | True | a source with the same title but another author is not reused
+gwt_apply/ops.py | out.append(("date", date_key(row.get("date")) == date_key(parse_date(op["date"])), | out.append(("date", True, | a citation of the same page with another date is not reused
+gwt_apply/ops.py | rows.append(("description", theirs == op["description"].strip(), | rows.append(("description", True, | an undated event with another description is not folded into the existing one

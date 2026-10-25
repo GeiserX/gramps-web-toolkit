@@ -137,7 +137,7 @@ When the re-read did not find the change and a later try wrote it, the op is pla
 
 ### Reuse only what is the same
 
-An existing object an op finds (the page on that source, the event of that type and date) stands in for the new one only when every other field the op sets is equal, and the plan says so: `reused C0123 (same source and page, confidence)`. A field the op leaves out is not compared. When the found object differs, the op is a conflict that names it, the field and the fix, and nothing is written.
+An existing object an op finds (the page on that source, the event of that type and date) stands in for the new one only when every other field the op sets is equal, and the plan says so: `reused C0123 (same source and page, confidence)`. A field the op leaves out is not compared: an `add_citation` without `confidence` reuses the citation of that page whatever its confidence, and the default of 2 applies only when a new citation is made. When the found object differs, the op is a conflict that names it, the field and the fix, and nothing is written.
 
 | Op | Found by | Must also be equal, when the op sets it |
 |---|---|---|
