@@ -179,6 +179,12 @@ def p_dup_repository(d):
     d["sources"][0]["reporef_list"].append({**copy.deepcopy(d["sources"][0]["reporef_list"][0]), "ref": "hR0098"})
 
 
+def p_dup_citation(d):
+    d["citations"].append(_base("C0098", source_handle="hS0001", page="Folio  1", confidence=2, date=_date(),
+                                attribute_list=[], media_list=[], note_list=[]))
+    _get(d, "events", "E0002")["citation_list"].append("hC0098")
+
+
 def p_dangling_child(d):
     _get(d, "families", "F0002")["child_ref_list"].append(_ref("ghost-person", frel="Birth", mrel="Birth"))
 
@@ -437,6 +443,7 @@ PLANTS = [
     (p_orphan_repository, "orphan-repository", "R0099", False),
     (p_source_no_repository, "info:sources without repository", "S0099", False),
     (p_dup_repository, "dup-repository", "R0001,R0098", False),
+    (p_dup_citation, "dup-citation", "C0001,C0098", False),
     (p_dangling_child, "dangling-ref", "F0002 child_ref_list -> people ghost-person", False),
     (p_dangling_subref, "dangling-ref", "F0003 child_ref_list[I0003].note_list -> notes ghost-note", False),
     (p_place_not_place, "place-not-place", "E0201 place", False),

@@ -13,7 +13,7 @@ One row per search, tab-separated, with a header line:
 | `person_key` | slug of the person searched, e.g. `ana-peiro-toledo` (or a tree id) |
 | `person_label` | readable name |
 | `source` | slug of where: `familysearch`, `gaceta`, `ad33`, `newspapers`. Names ending in `-verify`, `-sweep` or `-followup` are reserved for the [research loop](agent-loop.md), which logs those task kinds apart from plain searches; `any` stands for a task with no source |
-| `query` | the search, normalized: lowercase, no accents, no punctuation |
+| `query` | the search, normalized: casefolded, no accents, no punctuation. Letters and digits of every script stay, so `Иван Петров, 1880` is stored as `иван петров 1880` and `Ørsted` as `ørsted` |
 | `date` | ISO date of the search |
 | `result` | `hit`, `none`, `partial`, `blocked` (could not search: a site block, or an authorization you lack; the evidence file says which) or `denied` (the office refused the request) |
 | `evidence` | file that holds the result or the negative |
@@ -27,8 +27,8 @@ The path comes from `--ledger`, else `$GWT_LEDGER`, else `./buscado.tsv`. The ag
 ```sh
 export GWT_LEDGER=research/buscado.tsv GWT_AGENT=lane-7
 
-# Before a search. Exit 0 and the matching rows (best score first, newest first among equals) if it was done;
-# exit 1 if not; exit 2 on a usage error.
+# Before a search. Prints the matching rows (best score first, newest first among equals). Exit 0 if one of them
+# is a search that ran (hit, none, partial) and is not due again; exit 1 if not; exit 2 on a usage error.
 gwt-ledger check --person "Ana Peiro Toledo" --source familysearch \
   --query "Villanueva del Campo baptisms 1801-1850 Ana Peiro"
 
@@ -49,7 +49,7 @@ A ledger written with the older 8 columns needs no upgrade: its rows read with a
 
 `add` records the lane from `--agent` (default `$GWT_AGENT`) and the date from `--date` (default today).
 
-In a script: `gwt-ledger check ... >/dev/null && echo "already done, skip"`.
+In a script: `gwt-ledger check ... >/dev/null && echo "already done, skip"`. Exit 0 already means a search that ran and is not due again, so a `blocked` or `denied` row, or one whose `next_date` has arrived, never skips the search. Add `--any-result` only when you want to know whether anything at all was logged.
 
 ## Matching
 
@@ -64,6 +64,12 @@ Queries match fuzzily. The score is the best of three measures:
 Before any of that, every word of the new query must already be in the logged one. Particles (`de`, `la`, `y`, `the`…) don't count, and a word of five letters or more may differ by one inserted, dropped or changed letter. Words with digits (years, film and catalogue numbers) must match exactly, and one logged word never covers two words of the new query. Without this gate, two searches of one catalogue that share a long prefix and differ in one surname (`Real Chancilleria de Granada: Toledo` after `Real Chancilleria de Granada: Peiro Villanueva`) scored over 0.8, and the second search was skipped as already done.
 
 The default threshold is 0.75 (`--threshold` to change it). Reworded, reordered or re-accented queries still match. A different collection, place, name or date range does not.
+
+### What counts as done
+
+`check` prints every matching row but exits 0 only when one of them has the result `hit`, `none` or `partial` and an empty `next_date` or one after today. A `blocked` or `denied` row means the search never ran, and a row whose `next_date` has arrived asked to be searched again, so with only those rows `check` lists them and exits 1. `--any-result` gives the older answer: exit 0 on any matching row.
+
+A `--query` or `--person` that has nothing left after normalising (only punctuation or symbols, say `"!!"` or `"«»"`) is an error, exit 2, on every command. It would otherwise match every row: an empty query scores 1.00 against anything, and an empty person key drops the person filter.
 
 Rows with the same score come out newest first: by `date`, then the row logged last. So a first-row reader sees a recent `hit` before an old `none` for the same search.
 
@@ -80,13 +86,14 @@ The default fuzzy check is for a person deciding whether to search. Before a scr
 - **An empty `--source` matches every source.** Leaving `--source` out, or passing an empty value such as an unset `$source`, looks across the whole ledger. A `none` from another site, or from a narrower search there, then answers the check, and the task closes without the search it needed. `--exact` turns that empty value into an error instead.
 - **A fuzzy match is not the same search.** A shorter query counts as done when a longer logged one covers it, and one typo is allowed, so the logged row can be a different search that happens to share the words.
 
-Also skip reuse when the row's `next_date` has arrived: that row asked to be searched again.
+Exit 0 from `--exact` already leaves out `blocked` and `denied` rows and rows whose `next_date` has arrived. The first printed row can still be one of those (a newer `blocked` above an older `hit`), so a script that reuses the first row checks its `result` and `next_date` too.
 
 ## Traps
 
 - **Log the search, not the result.** The query is what you typed into the source: collection or site, film or years, name ("St Mary baptisms film 004400001 Ana Peiro"). Two long write-ups of the same search do not match each other. On a real ledger, the round-30 write-up and the round-25 write-up of the same film and the same images scored under 0.5 against each other. The same search as a short query scored 1.00 against both.
 - **Seeding from prose guesses the person.** A seeder that pulls names out of free text also catches place names: a town called "Villa Nueva" became a person key. Many negatives cover a whole collection and name nobody, so they have no person key. Run `check` without `--person` for collection-level searches, or you miss those rows. A negative that names two people must be filed under each of them: our first seeder used only the first name it matched, so a check for the second person found nothing.
-- **A negative from a blocked period is not a negative.** Log it as `blocked`, not `none`, so the next agent repeats it.
+- **A negative from a blocked period is not a negative.** Log it as `blocked`, not `none`, so the next agent repeats it: `check` lists a `blocked` row but does not count it as done.
+- **Ledgers written before Unicode normalisation dropped every letter outside a-z.** A query in Cyrillic, Greek or another script was stored as its digits alone (`Иван Петров 1880` as `1880`), and a letter such as `ø` or `ł` vanished from the word. Those rows no longer match the same search typed again, which errs towards searching again. Rows in plain Latin letters, accents included, are unchanged.
 - **The ledger in git:** agents that share one checkout also share its git index. Commit the ledger with `git commit -- <ledger path>`, or rows another agent staged go into your commit.
 
 ## Concurrency

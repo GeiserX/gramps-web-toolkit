@@ -1,4 +1,4 @@
-import io, os, subprocess, sys, tempfile, unittest
+import datetime, io, os, subprocess, sys, tempfile, unittest
 from contextlib import redirect_stderr, redirect_stdout
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -162,11 +162,73 @@ class LedgerTest(unittest.TestCase):
         p = subprocess.run([sys.executable, CLI, 'stats'], capture_output=True, text=True, env=env)
         self.assertIn('rows\t1', p.stdout)
 
-    def test_denied_is_a_result_and_still_counts_as_done(self):
-        self.add(person='Ana Peiro', query='registro civil birth act', result='denied')
-        code, out = run('--ledger', self.path, 'check', '--person', 'ana-peiro', '--query', 'registro civil birth act')
-        self.assertEqual(code, 0)
-        self.assertIn('denied', out)
+    def test_blocked_and_denied_rows_are_listed_but_not_done(self):
+        # A search that never ran is not a negative: check prints the row and still answers "not done".
+        for result in ('blocked', 'denied'):
+            self.path = os.path.join(self.dir.name, result + '.tsv')
+            self.add(person='Ana Peiro', query='registro civil birth act', result=result)
+            argv = ('--ledger', self.path, 'check', '--person', 'ana-peiro', '--query', 'registro civil birth act')
+            code, out = run(*argv)
+            self.assertEqual(code, 1, result)
+            self.assertIn(result, out)
+            self.assertEqual(run(*argv, '--any-result'), (0, out))  # the old meaning: any matching row
+            self.add(person='Ana Peiro', query='registro civil birth act', result='none')
+            self.assertEqual(run(*argv)[0], 0, result)
+
+    def test_a_row_whose_next_date_has_arrived_is_not_done(self):
+        for next_date, want in (('2000-01-01', 1), (datetime.date.today().isoformat(), 1), ('2999-01-01', 0)):
+            self.path = os.path.join(self.dir.name, next_date + '.tsv')
+            run('--ledger', self.path, 'add', '--person', 'ana', '--source', 'fs', '--query', 'q uno',
+                '--result', 'none', '--next-date', next_date)
+            argv = ('--ledger', self.path, 'check', '--query', 'q uno')
+            self.assertEqual(run(*argv)[0], want, next_date)
+            self.assertEqual(run(*argv, '--any-result')[0], 0, next_date)
+
+    def test_queries_in_other_scripts_keep_their_letters(self):
+        self.assertEqual(L.normalize('Иван Петров, 1880'), 'иван петров 1880')
+        self.assertEqual(L.normalize('Ørsted'), 'ørsted')
+        self.assertEqual(L.normalize('Ἀλέξανδρος'), 'αλεξανδροσ')  # casefold folds the final sigma
+        self.assertEqual(L.normalize('李 小龍'), '李 小龍')
+        self.assertEqual(L.normalize('snake_case'), 'snake case')  # underscore stays a separator, as before
+        run('--ledger', self.path, 'add', '--person', 'Hans Ørsted', '--source', 'kirkebog', '--query', 'Ørsted 1777',
+            '--result', 'none')
+        row = L.read_rows(self.path)[0]
+        self.assertEqual((row['person_key'], row['query']), ('hans-ørsted', 'ørsted 1777'))
+        self.assertEqual(run('--ledger', self.path, 'check', '--person', 'Hans Ørsted', '--query', 'Ørsted 1777')[0], 0)
+
+    def test_two_different_cyrillic_names_do_not_match(self):
+        run('--ledger', self.path, 'add', '--person', 'Ivan Petrov', '--source', 'metryki',
+            '--query', 'Иван Петров 1880', '--result', 'none')
+        self.assertEqual(L.read_rows(self.path)[0]['query'], 'иван петров 1880')
+        self.assertEqual(run('--ledger', self.path, 'check', '--query', 'Мария Сидорова'), (1, ''))
+        self.assertEqual(run('--ledger', self.path, 'check', '--query', 'Мария Сидорова 1880'), (1, ''))
+        self.assertEqual(run('--ledger', self.path, 'check', '--query', 'Иван Петров 1880')[0], 0)
+
+    def test_nothing_left_after_normalising_exits_2_never_a_wildcard(self):
+        self.add()
+        for argv in (('check', '--query', '!!! ...'), ('check', '--person', '«»', '--query', 'Ana Peiro'),
+                     ('list', '--person', '...'),
+                     ('add', '--person', '?', '--source', 's', '--query', 'q', '--result', 'none'),
+                     ('add', '--person', 'x', '--source', 's', '--query', '—', '--result', 'none')):
+            err = io.StringIO()
+            with self.assertRaises(SystemExit) as e, redirect_stderr(err):
+                run('--ledger', self.path, *argv)
+            self.assertEqual(e.exception.code, 2, argv)
+            self.assertIn('nothing left to match after normalising', err.getvalue())
+        self.assertEqual(len(L.read_rows(self.path)), 1)
+
+    def test_legacy_ascii_rows_still_match(self):
+        # Rows written by the old ASCII-only normalize: lowercase, no accents, words joined by single spaces.
+        with open(self.path, 'w', encoding='utf-8') as f:
+            f.write('\t'.join(L.COLUMNS) + '\n')
+            f.write('jose-peiro-ruiz\tJose\tfamilysearch\tpeiro jose bautismo 1850 1860\t2026-01-01\tnone\t\ta1\t\n')
+        for person, query in (('José Peiró Ruiz', 'Peiró, JOSÉ: bautismo 1850-1860'),
+                              ('jose-peiro-ruiz', 'bautismo de Jose Peiro 1850 1860')):
+            code, out = run('--ledger', self.path, 'check', '--person', person, '--source', 'FamilySearch',
+                            '--query', query)
+            self.assertEqual(code, 0, query)
+        self.assertEqual(run('--ledger', self.path, 'check', '--exact', '--source', 'familysearch',
+                             '--query', 'PEIRÓ José bautismo 1850/1860')[0], 0)
 
     def test_next_date_and_due(self):
         run('--ledger', self.path, 'add', '--person', 'x', '--source', 's', '--query', 'q one', '--result', 'denied',

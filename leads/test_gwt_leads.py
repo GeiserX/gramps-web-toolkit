@@ -425,6 +425,36 @@ class LeadsTest(unittest.TestCase):
             json.dump(as_dump(tree()), f)
         self.assertEqual(len(L.load(path)['people']), 5)
 
+    def snapshot(self, T, name='tree.snapshot.json.gz'):
+        """T saved the way `gwt-apply` saves a snapshot: gzipped, objects keyed by Gramps class."""
+        import gzip
+        cls = {'people': 'Person', 'families': 'Family', 'events': 'Event', 'places': 'Place'}
+        objects = {cls[t]: list(v.values()) for t, v in T.items()}
+        objects.update(Citation=[], Source=[], Note=[], Tag=[])
+        path = os.path.join(self.td.name, name)
+        with gzip.open(path, 'wt', encoding='utf-8') as f:
+            json.dump({'format': 'gwt-apply-snapshot/1', 'tree': 'demo', 'taken': '2026-01-01T00:00:00+00:00',
+                       'objects': objects}, f)
+        return path
+
+    def test_a_snapshot_gives_the_same_leads_as_a_dump(self):
+        T = tree()
+        T['places'] = {'pl': {'handle': 'pl', 'name': {'value': 'Exampleton'}}}
+        for fmt in ('tsv', 'json', 'queue'):
+            want = self.cli(self.dump(T), '--root', 'I1', '--format', fmt)
+            got = self.cli(self.snapshot(T), '--root', 'I1', '--format', fmt)
+            self.assertEqual(want[0], 0, want[2])
+            self.assertEqual(got, want, fmt)
+        self.assertEqual(L.load(self.snapshot(T, 's2.gz')), L.load(self.dump(T)))
+
+    def test_a_gzipped_file_without_the_gz_suffix_loads(self):
+        import gzip
+        path = os.path.join(self.td.name, 'dump.json')
+        with gzip.open(path, 'wt') as f:
+            json.dump(as_dump(tree()), f)
+        self.assertEqual(len(L.load(path)['people']), 5)
+        self.assertEqual(len(L.load(self.snapshot(tree(), 'snap.json'))['people']), 5)
+
     def test_malformed_records_are_rejected_not_filtered(self):
         ok = {'handle': 'p1', 'gramps_id': 'I1'}
         for objects in ({'people': [{}], 'families': [], 'events': []},
@@ -455,6 +485,9 @@ class LeadsTest(unittest.TestCase):
             self.assertEqual(code, 2, name)
             self.assertIn('gwt-leads:', err)
             self.assertEqual(out, '')
+            if name in ('b.json', 'c.json'):
+                self.assertIn('gwt-check dump', err)
+                self.assertIn('gwt-apply snapshot', err)
 
     # --- the real `gwt-check dump` shape, and honest dates ---
 
