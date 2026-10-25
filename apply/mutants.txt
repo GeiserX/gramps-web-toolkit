@@ -53,9 +53,15 @@ gwt_apply/ops.py | if name == "unlink_child" and "drop_link_sources" in op and n
 gwt_apply/ops.py | if other and not op.get("drop_link_sources"): | if False: | unlink_child refuses to lose the other notes and citations of a link unless drop_link_sources says so
 gwt_apply/ops.py | if n and text.startswith(LINK_MARKS) and | if n and text.startswith(PROBABLE) and | unlink_child removes a [wrong link] mark with the link, not only a [probable] one
 gwt_apply/ops.py | and h not in rest and self._referrers | and self._referrers | unlink_child keeps a link mark that the family also holds outside the link
-gwt_apply/ops.py | and self._referrers("Note", h) <= {("family", fam)}: | : | unlink_child keeps a link mark that another object also holds
+gwt_apply/ops.py | and self._referrers("Note", h) == {("family", fam)}: | : | unlink_child keeps a link mark that another object also holds
 gwt_apply/ops.py | if entry is None and not listed and not retry: | if entry is None and not retry: | unlink_child repairs a link only the person's side has, instead of skipping it
 gwt_apply/ops.py | if fam in (child.get("parent_family_list") or []): | if False: | unlink_child takes the family off the child's parent families too
 gwt_apply/ops.py | retry = op["key"] in self._unlink_notes  # | retry = False  # | unlink_child whose answer was lost still deletes the link's mark on the retry
 gwt_apply/ops.py | if entry is not None and not (family.get("father_handle") or family.get("mother_handle") | if False and not (family.get("father_handle") or family.get("mother_handle") | unlink_child warns when it leaves a family with nobody in it
 gwt_apply/revert.py | elif m == "DELETE" and _cls_of_path(path)[0] == "Note": | elif False: | --revert makes a note the run deleted again from the pre-run copy
+gwt_apply/ops.py | if held: | if False: | unlink_child keeps a link mark another writer took up between its tries
+gwt_apply/ops.py | if not self.c.exists("Note", handle): | if False: | unlink_child whose mark delete lost its answer finds the mark gone and is done
+gwt_apply/ops.py | self._referrers("Note", h) == {("family", fam)}: | self._referrers("Note", h) <= {("family", fam)}: | unlink_child never deletes a mark when the server names no holder for it
+gwt_apply/revert.py | if client.get_live(s["cls"], s["handle"]) is None: | if True: | --revert recreating a note whose answer was lost does not post it twice
+gwt_apply/revert.py | if (cls, h) in created:  # e.g. a mark | if False:  # e.g. a mark | --revert skips a note the same run made and deleted instead of asking for it by hand
+gwt_apply/revert.py | elif live(cls, h) is not None: | elif False: | --revert run twice skips a deleted note that is already back

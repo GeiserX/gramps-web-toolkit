@@ -1115,7 +1115,7 @@ class Applier:
             for h in entry.get("note_list") or []:
                 n = notes.get(h)
                 text = ((n or {}).get("text") or {}).get("string") or ""
-                if n and text.startswith(LINK_MARKS) and h not in rest and self._referrers("Note", h) <= {("family", fam)}:
+                if n and text.startswith(LINK_MARKS) and h not in rest and self._referrers("Note", h) == {("family", fam)}:  # empty: the server named no holder
                     drop.append(n)
                 else:
                     other.append(f"Note {self.label(n) if n else h}")

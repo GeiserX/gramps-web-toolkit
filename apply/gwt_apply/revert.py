@@ -218,7 +218,7 @@ def plan(entries: list[dict], pre: dict, live, links=None) -> list[dict]:
     for kind, cls, h in reversed(order):
         if kind == "recreate":
             before = pre.get((cls, h))
-            if (cls, h) in created:
+            if (cls, h) in created:  # e.g. a mark add_note made and unlink_child then removed
                 steps.append({"action": "skip", "cls": cls, "handle": h, "why": "made and deleted by this run"})
             elif before is None:
                 steps.append({"action": "manual", "cls": cls, "handle": h,

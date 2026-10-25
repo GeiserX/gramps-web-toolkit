@@ -3150,6 +3150,42 @@ def test_unlink_child_finishes_deleting_the_mark_after_a_lost_answer(fake):
     assert "wl" not in fake.store["notes"] and fake.store["people"]["kid"]["parent_family_list"] == []
 
 
+def test_unlink_child_keeps_a_mark_taken_up_between_its_tries(fake, monkeypatch):
+    _note(fake, "wl", "[wrong link] the godmother, not the mother")
+    _linked_kid(fake, ref_notes=["wl"])
+    fake.drop_after = ("PUT", "/api/people/", 1)
+    drop = Applier._drop_mark
+
+    def taken_up(self, handle):  # another writer puts the mark on Anna after the pre-check
+        fake.store["people"]["anna"]["note_list"] = ["wl"]
+        return drop(self, handle)
+
+    monkeypatch.setattr(Applier, "_drop_mark", taken_up)
+    res = run(fake, [_unlink()])
+    assert res[0].status == "done", res[0].actions
+    assert "wl" in fake.store["notes"]
+    assert any(a.startswith("kept Note N0001: still held by person anna") for a in res[0].actions), res[0].actions
+
+
+def test_unlink_child_whose_mark_delete_lost_its_answer_is_done(fake):
+    _note(fake, "wl", "[wrong link] the godmother, not the mother")
+    _linked_kid(fake, ref_notes=["wl"])
+    fake.drop_after = ("DELETE", "/api/notes/")  # the mark is deleted, the answer never arrives
+    res = run(fake, [_unlink()])
+    assert res[0].status == "done", res[0].actions
+    assert "wl" not in fake.store["notes"] and fake.store["people"]["kid"]["parent_family_list"] == []
+    assert fake.writes().count(("DELETE", "/api/notes/wl")) == 1
+
+
+def test_unlink_child_conflicts_when_the_server_names_no_holder_of_the_mark(fake, monkeypatch):
+    _note(fake, "wl", "[wrong link] the godmother, not the mother")
+    _linked_kid(fake, ref_notes=["wl"])
+    monkeypatch.setattr(fake, "backlinks", lambda handle: {})  # a server that ignores the backlinks parameter
+    res = run(fake, [_unlink()])
+    assert res[0].status == "conflict" and "Note N0001" in res[0].actions[-1], res[0].actions
+    assert "wl" in fake.store["notes"] and fake.store["people"]["kid"]["parent_family_list"] == ["fam"]
+
+
 def test_validate_unlink_child():
     assert validate([_unlink()]) == [] and validate([_unlink(drop_link_sources=False)]) == []
     op = _unlink()
@@ -3174,6 +3210,47 @@ def test_revert_puts_an_unlinked_child_and_its_mark_back(fake, tmp_path, env):
     assert fake.store["notes"]["wl"]["text"]["string"] == "[wrong link] the godmother, not the mother"
     assert fake.store["notes"]["wl"]["gramps_id"] == "N0001"
     assert list(fake.store["notes"]) == ["wl"] and fake.store["people"]["kid"]["note_list"] == []  # reason note gone
+
+
+def test_revert_of_an_unlink_twice_and_after_a_lost_answer(fake, tmp_path, env):
+    from gwt_apply import revert
+    _note(fake, "wl", "[wrong link] the godmother, not the mother")
+    _linked_kid(fake, ref_notes=["wl"])
+    pre = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", pre]) == 0
+    log = _apply_list(tmp_path, [_unlink()], "run")
+    snap = revert.load_pre(pre)
+    client = _live_client(fake)
+    steps = revert.plan(revert.read_log(log), snap, client.get_live)
+    assert next(s for s in steps if s["handle"] == "wl")["action"] == "recreate"
+    posts = fake.writes().count(("POST", "/api/objects/"))
+    fake.drop_after = ("POST", "/api/objects/")  # the note is made again, the answer never arrives
+    assert revert.execute(client, steps, snap, retries=3, retry_wait=0) == []
+    assert fake.writes().count(("POST", "/api/objects/")) == posts + 1  # the retry saw it back and posted nothing
+    assert fake.store["notes"]["wl"]["text"]["string"] == "[wrong link] the godmother, not the mother"
+    assert fake.store["families"]["fam"]["child_ref_list"][0]["note_list"] == ["wl"]
+    again = revert.plan(revert.read_log(log), snap, client.get_live)  # a revert run twice
+    step = next(s for s in again if s["handle"] == "wl")
+    assert step["action"] == "skip" and step["why"] == "already in the tree"
+
+
+def test_revert_skips_a_mark_the_same_run_made_and_unlinked(fake, tmp_path, env):
+    from gwt_apply import revert
+    _linked_kid(fake)
+    pre = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", pre]) == 0
+    log = _apply_list(tmp_path, [
+        {"op": "add_note", "key": "m", "ruling": R, "type": "Research", "text": "[wrong link] the godmother, not the mother",
+         "attach": [{"child_ref": {"family": "F0001", "child": "I0002"}}]},
+        _unlink()], "run")
+    mark = stable_handle("m")
+    assert mark not in fake.store["notes"] and fake.store["families"]["fam"]["child_ref_list"] == []
+    steps = revert.plan(revert.read_log(log), revert.load_pre(pre), _live_client(fake).get_live)
+    step = next(s for s in steps if s["handle"] == mark and s["cls"] == "Note")
+    assert step["action"] == "skip" and step["why"] == "made and deleted by this run"
+    assert not any(s["action"] == "manual" for s in steps), steps
+    assert _undo(log, pre, "--apply") == 0
+    assert fake.store["families"]["fam"]["child_ref_list"][0]["ref"] == "kid" and fake.store["notes"] == {}
 
 
 def test_unlink_child_dry_run_on_a_snapshot_and_verify(fake, tmp_path, env, monkeypatch, capsys):
