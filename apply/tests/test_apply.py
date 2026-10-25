@@ -1755,3 +1755,133 @@ def test_revert_never_restores_a_copy_older_than_what_the_run_read(fake, tmp_pat
     assert _undo(log, pre, "--apply") == 1
     assert "older than what the run read" in capsys.readouterr().out
     assert fake.store["notes"]["n1"]["text"]["string"] == "Father read as Rene, miller"  # not back to the older copy
+
+
+def _links(client):
+    return lambda c, h: (client.get_live(c, h, backlinks=True) or {}).get("backlinks")
+
+
+def _run_a_note_on_a_family(fake, tmp_path):
+    fake.add("families", {"handle": "fam", "mother_handle": "anna", "type": "Unknown"})
+    pre = str(tmp_path / "pre.json.gz")
+    assert main(["--save-snapshot", pre]) == 0
+    log = _apply_list(tmp_path, [{"op": "add_note", "key": "a-note", "ruling": R, "text": "Note from list A",
+                                  "attach": [{"family": "F0001"}]}], "list-a")
+    return log, pre, stable_handle("a-note")
+
+
+def test_revert_restores_when_the_live_object_holds_an_earlier_write_of_the_run(fake, tmp_path):
+    from gwt_apply import revert
+    _note(fake, "n1", "old text")
+    pre = {("Note", "n1"): json.loads(json.dumps(fake.store["notes"]["n1"]))}
+    first = {"_class": "Note", "handle": "n1", "type": "Research", "format": 0,
+             "text": {"_class": "StyledText", "string": "first text", "tags": []}}
+    fake.store["notes"]["n1"]["text"]["string"] = "first text"  # the second write never reached the server
+    log = tmp_path / "run.jsonl"
+    log.write_text("".join(json.dumps(e) + "\n" for e in (
+        {"ts": "2026-01-01T10:00:00+00:00", "dry_run": False, "method": "PUT", "path": "/notes/n1", "status": 200,
+         "body": first},
+        {"ts": "2026-01-01T10:00:01+00:00", "dry_run": False, "method": "PUT", "path": "/notes/n1", "status": None,
+         "body": dict(first, text={"_class": "StyledText", "string": "second text", "tags": []})})))
+    client = _live_client(fake)
+    steps = revert.plan(revert.read_log(str(log)), pre, client.get_live)
+    assert [s["action"] for s in steps] == ["restore"]
+    assert revert.execute(client, steps, pre, retry_wait=0) == []
+    assert fake.store["notes"]["n1"]["text"]["string"] == "old text"
+
+
+def test_revert_plan_already_shows_a_delete_kept_for_a_referrer(fake, tmp_path, env, capsys):
+    log, pre, note = _run_a_note_on_a_family(fake, tmp_path)
+    fake.add("sources", {"handle": "src", "title": "A later source", "note_list": [note]})
+    capsys.readouterr()
+    before = fake.writes()
+    assert _undo(log, pre) == 0
+    out = capsys.readouterr().out
+    assert f"[skip] Note {note}: still referenced by Source src" in out
+    assert fake.writes() == before
+
+
+def test_revert_keeps_an_object_something_points_at_since_the_plan(fake, tmp_path, env):
+    from gwt_apply import revert
+    log, pre, note = _run_a_note_on_a_family(fake, tmp_path)
+    client = _live_client(fake)
+    snap = revert.load_pre(pre)
+    steps = revert.plan(revert.read_log(log), snap, client.get_live, _links(client))
+    assert sorted(s["action"] for s in steps) == ["delete", "restore"]
+    fake.add("sources", {"handle": "src", "title": "A later source", "note_list": [note]})  # between plan and write
+    assert revert.execute(client, steps, snap, retry_wait=0) == []
+    assert note in fake.store["notes"]
+    kept = next(s for s in steps if s["handle"] == note)
+    assert kept["action"] == "skip" and "still referenced by Source src" in kept["why"]
+
+
+def test_revert_keeps_a_made_object_edited_since_the_plan(fake, tmp_path, env):
+    from gwt_apply import revert
+    log, pre, note = _run_a_note_on_a_family(fake, tmp_path)
+    client = _live_client(fake)
+    snap = revert.load_pre(pre)
+    steps = revert.plan(revert.read_log(log), snap, client.get_live, _links(client))
+    fake.store["notes"][note]["text"]["string"] = "Note from list A, corrected by hand"
+    assert revert.execute(client, steps, snap, retry_wait=0) == []
+    assert fake.store["notes"][note]["text"]["string"] == "Note from list A, corrected by hand"
+    kept = next(s for s in steps if s["handle"] == note)
+    assert kept["action"] == "skip" and kept["changed"]
+
+
+def test_revert_restore_whose_answer_is_lost_reads_as_done(fake, tmp_path):
+    from gwt_apply import revert
+    _note(fake, "n1", "old text")
+    pre = {("Note", "n1"): json.loads(json.dumps(fake.store["notes"]["n1"]))}
+    log = str(tmp_path / "run.jsonl")
+    client = Client("https://gw.example", "u", "s3cret-pw", tree="tree-test", dry_run=False, log_path=log, session=fake)
+    client.login()
+    Applier(client, retries=1, retry_wait=0).run([{"op": "update_note", "key": "u", "ruling": R, "note": "N0001",
+                                                   "set": {"text": "new text"}, "expect": "old text"}])
+    client = _live_client(fake)
+    steps = revert.plan(revert.read_log(log), pre, client.get_live)
+    fake.drop_after = ("PUT", "/api/notes/")  # the restore lands, its answer does not
+    assert revert.execute(client, steps, pre, retries=3, retry_wait=0) == []
+    assert fake.store["notes"]["n1"]["text"]["string"] == "old text"
+    assert steps[0]["action"] == "restore" and not steps[0].get("changed")
+
+
+def test_revert_reports_a_restore_that_does_not_read_back(fake, tmp_path, monkeypatch):
+    from gwt_apply import revert
+    _note(fake, "n1", "old text")
+    pre = {("Note", "n1"): json.loads(json.dumps(fake.store["notes"]["n1"]))}
+    fake.store["notes"]["n1"]["text"]["string"] = "new text"
+    log = tmp_path / "run.jsonl"
+    log.write_text(json.dumps({"ts": "2026-01-01T10:00:00+00:00", "dry_run": False, "method": "PUT", "path": "/notes/n1",
+                               "status": 200, "body": json.loads(json.dumps(fake.store["notes"]["n1"]))}) + "\n")
+    client = _live_client(fake)
+    steps = revert.plan(revert.read_log(str(log)), pre, client.get_live)
+    monkeypatch.setattr(client, "update", lambda obj: None)  # the server says 200 and keeps nothing
+    assert revert.execute(client, steps, pre, retry_wait=0) == ["Note n1 does not read back as before the run"]
+
+
+def test_revert_never_deletes_what_the_server_gives_no_backlinks_for(fake, tmp_path, env, monkeypatch):
+    from gwt_apply import revert
+    log, pre, note = _run_a_note_on_a_family(fake, tmp_path)
+    client = _live_client(fake)
+    snap = revert.load_pre(pre)
+    steps = revert.plan(revert.read_log(log), snap, client.get_live)  # planned without asking for backlinks
+    live = client.get_live
+    monkeypatch.setattr(client, "get_live", lambda c, h, backlinks=False: (
+        o if (o := live(c, h)) is None else {k: v for k, v in o.items() if k != "backlinks"}))
+    assert revert.execute(client, steps, snap, retry_wait=0) == []
+    assert note in fake.store["notes"]
+    assert "did not say what points at it" in next(s for s in steps if s["handle"] == note)["why"]
+
+
+def test_update_child_ref_conflicts_when_the_probable_note_moved_on(fake):
+    kid = fake.add("people", {"handle": "kid", "gender": 1, "primary_name": {"first_name": "Tom", "surname_list": [{"surname": "Example", "primary": True}]}})
+    fam = fake.add("families", {"handle": "fam", "mother_handle": "anna"})
+    assert run(fake, [{"op": "link_child", "key": "l", "ruling": R, "family": fam["gramps_id"], "child": kid["gramps_id"],
+                       "probable": True, "probable_reason": "same names in the same parish"}])[0].status == "done"
+    puts = len(fake.writes())
+    res = run(fake, [{"op": "update_child_ref", "key": "c", "ruling": R, "family": fam["gramps_id"], "child": kid["gramps_id"],
+                      "set": {"mrel": "Adopted"}, "confirm_probable": "the 1890 baptism names both parents",
+                      "expect": "[probable] an older reason"}])
+    assert res[0].status == "conflict"
+    assert fake.store["families"]["fam"]["child_ref_list"][0]["mrel"] == "Birth"
+    assert len(fake.writes()) == puts
