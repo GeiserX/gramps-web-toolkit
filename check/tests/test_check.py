@@ -14,7 +14,7 @@ import pytest
 from gwt_check import checks, selftest
 from gwt_check.cli import main
 from gwt_check.client import ApiError, Client
-from gwt_check.tree import load
+from gwt_check.tree import Tree, load
 
 
 def test_selftest_passes():
@@ -1042,3 +1042,58 @@ def test_from_takes_the_old_findings_as_known_unless_told_otherwise(live, tmp_pa
     server, old = _save_old(live, tmp_path, data)
     assert main(["check", "--from", old]) == 0  # the orphan was already in OLD
     assert main(["check", "--from", old, "--known", _write(tmp_path, "k.json", [])]) == 1
+
+
+# -- dup-citation ---------------------------------------------------------------------------------
+
+def _cite(d, gid, page, source="hS0001"):
+    d["citations"].append(selftest._base(gid, source_handle=source, page=page, confidence=2, date=selftest._date(),
+                                         attribute_list=[], media_list=[], note_list=[]))
+    selftest._get(d, "events", "E0002")["citation_list"].append("h" + gid)
+
+
+def _dups(d):
+    findings, _ = checks.run_checks(Tree(copy.deepcopy(d)))
+    return sorted(f["key"] for f in findings if f["check"] == "dup-citation")
+
+
+def test_dup_citation_same_source_and_page_ignoring_case_and_spacing():
+    d = selftest.clean_tree()
+    _cite(d, "C0090", " FOLIO   1 ")
+    _cite(d, "C0091", "folio 1v")  # another page
+    _cite(d, "C0092", "folio 1", source="hS0099")  # another source
+    _cite(d, "C0093", "")
+    _cite(d, "C0094", "")  # no page says nothing
+    assert _dups(d) == ["C0001,C0090"]
+
+
+def test_dup_citation_is_info_and_never_fails_the_run(tmp_path, capsys):
+    d = selftest.clean_tree()
+    _cite(d, "C0090", "folio 1")
+    dump = tmp_path / "t.json"
+    dump.write_text(json.dumps(d), encoding="utf-8")
+    assert main(["check", str(dump)]) == 0
+    assert "info dup-citation" in capsys.readouterr().out
+
+
+def test_dup_citation_needs_a_source():
+    d = selftest.clean_tree()
+    _cite(d, "C0090", "folio 7", source="")
+    _cite(d, "C0091", "folio 7", source="")
+    assert _dups(d) == []
+
+
+def test_dup_citation_needs_one_side_in_scope():
+    d = selftest.clean_tree()
+    _cite(d, "C0090", "folio 1")
+    tree = Tree(copy.deepcopy(d))
+    found = lambda scope: [f["key"] for f in checks.run_checks(tree, scope)[0] if f["check"] == "dup-citation"]
+    assert found({("citations", "hC0090")}) == ["C0001,C0090"]
+    assert found({("people", "hI0001")}) == []
+
+
+def test_fill_places_refuses_a_backup(tmp_path, capsys):
+    backup = tmp_path / "t.gramps"
+    backup.write_bytes(_to_xml(selftest.clean_tree()))
+    assert main(["fill-places", str(backup)]) == 2
+    assert "no citation text" in capsys.readouterr().err

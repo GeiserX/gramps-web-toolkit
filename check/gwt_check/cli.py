@@ -203,7 +203,7 @@ def print_report(report: dict, limit: int) -> None:
         if len(new) > limit:
             print(f"  ... {len(new) - limit} more (--limit, or --json for all)")
     info = report["info"]
-    print(f"\nevents without place: {info['events without place']}"
+    print(f"\nevents without place: {info['events without place']} (places their citations name: gwt-check fill-places)"
           + (f", {len(info['events without place, in scope'])} in scope" if "events without place, in scope" in info else ""))
     if info.get("dates not read"):
         print(f"dates not read by the dated checks: {info['dates not read']} (another calendar, from/to, dual-dated or free text)")
@@ -309,6 +309,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--limit", type=int, default=30, help="sources listed with --unlinked (default 30)")
     live_opts(p)
 
+    p = sub.add_parser("fill-places", help="for each event with no place, the place its own citations name, with the quote; proposals only")
+    p.add_argument("tree", nargs="?", help="dump file; without it the live tree is read")
+    p.add_argument("--ops", metavar="FILE", help="also write the proposals to a new file as gwt-apply update_event ops with an empty ruling")
+    p.add_argument("--json", action="store_true", help="print the result as JSON")
+    p.add_argument("--limit", type=int, default=30, help="proposals printed (default 30)")
+    live_opts(p)
+
     sub.add_parser("selftest", help="plant every error kind in a synthetic tree and prove each check fires")
 
     args = ap.parse_args(argv)
@@ -320,6 +327,23 @@ def main(argv: list[str] | None = None) -> int:
             return mark_known(args.report, args.check, args.key, args.reason, args.out)
         if args.cmd == "dump":
             save(live_dump(args), args.out)
+            return 0
+        if args.cmd == "fill-places":
+            from .fill import print_places, propose_places, write_ops
+            tree = load(args.tree) if args.tree else Tree(live_dump(args)["objects"], source="live tree")
+            if tree.partial:
+                raise BadInput(f"{tree.source}: a .gramps backup has no citation text; use a dump")
+            rep = propose_places(tree)
+            if args.ops:
+                try:
+                    n = write_ops(rep, args.ops)
+                except OSError as exc:
+                    raise BadInput(f"{args.ops}: {exc} (an existing file is never replaced)") from exc
+                print(f"{n} ops written to {args.ops} with an empty ruling; nothing was applied", file=sys.stderr)
+            if args.json:
+                print(json.dumps(rep, ensure_ascii=False, indent=1))
+            else:
+                print_places(rep, args.limit)
             return 0
         if args.cmd == "repos":
             from .repos import print_repository_report, repository_report
