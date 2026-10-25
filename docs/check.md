@@ -23,7 +23,7 @@ It exits `0` with no new findings and `1` with new findings. Findings of a check
 
 ## Reading a tree that is being written to
 
-A live read takes a while, and an apply may be writing to the tree meanwhile. Reading page by page, a write shifts the pages, so an object comes twice or not at all, and a person read before a note was attached to it makes that note look like an orphan. So `gwt-check` does not trust the pages. After paging through every type it compares the `change` stamp of every object with one list per type, a single request each, and reads again whatever moved, appeared or went away. It repeats that until a pass finds nothing moved.
+A live read takes a while, and an apply may be writing to the tree meanwhile. Reading page by page, a write shifts the pages, so an object comes twice or not at all, and a person read before a note was attached to it makes that note look like an orphan. So `gwt-check` does not trust the pages. After paging through every type it compares the `change` stamp of every object with one list per type, a single request each, and reads again whatever moved, appeared or went away, plus the father, mother and children of every family that moved (writing a family edits their family lists, see [Check after a write](#check-after-a-write)). It repeats that until a pass finds nothing moved.
 
 When writes never stop, a pass can still catch one halfway: a note made and not yet attached is an orphan for a moment. A pass reads the types one after another, so such a write can show in two passes in a row but not in three. While the tree keeps moving, a finding is confirmed when three passes in a row found it, and the read ends once the confirmed set stops changing. A finding only the last two passes found may be a write caught halfway or a real problem made late in the read, so it is reported too, marked `unconfirmed`; run the check again to tell which. A finding only one pass found is left out. Findings for information only, such as `unconnected`, are not part of this comparison: a group that comes and goes while someone writes never keeps the read going, and the report gives them as the last pass found them. The report says how many passes it took (`passes` in the JSON) and how many findings it left out (`in_flight`). If the findings are still changing after 10 passes, it exits `2`. The note a running `gwt-apply` holds the tree with is left out of every check.
 
@@ -32,6 +32,31 @@ On a copy of a real tree (about 10,000 people, 50,000 objects), a quiet tree giv
 `--live` keeps the old read: one pass, and a type whose count changes during the read stops it with exit `2`.
 
 A `gwt-apply` snapshot (`gwt-apply --save-snapshot`, or `--save-snapshot NEW --since OLD` right after an apply) is a tree too, for `TREE`, `--since` and `--baseline`. Checking one needs no server and takes seconds. A snapshot from before snapshots kept repositories is refused: take a new one.
+
+## Check after a write
+
+A writer that keeps a dump from before it writes does not need to read the whole tree again to check what it wrote:
+
+```sh
+gwt-check dump PRE.json.gz                                # before the write (or keep the last POST)
+# ... the apply writes ...
+gwt-check check --from PRE.json.gz --save-dump POST.json.gz
+```
+
+`--from` loads `PRE` instead of paging through every type, then makes it match the live tree the same way a live read puts its own pages right: one list of `change` stamps per type, a single request each, and a read of whatever moved, appeared or went away. On an unchanged tree that is one request per type, whatever the tree's size; a write adds one request per 100 changed objects of a type, and one for the members of the families it changed. A full read pages through every object, so it grows with the tree. `POST` is then the `PRE` of the next write.
+
+Two kinds of write leave a stamp that says nothing moved, and `--from` reads them again anyway:
+
+- A stamp counts whole seconds, so an object written again in the second the earlier read saw it keeps the stamp the file holds. Every dump `gwt-check` writes records `read_started`, the Unix time its read began, and `--from` reads again every object stamped at or after that moment minus 2 s. A file without it (written by an older `gwt-check`, or a `gwt-apply` snapshot) is taken to have started its read an hour before its `dumped_at` or `taken`, with a warning; one with neither is refused.
+- Writing a family edits its members' family lists, and nothing proves their stamps move with it. So the father, mother and children of every family that moved or went away, before and after the write, are read again. A live read does the same on every pass.
+
+Objects read again this way that come back unchanged do not count as moved, so they never add a pass. The one exception is a lock note left behind by a `gwt-apply` that died: `--from` leaves it out of the tree it starts from, so it reads that note again every time and takes one more round of stamp lists. The note is still in the tree, so that reread puts it in `POST`, and the next `--from` pays the same round until the note is removed.
+
+`read_started` comes from the clock of the machine that ran the read and stamps from the server's clock, so keep both in step (NTP).
+
+`--from` refuses a `.gramps` backup, a file of another tree than the one the login lands in, a `TREE` argument and `--live`, all with exit `2`. By default the findings `PRE` already had count as known, so the exit code reflects what the write added.
+
+It trusts the stamps for everything else. A change that reaches the database without moving its object's stamp, outside the two cases above, stays invisible to it. Keep a periodic full read (`gwt-check check` with no `--from`) as the safety net, and start the chain again from its `--save-dump`.
 
 ## Options of `check`
 
@@ -45,7 +70,8 @@ A `gwt-apply` snapshot (`gwt-apply --save-snapshot`, or `--save-snapshot NEW --s
 | `--ignore-check NAME` | Leaves a whole check out of the exit code (repeatable). For a check that is noise in your tree, such as `private` after an import that marks every living person private on purpose. The report still counts the findings and prints `ignored NAME: N finding(s)`; a name that is not a check exits 2 |
 | `--baseline OLD` | An earlier dump: the findings it already had count as known, so the exit code reflects only what is new since then. The same as running `check OLD --json` and passing that report to `--known`, in one command. The usual call is `--since OLD --baseline OLD`. It runs the checks twice, so a check takes about twice as long |
 | `--json FILE` | The full report as JSON (`-` prints it instead of the text) |
-| `--save-dump FILE` | Keeps the live dump, to use as `--since` next time |
+| `--save-dump FILE` | Keeps the live dump, to use as `--since` or `--from` next time |
+| `--from OLD` | A dump or `gwt-apply` snapshot of the same tree: start from it and read again only what changed since, instead of the whole tree ([below](#check-after-a-write)). Implies `--baseline OLD` unless `--baseline` or `--known` is given |
 | `--limit N` | Findings printed per check (default 30); the JSON has all of them |
 | `--pagesize`, `--workers` | Objects per request (default 1000) and requests in flight (default 4) |
 | `--live` | The old strict read of the live tree, which stops when the tree changes during it |
@@ -160,8 +186,6 @@ On a tree of 13,035 people, 3,874 families, 10,831 events, 9,120 citations, 5,58
 Each request costs about 1.3 s before the first object, so small pages waste most of the time. The checks themselves take under a second, and reading a saved dump about one. Large pages are safe without `profile=all`. It was `profile=all` that answered 500 on a whole-tree listing.
 
 A request that fails on the network (a timeout, a reset connection, an SSL read error) is tried again, the same as a 429 or a 5xx: up to 6 tries per request, waiting 5, 10, 20, 40 and then 60 s between them, or as long as a `Retry-After` header says. Only a page that fails all 6 stops the run, with exit code 2 and the last error. On a loaded server, where a 1000-object page can take minutes, read with `--pagesize 100 --workers 1`: smaller pages answer within the timeout, and nothing else competes with them.
-
-If the tree changes while it is being read, pages shift, and a type comes back short or with repeats. `gwt-check` then stops with exit code 2 instead of reporting false orphans. Run it when no apply is writing.
 
 ## A `.gramps` backup as the earlier tree
 
