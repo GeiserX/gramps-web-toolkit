@@ -17,7 +17,7 @@ The toolkit works for genealogy in any country. One module, `spanish-poller`, is
 ## Features
 
 - `gwt-apply`: applies a JSON Lines change list to a tree, reads before every write, skips what is already there, and stays dry-run until you pass `--apply`
-- `gwt-check`: reads the whole tree after an apply and reports orphans, dangling links, broken birth and death pointers, likely duplicates and what changed since the last copy, with a self-test that plants every error kind
+- `gwt-check`: reads the whole tree after an apply and reports orphans, dangling links, broken birth and death pointers, likely duplicates, dates that contradict each other and what changed since the last copy, with a self-test that plants every error kind
 - `gwt-import-excel`: reads a research workbook (.xlsx, standard library only) with a JSON column mapping and writes a gwt-apply change list for review. Namesakes in the tree are reported and pass gwt-apply's preflight only with a written reason, places are matched to the tree and never created, people who may be alive are held back
 - `gwt-fetch`: downloads archive images and text without a browser, with one manifest row per file: any IIIF archive, Europeana search, plus Spanish sources (DIGIBIB, the historical Gaceta de Madrid, CartoCiudad geocoding)
 - `gwt-ledger`: a shared "already searched" ledger, so parallel agents stop repeating each other's negative searches

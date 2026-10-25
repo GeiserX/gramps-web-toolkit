@@ -348,6 +348,85 @@ def p_unconnected(d):
     _new_family(d, "F9001", "hI9001", "hI9002")
 
 
+# dated plants: new people and families in the I07xx range, so they never touch another plant
+
+def _event(d, person, gid, typ, date, *, family=None):
+    ev = copy.deepcopy(_get(d, "events", "E0001"))
+    ev.update(handle="h" + gid, gramps_id=gid, type=typ, date=_date(*date), citation_list=[], tag_list=[])
+    d["events"].append(ev)
+    if family is not None:
+        family["event_ref_list"].append(_ref(ev["handle"], role="Family"))
+    else:
+        person["event_ref_list"].append(_ref(ev["handle"], role="Primary"))
+        if typ == "Death":
+            person["death_ref_index"] = len(person["event_ref_list"]) - 1
+
+
+def _parent_child(d, fam, parent, child, *, mother=False, parent_birth, child_birth, gender=None):
+    """A one-parent family `fam` with `parent` and one child, both new, born on the dates given."""
+    par = _new_person(d, parent, "Plantado", f"Padre {parent}", birth=parent_birth, family="h" + fam)
+    if mother or gender == 0:
+        par["gender"] = 0
+    kid = _new_person(d, child, "Plantado", f"Hijo {child}", birth=child_birth, parent_family="h" + fam)
+    f = _new_family(d, fam, "" if mother else par["handle"], par["handle"] if mother else "", [kid["handle"]])
+    return par, kid, f
+
+
+def p_death_before_birth(d):
+    p = _new_person(d, "I0700", "Plantado", "Orden", birth=(1850, 5, 1))
+    _event(d, p, "E0701", "Death", (1849,))
+
+
+def p_child_before_parent(d):
+    _parent_child(d, "F0702", "I0702", "I0703", parent_birth=(1880,), child_birth=(1879, 4, 2))
+
+
+def p_child_after_mother_death(d):
+    par, _, _ = _parent_child(d, "F0704", "I0704", "I0705", mother=True, parent_birth=(1850,),
+                              child_birth=(1881, 6, 1))
+    _event(d, par, "E0706", "Death", (1880, 1, 1))
+
+
+def p_marriage_before_birth(d):
+    par, _, f = _parent_child(d, "F0707", "I0707", "I0708", parent_birth=(1900,), child_birth=(1930,))
+    _event(d, par, "E0709", "Marriage", (1890,), family=f)
+
+
+def p_marriage_after_death(d):
+    par, _, f = _parent_child(d, "F0710", "I0710", "I0711", parent_birth=(1850,), child_birth=(1876,))
+    _event(d, par, "E0712", "Death", (1880,))
+    _event(d, par, "E0713", "Marriage", (1885,), family=f)
+
+
+def p_own_ancestor(d):
+    _, kid, f = _parent_child(d, "F0714", "I0714", "I0715", parent_birth=(1850,), child_birth=(1880,))
+    _new_family(d, "F0716", kid["handle"], "", ["hI0714"])
+    kid["family_list"].append("hF0716")
+    _get(d, "people", "I0714")["parent_family_list"].append("hF0716")
+
+
+def p_parent_age(d):
+    _parent_child(d, "F0717", "I0717", "I0718", mother=True, parent_birth=(1880, 1, 1), child_birth=(1890, 6, 1))
+
+
+def p_marriage_age(d):
+    par, _, f = _parent_child(d, "F0719", "I0719", "I0720", mother=True, parent_birth=(1880, 1, 1),
+                              child_birth=(1900,))
+    _event(d, par, "E0721", "Marriage", (1891, 6, 1), family=f)
+
+
+def p_sibling_spacing(d):
+    par, _, f = _parent_child(d, "F0722", "I0722", "I0723", mother=True, parent_birth=(1875,),
+                              child_birth=(1900, 1, 1))
+    kid = _new_person(d, "I0724", "Plantada", "Hija I0724", birth=(1900, 6, 1), parent_family="hF0722")
+    f["child_ref_list"].append(_ref(kid["handle"], frel="Birth", mrel="Birth"))
+
+
+def p_lifespan(d):
+    p = _new_person(d, "I0725", "Plantado", "Longevo", birth=(1700,))
+    _event(d, p, "E0726", "Death", (1820,))
+
+
 # (plant, check that must fire, key it must carry, needs the clean tree as --since and I0001 as root)
 PLANTS = [
     (p_unconnected, "unconnected", "I9001", False),
@@ -388,6 +467,16 @@ PLANTS = [
     (p_ahnentafel_lost, "ahnentafel-lost", "6 I0006", True),
     (p_ahnentafel_changed, "ahnentafel-changed", "4 I0004", True),
     (p_ahnentafel_truncated, "ahnentafel-truncated", "root I0001", True),
+    (p_death_before_birth, "event-order", "I0700 EI0700 E0701", False),
+    (p_child_before_parent, "child-before-parent", "F0702 I0702 I0703", False),
+    (p_child_after_mother_death, "child-after-parent-death", "F0704 I0704 I0705", False),
+    (p_marriage_before_birth, "marriage-before-birth", "F0707 E0709 I0707", False),
+    (p_marriage_after_death, "marriage-after-death", "F0710 E0713 I0710", False),
+    (p_own_ancestor, "own-ancestor", "I0714,I0715", False),
+    (p_parent_age, "parent-age", "F0717 I0717 I0718", False),
+    (p_marriage_age, "marriage-age", "F0719 E0721 I0719", False),
+    (p_sibling_spacing, "sibling-spacing", "I0722 I0723,I0724", False),
+    (p_lifespan, "lifespan", "I0725", False),
 ]
 
 

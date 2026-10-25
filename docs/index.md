@@ -57,7 +57,7 @@ The toolkit works for genealogy in any country. `gwt-spanish-poller` and some `g
 ## Tools that read and write the tree
 
 - [gwt-apply](apply.md): applies a JSON Lines change list, reads before every write, skips what is already there.
-- [gwt-check](check.md): reads the whole tree and reports orphans, dangling links, broken pointers, likely duplicates and what changed.
+- [gwt-check](check.md): reads the whole tree and reports orphans, dangling links, broken pointers, likely duplicates, dates that contradict each other and what changed.
 - [gwt-import-excel](import-excel.md): turns a research workbook into a change list for review.
 - [gwt-leads](leads.md): reads a tree dump offline and ranks its gaps as queue tasks.
 
