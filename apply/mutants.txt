@@ -69,3 +69,4 @@ gwt_apply/snapshot.py | if "format" not in data and isinstance(data.get("objects
 gwt_apply/snapshot.py | if not dump.get("tree"): | if False: | a gwt-check dump that records no tree is refused as a snapshot
 gwt_apply/snapshot.py | if isinstance(started, (int, float)) and not isinstance(started, bool): | if False: | a gwt-check dump is dated by read_started, as gwt-check dates it
 gwt_apply/snapshot.py | return isinstance(rows, list) and all(isinstance(o, dict) and isinstance(o.get("handle"), str) for o in rows) | return True | a gwt-check dump with rows that are not objects with handles is refused, not a traceback
+gwt_apply/snapshot.py | except (OverflowError, OSError, ValueError):  # out of range or NaN | except ValueError:  # out of range or NaN | a gwt-check dump with a read_started out of range is dated by dumped_at, not a traceback

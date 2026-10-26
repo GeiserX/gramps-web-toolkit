@@ -124,7 +124,10 @@ def _dump_time(dump: dict) -> str:
     gwt-check itself takes it; else dumped_at; else unknown."""
     started = dump.get("read_started")
     if isinstance(started, (int, float)) and not isinstance(started, bool):
-        return datetime.fromtimestamp(started, timezone.utc).isoformat(timespec="seconds")
+        try:
+            return datetime.fromtimestamp(started, timezone.utc).isoformat(timespec="seconds")
+        except (OverflowError, OSError, ValueError):  # out of range or NaN: fall back to dumped_at
+            pass
     try:
         return datetime.fromisoformat(dump["dumped_at"]).isoformat(timespec="seconds")
     except (KeyError, TypeError, ValueError):

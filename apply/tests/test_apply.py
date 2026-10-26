@@ -1441,9 +1441,12 @@ def test_a_gwt_check_dump_without_a_tree_or_a_type_is_refused(fake, scan, tmp_pa
             json.dump(dump, fh)
         assert main([str(changes), "--snapshot", str(bad)]) == 2, name
         assert f"whose {name} is not a list of objects with handles" in capsys.readouterr().err
+    (tmp_path / "cut.json.gz").write_bytes(snap.read_bytes()[:40])
     (tmp_path / "junk.json").write_text("[1, 2]")
-    assert main([str(changes), "--snapshot", str(tmp_path / "junk.json")]) == 2
-    assert "neither a gwt-apply snapshot nor a gwt-check dump" in capsys.readouterr().err
+    (tmp_path / "text.json").write_text("not json")
+    for junk in ("cut.json.gz", "junk.json", "text.json"):
+        assert main([str(changes), "--snapshot", str(tmp_path / junk)]) == 2, junk
+        assert "neither a gwt-apply snapshot nor a gwt-check dump" in capsys.readouterr().err, junk
 
 
 def test_a_gwt_check_dump_time_is_read_started_then_dumped_at_and_never_a_reason_to_refuse(fake, scan, tmp_path, env,
@@ -1456,7 +1459,11 @@ def test_a_gwt_check_dump_time_is_read_started_then_dumped_at_and_never_a_reason
             ("odd-dumped-at", (), {"dumped_at": 1793000000}, "of 2026-10-26T07:33:20+00:00"),
             ("no-offset", ("read_started",), {"dumped_at": "2026-10-26T01:36:27"}, "of 2026-10-26T01:36:27,"),
             ("offset", ("read_started",), {}, "of 2026-10-26T01:36:27+01:00,"),
-            ("no-time", ("read_started", "dumped_at"), {}, "of unknown,")):
+            ("no-time", ("read_started", "dumped_at"), {}, "of unknown,"),
+            ("odd-dumped-at-alone", ("read_started",), {"dumped_at": 1793000000}, "of unknown,"),
+            ("bad-dumped-at-alone", ("read_started",), {"dumped_at": "yesterday"}, "of unknown,"),
+            ("huge-read-started", (), {"read_started": 1e300}, "of 2026-10-26T01:36:27+01:00,"),
+            ("nan-read-started", (), {"read_started": float("nan")}, "of 2026-10-26T01:36:27+01:00,")):
         dump = _as_check_dump(snap, tmp_path / f"{name}.json.gz", drop, **meta)
         capsys.readouterr()
         assert main([str(changes), "--snapshot", str(dump)]) == 0, name
