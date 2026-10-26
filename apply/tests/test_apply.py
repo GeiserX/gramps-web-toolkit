@@ -800,6 +800,116 @@ def test_login_that_times_out_is_retried(fake):
     assert res[0].status == "done", res[0].actions
 
 
+def test_preflight_read_that_times_out_is_retried(fake, tmp_path, monkeypatch, capsys):
+    """The duplicate preflight lists the whole tree before any op runs: a timeout there is retried like an op's
+    read, and the run ends only once the retries are spent."""
+    import requests
+    import gwt_apply.client as clientmod
+    request, timeouts = fake.request, [1]
+
+    def flaky(method, url, **kw):
+        if method == "GET" and url.endswith("/api/people/") and "keys" in (kw.get("params") or {}) and timeouts[0]:
+            timeouts[0] -= 1
+            raise requests.Timeout("Read timed out.")
+        return request(method, url, **kw)
+
+    fake.request = flaky
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: fake)
+    for k, v in {"GWT_URL": "https://gw.example", "GWT_USERNAME": "u", "GWT_PASSWORD": "pw", "GWT_TREE": "tree-test"}.items():
+        monkeypatch.setenv(k, v)
+    p = tmp_path / "changes.jsonl"
+    p.write_text(json.dumps({"op": "add_person", "key": "p", "ruling": R, "first_name": "Rose", "surname": "Sample"}) + "\n")
+    assert main([str(p), "--retry-wait", "0"]) == 0
+    assert timeouts == [0]
+    assert "1 done, 0 skip, 0 conflict, 0 error" in capsys.readouterr().out
+    timeouts[0] = 3
+    assert main([str(p), "--retries", "3", "--retry-wait", "0"]) == 1
+    assert "GET /people/: Timeout" in capsys.readouterr().err
+
+
+def test_snapshot_check_read_that_times_out_is_retried(fake, tmp_path, env, capsys):
+    """An apply on a snapshot lists the classes its plan touched on the server, to see what changed since: a
+    timeout there is retried like the duplicate check's reads."""
+    request, timeouts = fake.request, [0]
+
+    def flaky(method, url, **kw):
+        if method == "GET" and url.endswith("/api/people/") and "keys" in (kw.get("params") or {}) and timeouts[0]:
+            timeouts[0] -= 1
+            raise requests.Timeout("Read timed out.")
+        return request(method, url, **kw)
+
+    fake.request = flaky
+    p = tmp_path / "changes.jsonl"
+    p.write_text(json.dumps({"op": "add_person", "key": "p", "ruling": R, "first_name": "Rose", "surname": "Sample"}) + "\n")
+    snap = tmp_path / "tree.json.gz"
+    assert main(["--save-snapshot", str(snap)]) == 0
+    timeouts[0] = 1
+    assert main([str(p), "--snapshot", str(snap), "--apply", "--retry-wait", "0"]) == 0, capsys.readouterr()
+    assert timeouts == [0]
+    assert "1 done, 0 skip, 0 conflict, 0 error" in capsys.readouterr().out
+    snap2 = tmp_path / "tree2.json.gz"
+    assert main(["--save-snapshot", str(snap2)]) == 0
+    timeouts[0] = 2
+    assert main([str(p), "--snapshot", str(snap2), "--apply", "--retries", "2", "--retry-wait", "0"]) == 1
+    assert "GET /people/: Timeout" in capsys.readouterr().err
+
+
+def test_a_retried_preflight_keeps_the_lock_fresh(fake, tmp_path, env, monkeypatch):
+    """A long wait between two tries of the duplicate check refreshes the lock before the next try."""
+    from gwt_apply import lock as lockmod
+    import gwt_apply.cli as climod
+    from gwt_apply.lock import LOCK_HANDLE
+    clock = [lockmod._now()]
+    monkeypatch.setattr(lockmod, "_now", lambda: clock[0])
+    sleep = climod.time.sleep
+    monkeypatch.setattr(climod.time, "sleep", lambda s: clock.__setitem__(0, clock[0] + 600) if s == 7 else sleep(s))
+    request, reads, refreshed = fake.request, [], ("PUT", f"/api/notes/{LOCK_HANDLE}")
+
+    def flaky(method, url, **kw):
+        if method == "GET" and url.endswith("/api/people/") and "keys" in (kw.get("params") or {}):
+            reads.append(fake.writes().count(refreshed))
+            if len(reads) == 1:
+                raise requests.Timeout("Read timed out.")
+        return request(method, url, **kw)
+
+    fake.request = flaky
+    p = tmp_path / "changes.jsonl"
+    p.write_text(json.dumps({"op": "add_person", "key": "p", "ruling": R, "first_name": "Rose", "surname": "Sample"}) + "\n")
+    assert main([str(p), "--apply", "--retry-wait", "7"]) == 0
+    assert reads[:2] == [0, 1]  # the second try ran after the lock was pushed forward
+
+
+def test_first_login_that_times_out_is_retried_by_the_cli(fake, tmp_path, env, capsys):
+    """The run's own first login is retried too, not only a login inside an op."""
+    request, timeouts = fake.request, [1]
+
+    def flaky(method, url, **kw):
+        if url.endswith("/token/") and timeouts[0]:
+            timeouts[0] -= 1
+            raise requests.Timeout("Read timed out.")
+        return request(method, url, **kw)
+
+    fake.request = flaky
+    p = tmp_path / "changes.jsonl"
+    p.write_text(json.dumps({"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}) + "\n")
+    assert main([str(p), "--apply", "--retry-wait", "0"]) == 0, capsys.readouterr()
+    assert timeouts == [0]
+    timeouts[0] = 2
+    assert main([str(p), "--apply", "--retries", "2", "--retry-wait", "0"]) == 1
+    assert "login: Timeout" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("value", ["0", "-1"])
+def test_retries_below_one_is_refused(tmp_path, capsys, value):
+    """No tries at all would take no lock, run no op and still report every op done."""
+    p = tmp_path / "changes.jsonl"
+    p.write_text(json.dumps({"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}) + "\n")
+    with pytest.raises(SystemExit) as exc:
+        main([str(p), "--retries", value])
+    assert exc.value.code == 2
+    assert "--retries" in capsys.readouterr().err
+
+
 class MergingFake(FakeGrampsWeb):
     """The fake API plus the merge endpoints, doing what Gramps' merge does to the lists the tests look at."""
 
@@ -1380,6 +1490,102 @@ def test_the_fast_redry_reports_an_object_changed_after_the_apply(fake, scan, tm
     main([str(changes), "--snapshot", str(after)])
     out = capsys.readouterr().out
     assert "[done] u-anna" in out and "[done] c-bapt" in out
+
+
+def _as_check_dump(snap_path, out, drop=(), **meta):
+    """The snapshot written the way `gwt-check dump` writes a tree: API type names, tree, read_started, dumped_at."""
+    import gzip
+    from gwt_apply import snapshot
+    from gwt_apply.client import NAMESPACE
+    snap = snapshot.load(str(snap_path))
+    dump = {"tree": snap["tree"], "read_started": 1793000000, "dumped_at": "2026-10-26T01:36:27+0100",
+            "objects": {ns: snap["objects"].get(cls, []) for cls, ns in NAMESPACE.items()}}
+    dump.update(meta)
+    for k in drop:
+        dump.pop(k, None) if k in dump else dump["objects"].pop(k)
+    with gzip.open(out, "wt", encoding="utf-8") as fh:
+        json.dump(dump, fh)
+    return out
+
+
+def test_a_gwt_check_dump_serves_as_a_snapshot_for_a_dry_run_and_verify(fake, scan, tmp_path, env, monkeypatch,
+                                                                          capsys):
+    before, after = tmp_path / "before.json.gz", tmp_path / "after.json.gz"
+    assert main(["--save-snapshot", str(before)]) == 0
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text("\n".join(json.dumps(op) for op in full_list(scan)))
+    pre = _as_check_dump(before, tmp_path / "pre-dump.json.gz")
+    capsys.readouterr()
+    assert main([str(changes), "--snapshot", str(before)]) == 0
+    on_snapshot = capsys.readouterr().out.split("\n", 2)[2]  # past the run id and the header line
+    assert main([str(changes), "--snapshot", str(pre)]) == 0
+    out = capsys.readouterr().out
+    assert "of 2026-10-26T07:33:20+00:00" in out and out.split("\n", 2)[2] == on_snapshot  # read_started, the same plan
+    assert main([str(changes), "--apply"]) == 0
+    assert main(["--save-snapshot", str(after)]) == 0
+    post = _as_check_dump(after, tmp_path / "post-dump.json")  # check writes plain JSON without .gz
+    import gwt_apply.client as clientmod
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: NoServer())
+    capsys.readouterr()
+    assert main([str(changes), "--verify", "--snapshot", str(post)]) == 0  # offline, every op in the tree
+    assert "VERIFY: 8 of 8 op(s) in the tree" in capsys.readouterr().out
+    assert main([str(changes), "--verify", "--snapshot", str(pre)]) == 1  # the dump from before the apply
+
+
+def test_a_gwt_check_dump_without_a_tree_or_a_type_is_refused(fake, scan, tmp_path, env, capsys):
+    snap = tmp_path / "tree.json.gz"
+    assert main(["--save-snapshot", str(snap)]) == 0
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text("\n".join(json.dumps(op) for op in full_list(scan)))
+    for drop, why in ((("tree",), "records no tree"), (("citations",), "without citations")):
+        bad = _as_check_dump(snap, tmp_path / f"bad-{drop[0]}.json.gz", drop)
+        assert main([str(changes), "--snapshot", str(bad)]) == 2
+        assert why in capsys.readouterr().err
+    import gzip
+    for name, rows in (("people", [1]), ("events", [{"gramps_id": "E1"}]), ("tags", {"a": {}})):
+        bad = _as_check_dump(snap, tmp_path / f"bad-rows-{name}.json.gz")
+        with gzip.open(bad, "rt", encoding="utf-8") as fh:
+            dump = json.load(fh)
+        dump["objects"][name] = rows
+        with gzip.open(bad, "wt", encoding="utf-8") as fh:
+            json.dump(dump, fh)
+        assert main([str(changes), "--snapshot", str(bad)]) == 2, name
+        assert f"whose {name} is not a list of objects with handles" in capsys.readouterr().err
+    (tmp_path / "cut.json.gz").write_bytes(snap.read_bytes()[:40])
+    (tmp_path / "junk.json").write_text("[1, 2]")
+    (tmp_path / "text.json").write_text("not json")
+    for junk in ("cut.json.gz", "junk.json", "text.json"):
+        assert main([str(changes), "--snapshot", str(tmp_path / junk)]) == 2, junk
+        assert "neither a gwt-apply snapshot nor a gwt-check dump" in capsys.readouterr().err, junk
+
+
+def test_a_gwt_check_dump_time_is_read_started_then_dumped_at_and_never_a_reason_to_refuse(fake, scan, tmp_path, env,
+                                                                                          capsys):
+    snap = tmp_path / "tree.json.gz"
+    assert main(["--save-snapshot", str(snap)]) == 0
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text("\n".join(json.dumps(op) for op in full_list(scan)))
+    for name, drop, meta, shown in (
+            ("odd-dumped-at", (), {"dumped_at": 1793000000}, "of 2026-10-26T07:33:20+00:00"),
+            ("no-offset", ("read_started",), {"dumped_at": "2026-10-26T01:36:27"}, "of 2026-10-26T01:36:27,"),
+            ("offset", ("read_started",), {}, "of 2026-10-26T01:36:27+01:00,"),
+            ("no-time", ("read_started", "dumped_at"), {}, "of unknown,"),
+            ("odd-dumped-at-alone", ("read_started",), {"dumped_at": 1793000000}, "of unknown,"),
+            ("bad-dumped-at-alone", ("read_started",), {"dumped_at": "yesterday"}, "of unknown,"),
+            ("huge-read-started", (), {"read_started": 1e300}, "of 2026-10-26T01:36:27+01:00,"),
+            ("nan-read-started", (), {"read_started": float("nan")}, "of 2026-10-26T01:36:27+01:00,")):
+        dump = _as_check_dump(snap, tmp_path / f"{name}.json.gz", drop, **meta)
+        capsys.readouterr()
+        assert main([str(changes), "--snapshot", str(dump)]) == 0, name
+        assert shown in capsys.readouterr().out, name
+
+
+def test_the_help_says_snapshot_and_since_take_a_gwt_check_dump(monkeypatch, capsys):
+    monkeypatch.setenv("COLUMNS", "400")  # one help line per option, so no phrase is wrapped
+    with pytest.raises(SystemExit):
+        main(["-h"])
+    lines = {ln.split()[0]: ln for ln in capsys.readouterr().out.splitlines() if ln.strip().startswith("--")}
+    assert "gwt-check dump" in lines["--snapshot"] and "gwt-check dump" in lines["--since"]
 
 
 def test_since_refuses_a_snapshot_of_another_tree(fake, tmp_path, env, monkeypatch, capsys):

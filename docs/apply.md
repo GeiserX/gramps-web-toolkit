@@ -25,7 +25,7 @@ On a multi-tree server, the tree comes from the user: the login (`POST /api/toke
 
 Every request carries the User-Agent `gramps-web-toolkit/<version> (gwt-apply; +https://github.com/GeiserX/gramps-web-toolkit)`, so a server admin can tell the toolkit apart in the logs.
 
-Other flags: `--verify` and `--json FILE` ([Prove a list landed](#prove-a-list-landed)), `--log PATH`, `--retries N` (default 5), `--retry-wait SECONDS` (default 30), `--snapshot FILE`, `--save-snapshot FILE` and `--since OLD` ([Snapshots](#snapshots)), `--tag NAME` ([Tags](#tags)), `--break-lock` (below).
+Other flags: `--verify` and `--json FILE` ([Prove a list landed](#prove-a-list-landed)), `--log PATH`, `--retries N` (default 5, at least 1), `--retry-wait SECONDS` (default 30), `--snapshot FILE`, `--save-snapshot FILE` and `--since OLD` ([Snapshots](#snapshots)), `--tag NAME` ([Tags](#tags)), `--break-lock` (below).
 
 Every run gets a run id, `<date>-<time>-<6 hex>`. The first line of output names it and the log, before the login, so a run whose login fails still says which run it was. The log path carries `(created once logged in)`: the file appears only after the login. See [The log](#the-log).
 
@@ -278,6 +278,15 @@ gwt-apply --save-snapshot tree-0413.json.gz --since tree-0412.json.gz   # only w
 gwt-apply changes.jsonl --verify --snapshot tree-0413.json.gz           # exit 0: every op is in the tree
 ```
 
+A `gwt-check` dump works anywhere a snapshot does (`--snapshot`, `--since`): `gwt-check dump`, or the `--save-dump` of a `gwt-check check --from PRE`, holds the same objects as the API returns them. So a writer that refreshes its dump after each apply with `gwt-check check --from PRE --save-dump POST` verifies on that same file, with no second read of the tree:
+
+```sh
+gwt-check check --from pre.json.gz --save-dump post.json.gz   # the gate: what the apply changed, read in seconds
+gwt-apply changes.jsonl --verify --snapshot post.json.gz       # exit 0: every op is in the tree
+```
+
+The header line dates a dump by when its read began (`read_started`), or by when it was written (`dumped_at`) if it has no `read_started`; that time is only shown, never compared. A dump that records no tree or lacks a type is refused with exit `2`: take a new one. A dump `gwt-check` marked `settled` stopped reading again while other writes went on, so it is not one moment's view of the whole tree: verify on it only when nothing else writes to that tree.
+
 `--since` reads one list of `change` stamps per class, then only the objects whose stamp moved and the new ones, and leaves out the deleted ones. The new file holds what a full `--save-snapshot` would, so the check is as strong as `--verify` against the server: an object the list touched and someone changed afterwards, or one that went away, makes its op come out `done` or `conflict` instead of `skip`. That holds for any change since the older snapshot, not only the ones the list made, so the new snapshot is also the one to plan and apply the next list on. Gramps' `change` stamp counts seconds, so take the older snapshot while nothing writes to the tree, as an apply's lock guarantees.
 
 ## Safety rules
@@ -294,7 +303,7 @@ gwt-apply changes.jsonl --verify --snapshot tree-0413.json.gz           # exit 0
 - **One apply per tree.** `--apply` takes a lock before its first write and holds it to the end: a private note with a fixed handle and Gramps ID `GWTLOCK`, inside the tree, so it works whichever machine the apply runs on. Creating it is the test: the server refuses a second object with the same handle. The note says which run, host and process hold it and until when; the holder moves that time 15 minutes ahead while it works and deletes the note when it stops, also on Ctrl-C, `SIGTERM` or `SIGHUP`. A second `--apply` on the tree stops before writing and names the holder. A lock whose holder died (power cut, `kill -9`) expires after 15 minutes and the next apply takes it over and says so; `--break-lock` takes it at once, for when you know the holder is dead. A holder that finds its lock gone stops. A dry run takes no lock, and says so when an apply holds the tree. While the lock is held, an export of the tree includes the lock note.
 - **Stop at the first conflict or error.** Later ops are not run, because they may depend on this one.
 - **Writes are narrow.** Only a merge deletes anything, and only the loser: through Gramps' own merge, or for `merge_repository` with a `DELETE` once no source lists it. Objects are created with `POST /api/objects/`. Changes to an existing object are a `GET` followed by a `PUT` of the same object with only the named field changed. Right before the `PUT` the object is read again; if it changed since the op read it, the op starts over, so a concurrent edit is not overwritten.
-- **Busy server.** On "database is locked", any 5xx, a request that timed out or lost its connection, or an object that changed since it was read, the op waits `--retry-wait` seconds and starts over from fresh reads. A create whose answer never came is looked up again before the op tries it a second time, so a timeout cannot make an object twice. A login answered 429 (the server rate-limits logins) waits and tries again.
+- **Busy server.** On "database is locked", any 5xx, a request that timed out or lost its connection, or an object that changed since it was read, the op waits `--retry-wait` seconds and starts over from fresh reads. A create whose answer never came is looked up again before the op tries it a second time, so a timeout cannot make an object twice. A login answered 429 (the server rate-limits logins) waits and tries again; a login that times out, the run's first one included, is retried like a read. The whole-tree list reads before the first op retry the same way: the duplicate check, which lists every person, event and family, and on an `--apply --snapshot` the check of what changed since the snapshot. One slow list read does not end a run that has written nothing.
 - **A log of every call.** One JSONL line per API call with the op's `key` and `ruling`, the method, path, status, and the body of every write, between a `start` and an `end` line ([The log](#the-log)). The password and the token are never logged.
 - **Re-running is safe.** After a crash, run the same list again with `--apply`: what was written is skipped, and an object that was created but not yet linked gets linked. A rerun without `--apply` is only a dry run, and it exits `0` even when ops would write; `--verify` is what proves a list landed.
 

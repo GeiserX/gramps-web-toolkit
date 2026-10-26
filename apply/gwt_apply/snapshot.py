@@ -81,11 +81,57 @@ def _write(path: str, tree: str | None, taken: datetime, objects: dict[str, list
 
 
 def load(path: str) -> dict:
-    with gzip.open(path, "rt", encoding="utf-8") as fh:
-        data = json.load(fh)
-    if data.get("format") != FORMAT:
-        raise ValueError(f"{path} is not a gwt-apply snapshot")
-    return data
+    """A snapshot, or a `gwt-check` dump (`gwt-check dump`, `check --save-dump`), gzip or plain JSON.
+
+    A dump holds the same objects, as the API returns them, under the API's type names; it becomes a snapshot
+    taken when the dump was written."""
+    with open(path, "rb") as fh:
+        raw = fh.read()
+    try:
+        data = json.loads(gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw)
+    except (OSError, EOFError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"{path} is neither a gwt-apply snapshot nor a gwt-check dump ({exc})") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} is neither a gwt-apply snapshot nor a gwt-check dump")
+    if data.get("format") == FORMAT:
+        return data
+    if "format" not in data and isinstance(data.get("objects"), dict):
+        return _from_dump(path, data)
+    raise ValueError(f"{path} is neither a gwt-apply snapshot nor a gwt-check dump")
+
+
+def _from_dump(path: str, dump: dict) -> dict:
+    objects = dump["objects"]
+    missing = [ns for ns in NAMESPACE.values() if ns != "tags" and objects.get(ns) is None]
+    if missing:
+        raise ValueError(f"{path}: a gwt-check dump without {', '.join(missing)}; take a new one")
+    bad = [ns for ns in NAMESPACE.values() if objects.get(ns) is not None and not _rows(objects[ns])]
+    if bad:
+        raise ValueError(f"{path}: a gwt-check dump whose {', '.join(bad)} is not a list of objects with handles; "
+                         "take a new one")
+    if not dump.get("tree"):
+        raise ValueError(f"{path}: a gwt-check dump that records no tree; take a new one")
+    return {"format": FORMAT, "tree": dump["tree"], "taken": _dump_time(dump),
+            "objects": {cls: objects.get(ns) or [] for cls, ns in NAMESPACE.items()}}
+
+
+def _rows(rows) -> bool:
+    return isinstance(rows, list) and all(isinstance(o, dict) and isinstance(o.get("handle"), str) for o in rows)
+
+
+def _dump_time(dump: dict) -> str:
+    """When the dump was read, for the header line only: read_started, the moment gwt-check began reading, as
+    gwt-check itself takes it; else dumped_at; else unknown."""
+    started = dump.get("read_started")
+    if isinstance(started, (int, float)) and not isinstance(started, bool):
+        try:
+            return datetime.fromtimestamp(started, timezone.utc).isoformat(timespec="seconds")
+        except (OverflowError, OSError, ValueError):  # out of range or NaN: fall back to dumped_at
+            pass
+    try:
+        return datetime.fromisoformat(dump["dumped_at"]).isoformat(timespec="seconds")
+    except (KeyError, TypeError, ValueError):
+        return "unknown"
 
 
 def check(client: Client, snap: dict, planner: Client) -> list[str]:
