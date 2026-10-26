@@ -6,6 +6,14 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+None.
+
+### Fixed
+
+- `gwt-leads --links` no longer stops with exit 2 on a links report that has a link that is itself cited (`the link itself is cited`), the first level `gwt-check links` writes.
+
 ## [0.2.2] - 2026-10-26
 
 ### Change lists

@@ -28,9 +28,9 @@ KINDS = ('branch-end', 'missing-vital', 'uncited', 'unsupported-link')
 DEFAULT_KINDS = ('branch-end', 'missing-vital', 'uncited')  # unsupported-link needs --links, so it is asked for
 LINK_GAPS = {'cited, names neither': 'a cited record names neither parent',
              'a record names one': 'records name only one of the two parents'}
-# the other levels gwt-check links writes; 'no record names a parent' means no cited birth or baptism at all,
-# which uncited and missing-vital already list
-LINK_NOT_GAPS = ('birth record names both', 'other record names both', 'no record names a parent')
+# the other levels gwt-check links writes; a cited link has its own source on the child_ref; 'no record names a
+# parent' means no cited birth or baptism at all, which uncited and missing-vital already list
+LINK_NOT_GAPS = ('the link itself is cited', 'birth record names both', 'other record names both', 'no record names a parent')
 BIRTH_LIKE = ('Birth', 'Baptism', 'Christening')   # in order of preference
 DEATH_LIKE = ('Death', 'Burial', 'Cremation')
 MARRIAGE_LIKE = ('Marriage',)

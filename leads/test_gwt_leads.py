@@ -577,6 +577,34 @@ class LeadsTest(unittest.TestCase):
             self.assertEqual((rc, out), (2, ''), err)
             self.assertNotIn('Traceback', err)
 
+    def test_every_level_gwt_check_links_writes_is_accepted(self):
+        # a cited link is the first level gwt-check writes; a report with one used to stop the whole run
+        self.assertIn('the link itself is cited', L.LINK_NOT_GAPS)
+        # read the levels from gwt-check itself, so a level it adds later fails here instead of in a user's run;
+        # the mutant runner copies this package alone, without check/ beside it
+        if not os.path.isdir(os.path.join(HERE, '..', 'check', 'gwt_check')):
+            self.skipTest('gwt-check is not beside this package')
+        sys.path.insert(0, os.path.join(HERE, '..', 'check'))
+        from gwt_check.links import LEVELS
+        self.assertEqual(set(LEVELS), set(L.LINK_GAPS) | set(L.LINK_NOT_GAPS))
+
+    def test_a_gwt_check_links_report_with_a_cited_link_makes_no_task_and_does_not_stop(self):
+        def mutate(objects):
+            fam = next(f for f in objects['families'] if f['child_ref_list'])
+            cit = next(c for c in objects['citations'] if not c.get('private'))
+            fam['child_ref_list'][0]['citation_list'] = [cit['handle']]
+        if not os.path.isdir(os.path.join(HERE, '..', 'check', 'gwt_check')):
+            self.skipTest('gwt-check is not beside this package')
+        path = self.real_dump(mutate)
+        from gwt_check import tree as CT
+        from gwt_check.links import link_report
+        rep = link_report(CT.load(path))
+        cited = [r for r in rep['rows'] if r['level'] == 'the link itself is cited']
+        self.assertTrue(cited, 'the dump must carry a cited link')
+        rows, _ = L.leads(L.load(path), None, ('unsupported-link',), 1925, hold=False, links=rep)
+        on_cited = {(r['child'], 'link-' + r['family']) for r in cited}
+        self.assertFalse([r for r in rows if (r['person'], r['gap']) in on_cited])
+
     def test_unsupported_link_skips_what_is_supported_not_by_birth_or_listed_by_another_kind(self):
         T = tree()
         def got(*rows):
