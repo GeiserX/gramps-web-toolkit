@@ -6,6 +6,14 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+None.
+
+### Added
+
+- `link_event` puts a person on an existing event in a role such as `Witness`, without editing the event.
+
 ## [0.2.3] - 2026-10-26
 
 ### Change lists

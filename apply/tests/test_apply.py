@@ -514,6 +514,22 @@ def test_update_place_sets_coordinates_on_an_existing_place(fake):
         assert validate([dict(ops[0], key="bad", set=bad)]), bad
 
 
+def test_link_event_puts_a_person_on_an_existing_event_in_a_role(fake):
+    bride = fake.add("people", {"handle": "br", "gender": 0, "primary_name": {"first_name": "Anna", "surname_list": [{"surname": "Example", "primary": True}]}})
+    guest = fake.add("people", {"handle": "gu", "gender": 1, "primary_name": {"first_name": "Tom", "surname_list": [{"surname": "Sample", "primary": True}]}})
+    wedding = fake.add("events", {"handle": "wed", "type": "Marriage", "date": {"dateval": [1, 6, 1880, False], "modifier": 0, "quality": 0}})
+    link = [{"op": "link_event", "key": "w", "ruling": R, "person": guest["gramps_id"], "event": wedding["gramps_id"], "role": "Witness"}]
+    assert run(fake, link)[0].status == "done"
+    assert fake.store["people"]["gu"]["event_ref_list"] == [{"ref": "wed", "role": "Witness"}]
+    assert fake.store["events"]["wed"]["type"] == "Marriage"  # the event is not touched
+    assert run(fake, link)[0].status == "skip"
+    other = [dict(link[0], key="w2", role="Godfather")]
+    assert run(fake, other)[0].status == "conflict"
+    for bad in (dict(link[0], key="b1", role="Primary"), dict(link[0], key="b2", role=""), dict(link[0], key="b3", event="wed")):
+        assert validate([bad]), bad
+    assert bride["gramps_id"]
+
+
 def test_coordinates_that_are_not_numbers_are_a_validation_error():
     # float(None) is a TypeError: it must come out as a line in the error list, not a crash
     for bad in (None, "north", [1]):

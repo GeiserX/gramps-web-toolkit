@@ -40,6 +40,7 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "update_family": ({"family", "set"}, set()),
     "update_child_ref": ({"family", "child"}, {"set", "confirm_probable", "expect"}),
     "detach": ({"target", "object"}, set()),
+    "link_event": ({"person", "event", "role"}, set()),
     "add_event": ({"type"}, {"person", "family", "role", "date", "place", "description", "gramps_id"}),
     "add_family": (set(), {"father", "mother", "children", "type", "gramps_id", "allow_new_couple", "new_couple_reason",
                            "new_couple_of"}),
@@ -287,7 +288,7 @@ def validate(ops: list[dict]) -> list[str]:
             errors.append(f"{where}: the same change as {payloads[payload]}; one change, one op")
         else:
             payloads[payload] = where
-        refs = [op.get(f) for f in ("person", "family", "father", "mother", "child", "source", "place", "enclosed_by",
+        refs = [op.get(f) for f in ("person", "family", "father", "mother", "child", "source", "place", "enclosed_by", "event",
                                     "winner", "loser", "repository", "note", "citation")]
         refs += list(op.get("children") or [])
         if name == "attach_existing":
@@ -373,6 +374,11 @@ def validate(ops: list[dict]) -> list[str]:
                 if s.get("place") and not (isinstance(s["place"], str) and (
                         s["place"].startswith("key:") or _GRAMPS_ID.match(s["place"]))):
                     raise ValueError(f"{s['place']!r} is neither key:<key> nor a Gramps ID (never a handle)")
+            if name == "link_event":
+                if not isinstance(op["role"], str) or not op["role"].strip():
+                    raise ValueError("role is a non-empty text, such as Witness")
+                if op["role"] in ("Primary", "Family"):
+                    raise ValueError(f"{op['role']} is the role of the event's own person or family: use add_event")
             if name == "update_place":
                 s = op.get("set")
                 if not isinstance(s, dict) or not s or set(s) - PLACE_FIELDS:
@@ -1001,6 +1007,24 @@ class Applier:
         if target_cls == "Person" and index_key and role == "Primary" and target.get(index_key, -1) == -1:
             target[index_key] = len(refs)
         self.save(before, target)
+
+    def link_event(self, op):
+        """A person takes part in an event the tree already has, in a role (a witness of a marriage): the event
+        reference on the person, nothing else. The event is never edited."""
+        person = self.obj("Person", op["person"])
+        event = self.obj("Event", op["event"])
+        person.setdefault("_class", "Person")
+        refs = person.get("event_ref_list") or []
+        for r in refs:
+            if r["ref"] == event["handle"]:
+                if r.get("role") == op["role"]:
+                    self.actions.append(f"skip: Person {self.label(person)} already has {event.get('gramps_id')} as {op['role']}")
+                    return
+                raise Conflict(f"{self.label(person)} already has {event.get('gramps_id')} in the role {r.get('role')!r}; "
+                               "not changed")
+        before = copy.deepcopy(person)
+        person["event_ref_list"] = [*refs, {"_class": "EventRef", "ref": event["handle"], "role": op["role"]}]
+        self.save(before, person)
 
     def add_family(self, op):
         father = self.resolve("Person", op["father"]) if op.get("father") else None
