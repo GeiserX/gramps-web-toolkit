@@ -901,7 +901,7 @@ def test_first_login_that_times_out_is_retried_by_the_cli(fake, tmp_path, env, c
 
 @pytest.mark.parametrize("value", ["0", "-1"])
 def test_retries_below_one_is_refused(tmp_path, capsys, value):
-    """No tries at all would skip the duplicate check and the lock and still report every op done."""
+    """No tries at all would take no lock, run no op and still report every op done."""
     p = tmp_path / "changes.jsonl"
     p.write_text(json.dumps({"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}) + "\n")
     with pytest.raises(SystemExit) as exc:

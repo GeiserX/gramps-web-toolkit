@@ -66,6 +66,6 @@ gwt_apply/revert.py | if client.get_live(s["cls"], s["handle"]) is None: | if Tr
 gwt_apply/revert.py | if (cls, h) in created:  # e.g. a mark | if False:  # e.g. a mark | --revert skips a note the same run made and deleted instead of asking for it by hand
 gwt_apply/revert.py | elif live(cls, h) is not None: | elif False: | --revert run twice skips a deleted note that is already back
 gwt_apply/cli.py | for attempt in range(1, args.retries + 1): | for attempt in range(1, 2): | a timeout in the duplicate preflight's list reads is retried, not the end of the run
-gwt_apply/cli.py | if n < 1: | if False: | --retries below 1 is refused, never a run that skips the duplicate check
+gwt_apply/cli.py | if n < 1: | if False: | --retries below 1 is refused, never a run that reports ops done without running them
 gwt_apply/cli.py | lock.refresh() | pass | a retried read before the first op refreshes the lock before the next try
 gwt_apply/cli.py | _retried("login", client.login, client, args) | client.login() | a timeout on the run's first login is retried

@@ -210,7 +210,7 @@ def _revert_run(args, argv, client: Client, run_id: str, entries, snap, pre, out
 
 def _at_least_one(text: str) -> int:
     n = int(text)
-    if n < 1:  # zero tries would skip the duplicate check and the lock, and report every op done
+    if n < 1:  # zero tries would take no lock, run no op, and report every op done
         raise argparse.ArgumentTypeError(f"{text}: at least 1")
     return n
 
