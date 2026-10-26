@@ -1382,6 +1382,60 @@ def test_the_fast_redry_reports_an_object_changed_after_the_apply(fake, scan, tm
     assert "[done] u-anna" in out and "[done] c-bapt" in out
 
 
+def _as_check_dump(snap_path, out, **drop):
+    """The snapshot written the way `gwt-check dump` writes a tree: API type names, tree, read_started, dumped_at."""
+    import gzip
+    from gwt_apply import snapshot
+    from gwt_apply.client import NAMESPACE
+    snap = snapshot.load(str(snap_path))
+    dump = {"tree": snap["tree"], "read_started": 1793000000, "dumped_at": "2026-10-26T01:36:27+0100",
+            "objects": {ns: snap["objects"].get(cls, []) for cls, ns in NAMESPACE.items()}}
+    for k in drop:
+        dump.pop(k, None) if k in dump else dump["objects"].pop(k)
+    with gzip.open(out, "wt", encoding="utf-8") as fh:
+        json.dump(dump, fh)
+    return out
+
+
+def test_a_gwt_check_dump_serves_as_a_snapshot_for_a_dry_run_and_verify(fake, scan, tmp_path, env, monkeypatch,
+                                                                          capsys):
+    before, after = tmp_path / "before.json.gz", tmp_path / "after.json.gz"
+    assert main(["--save-snapshot", str(before)]) == 0
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text("\n".join(json.dumps(op) for op in full_list(scan)))
+    pre = _as_check_dump(before, tmp_path / "pre-dump.json.gz")
+    capsys.readouterr()
+    assert main([str(changes), "--snapshot", str(before)]) == 0
+    on_snapshot = capsys.readouterr().out.split("\n", 2)[2]  # past the run id and the header line
+    assert main([str(changes), "--snapshot", str(pre)]) == 0
+    out = capsys.readouterr().out
+    assert "of 2026-10-26T01:36:27+01:00" in out and out.split("\n", 2)[2] == on_snapshot  # the same plan
+    assert main([str(changes), "--apply"]) == 0
+    assert main(["--save-snapshot", str(after)]) == 0
+    post = _as_check_dump(after, tmp_path / "post-dump.json")  # check writes plain JSON without .gz
+    import gwt_apply.client as clientmod
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: NoServer())
+    capsys.readouterr()
+    assert main([str(changes), "--verify", "--snapshot", str(post)]) == 0  # offline, every op in the tree
+    assert "VERIFY: 8 of 8 op(s) in the tree" in capsys.readouterr().out
+    assert main([str(changes), "--verify", "--snapshot", str(pre)]) == 1  # the dump from before the apply
+
+
+def test_a_gwt_check_dump_without_a_tree_a_type_or_a_time_is_refused(fake, scan, tmp_path, env, capsys):
+    snap = tmp_path / "tree.json.gz"
+    assert main(["--save-snapshot", str(snap)]) == 0
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text("\n".join(json.dumps(op) for op in full_list(scan)))
+    for drop, why in ((("tree",), "records no tree"), (("citations",), "without citations"),
+                      (("dumped_at", "read_started"), "says nowhere when it was read")):
+        bad = _as_check_dump(snap, tmp_path / f"bad-{drop[0]}.json.gz", **dict.fromkeys(drop))
+        assert main([str(changes), "--snapshot", str(bad)]) == 2
+        assert why in capsys.readouterr().err
+    (tmp_path / "junk.json").write_text("[1, 2]")
+    assert main([str(changes), "--snapshot", str(tmp_path / "junk.json")]) == 2
+    assert "neither a gwt-apply snapshot nor a gwt-check dump" in capsys.readouterr().err
+
+
 def test_since_refuses_a_snapshot_of_another_tree(fake, tmp_path, env, monkeypatch, capsys):
     old = tmp_path / "old.json.gz"
     assert main(["--save-snapshot", str(old)]) == 0

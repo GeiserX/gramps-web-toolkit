@@ -65,3 +65,5 @@ gwt_apply/ops.py | self._referrers("Note", h) == {("family", fam)}: | self._refe
 gwt_apply/revert.py | if client.get_live(s["cls"], s["handle"]) is None: | if True: | --revert recreating a note whose answer was lost does not post it twice
 gwt_apply/revert.py | if (cls, h) in created:  # e.g. a mark | if False:  # e.g. a mark | --revert skips a note the same run made and deleted instead of asking for it by hand
 gwt_apply/revert.py | elif live(cls, h) is not None: | elif False: | --revert run twice skips a deleted note that is already back
+gwt_apply/snapshot.py | if "format" not in data and isinstance(data.get("objects"), dict): | if False: | --snapshot reads a gwt-check dump as a snapshot
+gwt_apply/snapshot.py | if not dump.get("tree"): | if False: | a gwt-check dump that records no tree is refused as a snapshot
