@@ -800,6 +800,33 @@ def test_login_that_times_out_is_retried(fake):
     assert res[0].status == "done", res[0].actions
 
 
+
+def test_preflight_read_that_times_out_is_retried(fake, tmp_path, monkeypatch, capsys):
+    """The duplicate preflight lists the whole tree before any op runs: a timeout there is retried like an op's
+    read, and the run ends only once the retries are spent."""
+    import requests
+    import gwt_apply.client as clientmod
+    request, timeouts = fake.request, [1]
+
+    def flaky(method, url, **kw):
+        if method == "GET" and url.endswith("/api/people/") and "keys" in (kw.get("params") or {}) and timeouts[0]:
+            timeouts[0] -= 1
+            raise requests.Timeout("Read timed out.")
+        return request(method, url, **kw)
+
+    fake.request = flaky
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: fake)
+    for k, v in {"GWT_URL": "https://gw.example", "GWT_USERNAME": "u", "GWT_PASSWORD": "pw", "GWT_TREE": "tree-test"}.items():
+        monkeypatch.setenv(k, v)
+    p = tmp_path / "changes.jsonl"
+    p.write_text(json.dumps({"op": "add_person", "key": "p", "ruling": R, "first_name": "Rose", "surname": "Sample"}) + "\n")
+    assert main([str(p), "--retry-wait", "0"]) == 0
+    assert timeouts == [0]
+    assert "1 done, 0 skip, 0 conflict, 0 error" in capsys.readouterr().out
+    timeouts[0] = 3
+    assert main([str(p), "--retries", "3", "--retry-wait", "0"]) == 1
+    assert "GET /people/: Timeout" in capsys.readouterr().err
+
 class MergingFake(FakeGrampsWeb):
     """The fake API plus the merge endpoints, doing what Gramps' merge does to the lists the tests look at."""
 

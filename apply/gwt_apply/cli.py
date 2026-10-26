@@ -10,11 +10,12 @@ import re
 import secrets
 import signal
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
 from . import revert, snapshot, version
-from .client import ApiError, Client, url_problem
+from .client import ApiError, Client, Retryable, url_problem
 from .dupes import preflight
 from .lock import LockHeld, TreeLock, read_lock
 from .ops import Applier, load_change_list, validate
@@ -92,6 +93,22 @@ def _first_line(run_id: str, log: str | None) -> None:
     """Printed before the login, so a run that stops there still names its run id."""
     print(f"run {run_id}, log " + (f"{log} (created once logged in)" if log else "none (add --log PATH to keep one)"),
           flush=True)
+
+
+def _preflight(ops: list[dict], client: Client, args, lock) -> list[str]:
+    """The duplicate preflight, retried like an op: its whole-tree list reads are the run's longest, and one timeout
+    there must not end a run that has not written anything yet."""
+    for attempt in range(1, args.retries + 1):
+        if lock is not None:
+            lock.refresh()
+        try:
+            return preflight(ops, client)
+        except Retryable as exc:
+            if attempt == args.retries:
+                raise
+            client.log(event="retry", attempt=attempt, error=f"preflight: {exc}")
+            time.sleep(args.retry_wait)
+    return []
 
 
 def _ended(client: Client, run, outcome: dict) -> int:
@@ -333,7 +350,7 @@ def _run(args, argv, client: Client, run_id: str, ops, snap, old, offline: bool,
                 _write_json(args.json, ops, [], "not run: the snapshot check refused the list")
                 return 1
             client.use_snapshot(snap)
-        problems = preflight(ops, client)
+        problems = _preflight(ops, client, args, lock)
         if problems:
             client.log(event="refused", reason="preflight", problems=problems)
             print("\n".join(problems), file=sys.stderr)

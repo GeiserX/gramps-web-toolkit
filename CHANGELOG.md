@@ -6,6 +6,14 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+None.
+
+### Fixed
+
+- apply: a timeout or busy answer in the duplicate check's whole-tree list reads is retried like an op's read (`--retries`, `--retry-wait`). Before, one slow read ended the run with exit 1 before any op ran.
+
 ## [0.2.1] - 2026-10-26
 
 ### Change lists
