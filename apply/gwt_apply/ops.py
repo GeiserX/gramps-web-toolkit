@@ -87,7 +87,7 @@ PERSON_FIELDS = {"first_name", "surname", "gender"}
 ADDRESS_KEYS = {"street", "locality", "city", "county", "state", "country", "postal", "phone"}
 REPOSITORY_FIELDS = {"name", "type", "url", "address"}
 EVENT_FIELDS = {"type", "date", "place", "description"}
-PLACE_FIELDS = {"lat", "long"}
+PLACE_FIELDS = {"lat", "long", "enclosed_by"}
 NOTE_FIELDS = {"text", "type"}
 CITATION_FIELDS = {"page", "confidence", "date"}
 FAMILY_FIELDS = {"type"}
@@ -378,6 +378,9 @@ def validate(ops: list[dict]) -> list[str]:
                 if not isinstance(s, dict) or not s or set(s) - PLACE_FIELDS:
                     raise ValueError(f"set takes only {sorted(PLACE_FIELDS)}")
                 _check_coords(s)
+                if "enclosed_by" in s and not (isinstance(s["enclosed_by"], str) and (
+                        s["enclosed_by"].startswith("key:") or _GRAMPS_ID.match(s["enclosed_by"]))):
+                    raise ValueError(f"{s['enclosed_by']!r} is neither key:<key> nor a Gramps ID (never a handle)")
             if name == "update_note":
                 f = op.get("set")
                 if not isinstance(f, dict) or not f or set(f) - NOTE_FIELDS:
@@ -924,9 +927,26 @@ class Applier:
         place.setdefault("_class", "Place")
         before = copy.deepcopy(place)
         s = op["set"]
-        place["lat"], place["long"] = str(s["lat"]), str(s["long"])
+        if "lat" in s:
+            place["lat"], place["long"] = str(s["lat"]), str(s["long"])
+        if "enclosed_by" in s:
+            parent = self.resolve("Place", s["enclosed_by"])
+            refs = place.get("placeref_list") or []
+            if len(refs) > 1:
+                raise Conflict(f"{self.label(place)} is enclosed by more than one place; not moved")
+            if parent == place["handle"]:
+                raise Conflict(f"{self.label(place)} cannot enclose itself")
+            seen, up = set(), parent
+            while up and up not in seen:
+                if up == place["handle"]:
+                    raise Conflict(f"{s['enclosed_by']} is inside {self.label(place)}: that would make a loop")
+                seen.add(up)
+                row = self.c.get("Place", up) or {}
+                up = next((r.get("ref") for r in row.get("placeref_list") or []), None)
+            if not refs or refs[0].get("ref") != parent:
+                place["placeref_list"] = [{**(refs[0] if refs else {"_class": "PlaceRef"}), "ref": parent}]
         if place == before:
-            self.actions.append(f"skip: Place {self.label(place)} already has those coordinates")
+            self.actions.append(f"skip: Place {self.label(place)} already has those values")
             return
         self.save(before, place)
 

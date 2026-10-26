@@ -6,6 +6,14 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+None.
+
+### Added
+
+- `update_place` can move a place under another one with `set.enclosed_by`, for example a department under its region. It refuses a place with more than one parent, a place under itself, and a loop.
+
 ## [0.2.3] - 2026-10-26
 
 ### Change lists
