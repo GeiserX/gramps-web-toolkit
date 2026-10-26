@@ -232,8 +232,9 @@ def test_the_types_are_read_together_and_come_out_the_same_as_one_by_one():
     data = selftest.clean_tree()
     slow = Slow(FakeServer(data))
     client = Client("https://gramps.example.org", "u", "pw", opener=slow)
+    client.dump(pagesize=1000, workers=4)
+    assert slow.peak > 1  # every type is one page here, so only the first pages read together can overlap
     out = client.dump(pagesize=3, workers=4)
-    assert slow.peak > 1  # one request per type in a row would never overlap
     assert {t: [o["handle"] for o in v] for t, v in out.items()} == {t: [o["handle"] for o in v] for t, v in data.items()}
     one = Slow(FakeServer(data))
     assert Client("https://gramps.example.org", "u", "pw", opener=one).dump(pagesize=3, workers=1) == out
