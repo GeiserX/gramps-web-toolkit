@@ -44,7 +44,7 @@ A birth is proven old by any of these, each one ending in `--living-after` or ea
 
 For this test a date counts by its latest possible year: the end of a range or span, the year plus 10 for an "about" or estimated date, and no year at all for "after" or "from", which have no upper bound. A date with only text proves nothing.
 
-Their Gramps ids, never their names, go to stderr in one line. `--include-living` turns the hold off; use it only for a private review on your own machine, never for a list that feeds searches on outside sites. Private events never feed the facts, and their year and date text stay out of the gap text too.
+Their Gramps ids, never their names, go to stderr in one line, after how many are marked private and how many may be living. `--include-living` turns the hold off; use it only for a private review on your own machine, never for a list that feeds searches on outside sites. Private events never feed the facts, and their year and date text stay out of the gap text too.
 
 A death is asked (`no death or burial event`) of everyone proven old who has none.
 

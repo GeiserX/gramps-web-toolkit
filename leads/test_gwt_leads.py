@@ -192,7 +192,7 @@ class LeadsTest(unittest.TestCase):
             self.assertEqual(code, 0, err)
             for gid in ('I2', 'I5', 'I6', 'I7', 'I8'):
                 self.assertNotIn('"%s"' % gid if fmt != 'tsv' else '\t%s\t' % gid, out, fmt)
-            self.assertIn('held back 5 people', err)
+            self.assertIn('held back 5 people (1 marked private, 4 who may be living', err)
             self.assertIn('I2 I5 I6 I7 I8', err)
             self.assertNotIn('Ana', err)  # ids only, never names
         code, out, err = self.cli(path, '--include-living', '--living-after', '1925')

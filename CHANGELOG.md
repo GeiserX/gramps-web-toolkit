@@ -10,6 +10,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 None.
 
+### Changed
+
+- `gwt-leads` says how many of the people it held back are marked private and how many may be living, instead of one count for both.
+
 ### Fixed
 
 - `gwt-leads --links` no longer stops with exit 2 on a links report that has a link that is itself cited (`the link itself is cited`), the first level `gwt-check links` writes.
