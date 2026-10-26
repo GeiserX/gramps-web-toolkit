@@ -30,7 +30,7 @@ LINK_GAPS = {'cited, names neither': 'a cited record names neither parent',
              'a record names one': 'records name only one of the two parents'}
 # the other levels gwt-check links writes; 'no record names a parent' means no cited birth or baptism at all,
 # which uncited and missing-vital already list
-LINK_NOT_GAPS = ('birth record names both', 'other record names both', 'no record names a parent')
+LINK_NOT_GAPS = ('the link itself is cited', 'birth record names both', 'other record names both', 'no record names a parent')
 BIRTH_LIKE = ('Birth', 'Baptism', 'Christening')   # in order of preference
 DEATH_LIKE = ('Death', 'Burial', 'Cremation')
 MARRIAGE_LIKE = ('Marriage',)

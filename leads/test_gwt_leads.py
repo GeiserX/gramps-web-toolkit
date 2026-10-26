@@ -577,6 +577,14 @@ class LeadsTest(unittest.TestCase):
             self.assertEqual((rc, out), (2, ''), err)
             self.assertNotIn('Traceback', err)
 
+    def test_every_level_gwt_check_links_writes_is_accepted(self):
+        # a cited link is the first level gwt-check writes; a report with one used to stop the whole run
+        self.assertIn('the link itself is cited', L.LINK_NOT_GAPS)
+        levels = ('the link itself is cited', 'birth record names both', 'other record names both',
+                  'a record names one', 'cited, names neither', 'no record names a parent')
+        for lv in levels:
+            self.assertTrue(lv in L.LINK_GAPS or lv in L.LINK_NOT_GAPS, lv)
+
     def test_unsupported_link_skips_what_is_supported_not_by_birth_or_listed_by_another_kind(self):
         T = tree()
         def got(*rows):
