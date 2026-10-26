@@ -35,8 +35,6 @@ Every output format leaves out:
 - anyone marked private in Gramps, and
 - anyone who may be living: no Death, Burial or Cremation event (with or without a date), and no date that proves a birth in `--living-after` or earlier. The default is this year minus 100.
 
-The note on stderr says how many of the people held back are marked private and how many may be living, then lists their ids. A tree where every record is marked private holds back everyone: the note shows that at once, so an empty result is not read as "no gaps".
-
 A birth is proven old by any of these, each one ending in `--living-after` or earlier:
 
 - the person's own birth, baptism or christening year, any of them;
@@ -46,7 +44,7 @@ A birth is proven old by any of these, each one ending in `--living-after` or ea
 
 For this test a date counts by its latest possible year: the end of a range or span, the year plus 10 for an "about" or estimated date, and no year at all for "after" or "from", which have no upper bound. A date with only text proves nothing.
 
-Their Gramps ids, never their names, go to stderr in one line. `--include-living` turns the hold off; use it only for a private review on your own machine, never for a list that feeds searches on outside sites. Private events never feed the facts, and their year and date text stay out of the gap text too.
+Their Gramps ids, never their names, go to stderr in one line, after how many are marked private and how many may be living. `--include-living` turns the hold off; use it only for a private review on your own machine, never for a list that feeds searches on outside sites. Private events never feed the facts, and their year and date text stay out of the gap text too.
 
 A death is asked (`no death or burial event`) of everyone proven old who has none.
 
