@@ -205,10 +205,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--log", help="JSONL log of every API call; the run id is added to the name (default: a real run "
                     "logs under $XDG_STATE_HOME/gwt-apply/<tree>/, a dry run keeps no log)")
     ap.add_argument("--snapshot", metavar="FILE",
-                    help="a tree snapshot: a dry run reads only it, with no server; --apply checks it is current, then reads it")
+                    help="a tree snapshot or gwt-check dump: a dry run reads only it, with no server; --apply checks it "
+                    "is current, then reads it")
     ap.add_argument("--save-snapshot", metavar="FILE", help="read the whole tree into a new FILE (gzip JSON) and stop")
     ap.add_argument("--since", metavar="OLD",
-                    help="with --save-snapshot: start from the older snapshot OLD and read only what changed since")
+                    help="with --save-snapshot: start from OLD, an older snapshot or gwt-check dump, and read only what "
+                    "changed since")
     ap.add_argument("--revert", metavar="LOG", help="undo the run that wrote LOG (a real run's log), using --pre, the tree "
                     "as it was before; a plan unless --apply (see docs/apply.md, Undo a run)")
     ap.add_argument("--pre", metavar="FILE", help="with --revert: a snapshot or gwt-check dump taken before that run")

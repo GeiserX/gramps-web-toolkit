@@ -1382,6 +1382,102 @@ def test_the_fast_redry_reports_an_object_changed_after_the_apply(fake, scan, tm
     assert "[done] u-anna" in out and "[done] c-bapt" in out
 
 
+def _as_check_dump(snap_path, out, drop=(), **meta):
+    """The snapshot written the way `gwt-check dump` writes a tree: API type names, tree, read_started, dumped_at."""
+    import gzip
+    from gwt_apply import snapshot
+    from gwt_apply.client import NAMESPACE
+    snap = snapshot.load(str(snap_path))
+    dump = {"tree": snap["tree"], "read_started": 1793000000, "dumped_at": "2026-10-26T01:36:27+0100",
+            "objects": {ns: snap["objects"].get(cls, []) for cls, ns in NAMESPACE.items()}}
+    dump.update(meta)
+    for k in drop:
+        dump.pop(k, None) if k in dump else dump["objects"].pop(k)
+    with gzip.open(out, "wt", encoding="utf-8") as fh:
+        json.dump(dump, fh)
+    return out
+
+
+def test_a_gwt_check_dump_serves_as_a_snapshot_for_a_dry_run_and_verify(fake, scan, tmp_path, env, monkeypatch,
+                                                                          capsys):
+    before, after = tmp_path / "before.json.gz", tmp_path / "after.json.gz"
+    assert main(["--save-snapshot", str(before)]) == 0
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text("\n".join(json.dumps(op) for op in full_list(scan)))
+    pre = _as_check_dump(before, tmp_path / "pre-dump.json.gz")
+    capsys.readouterr()
+    assert main([str(changes), "--snapshot", str(before)]) == 0
+    on_snapshot = capsys.readouterr().out.split("\n", 2)[2]  # past the run id and the header line
+    assert main([str(changes), "--snapshot", str(pre)]) == 0
+    out = capsys.readouterr().out
+    assert "of 2026-10-26T07:33:20+00:00" in out and out.split("\n", 2)[2] == on_snapshot  # read_started, the same plan
+    assert main([str(changes), "--apply"]) == 0
+    assert main(["--save-snapshot", str(after)]) == 0
+    post = _as_check_dump(after, tmp_path / "post-dump.json")  # check writes plain JSON without .gz
+    import gwt_apply.client as clientmod
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: NoServer())
+    capsys.readouterr()
+    assert main([str(changes), "--verify", "--snapshot", str(post)]) == 0  # offline, every op in the tree
+    assert "VERIFY: 8 of 8 op(s) in the tree" in capsys.readouterr().out
+    assert main([str(changes), "--verify", "--snapshot", str(pre)]) == 1  # the dump from before the apply
+
+
+def test_a_gwt_check_dump_without_a_tree_or_a_type_is_refused(fake, scan, tmp_path, env, capsys):
+    snap = tmp_path / "tree.json.gz"
+    assert main(["--save-snapshot", str(snap)]) == 0
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text("\n".join(json.dumps(op) for op in full_list(scan)))
+    for drop, why in ((("tree",), "records no tree"), (("citations",), "without citations")):
+        bad = _as_check_dump(snap, tmp_path / f"bad-{drop[0]}.json.gz", drop)
+        assert main([str(changes), "--snapshot", str(bad)]) == 2
+        assert why in capsys.readouterr().err
+    import gzip
+    for name, rows in (("people", [1]), ("events", [{"gramps_id": "E1"}]), ("tags", {"a": {}})):
+        bad = _as_check_dump(snap, tmp_path / f"bad-rows-{name}.json.gz")
+        with gzip.open(bad, "rt", encoding="utf-8") as fh:
+            dump = json.load(fh)
+        dump["objects"][name] = rows
+        with gzip.open(bad, "wt", encoding="utf-8") as fh:
+            json.dump(dump, fh)
+        assert main([str(changes), "--snapshot", str(bad)]) == 2, name
+        assert f"whose {name} is not a list of objects with handles" in capsys.readouterr().err
+    (tmp_path / "cut.json.gz").write_bytes(snap.read_bytes()[:40])
+    (tmp_path / "junk.json").write_text("[1, 2]")
+    (tmp_path / "text.json").write_text("not json")
+    for junk in ("cut.json.gz", "junk.json", "text.json"):
+        assert main([str(changes), "--snapshot", str(tmp_path / junk)]) == 2, junk
+        assert "neither a gwt-apply snapshot nor a gwt-check dump" in capsys.readouterr().err, junk
+
+
+def test_a_gwt_check_dump_time_is_read_started_then_dumped_at_and_never_a_reason_to_refuse(fake, scan, tmp_path, env,
+                                                                                          capsys):
+    snap = tmp_path / "tree.json.gz"
+    assert main(["--save-snapshot", str(snap)]) == 0
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text("\n".join(json.dumps(op) for op in full_list(scan)))
+    for name, drop, meta, shown in (
+            ("odd-dumped-at", (), {"dumped_at": 1793000000}, "of 2026-10-26T07:33:20+00:00"),
+            ("no-offset", ("read_started",), {"dumped_at": "2026-10-26T01:36:27"}, "of 2026-10-26T01:36:27,"),
+            ("offset", ("read_started",), {}, "of 2026-10-26T01:36:27+01:00,"),
+            ("no-time", ("read_started", "dumped_at"), {}, "of unknown,"),
+            ("odd-dumped-at-alone", ("read_started",), {"dumped_at": 1793000000}, "of unknown,"),
+            ("bad-dumped-at-alone", ("read_started",), {"dumped_at": "yesterday"}, "of unknown,"),
+            ("huge-read-started", (), {"read_started": 1e300}, "of 2026-10-26T01:36:27+01:00,"),
+            ("nan-read-started", (), {"read_started": float("nan")}, "of 2026-10-26T01:36:27+01:00,")):
+        dump = _as_check_dump(snap, tmp_path / f"{name}.json.gz", drop, **meta)
+        capsys.readouterr()
+        assert main([str(changes), "--snapshot", str(dump)]) == 0, name
+        assert shown in capsys.readouterr().out, name
+
+
+def test_the_help_says_snapshot_and_since_take_a_gwt_check_dump(monkeypatch, capsys):
+    monkeypatch.setenv("COLUMNS", "400")  # one help line per option, so no phrase is wrapped
+    with pytest.raises(SystemExit):
+        main(["-h"])
+    lines = {ln.split()[0]: ln for ln in capsys.readouterr().out.splitlines() if ln.strip().startswith("--")}
+    assert "gwt-check dump" in lines["--snapshot"] and "gwt-check dump" in lines["--since"]
+
+
 def test_since_refuses_a_snapshot_of_another_tree(fake, tmp_path, env, monkeypatch, capsys):
     old = tmp_path / "old.json.gz"
     assert main(["--save-snapshot", str(old)]) == 0
