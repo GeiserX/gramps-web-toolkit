@@ -12,6 +12,7 @@ None.
 
 ### Changed
 
+- `gwt-check dump` and `check` read the first page of every type together, then the remaining pages, instead of one type after another; the dump holds the same objects. `check --from` does not page the tree, so it gains nothing. The per-type progress lines now appear together once the read ends. On a 260-person tree the read went from 20 s to 14 s.
 - `gwt-leads` says how many of the people it held back are marked private and how many may be living, instead of one count for both.
 
 ### Fixed

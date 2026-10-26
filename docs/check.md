@@ -242,6 +242,8 @@ On a tree of 13,035 people, 3,874 families, 10,831 events, 9,120 citations, 5,58
 | 1000 per page, 4 in flight (default) | 69 | 109 s |
 | 1000 per page, 8 in flight | 69 | 64 s |
 
+The first page of every type goes out together, then every page still missing, `--workers` at a time. On a small tree (about 260 people, 2,000 notes, 10 types) that read took 20 s with the types in a row and 14 s with them together; the rest is the stamp pass that follows, one list per type, which still runs one type after another. `check --from` skips the paged read and runs only that stamp pass, so it is no faster.
+
 Each request costs about 1.3 s before the first object, so small pages waste most of the time. The checks themselves take under a second, and reading a saved dump about one. Large pages are safe without `profile=all`. It was `profile=all` that answered 500 on a whole-tree listing.
 
 A request that fails on the network (a timeout, a reset connection, an SSL read error) is tried again, the same as a 429 or a 5xx: up to 6 tries per request, waiting 5, 10, 20, 40 and then 60 s between them, or as long as a `Retry-After` header says. Only a page that fails all 6 stops the run, with exit code 2 and the last error. On a loaded server, where a 1000-object page can take minutes, read with `--pagesize 100 --workers 1`: smaller pages answer within the timeout, and nothing else competes with them.
