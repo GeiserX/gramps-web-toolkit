@@ -150,18 +150,28 @@ class Client:
             raise ApiError(f"GET {path}: HTTP {status}")
         raise ApiError(f"GET {path}: gave up after {TRIES} tries, last {last}")
 
+    def _pages(self, pagesize: int, workers: int) -> dict[str, tuple[int, list]]:
+        """{type: (the total the server says, its rows)}. First pages of all the types go out together, then
+        every page still missing: a small tree is ten short requests, not ten in a row."""
+        firsts: dict[str, tuple[int, list]] = {}
+        with ThreadPoolExecutor(workers) as pool:
+            first_page = lambda t: self.get(f"/{t}/", {"page": 1, "pagesize": pagesize})  # noqa: E731
+            got = [first_page(TYPES[0])]  # alone, so a server that never answers stops here, not ten times over
+            got += pool.map(first_page, TYPES[1:])
+            for t, (headers, first) in zip(TYPES, got):
+                total = int({k.lower(): v for k, v in headers.items()}.get("x-total-count", len(first)))
+                firsts[t] = (total, list(first))
+            todo = [(t, p) for t in TYPES for p in range(2, max(1, -(-firsts[t][0] // pagesize)) + 1)]
+            for (t, _), (_, chunk) in zip(todo, pool.map(
+                    lambda tp: self.get(f"/{tp[0]}/", {"page": tp[1], "pagesize": pagesize}), todo)):
+                firsts[t][1].extend(chunk)
+        return firsts
+
     def read_all(self, *, pagesize: int = 1000, workers: int = 4, progress=None) -> dict[str, dict[str, dict]]:
         """Every object of every type, by handle, page by page, without trusting the pages: a write during the
         read shifts them, so an object can come twice or not at all. `refresh` puts that right."""
         out: dict[str, dict[str, dict]] = {}
-        for t in TYPES:
-            headers, first = self.get(f"/{t}/", {"page": 1, "pagesize": pagesize})
-            total = int({k.lower(): v for k, v in headers.items()}.get("x-total-count", len(first)))
-            rows = list(first)
-            with ThreadPoolExecutor(workers) as pool:
-                for _, chunk in pool.map(lambda p: self.get(f"/{t}/", {"page": p, "pagesize": pagesize}),
-                                         range(2, max(1, -(-total // pagesize)) + 1)):
-                    rows += chunk
+        for t, (_, rows) in self._pages(pagesize, workers).items():
             out[t] = {o["handle"]: o for o in rows}
             if progress:
                 progress(t, len(out[t]))
@@ -213,18 +223,7 @@ class Client:
     def dump(self, *, pagesize: int = 1000, workers: int = 4, progress=None) -> dict:
         """Every object of every type. Raises if a type comes back short or with repeats."""
         out: dict[str, list] = {}
-        for t in TYPES:
-            headers, first = self.get(f"/{t}/", {"page": 1, "pagesize": pagesize})
-            total = int({k.lower(): v for k, v in headers.items()}.get("x-total-count", len(first)))
-            pages = max(1, -(-total // pagesize))
-            rows = list(first)
-            if pages > 1:
-                with ThreadPoolExecutor(workers) as pool:
-                    for _, chunk in pool.map(
-                        lambda p: self.get(f"/{t}/", {"page": p, "pagesize": pagesize}),
-                        range(2, pages + 1),
-                    ):
-                        rows += chunk
+        for t, (total, rows) in self._pages(pagesize, workers).items():
             handles = {o["handle"] for o in rows}
             if len(rows) != total or len(handles) != total:
                 # pages shift when the tree changes mid-dump; a short dump gives false orphans

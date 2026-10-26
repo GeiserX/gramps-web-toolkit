@@ -37,3 +37,4 @@ gwt_check/cites.py | if want in ("death", "marriage") and any | if any | a birth
 gwt_check/cites.py | prob = citation_problem(e, c) if c else None | prob = citation_problem(e, c) | a citation missing from the dump is skipped
 gwt_check/cli.py | raise BadInput(f"{tree.source}: a .gramps backup has no citation pages; use a dump") | pass | cites refuses a .gramps backup
 gwt_check/fill.py | if rep.get("held_back"): | if False: | the text output counts the held-back events
+client.py | got += pool.map(first_page, TYPES[1:]) | got += [first_page(t) for t in TYPES[1:]] | the first pages of the types are read together, not one type after another

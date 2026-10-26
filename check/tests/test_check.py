@@ -7,6 +7,8 @@ import os
 import ssl
 import subprocess
 import sys
+import threading
+import time
 import urllib.error
 import urllib.parse
 
@@ -206,6 +208,37 @@ class Flaky:
             self.raised += 1
             raise self.error
         return self.server(req, timeout)
+
+
+class Slow:
+    """Answers every page read after a pause and records how many were in flight at once."""
+
+    def __init__(self, server):
+        self.server, self.now, self.peak, self.lock = server, 0, 0, threading.Lock()
+
+    def __call__(self, req, timeout):
+        if req.full_url.split("?")[0].endswith("/token/"):
+            return self.server(req, timeout)
+        with self.lock:
+            self.now += 1
+            self.peak = max(self.peak, self.now)
+        time.sleep(0.05)
+        with self.lock:
+            self.now -= 1
+        return self.server(req, timeout)
+
+
+def test_the_types_are_read_together_and_come_out_the_same_as_one_by_one():
+    data = selftest.clean_tree()
+    slow = Slow(FakeServer(data))
+    client = Client("https://gramps.example.org", "u", "pw", opener=slow)
+    out = client.dump(pagesize=3, workers=4)
+    assert slow.peak > 1  # one request per type in a row would never overlap
+    assert {t: [o["handle"] for o in v] for t, v in out.items()} == {t: [o["handle"] for o in v] for t, v in data.items()}
+    one = Slow(FakeServer(data))
+    assert Client("https://gramps.example.org", "u", "pw", opener=one).dump(pagesize=3, workers=1) == out
+    assert one.peak == 1
+    assert list(client.read_all(pagesize=3, workers=4)) == list(out)
 
 
 def test_a_page_that_times_out_twice_is_read_on_the_third_try():

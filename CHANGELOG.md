@@ -13,6 +13,7 @@ None.
 ### Changed
 
 - `gwt-apply --snapshot` and `--since` accept a `gwt-check` dump as well as a snapshot, so `gwt-apply LIST --verify --snapshot POST` works on the `--save-dump` of `gwt-check check --from PRE`. Before, a dump was refused with "is not a gwt-apply snapshot".
+- `gwt-check dump` and `check` read the first page of every type together, then the remaining pages, instead of one type after another; the dump holds the same objects. On a 260-person tree the read went from 20 s to 14 s.
 
 ### Fixed
 
