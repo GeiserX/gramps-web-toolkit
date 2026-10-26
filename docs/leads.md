@@ -35,6 +35,8 @@ Every output format leaves out:
 - anyone marked private in Gramps, and
 - anyone who may be living: no Death, Burial or Cremation event (with or without a date), and no date that proves a birth in `--living-after` or earlier. The default is this year minus 100.
 
+The note on stderr says how many of the people held back are marked private and how many may be living, then lists their ids. A tree where every record is marked private holds back everyone: the note shows that at once, so an empty result is not read as "no gaps".
+
 A birth is proven old by any of these, each one ending in `--living-after` or earlier:
 
 - the person's own birth, baptism or christening year, any of them;

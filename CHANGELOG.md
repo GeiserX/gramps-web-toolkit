@@ -13,6 +13,7 @@ None.
 ### Changed
 
 - `gwt-apply --snapshot` and `--since` accept a `gwt-check` dump as well as a snapshot, so `gwt-apply LIST --verify --snapshot POST` works on the `--save-dump` of `gwt-check check --from PRE`. Before, a dump was refused with "is not a gwt-apply snapshot".
+- `gwt-leads` says how many of the people it held back are marked private and how many may be living, instead of one count for both.
 
 ### Fixed
 

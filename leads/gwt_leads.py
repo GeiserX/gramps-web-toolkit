@@ -498,9 +498,10 @@ def main(argv=None):
         print('gwt-leads: %s' % exc, file=sys.stderr)
         return 2
     if held:
-        print('gwt-leads: held back %d people who may be living (born after %d or in an unknown year, no death) '
-              'or are private: %s' % (len(held), args.living_after, ' '.join(sorted(held, key=id_order))),
-              file=sys.stderr)
+        n_private = sum(1 for why in held.values() if why == 'private')
+        print('gwt-leads: held back %d people (%d marked private, %d who may be living: born after %d or in an unknown '
+              'year, no death): %s' % (len(held), n_private, len(held) - n_private, args.living_after,
+                                       ' '.join(sorted(held, key=id_order))), file=sys.stderr)
     if args.format == 'queue':
         if args.skip_weak:
             weak = sorted({r['person'] for r in rows if r['weak'] and r['generation'] is None}, key=id_order)
