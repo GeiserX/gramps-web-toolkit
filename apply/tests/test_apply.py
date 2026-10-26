@@ -1463,6 +1463,14 @@ def test_a_gwt_check_dump_time_is_read_started_then_dumped_at_and_never_a_reason
         assert shown in capsys.readouterr().out, name
 
 
+def test_the_help_says_snapshot_and_since_take_a_gwt_check_dump(monkeypatch, capsys):
+    monkeypatch.setenv("COLUMNS", "400")  # one help line per option, so no phrase is wrapped
+    with pytest.raises(SystemExit):
+        main(["-h"])
+    lines = {ln.split()[0]: ln for ln in capsys.readouterr().out.splitlines() if ln.strip().startswith("--")}
+    assert "gwt-check dump" in lines["--snapshot"] and "gwt-check dump" in lines["--since"]
+
+
 def test_since_refuses_a_snapshot_of_another_tree(fake, tmp_path, env, monkeypatch, capsys):
     old = tmp_path / "old.json.gz"
     assert main(["--save-snapshot", str(old)]) == 0
