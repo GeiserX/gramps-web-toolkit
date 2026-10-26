@@ -278,6 +278,15 @@ gwt-apply --save-snapshot tree-0413.json.gz --since tree-0412.json.gz   # only w
 gwt-apply changes.jsonl --verify --snapshot tree-0413.json.gz           # exit 0: every op is in the tree
 ```
 
+A `gwt-check` dump works anywhere a snapshot does (`--snapshot`, `--since`): `gwt-check dump`, or the `--save-dump` of a `gwt-check check --from PRE`, holds the same objects as the API returns them. So a writer that refreshes its dump after each apply with `gwt-check check --from PRE --save-dump POST` verifies on that same file, with no second read of the tree:
+
+```sh
+gwt-check check --from pre.json.gz --save-dump post.json.gz   # the gate: what the apply changed, read in seconds
+gwt-apply changes.jsonl --verify --snapshot post.json.gz       # exit 0: every op is in the tree
+```
+
+The header line dates a dump by when its read began (`read_started`), or by when it was written (`dumped_at`) if it has no `read_started`; that time is only shown, never compared. A dump that records no tree or lacks a type is refused with exit `2`: take a new one. A dump `gwt-check` marked `settled` stopped reading again while other writes went on, so it is not one moment's view of the whole tree: verify on it only when nothing else writes to that tree.
+
 `--since` reads one list of `change` stamps per class, then only the objects whose stamp moved and the new ones, and leaves out the deleted ones. The new file holds what a full `--save-snapshot` would, so the check is as strong as `--verify` against the server: an object the list touched and someone changed afterwards, or one that went away, makes its op come out `done` or `conflict` instead of `skip`. That holds for any change since the older snapshot, not only the ones the list made, so the new snapshot is also the one to plan and apply the next list on. Gramps' `change` stamp counts seconds, so take the older snapshot while nothing writes to the tree, as an apply's lock guarantees.
 
 ## Safety rules

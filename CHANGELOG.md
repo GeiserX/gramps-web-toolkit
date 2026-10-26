@@ -10,6 +10,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 None.
 
+### Changed
+
+- `gwt-apply --snapshot` and `--since` accept a `gwt-check` dump as well as a snapshot, so `gwt-apply LIST --verify --snapshot POST` works on the `--save-dump` of `gwt-check check --from PRE`. Before, a dump was refused with "is not a gwt-apply snapshot".
+
 ### Fixed
 
 - apply: a timeout or busy answer in the whole-tree list reads before the first op is retried like an op's read (`--retries`, `--retry-wait`): the duplicate check's, and on an `--apply --snapshot` the check of what changed since the snapshot. Before, one slow read ended the run with exit 1 before any op ran.
