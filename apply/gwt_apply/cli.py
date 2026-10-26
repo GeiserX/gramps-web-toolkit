@@ -95,18 +95,18 @@ def _first_line(run_id: str, log: str | None) -> None:
           flush=True)
 
 
-def _preflight(ops: list[dict], client: Client, args, lock) -> list[str]:
-    """The duplicate preflight, retried like an op: its whole-tree list reads are the run's longest, and one timeout
-    there must not end a run that has not written anything yet."""
+def _retried(what: str, fn, client: Client, args, lock=None):
+    """`fn()`, retried like an op on a busy server: the whole-tree reads before the first op are the run's longest,
+    and one timeout there must not end a run that has not written anything yet."""
     for attempt in range(1, args.retries + 1):
         if lock is not None:
             lock.refresh()
         try:
-            return preflight(ops, client)
+            return fn()
         except Retryable as exc:
             if attempt == args.retries:
                 raise
-            client.log(event="retry", attempt=attempt, error=f"preflight: {exc}")
+            client.log(event="retry", attempt=attempt, error=f"{what}: {exc}")
             time.sleep(args.retry_wait)
     raise AssertionError("unreachable: --retries is at least 1")
 
@@ -350,14 +350,15 @@ def _run(args, argv, client: Client, run_id: str, ops, snap, old, offline: bool,
                 print(msg, file=sys.stderr)
                 _write_json(args.json, ops, [], "not run: the snapshot check refused the list")
                 return 1
-            refused = _plan_on_snapshot(ops, snap, client, tag=args.tag)
+            refused = _retried("snapshot check", lambda: _plan_on_snapshot(ops, snap, client, tag=args.tag),
+                               client, args, lock)
             if refused:
                 client.log(event="refused", reason="snapshot-plan", problems=refused)
                 print("\n".join(refused) + "; nothing was written", file=sys.stderr)
                 _write_json(args.json, ops, [], "not run: the snapshot check refused the list")
                 return 1
             client.use_snapshot(snap)
-        problems = _preflight(ops, client, args, lock)
+        problems = _retried("preflight", lambda: preflight(ops, client), client, args, lock)
         if problems:
             client.log(event="refused", reason="preflight", problems=problems)
             print("\n".join(problems), file=sys.stderr)

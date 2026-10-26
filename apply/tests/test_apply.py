@@ -827,6 +827,58 @@ def test_preflight_read_that_times_out_is_retried(fake, tmp_path, monkeypatch, c
     assert "GET /people/: Timeout" in capsys.readouterr().err
 
 
+def test_snapshot_check_read_that_times_out_is_retried(fake, tmp_path, env, capsys):
+    """An apply on a snapshot lists the classes its plan touched on the server, to see what changed since: a
+    timeout there is retried like the duplicate check's reads."""
+    request, timeouts = fake.request, [0]
+
+    def flaky(method, url, **kw):
+        if method == "GET" and url.endswith("/api/people/") and "keys" in (kw.get("params") or {}) and timeouts[0]:
+            timeouts[0] -= 1
+            raise requests.Timeout("Read timed out.")
+        return request(method, url, **kw)
+
+    fake.request = flaky
+    p = tmp_path / "changes.jsonl"
+    p.write_text(json.dumps({"op": "add_person", "key": "p", "ruling": R, "first_name": "Rose", "surname": "Sample"}) + "\n")
+    snap = tmp_path / "tree.json.gz"
+    assert main(["--save-snapshot", str(snap)]) == 0
+    timeouts[0] = 1
+    assert main([str(p), "--snapshot", str(snap), "--apply", "--retry-wait", "0"]) == 0, capsys.readouterr()
+    assert timeouts == [0]
+    assert "1 done, 0 skip, 0 conflict, 0 error" in capsys.readouterr().out
+    snap2 = tmp_path / "tree2.json.gz"
+    assert main(["--save-snapshot", str(snap2)]) == 0
+    timeouts[0] = 2
+    assert main([str(p), "--snapshot", str(snap2), "--apply", "--retries", "2", "--retry-wait", "0"]) == 1
+    assert "GET /people/: Timeout" in capsys.readouterr().err
+
+
+def test_a_retried_preflight_keeps_the_lock_fresh(fake, tmp_path, env, monkeypatch):
+    """A long wait between two tries of the duplicate check refreshes the lock before the next try."""
+    from gwt_apply import lock as lockmod
+    import gwt_apply.cli as climod
+    from gwt_apply.lock import LOCK_HANDLE
+    clock = [lockmod._now()]
+    monkeypatch.setattr(lockmod, "_now", lambda: clock[0])
+    sleep = climod.time.sleep
+    monkeypatch.setattr(climod.time, "sleep", lambda s: clock.__setitem__(0, clock[0] + 600) if s == 7 else sleep(s))
+    request, reads, refreshed = fake.request, [], ("PUT", f"/api/notes/{LOCK_HANDLE}")
+
+    def flaky(method, url, **kw):
+        if method == "GET" and url.endswith("/api/people/") and "keys" in (kw.get("params") or {}):
+            reads.append(fake.writes().count(refreshed))
+            if len(reads) == 1:
+                raise requests.Timeout("Read timed out.")
+        return request(method, url, **kw)
+
+    fake.request = flaky
+    p = tmp_path / "changes.jsonl"
+    p.write_text(json.dumps({"op": "add_person", "key": "p", "ruling": R, "first_name": "Rose", "surname": "Sample"}) + "\n")
+    assert main([str(p), "--apply", "--retry-wait", "7"]) == 0
+    assert reads[:2] == [0, 1]  # the second try ran after the lock was pushed forward
+
+
 @pytest.mark.parametrize("value", ["0", "-1"])
 def test_retries_below_one_is_refused(tmp_path, capsys, value):
     """No tries at all would skip the duplicate check and the lock and still report every op done."""
