@@ -6,6 +6,8 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-26
+
 ### Change lists
 
 None.
@@ -14,6 +16,8 @@ None.
 
 - `gwt-check links`: a read-only report of which parent links have a source, on the link itself or in a record whose text names both parents. It never sets the exit code.
 - `gwt-check cites`: events whose citation's page names another kind of act (a marriage act under a birth) or a marginal mention in another act; a report that never fails.
+- `gwt-check act`: sets one transcribed act beside a dump and says, field by field, whether the tree's event agrees on date, place, parents and citation reference; `--person` names the subject. A report that always exits 0.
+- `gwt-leads --links FILE`: an opt-in `unsupported-link` kind that turns birth links no cited record supports, read from `gwt-check links --json`, into verify tasks. A report from another tree or an older dump stops with exit 2.
 
 ### Changed
 
