@@ -96,8 +96,8 @@ def _first_line(run_id: str, log: str | None) -> None:
 
 
 def _retried(what: str, fn, client: Client, args, lock=None):
-    """`fn()`, retried like an op on a busy server: the whole-tree reads before the first op are the run's longest,
-    and one timeout there must not end a run that has not written anything yet."""
+    """`fn()`, retried like an op on a busy server: the login and the whole-tree reads before the first op are the
+    run's slowest calls, and one timeout there must not end a run that has not written anything yet."""
     for attempt in range(1, args.retries + 1):
         if lock is not None:
             lock.refresh()
@@ -237,7 +237,8 @@ def main(argv: list[str] | None = None) -> int:
                     "as it was before; a plan unless --apply (see docs/apply.md, Undo a run)")
     ap.add_argument("--pre", metavar="FILE", help="with --revert: a snapshot or gwt-check dump taken before that run")
     ap.add_argument("--tag", help="a Gramps tag put on every object this run creates, e.g. r12 (ops can add their own with \"tag\")")
-    ap.add_argument("--retries", type=_at_least_one, default=5, help="tries per op (at least 1)")
+    ap.add_argument("--retries", type=_at_least_one, default=5,
+                    help="tries per op, and for the login and reads before the first op (at least 1)")
     ap.add_argument("--retry-wait", type=float, default=30.0, help="seconds after a busy server")
     ap.add_argument("--break-lock", action="store_true",
                     help="take the tree's lock even if another apply's lock has not expired (only if that apply is dead)")
@@ -306,7 +307,7 @@ def _run(args, argv, client: Client, run_id: str, ops, snap, old, offline: bool,
         if offline:
             client.use_snapshot(snap, offline=True)
         else:
-            client.login()
+            _retried("login", client.login, client, args)
         if args.save_snapshot and old is not None:
             counts = snapshot.refresh(client, old, args.save_snapshot)
             print(f"snapshot of tree {client.tree} in {args.save_snapshot}, from {args.since} of {old['taken']}: "

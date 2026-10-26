@@ -879,6 +879,26 @@ def test_a_retried_preflight_keeps_the_lock_fresh(fake, tmp_path, env, monkeypat
     assert reads[:2] == [0, 1]  # the second try ran after the lock was pushed forward
 
 
+def test_first_login_that_times_out_is_retried_by_the_cli(fake, tmp_path, env, capsys):
+    """The run's own first login is retried too, not only a login inside an op."""
+    request, timeouts = fake.request, [1]
+
+    def flaky(method, url, **kw):
+        if url.endswith("/token/") and timeouts[0]:
+            timeouts[0] -= 1
+            raise requests.Timeout("Read timed out.")
+        return request(method, url, **kw)
+
+    fake.request = flaky
+    p = tmp_path / "changes.jsonl"
+    p.write_text(json.dumps({"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}) + "\n")
+    assert main([str(p), "--apply", "--retry-wait", "0"]) == 0, capsys.readouterr()
+    assert timeouts == [0]
+    timeouts[0] = 2
+    assert main([str(p), "--apply", "--retries", "2", "--retry-wait", "0"]) == 1
+    assert "login: Timeout" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize("value", ["0", "-1"])
 def test_retries_below_one_is_refused(tmp_path, capsys, value):
     """No tries at all would skip the duplicate check and the lock and still report every op done."""
