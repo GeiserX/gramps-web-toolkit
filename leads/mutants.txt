@@ -7,3 +7,5 @@ gwt_leads.py |         if stale: |         if False: | a stale or foreign report
 gwt_leads.py | not (is_birth_relation(ref.get('frel')) and is_birth_relation(ref.get('mrel'))) | False | an adoptive, step or foster link is never a birth-record gap
 gwt_leads.py | for k in ('father_handle', 'mother_handle')) < 2: | for k in ('father_handle', 'mother_handle')) < 0: | a record naming the only parent a family has is full support, not a gap
 gwt_leads.py | row['kind'] in ('uncited', 'unsupported-link') | row['kind'] in ('uncited',) | an unsupported link is record work (a verify task), never folded into the person's search task
+gwt_leads.py | why == 'private') | why == 'living') | the held-back note counts the private records apart from the people who may be living
+gwt_leads.py | LINK_NOT_GAPS = ('the link itself is cited', | LINK_NOT_GAPS = ( | a cited link is a level gwt-check links writes, so a report with one is read, not refused as unknown

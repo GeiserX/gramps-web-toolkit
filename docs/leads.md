@@ -18,7 +18,7 @@ The same tree gives the same leads from either file. A file in any other shape, 
 | `branch-end` | a person with no birth parents recorded: where a line stops |
 | `missing-vital` | no birth or baptism; no death or burial for someone born in `--living-after` or earlier; a birth or death (or its stand-in) with no date or no place; a family with children and no marriage event |
 | `uncited` | a birth or death (or its stand-in) with no citation: a fact nobody can check |
-| `unsupported-link` | a birth link whose cited records name neither parent, or only one of the two. `--links FILE` turns it on: the JSON `gwt-check links --json` wrote from the same dump. A report that does not fit the dump (an unknown level, or a child not in that family) stops with exit 2. Left out: a family with one parent whose record names that parent, adoptive, step or foster links, and a child with no cited birth or baptism (`uncited` and `missing-vital` list that). The task carries the report's flags. It is a gap in the record text, not a sign the link is wrong, and it is only as good as the name matching of `gwt-check links` |
+| `unsupported-link` | a birth link whose cited records name neither parent, or only one of the two. `--links FILE` turns it on: the JSON `gwt-check links --json` wrote from the same dump. A report that does not fit the dump (an unknown level, or a child not in that family) stops with exit 2. Left out: a link that carries its own citation (`the link itself is cited`), a family with one parent whose record names that parent, adoptive, step or foster links, and a child with no cited birth or baptism (`uncited` and `missing-vital` list that). The task carries the report's flags. It is a gap in the record text, not a sign the link is wrong, and it is only as good as the name matching of `gwt-check links` |
 
 `--kinds` picks a subset. Only a person's own events count, the same way `gwt-check` and `gwt-apply` read them:
 
@@ -44,7 +44,7 @@ A birth is proven old by any of these, each one ending in `--living-after` or ea
 
 For this test a date counts by its latest possible year: the end of a range or span, the year plus 10 for an "about" or estimated date, and no year at all for "after" or "from", which have no upper bound. A date with only text proves nothing.
 
-Their Gramps ids, never their names, go to stderr in one line. `--include-living` turns the hold off; use it only for a private review on your own machine, never for a list that feeds searches on outside sites. Private events never feed the facts, and their year and date text stay out of the gap text too.
+Their Gramps ids, never their names, go to stderr in one line, after how many are marked private and how many may be living. `--include-living` turns the hold off; use it only for a private review on your own machine, never for a list that feeds searches on outside sites. Private events never feed the facts, and their year and date text stay out of the gap text too.
 
 A death is asked (`no death or burial event`) of everyone proven old who has none.
 
