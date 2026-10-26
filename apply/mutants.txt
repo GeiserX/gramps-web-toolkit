@@ -67,3 +67,4 @@ gwt_apply/revert.py | if (cls, h) in created:  # e.g. a mark | if False:  # e.g.
 gwt_apply/revert.py | elif live(cls, h) is not None: | elif False: | --revert run twice skips a deleted note that is already back
 gwt_apply/snapshot.py | if "format" not in data and isinstance(data.get("objects"), dict): | if False: | --snapshot reads a gwt-check dump as a snapshot
 gwt_apply/snapshot.py | if not dump.get("tree"): | if False: | a gwt-check dump that records no tree is refused as a snapshot
+gwt_apply/snapshot.py | if isinstance(started, (int, float)) and not isinstance(started, bool): | if False: | a gwt-check dump is dated by read_started, as gwt-check dates it

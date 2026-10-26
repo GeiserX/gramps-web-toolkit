@@ -285,7 +285,7 @@ gwt-check check --from pre.json.gz --save-dump post.json.gz   # the gate: what t
 gwt-apply changes.jsonl --verify --snapshot post.json.gz       # exit 0: every op is in the tree
 ```
 
-A dump counts as taken when it was written (`dumped_at`). One that records no tree, says nowhere when it was read, or lacks a type is refused with exit `2`: take a new one.
+The header line dates a dump by when its read began (`read_started`), or by when it was written (`dumped_at`) if it has no `read_started`; that time is only shown, never compared. A dump that records no tree or lacks a type is refused with exit `2`: take a new one.
 
 `--since` reads one list of `change` stamps per class, then only the objects whose stamp moved and the new ones, and leaves out the deleted ones. The new file holds what a full `--save-snapshot` would, so the check is as strong as `--verify` against the server: an object the list touched and someone changed afterwards, or one that went away, makes its op come out `done` or `conflict` instead of `skip`. That holds for any change since the older snapshot, not only the ones the list made, so the new snapshot is also the one to plan and apply the next list on. Gramps' `change` stamp counts seconds, so take the older snapshot while nothing writes to the tree, as an apply's lock guarantees.
 

@@ -107,14 +107,20 @@ def _from_dump(path: str, dump: dict) -> dict:
         raise ValueError(f"{path}: a gwt-check dump without {', '.join(missing)}; take a new one")
     if not dump.get("tree"):
         raise ValueError(f"{path}: a gwt-check dump that records no tree; take a new one")
-    if dump.get("dumped_at"):
-        taken = datetime.strptime(dump["dumped_at"], "%Y-%m-%dT%H:%M:%S%z")
-    elif isinstance(dump.get("read_started"), (int, float)):
-        taken = datetime.fromtimestamp(dump["read_started"], timezone.utc)
-    else:
-        raise ValueError(f"{path}: a gwt-check dump that says nowhere when it was read; take a new one")
-    return {"format": FORMAT, "tree": dump["tree"], "taken": taken.isoformat(timespec="seconds"),
+    return {"format": FORMAT, "tree": dump["tree"], "taken": _dump_time(dump),
             "objects": {cls: objects.get(ns) or [] for cls, ns in NAMESPACE.items()}}
+
+
+def _dump_time(dump: dict) -> str:
+    """When the dump was read, for the header line only: read_started, the moment gwt-check began reading, as
+    gwt-check itself takes it; else dumped_at; else unknown."""
+    started = dump.get("read_started")
+    if isinstance(started, (int, float)) and not isinstance(started, bool):
+        return datetime.fromtimestamp(started, timezone.utc).isoformat(timespec="seconds")
+    try:
+        return datetime.fromisoformat(dump["dumped_at"]).isoformat(timespec="seconds")
+    except (KeyError, TypeError, ValueError):
+        return "unknown"
 
 
 def check(client: Client, snap: dict, planner: Client) -> list[str]:
