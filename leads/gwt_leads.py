@@ -5,13 +5,16 @@ Reads an offline dump (the JSON `gwt-check dump` writes, or a `gwt-apply` snapsh
 touches the tree. Exit 2 on a file that is not a dump, never a silent empty list. Prints the gaps highest priority first: direct ancestors of --root count
 100 minus a point per generation (never below 40), everyone else 10.
 
-  gwt-leads [--root I0001] [--kinds branch-end,missing-vital,uncited] [--limit N] [--format tsv|json|queue] DUMP
+  gwt-leads [--root I0001] [--kinds branch-end,missing-vital,uncited] [--links FILE] [--limit N]
+            [--format tsv|json|queue] DUMP
 
 Gaps:
   branch-end     a person with no birth parents recorded: where a line stops
   missing-vital  no birth (or baptism), no marriage (a family with children but no marriage event) or, for people
                  born in --living-after or earlier, no death (or burial); or such an event with no date or no place
   uncited        a birth or death event (or its baptism or burial stand-in) with no citation
+  unsupported-link  (only with --links, the report `gwt-check links --json` wrote from the same dump) a birth
+                 link whose cited records name neither parent, or only one of two: words only, never a wrong link
 
 Only the person's own events count: refs with role Primary, the birth and death the person points at first.
 People who may be living (no death, burial or cremation, and no date of theirs or of a descendant that proves a
@@ -21,7 +24,13 @@ birth in --living-after or earlier) and people or events marked private are held
 """
 import argparse, collections, datetime, gzip, json, re, sys
 
-KINDS = ('branch-end', 'missing-vital', 'uncited')
+KINDS = ('branch-end', 'missing-vital', 'uncited', 'unsupported-link')
+DEFAULT_KINDS = ('branch-end', 'missing-vital', 'uncited')  # unsupported-link needs --links, so it is asked for
+LINK_GAPS = {'cited, names neither': 'a cited record names neither parent',
+             'a record names one': 'records name only one of the two parents'}
+# the other levels gwt-check links writes; 'no record names a parent' means no cited birth or baptism at all,
+# which uncited and missing-vital already list
+LINK_NOT_GAPS = ('birth record names both', 'other record names both', 'no record names a parent')
 BIRTH_LIKE = ('Birth', 'Baptism', 'Christening')   # in order of preference
 DEATH_LIKE = ('Death', 'Burial', 'Cremation')
 MARRIAGE_LIKE = ('Marriage',)
@@ -294,7 +303,7 @@ def facts(T, p):
     return out
 
 
-def leads(T, root_gid=None, kinds=KINDS, living_after=None, hold=True):
+def leads(T, root_gid=None, kinds=DEFAULT_KINDS, living_after=None, hold=True, links=None):
     """(rows, held): one row per gap, highest priority first, and {gramps_id: why} for the people held back
     (none when hold is False)."""
     living_after = default_living_after() if living_after is None else living_after
@@ -352,6 +361,38 @@ def leads(T, root_gid=None, kinds=KINDS, living_after=None, hold=True):
                         add(p, 'missing-vital', 'marriage-missing-%s' % f.get('gramps_id', f['handle']),
                             'family %s has children but no marriage event' % f.get('gramps_id', ''))
                         break
+    if 'unsupported-link' in kinds:
+        by_gid = {p.get('gramps_id'): p for p in T['people'].values()}
+        fam_by_gid = {f.get('gramps_id'): f for f in T['families'].values()}
+        stale = 0
+        for row in (links or {}).get('rows', []):
+            if not (isinstance(row, dict) and all(isinstance(row.get(k), str) for k in ('family', 'child', 'level'))):
+                raise BadInput('not a gwt-check links report: every row needs a family, a child and a level')
+            if row['level'] not in LINK_GAPS and row['level'] not in LINK_NOT_GAPS:
+                raise BadInput('links report: unknown level %r (is it from a newer gwt-check?)' % row['level'])
+            p, f = by_gid.get(row['child']), fam_by_gid.get(row['family'])
+            ref = next((c for c in (f or {}).get('child_ref_list', []) if p and c.get('ref') == p['handle']), None)
+            if ref is None:
+                stale += 1
+                continue
+            gap = LINK_GAPS.get(row['level'])
+            if gap is None or not (is_birth_relation(ref.get('frel')) and is_birth_relation(ref.get('mrel'))):
+                continue  # supported, listed by another kind, or not a birth link a birth record could prove
+            if row['level'] == 'a record names one' and \
+                    sum(f.get(k) in T['people'] for k in ('father_handle', 'mother_handle')) < 2:
+                continue  # the one parent the family has is named
+            why = held_back(T, p, living_after, old) if hold else ''
+            if why:
+                held[p.get('gramps_id', p['handle'])] = why
+                continue
+            flags = [x for x in row.get('flags') or [] if isinstance(x, str)]
+            add(p, 'unsupported-link', 'link-%s' % row['family'],
+                'family %s: %s; transcribe the parents from the cited record into its citation, or find a record '
+                'that names both (words only: the link is not shown wrong)%s'
+                % (row['family'], gap, ' [read first: %s]' % '; '.join(flags) if flags else ''))
+        if stale:
+            raise BadInput('%d rows of the links report name a child who is not in that family in this dump: the '
+                           'report is from another tree or an older dump, so run gwt-check links on this one' % stale)
     out.sort(key=lambda r: (-r['priority'], id_order(r['person']), r['kind'], r['gap']))
     return out, held
 
@@ -363,7 +404,7 @@ def id_order(gid):
 
 
 def task_of(row):
-    return 'verify' if row['kind'] == 'uncited' else 'search'
+    return 'verify' if row['kind'] in ('uncited', 'unsupported-link') else 'search'
 
 
 def query_of(row):
@@ -412,7 +453,9 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog='gwt-leads', description=__doc__.split('\n')[0])
     p.add_argument('dump')
     p.add_argument('--root', help='Gramps id of the person whose ancestors rank first')
-    p.add_argument('--kinds', default=','.join(KINDS))
+    p.add_argument('--kinds', default=','.join(DEFAULT_KINDS))
+    p.add_argument('--links', metavar='FILE',
+                   help='the JSON `gwt-check links --json` wrote from this same dump: adds the unsupported-link kind')
     p.add_argument('--limit', type=int, default=0, help='keep the N highest-priority rows (tasks, in queue format)')
     p.add_argument('--format', choices=('queue', 'tsv', 'json'), default='tsv')
     p.add_argument('--living-after', type=int, default=default_living_after(), metavar='YEAR',
@@ -435,8 +478,22 @@ def main(argv=None):
     bad = [k for k in kinds if k not in KINDS]
     if bad:
         p.error('unknown kind: %s' % ', '.join(bad))
+    if args.links and 'unsupported-link' not in kinds:
+        kinds += ('unsupported-link',)  # --links can only mean this kind
+    if 'unsupported-link' in kinds and not args.links:
+        p.error('the unsupported-link kind needs --links FILE, the JSON `gwt-check links --json` writes')
+    links = None
+    if args.links:
+        try:
+            with open(args.links, encoding='utf-8') as fh:
+                links = json.load(fh)
+            if not isinstance(links, dict) or not isinstance(links.get('rows'), list):
+                raise ValueError('not a gwt-check links report')
+        except (OSError, ValueError) as exc:
+            print('gwt-leads: %s: %s' % (args.links, exc), file=sys.stderr)
+            return 2
     try:
-        rows, held = leads(load(args.dump), args.root, kinds, args.living_after, hold=not args.include_living)
+        rows, held = leads(load(args.dump), args.root, kinds, args.living_after, hold=not args.include_living, links=links)
     except BadInput as exc:
         print('gwt-leads: %s' % exc, file=sys.stderr)
         return 2
