@@ -1431,6 +1431,16 @@ def test_a_gwt_check_dump_without_a_tree_or_a_type_is_refused(fake, scan, tmp_pa
         bad = _as_check_dump(snap, tmp_path / f"bad-{drop[0]}.json.gz", drop)
         assert main([str(changes), "--snapshot", str(bad)]) == 2
         assert why in capsys.readouterr().err
+    import gzip
+    for name, rows in (("people", [1]), ("events", [{"gramps_id": "E1"}]), ("tags", {"a": {}})):
+        bad = _as_check_dump(snap, tmp_path / f"bad-rows-{name}.json.gz")
+        with gzip.open(bad, "rt", encoding="utf-8") as fh:
+            dump = json.load(fh)
+        dump["objects"][name] = rows
+        with gzip.open(bad, "wt", encoding="utf-8") as fh:
+            json.dump(dump, fh)
+        assert main([str(changes), "--snapshot", str(bad)]) == 2, name
+        assert f"whose {name} is not a list of objects with handles" in capsys.readouterr().err
     (tmp_path / "junk.json").write_text("[1, 2]")
     assert main([str(changes), "--snapshot", str(tmp_path / "junk.json")]) == 2
     assert "neither a gwt-apply snapshot nor a gwt-check dump" in capsys.readouterr().err

@@ -102,13 +102,21 @@ def load(path: str) -> dict:
 
 def _from_dump(path: str, dump: dict) -> dict:
     objects = dump["objects"]
-    missing = [ns for ns in NAMESPACE.values() if ns != "tags" and not isinstance(objects.get(ns), list)]
+    missing = [ns for ns in NAMESPACE.values() if ns != "tags" and objects.get(ns) is None]
     if missing:
         raise ValueError(f"{path}: a gwt-check dump without {', '.join(missing)}; take a new one")
+    bad = [ns for ns in NAMESPACE.values() if objects.get(ns) is not None and not _rows(objects[ns])]
+    if bad:
+        raise ValueError(f"{path}: a gwt-check dump whose {', '.join(bad)} is not a list of objects with handles; "
+                         "take a new one")
     if not dump.get("tree"):
         raise ValueError(f"{path}: a gwt-check dump that records no tree; take a new one")
     return {"format": FORMAT, "tree": dump["tree"], "taken": _dump_time(dump),
             "objects": {cls: objects.get(ns) or [] for cls, ns in NAMESPACE.items()}}
+
+
+def _rows(rows) -> bool:
+    return isinstance(rows, list) and all(isinstance(o, dict) and isinstance(o.get("handle"), str) for o in rows)
 
 
 def _dump_time(dump: dict) -> str:
