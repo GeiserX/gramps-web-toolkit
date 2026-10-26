@@ -25,7 +25,7 @@ On a multi-tree server, the tree comes from the user: the login (`POST /api/toke
 
 Every request carries the User-Agent `gramps-web-toolkit/<version> (gwt-apply; +https://github.com/GeiserX/gramps-web-toolkit)`, so a server admin can tell the toolkit apart in the logs.
 
-Other flags: `--verify` and `--json FILE` ([Prove a list landed](#prove-a-list-landed)), `--log PATH`, `--retries N` (default 5), `--retry-wait SECONDS` (default 30), `--snapshot FILE`, `--save-snapshot FILE` and `--since OLD` ([Snapshots](#snapshots)), `--tag NAME` ([Tags](#tags)), `--break-lock` (below).
+Other flags: `--verify` and `--json FILE` ([Prove a list landed](#prove-a-list-landed)), `--log PATH`, `--retries N` (default 5, at least 1), `--retry-wait SECONDS` (default 30), `--snapshot FILE`, `--save-snapshot FILE` and `--since OLD` ([Snapshots](#snapshots)), `--tag NAME` ([Tags](#tags)), `--break-lock` (below).
 
 Every run gets a run id, `<date>-<time>-<6 hex>`. The first line of output names it and the log, before the login, so a run whose login fails still says which run it was. The log path carries `(created once logged in)`: the file appears only after the login. See [The log](#the-log).
 

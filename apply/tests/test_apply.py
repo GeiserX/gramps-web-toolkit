@@ -800,7 +800,6 @@ def test_login_that_times_out_is_retried(fake):
     assert res[0].status == "done", res[0].actions
 
 
-
 def test_preflight_read_that_times_out_is_retried(fake, tmp_path, monkeypatch, capsys):
     """The duplicate preflight lists the whole tree before any op runs: a timeout there is retried like an op's
     read, and the run ends only once the retries are spent."""
@@ -826,6 +825,18 @@ def test_preflight_read_that_times_out_is_retried(fake, tmp_path, monkeypatch, c
     timeouts[0] = 3
     assert main([str(p), "--retries", "3", "--retry-wait", "0"]) == 1
     assert "GET /people/: Timeout" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("value", ["0", "-1"])
+def test_retries_below_one_is_refused(tmp_path, capsys, value):
+    """No tries at all would skip the duplicate check and the lock and still report every op done."""
+    p = tmp_path / "changes.jsonl"
+    p.write_text(json.dumps({"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}) + "\n")
+    with pytest.raises(SystemExit) as exc:
+        main([str(p), "--retries", value])
+    assert exc.value.code == 2
+    assert "--retries" in capsys.readouterr().err
+
 
 class MergingFake(FakeGrampsWeb):
     """The fake API plus the merge endpoints, doing what Gramps' merge does to the lists the tests look at."""

@@ -108,7 +108,7 @@ def _preflight(ops: list[dict], client: Client, args, lock) -> list[str]:
                 raise
             client.log(event="retry", attempt=attempt, error=f"preflight: {exc}")
             time.sleep(args.retry_wait)
-    return []
+    raise AssertionError("unreachable: --retries is at least 1")
 
 
 def _ended(client: Client, run, outcome: dict) -> int:
@@ -208,6 +208,13 @@ def _revert_run(args, argv, client: Client, run_id: str, entries, snap, pre, out
             signal.signal(sig, handler)
 
 
+def _at_least_one(text: str) -> int:
+    n = int(text)
+    if n < 1:  # zero tries would skip the duplicate check and the lock, and report every op done
+        raise argparse.ArgumentTypeError(f"{text}: at least 1")
+    return n
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="gwt-apply",
@@ -230,7 +237,7 @@ def main(argv: list[str] | None = None) -> int:
                     "as it was before; a plan unless --apply (see docs/apply.md, Undo a run)")
     ap.add_argument("--pre", metavar="FILE", help="with --revert: a snapshot or gwt-check dump taken before that run")
     ap.add_argument("--tag", help="a Gramps tag put on every object this run creates, e.g. r12 (ops can add their own with \"tag\")")
-    ap.add_argument("--retries", type=int, default=5)
+    ap.add_argument("--retries", type=_at_least_one, default=5, help="tries per op (at least 1)")
     ap.add_argument("--retry-wait", type=float, default=30.0, help="seconds after a busy server")
     ap.add_argument("--break-lock", action="store_true",
                     help="take the tree's lock even if another apply's lock has not expired (only if that apply is dead)")

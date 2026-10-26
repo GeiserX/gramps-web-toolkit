@@ -13,6 +13,7 @@ None.
 ### Fixed
 
 - apply: a timeout or busy answer in the duplicate check's whole-tree list reads is retried like an op's read (`--retries`, `--retry-wait`). Before, one slow read ended the run with exit 1 before any op ran.
+- apply: `--retries` below 1 is refused with exit 2. With 0, a run skipped the duplicate check and the lock and reported every op done without running it.
 
 ## [0.2.1] - 2026-10-26
 
