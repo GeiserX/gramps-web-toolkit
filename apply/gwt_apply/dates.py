@@ -2,9 +2,12 @@
 
 Grammar (case-insensitive):
 
-    DATE   := [QUALITY " "] [MOD " "] YMD
+    DATE   := [CALENDAR " "] [QUALITY " "] [MOD " "] YMD
             | [QUALITY " "] ("bet" | "between") YMD "and" YMD
             | [QUALITY " "] "from" YMD "to" YMD
+    CALENDAR := "fr" | "republican"   (French Republican calendar; YMD is then year-month-day
+                of that calendar: "fr 0005-03-26" is 26 frimaire an V; year 1 to 14, month 1 to 12,
+                13 for the complementary days)
     QUALITY:= "est" | "estimated" | "calc" | "calculated"
     MOD    := "abt" | "about" | "bef" | "before" | "aft" | "after"
     YMD    := YYYY | YYYY-MM | YYYY-MM-DD
@@ -40,13 +43,32 @@ class DateError(ValueError):
     pass
 
 
-def _ymd(text: str) -> tuple[int, int, int]:
+CAL_GREGORIAN, CAL_FRENCH = 0, 3
+_CALENDAR = {"fr": CAL_FRENCH, "republican": CAL_FRENCH}
+# Years of the Republican calendar with six complementary days (Gramps counts a leap year every fourth year).
+_FR_LEAP = (3, 7, 11)
+
+
+def french_sdn(year: int, month: int, day: int) -> int:
+    """Serial day number of a Republican date, the same value Gramps stores as `sortval`."""
+    return (year * 1461) // 4 + (month - 1) * 30 + day + 2375474
+
+
+def _ymd(text: str, calendar: int = CAL_GREGORIAN) -> tuple[int, int, int]:
     m = _YMD.match(text)
     if not m:
         raise DateError(f"unreadable date part {text!r}")
     year = int(m.group(1))
     month = int(m.group(2) or 0)
     day = int(m.group(3) or 0)
+    if calendar == CAL_FRENCH:
+        if not 1 <= year <= 14:
+            raise DateError(f"Republican year {year} is outside 1 to 14 in {text!r}")
+        if not 0 <= month <= 13 or not 0 <= day <= 30 or (day and not month):
+            raise DateError(f"impossible date {text!r}")
+        if month == 13 and day > (6 if year in _FR_LEAP else 5):
+            raise DateError(f"impossible date {text!r}: that year has no complementary day {day}")
+        return day, month, year
     if not 0 <= month <= 12 or not 0 <= day <= 31 or (day and not month):
         raise DateError(f"impossible date {text!r}")
     if day and year:
@@ -91,6 +113,9 @@ def parse_date(text: str | None) -> dict:
     if text is None or not str(text).strip():
         return empty_date()
     words = str(text).strip().lower().split()
+    calendar = CAL_GREGORIAN
+    if words and words[0] in _CALENDAR:
+        calendar = _CALENDAR[words.pop(0)]
     quality = QUAL_NONE
     if words and words[0] in _QUALITY:
         quality = _QUALITY[words.pop(0)]
@@ -106,16 +131,18 @@ def parse_date(text: str | None) -> dict:
         first = words[0]
     else:
         raise DateError(f"unreadable date {text!r}")
-    day, month, year = _ymd(first)
+    day, month, year = _ymd(first, calendar)
     dateval: list = [day, month, year, False]
     if second is not None:
-        dateval += [*_ymd(second), False]
+        dateval += [*_ymd(second, calendar), False]
     date = empty_date()
+    to_sdn = french_sdn if calendar == CAL_FRENCH else gregorian_sdn
     date.update(
+        calendar=calendar,
         modifier=modifier,
         quality=quality,
         dateval=dateval,
-        sortval=gregorian_sdn(max(year, 1), max(month, 1), max(day, 1)),
+        sortval=to_sdn(max(year, 1), max(month, 1), max(day, 1)),
     )
     return date
 
@@ -124,8 +151,11 @@ def date_key(date: dict | None) -> tuple:
     """What two dates must share to count as the same date."""
     if not date:
         return (MOD_NONE, QUAL_NONE, (0, 0, 0))
+    calendar = date.get("calendar", 0)
     val = date.get("dateval") or [0, 0, 0, False]
     parts = tuple(v for i, v in enumerate(val) if i % 4 != 3)
     if all(v == 0 for v in parts):
         parts = (0, 0, 0)
+    if calendar:
+        return (date.get("modifier", 0), date.get("quality", 0), parts, calendar)
     return (date.get("modifier", 0), date.get("quality", 0), parts)

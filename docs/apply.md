@@ -116,7 +116,7 @@ Place names, place types and person names are compared without case, accents or 
 
 Types (event, note, place, family, attribute, repository, media type) are Gramps' internal English names, whatever language the web UI shows: `Research`, `Transcript`, `Baptism`, `Parish`. A name the server does not recognise is stored as a new custom type, separate from the built-in one; whether a translated name is recognised depends on the server's language, so do not rely on it. Custom types the tree already uses are written as they are.
 
-Dates are written in this format: `1890`, `1890-03`, `1890-03-14`, optionally after `abt`, `bef` or `aft`, and optionally after `est` or `calc`. Ranges are `bet 1890 and 1895`, spans `from 1890 to 1895`. A full date must be a real calendar day: `1890-02-31` is refused, `1892-02-29` is not. Anything else is refused rather than stored as text.
+Dates are written in this format: `1890`, `1890-03`, `1890-03-14`, optionally after `abt`, `bef` or `aft`, and optionally after `est` or `calc`. Ranges are `bet 1890 and 1895`, spans `from 1890 to 1895`. A full date must be a real calendar day: `1890-02-31` is refused, `1892-02-29` is not. Anything else is refused rather than stored as text. A date an act gives in the French Republican calendar is written with `fr` (or `republican`) first and the year, month and day of that calendar: `fr 0005-03-26` is 26 frimaire an V, month 13 is the complementary days, and the year is 1 to 14. It is stored in that calendar, with the serial day of the same day in the Gregorian one, so sorting and `gwt-check` date comparisons keep working. The same event with the Gregorian form of that day is not the same date, so `update_event` writes it.
 
 ### Example
 

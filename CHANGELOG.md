@@ -6,6 +6,14 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+None.
+
+### Added
+
+- A date in a change list can be written in the French Republican calendar: `fr 0005-03-26` is 26 frimaire an V. It is stored in that calendar, with the serial day of the Gregorian day it falls on.
+
 ## [0.2.3] - 2026-10-26
 
 ### Change lists

@@ -6,7 +6,7 @@ import requests
 
 from fake_api import FakeGrampsWeb, Resp
 from gwt_apply.client import ApiError, Client
-from gwt_apply.dates import DateError, parse_date
+from gwt_apply.dates import DateError, date_key, parse_date
 from gwt_apply.ops import Applier, stable_handle, validate
 from gwt_apply.cli import main
 
@@ -196,6 +196,21 @@ def test_dates():
     for bad in ("March 1890", "1890-13", "abt", "1890-00-05"):
         with pytest.raises(DateError):
             parse_date(bad)
+
+
+def test_republican_dates_keep_their_own_calendar_and_serial_day():
+    d = parse_date("fr 0005-03-26")  # 26 frimaire an V
+    assert (d["calendar"], d["dateval"]) == (3, [26, 3, 5, False])
+    assert d["sortval"] == parse_date("1796-12-16")["sortval"]
+    assert parse_date("fr 0013-07-14")["sortval"] == parse_date("1805-04-04")["sortval"]
+    d = parse_date("fr bef 0011-04")
+    assert (d["calendar"], d["modifier"], d["dateval"]) == (3, 1, [0, 4, 11, False])
+    assert date_key(parse_date("fr 0005-03-26")) != date_key(parse_date("1796-12-16"))
+    assert parse_date("1796-12-16")["calendar"] == 0
+    for bad in ("fr 0015-01-01", "fr 0005-13-06", "fr 0005-14-01", "fr 0005-01-31", "fr 0000-01-01"):
+        with pytest.raises(DateError):
+            parse_date(bad)
+    assert parse_date("fr 0003-13-06")["dateval"] == [6, 13, 3, False]
 
 
 def test_cli_validation_stops_before_any_network(tmp_path, capsys):
