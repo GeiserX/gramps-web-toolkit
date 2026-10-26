@@ -1,3 +1,6 @@
+# Mutations the check tests must catch. One row each: file | exact text | replacement | why
+# `python3 .github/scripts/run_tests.py --mutants --only check` applies each row to a scratch copy
+# of check/ and fails when the tests still pass. The text must occur exactly once in the file.
 gwt_check/links.py | if len(w) >= MIN_WORD] | if len(w) >= 0] | words of fewer than 3 letters never count as a name
 gwt_check/links.py | if len([1 for h in ch.get("parent_family_list") or [] if h in O["families"]]) > 1: | if False: | a child with several parental families gets one row per family and a flag
 gwt_check/links.py | if x.get("ref") in E and kind(x.get("role")) == "primary"] | if x.get("ref") in E] | an event where the child is only a godparent is not the child's record
@@ -20,3 +23,17 @@ gwt_check/act.py | p.get("gramps_id") == person] | True] | --person picks exactl
 gwt_check/act.py | if want == names[0]: | if want in names: | a place that only encloses the tree's place is not reported as the same place
 gwt_check/act.py | r"(?<!\w)" + re.escape(want) | re.escape(want) | a reference is not found inside a longer number ("1" in "folio 21")
 gwt_check/act.py | x in P and x != p["handle"] and _fits | x in P and _fits | a spouse name that fits the subject is never the subject himself
+gwt_check/cites.py | if want and acts and want not in acts: | if want and acts: | a citation whose page names the event's own kind of act is not other-act
+gwt_check/cites.py | (?:s|es)?(?!\w)", f) | ", f) | an act word matches whole, never inside a longer word such as birthplace
+gwt_check/cites.py | "boda", | "bodx", | a marriage cited by a «Bodas» page is not another kind of act
+gwt_check/cites.py | if want in ("death", "marriage") and any(m in _fold(page) for m in MARGINAL): | if False: | a death or marriage cited by a marginal mention is flagged
+gwt_check/fill.py | (flagged if prob else parts).extend(text) | parts.extend(text) | fill-places does not propose a place that only a flagged citation names
+gwt_check/fill.py | if only: | if False: | a place only a flagged citation names is listed under held_back
+gwt_check/cites.py | if want and acts and want not in acts: | if acts and want not in acts: | an event of no act kind (a residence) is never another act
+gwt_check/cites.py | "baptism": "birth", | "baptismx": "birth", | a baptism is read as a birth act
+gwt_check/cites.py | "burial": "death", | "burialx": "death", | a burial is read as a death act
+gwt_check/cites.py | rf"(?<!\w){w} | rf"{w} | an act word inside a longer word (renacimiento) is not that act
+gwt_check/cites.py | if want in ("death", "marriage") and any | if any | a birth cited by a marginal mention is not flagged
+gwt_check/cites.py | prob = citation_problem(e, c) if c else None | prob = citation_problem(e, c) | a citation missing from the dump is skipped
+gwt_check/cli.py | raise BadInput(f"{tree.source}: a .gramps backup has no citation pages; use a dump") | pass | cites refuses a .gramps backup
+gwt_check/fill.py | if rep.get("held_back"): | if False: | the text output counts the held-back events

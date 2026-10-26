@@ -64,29 +64,41 @@ def propose_places(tree: Tree) -> dict:
     # one pattern for every name, longest first, compiled once
     rx = re.compile(r"(?<!\w)(?:" + "|".join(re.escape(n).replace(r"\ ", r"\s+")
                                              for n in sorted(by_name, key=len, reverse=True)) + r")(?!\w)") if by_name else None
-    proposals, ambiguous, without = [], [], 0
-    for h, e in E.items():
-        if e.get("place"):
-            continue
-        without += 1
-        parts = []
-        for ch in e.get("citation_list") or []:
-            c = C.get(ch)
-            if c:
-                parts.append(c.get("page") or "")
-                parts += [_note_text(N[n]) for n in c.get("note_list") or [] if n in N]
-        text = unicodedata.normalize("NFC", "\n".join(p for p in parts if p))
+    from .cites import citation_problem  # here: cites imports this module
+    proposals, ambiguous, held, without = [], [], [], 0
+
+    def places_in(text: str):
         if rx is None or not text.strip():
-            continue
+            return {}, []
         hits: dict[str, int] = {}
         for m in rx.finditer(_fold(text)):
             for ph in by_name[" ".join(m[0].split())]:
                 hits.setdefault(ph, m.start())
         enclosing = set().union(*(_enclosing(P, ph) for ph in hits)) if hits else set()
-        most = sorted((ph for ph in hits if ph not in enclosing), key=lambda ph: tree.gid("places", ph))
-        if not most:
+        return hits, sorted((ph for ph in hits if ph not in enclosing), key=lambda ph: tree.gid("places", ph))
+
+    for h, e in E.items():
+        if e.get("place"):
             continue
+        without += 1
+        parts, flagged, why = [], [], ""
+        for ch in e.get("citation_list") or []:
+            c = C.get(ch)
+            if not c:
+                continue
+            text = [c.get("page") or ""] + [_note_text(N[n]) for n in c.get("note_list") or [] if n in N]
+            prob = citation_problem(e, c)
+            (flagged if prob else parts).extend(text)
+            why = why or (prob[1] if prob else "")
+        text = unicodedata.normalize("NFC", "\n".join(p for p in parts if p))
+        hits, most = places_in(text)
         row = {"event": tree.gid("events", h), "kind": kind(e.get("type"))}
+        if not most:
+            # a place only a citation of another act names is held back, not proposed
+            _, only = places_in(unicodedata.normalize("NFC", "\n".join(p for p in flagged if p)))
+            if only:
+                held.append({**row, "places": [f"{tree.gid('places', ph)} {_name(P[ph])}" for ph in only], "why": why})
+            continue
         if len(most) == 1:
             at = hits[most[0]]
             lo = max(0, at - 40)
@@ -94,7 +106,7 @@ def propose_places(tree: Tree) -> dict:
                               "quote": " ".join(text[lo:lo + 120].split())})
         else:
             ambiguous.append({**row, "places": [f"{tree.gid('places', ph)} {_name(P[ph])}" for ph in most]})
-    return {"events_without_place": without, "proposals": proposals, "ambiguous": ambiguous}
+    return {"events_without_place": without, "proposals": proposals, "ambiguous": ambiguous, "held_back": held}
 
 
 def print_places(rep: dict, limit: int) -> None:
@@ -104,6 +116,9 @@ def print_places(rep: dict, limit: int) -> None:
         print(f"  {x['event']} ({x['kind']}): {x['place']} {x['name']}  «{x['quote']}»")
     for x in rep["ambiguous"][:limit]:
         print(f"  {x['event']} ({x['kind']}): several places: {'; '.join(x['places'])}")
+    if rep.get("held_back"):
+        print(f"held back, not proposed: {len(rep['held_back'])} (the only citations are of another act or a "
+              f"marginal mention; gwt-check cites says which; --json lists them)")
     print("proposals only: read each record before applying one (the text may name where the record was made)")
 
 

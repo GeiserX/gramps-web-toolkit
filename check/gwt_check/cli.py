@@ -341,6 +341,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--json", action="store_true", help="print the result as JSON")
     p.add_argument("--limit", type=int, default=30, help="people printed (default 30)")
 
+    p = sub.add_parser("cites", help="events cited by another kind of act or a marginal mention; a report, never fails")
+    p.add_argument("tree", nargs="?", help="dump file; without it the live tree is read")
+    p.add_argument("--json", action="store_true", help="print the result as JSON")
+    live_opts(p)
+
     sub.add_parser("selftest", help="plant every error kind in a synthetic tree and prove each check fires")
 
     args = ap.parse_args(argv)
@@ -375,6 +380,17 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps(rep, ensure_ascii=False, indent=1))
             else:
                 print_act(rep, args.limit)
+            return 0
+        if args.cmd == "cites":
+            from .cites import cites_report, print_cites
+            tree = load(args.tree) if args.tree else Tree(live_dump(args)["objects"], source="live tree")
+            if tree.partial:
+                raise BadInput(f"{tree.source}: a .gramps backup has no citation pages; use a dump")
+            rep = cites_report(tree)
+            if args.json:
+                print(json.dumps(rep, ensure_ascii=False, indent=1))
+            else:
+                print_cites(rep)
             return 0
         if args.cmd == "fill-places":
             from .fill import print_places, propose_places, write_ops

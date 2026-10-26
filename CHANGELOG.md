@@ -6,9 +6,18 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+None.
+
 ### Added
 
 - `gwt-check links`: a read-only report of which parent links have a source, on the link itself or in a record whose text names both parents. It never sets the exit code.
+- `gwt-check cites`: events whose citation's page names another kind of act (a marriage act under a birth) or a marginal mention in another act; a report that never fails.
+
+### Changed
+
+- `gwt-check fill-places` no longer proposes a place that only a citation of another kind of act or a marginal mention names; the event appears under `held_back` instead, so an `--ops` file has fewer ops than before.
 
 ## [0.2.0] - 2026-10-26
 

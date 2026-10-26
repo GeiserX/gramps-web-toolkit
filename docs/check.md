@@ -97,6 +97,7 @@ gwt-check fill-places dump.json.gz --json             # every proposal and every
 - A candidate is a place that some event of the tree already uses, so a country or province that only encloses other places is never proposed on its own. Names of fewer than 4 letters are left out.
 - Names are compared without case or accents, and only as whole words: `Villaejemplo` does not match inside `Villaejemplonuevo`.
 - When the text names a place and also one that encloses it (`Villaejemplo, Provincia Imaginaria`), the enclosing one is dropped. One place left is a proposal. More than one, such as two towns with the same name, is listed as ambiguous with each place ID, and nothing is proposed.
+- A place that only a flagged citation names (see `cites` below) is not proposed. It is listed under `held_back` in `--json` and counted in the text output. A place a clean citation of the same event also names is still proposed, from that citation's text.
 - A citation can name where the record was made rather than where the event happened: a census town, the parish of a death record, a newspaper's city. Read each proposal against the record before you apply it.
 
 `--ops FILE` writes one [`gwt-apply`](apply.md) `update_event` op per proposal, with `"ruling": ""`. `gwt-apply` refuses an op with no ruling, so the file applies only after someone has read each record, written the ruling and deleted the ops they reject. An `update_event` op replaces whatever place the event has when it is applied, so build the file from a fresh dump and apply it soon after; an event someone has placed in the meantime should have its op deleted. An existing file is never replaced.
@@ -248,3 +249,21 @@ A request that fails on the network (a timeout, a reset connection, an SSL read 
 ## A `.gramps` backup as the earlier tree
 
 `--since` reads a Gramps XML backup (`POST /api/exporters/gramps/file`) as well as a dump. From the backup it takes handles, IDs, change times and family links, which is all the diff and the Ahnentafel need. The checks themselves need a JSON dump, so a backup can only be the earlier tree.
+
+## Citations that do not fit their event (`cites`)
+
+`gwt-check cites [DUMP]` reads a dump (or the live tree) and writes nothing. It never sets the exit code. It lists each event whose citation's page (its title) says the citation is about another kind of act. Read the act before you act on a row.
+
+```sh
+gwt-check cites dump.json.gz          # one line per row
+gwt-check cites dump.json.gz --json   # the same rows as JSON
+```
+
+| rule | fires when |
+|---|---|
+| `other-act` | the citation's page names a kind of act (birth, death, marriage) and none of them is the event's kind; a birth event cited by a marriage act holds that act's place and date |
+| `marginal-mention` | a death or marriage is cited by a marginal mention in another act; the act's place and date are that act's |
+
+- Only the page is read, never the citation's notes, so the rules work on any tree whatever its note style.
+- The words that name a kind of act are in one table, `ACT_WORDS`, at the top of `gwt_check/cites.py`, and the words of a marginal mention in `MARGINAL` beside it. A language that is not in them is not read. A word matches as a whole word, singular or plural (`nacimiento`, `nacimientos`), never inside a longer word (`birthplace` is not a birth act).
+- `fill-places` holds back every row `cites` lists: a place that only such a citation names is listed under `held_back`, not proposed.
