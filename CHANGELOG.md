@@ -14,6 +14,12 @@ None.
 
 - `gwt-apply --snapshot` and `--since` accept a `gwt-check` dump as well as a snapshot, so `gwt-apply LIST --verify --snapshot POST` works on the `--save-dump` of `gwt-check check --from PRE`. Before, a dump was refused with "is not a gwt-apply snapshot".
 
+### Fixed
+
+- apply: a timeout or busy answer in the whole-tree list reads before the first op is retried like an op's read (`--retries`, `--retry-wait`): the duplicate check's, and on an `--apply --snapshot` the check of what changed since the snapshot. Before, one slow read ended the run with exit 1 before any op ran.
+- apply: a timeout on the run's first login is retried the same way; only a login inside an op was retried before.
+- apply: `--retries` below 1 is refused with exit 2. With 0, a run took no lock, ran no op and reported every op done.
+
 ## [0.2.1] - 2026-10-26
 
 ### Change lists

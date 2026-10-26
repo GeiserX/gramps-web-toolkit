@@ -65,6 +65,10 @@ gwt_apply/ops.py | self._referrers("Note", h) == {("family", fam)}: | self._refe
 gwt_apply/revert.py | if client.get_live(s["cls"], s["handle"]) is None: | if True: | --revert recreating a note whose answer was lost does not post it twice
 gwt_apply/revert.py | if (cls, h) in created:  # e.g. a mark | if False:  # e.g. a mark | --revert skips a note the same run made and deleted instead of asking for it by hand
 gwt_apply/revert.py | elif live(cls, h) is not None: | elif False: | --revert run twice skips a deleted note that is already back
+gwt_apply/cli.py | for attempt in range(1, args.retries + 1): | for attempt in range(1, 2): | a timeout in the duplicate preflight's list reads is retried, not the end of the run
+gwt_apply/cli.py | if n < 1: | if False: | --retries below 1 is refused, never a run that reports ops done without running them
+gwt_apply/cli.py | lock.refresh() | pass | a retried read before the first op refreshes the lock before the next try
+gwt_apply/cli.py | _retried("login", client.login, client, args) | client.login() | a timeout on the run's first login is retried
 gwt_apply/snapshot.py | if "format" not in data and isinstance(data.get("objects"), dict): | if False: | --snapshot reads a gwt-check dump as a snapshot
 gwt_apply/snapshot.py | if not dump.get("tree"): | if False: | a gwt-check dump that records no tree is refused as a snapshot
 gwt_apply/snapshot.py | if isinstance(started, (int, float)) and not isinstance(started, bool): | if False: | a gwt-check dump is dated by read_started, as gwt-check dates it

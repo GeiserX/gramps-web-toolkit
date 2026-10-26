@@ -10,11 +10,12 @@ import re
 import secrets
 import signal
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
 from . import revert, snapshot, version
-from .client import ApiError, Client, url_problem
+from .client import ApiError, Client, Retryable, url_problem
 from .dupes import preflight
 from .lock import LockHeld, TreeLock, read_lock
 from .ops import Applier, load_change_list, validate
@@ -92,6 +93,22 @@ def _first_line(run_id: str, log: str | None) -> None:
     """Printed before the login, so a run that stops there still names its run id."""
     print(f"run {run_id}, log " + (f"{log} (created once logged in)" if log else "none (add --log PATH to keep one)"),
           flush=True)
+
+
+def _retried(what: str, fn, client: Client, args, lock=None):
+    """`fn()`, retried like an op on a busy server: the login and the whole-tree reads before the first op are the
+    run's slowest calls, and one timeout there must not end a run that has not written anything yet."""
+    for attempt in range(1, args.retries + 1):
+        if lock is not None:
+            lock.refresh()
+        try:
+            return fn()
+        except Retryable as exc:
+            if attempt == args.retries:
+                raise
+            client.log(event="retry", attempt=attempt, error=f"{what}: {exc}")
+            time.sleep(args.retry_wait)
+    raise AssertionError("unreachable: --retries is at least 1")
 
 
 def _ended(client: Client, run, outcome: dict) -> int:
@@ -191,6 +208,13 @@ def _revert_run(args, argv, client: Client, run_id: str, entries, snap, pre, out
             signal.signal(sig, handler)
 
 
+def _at_least_one(text: str) -> int:
+    n = int(text)
+    if n < 1:  # zero tries would take no lock, run no op, and report every op done
+        raise argparse.ArgumentTypeError(f"{text}: at least 1")
+    return n
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="gwt-apply",
@@ -215,7 +239,8 @@ def main(argv: list[str] | None = None) -> int:
                     "as it was before; a plan unless --apply (see docs/apply.md, Undo a run)")
     ap.add_argument("--pre", metavar="FILE", help="with --revert: a snapshot or gwt-check dump taken before that run")
     ap.add_argument("--tag", help="a Gramps tag put on every object this run creates, e.g. r12 (ops can add their own with \"tag\")")
-    ap.add_argument("--retries", type=int, default=5)
+    ap.add_argument("--retries", type=_at_least_one, default=5,
+                    help="tries per op, and for the login and reads before the first op (at least 1)")
     ap.add_argument("--retry-wait", type=float, default=30.0, help="seconds after a busy server")
     ap.add_argument("--break-lock", action="store_true",
                     help="take the tree's lock even if another apply's lock has not expired (only if that apply is dead)")
@@ -284,7 +309,7 @@ def _run(args, argv, client: Client, run_id: str, ops, snap, old, offline: bool,
         if offline:
             client.use_snapshot(snap, offline=True)
         else:
-            client.login()
+            _retried("login", client.login, client, args)
         if args.save_snapshot and old is not None:
             counts = snapshot.refresh(client, old, args.save_snapshot)
             print(f"snapshot of tree {client.tree} in {args.save_snapshot}, from {args.since} of {old['taken']}: "
@@ -328,14 +353,15 @@ def _run(args, argv, client: Client, run_id: str, ops, snap, old, offline: bool,
                 print(msg, file=sys.stderr)
                 _write_json(args.json, ops, [], "not run: the snapshot check refused the list")
                 return 1
-            refused = _plan_on_snapshot(ops, snap, client, tag=args.tag)
+            refused = _retried("snapshot check", lambda: _plan_on_snapshot(ops, snap, client, tag=args.tag),
+                               client, args, lock)
             if refused:
                 client.log(event="refused", reason="snapshot-plan", problems=refused)
                 print("\n".join(refused) + "; nothing was written", file=sys.stderr)
                 _write_json(args.json, ops, [], "not run: the snapshot check refused the list")
                 return 1
             client.use_snapshot(snap)
-        problems = preflight(ops, client)
+        problems = _retried("preflight", lambda: preflight(ops, client), client, args, lock)
         if problems:
             client.log(event="refused", reason="preflight", problems=problems)
             print("\n".join(problems), file=sys.stderr)
