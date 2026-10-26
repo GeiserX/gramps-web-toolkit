@@ -9,3 +9,14 @@ gwt_check/links.py | if _public_cits(tree, r.get("citation_list")): | if False: 
 gwt_check/links.py | flags = [f"the link is marked {mark}"] if mark in FLAG_MARKS else [] | flags = [] | an open [probable] or [wrong link] mark is flagged
 gwt_check/links.py | rows = [r for r in rep["rows"] if only is None or r["level"] == only or (only == "flagged" and r["flags"])] | rows = rep["rows"] | --level prints only the rows of that level
 gwt_check/links.py | for r in rows[:limit]: | for r in rows: | --limit caps the printed rows
+gwt_check/act.py | elif len(rows) > 1: | elif False: | an act whose subject fits several people is never matched to one
+gwt_check/act.py | if registered: | if False: | a tree date that is the registration day is reported as such, not as a plain difference
+gwt_check/act.py | if r.get("role") == "Primary" and r.get("ref") in E | if r.get("ref") in E | a godparent's or witness's ref to an event is never read as the person's own event
+gwt_check/act.py | if p.get("private"):  # counted | if False:  # counted | a person marked private is counted but nothing of them is shown
+gwt_check/act.py | if not c or c.get("private"): | if not c: | a private citation is never searched for the act's reference
+gwt_check/act.py | and all(isinstance(who.get(k) or "", str) for k in ("given", "surname"))) | and True) | a name given as a list or a number is refused as bad input, not a crash
+gwt_check/act.py | cands = wed or cands | cands = cands | a marriage act counts only the namesakes who have a family with the named spouse
+gwt_check/act.py | p.get("gramps_id") == person] | True] | --person picks exactly the named person
+gwt_check/act.py | if want == names[0]: | if want in names: | a place that only encloses the tree's place is not reported as the same place
+gwt_check/act.py | r"(?<!\w)" + re.escape(want) | re.escape(want) | a reference is not found inside a longer number ("1" in "folio 21")
+gwt_check/act.py | x in P and x != p["handle"] and _fits | x in P and _fits | a spouse name that fits the subject is never the subject himself

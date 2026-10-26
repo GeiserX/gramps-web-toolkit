@@ -133,6 +133,34 @@ These are words in text. A record can name two people as parents of someone else
 
 The output holds IDs, levels and flags only, no record text.
 
+## One act beside the tree (`act`)
+
+`gwt-check act ACT.json DUMP [--person GRAMPS_ID]` sets one transcribed act beside the tree and says, field by field, what agrees. It reads a dump (`gwt-check dump`, or `check --save-dump`) and writes nothing; one act is not worth a whole live read, and one dump serves every act you check that day. It never sets the exit code: a disagreement is something to read, not a failure.
+
+`ACT.json` is written by whoever read the act. Nothing here reads images.
+
+```json
+{"kind": "birth", "date": "1900-03-01", "place": "Villaejemplo", "reference": "folio 1",
+ "subject": {"given": "Lucia", "surname": "Ortega"},
+ "father": {"given": "Mateo", "surname": "Ortega"}, "mother": {"given": "Clara", "surname": "Sanz"}}
+```
+
+`date` is the day of the event the act records. `registered` (optional, same shapes) is the day the act was written. It is used only to explain a differing tree date: when the tree's date is that day and not the event's, the report says so. `kind` is `birth`, `baptism`, `death`, `burial` or `marriage` (a marriage names a `spouse` instead of parents). `date` is `YYYY`, `YYYY-MM` or `YYYY-MM-DD`; `place`, `reference`, `father` and `mother` are optional. `place` is one place name, as the tree spells it (`Villaejemplo`, not `Villaejemplo, Provincia Imaginaria`).
+
+```sh
+gwt-check act act.json dump.json.gz --person I0001
+gwt-check act act.json dump.json.gz --json
+```
+
+- `--person` names the tree person the act is about, and no name search is made; the report notes when the act's name does not fit that person. Without it, a person is a candidate when every word of the act's name is in the tree's primary name, ignoring case and accents. The act may give fewer names than the tree. For a marriage act, only namesakes who have a family with the named spouse are kept, unless none has one.
+- Only the person's own events count (event refs with role Primary): a godparent's ref to a baptism is not the godparent's baptism.
+- For each candidate's matching event, the report says whether the date is the same, compatible but not equal (a year against a day), different, or missing in the tree; whether the place is the same, encloses the tree's place (a province against a village) or differs; whether the parents have names that agree in at least one of the person's parental families (every family is read, and the report names which agree and which do not); and whether the page text or notes of a citation of the event contain the act's `reference` as whole words (`folio 1` does not match `folio 15`). Agreeing names are not proof that two people are the same or related, and a string found in a citation does not show the record was checked against the act.
+- A subject who is not in the tree is reported as absent. Nothing proposes a person, a family or a link from one act.
+- When the name fits two people, both are listed and neither is chosen. When no one fits but the tree has people whose names are shorter than the act's (the act says "Armand Francois", the tree "Armand"), they are listed with a note and none is taken as the subject.
+- A person marked private is counted, so a private namesake still keeps the verdict at "several", but only their ID is shown. Private citations and notes are not searched for the reference.
+- The text output lists 30 people (`--limit`); `--json` has all of them.
+- The report quotes the tree, so it is as private as the tree.
+
 ## Finding repositories
 
 `gwt-check repos` reads a dump or the live tree and prints each repository with its source count. It never writes.

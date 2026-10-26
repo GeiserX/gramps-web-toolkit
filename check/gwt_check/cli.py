@@ -334,6 +334,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--limit", type=int, default=30, help="rows printed (default 30)")
     live_opts(p)
 
+    p = sub.add_parser("act", help="set one transcribed act beside the tree: same date, place, parents, cited or not; a report that changes nothing")
+    p.add_argument("actfile", help="JSON file with the act: kind, date, place, reference, subject, father, mother or spouse")
+    p.add_argument("tree", help="dump file (gwt-check dump, or check --save-dump): one act is not worth a whole live read")
+    p.add_argument("--person", metavar="GRAMPS_ID", help="the tree person the act is about; without it the act's name is searched")
+    p.add_argument("--json", action="store_true", help="print the result as JSON")
+    p.add_argument("--limit", type=int, default=30, help="people printed (default 30)")
+
     sub.add_parser("selftest", help="plant every error kind in a synthetic tree and prove each check fires")
 
     args = ap.parse_args(argv)
@@ -356,6 +363,18 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps(rep, ensure_ascii=False, indent=1))
             else:
                 print_links(rep, args.limit, args.level)
+            return 0
+        if args.cmd == "act":
+            from .act import compare_act, load_act, print_act
+            act = load_act(args.actfile)
+            tree = load(args.tree)
+            if tree.partial:
+                raise BadInput(f"{tree.source}: a .gramps backup has no citation text; use a dump")
+            rep = compare_act(tree, act, args.person)
+            if args.json:
+                print(json.dumps(rep, ensure_ascii=False, indent=1))
+            else:
+                print_act(rep, args.limit)
             return 0
         if args.cmd == "fill-places":
             from .fill import print_places, propose_places, write_ops
