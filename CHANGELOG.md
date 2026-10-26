@@ -14,6 +14,10 @@ None.
 
 - `gwt-leads` says how many of the people it held back are marked private and how many may be living, instead of one count for both.
 
+### Fixed
+
+- `gwt-leads --links` no longer stops with exit 2 on a links report that has a link that is itself cited (`the link itself is cited`), the first level `gwt-check links` writes.
+
 ## [0.2.2] - 2026-10-26
 
 ### Change lists
