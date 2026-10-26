@@ -12,6 +12,7 @@ None.
 
 ### Added
 
+- `gwt-check links`: a read-only report of which parent links have a source, on the link itself or in a record whose text names both parents. It never sets the exit code.
 - `gwt-check cites`: events whose citation's page names another kind of act (a marriage act under a birth) or a marginal mention in another act; a report that never fails.
 
 ### Changed

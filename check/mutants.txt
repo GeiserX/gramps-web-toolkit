@@ -1,6 +1,28 @@
 # Mutations the check tests must catch. One row each: file | exact text | replacement | why
 # `python3 .github/scripts/run_tests.py --mutants --only check` applies each row to a scratch copy
 # of check/ and fails when the tests still pass. The text must occur exactly once in the file.
+gwt_check/links.py | if len(w) >= MIN_WORD] | if len(w) >= 0] | words of fewer than 3 letters never count as a name
+gwt_check/links.py | if len([1 for h in ch.get("parent_family_list") or [] if h in O["families"]]) > 1: | if False: | a child with several parental families gets one row per family and a flag
+gwt_check/links.py | if x.get("ref") in E and kind(x.get("role")) == "primary"] | if x.get("ref") in E] | an event where the child is only a godparent is not the child's record
+gwt_check/links.py | if any(x not in BIOLOGICAL for x in rel): | if any(x and x != "birth" for x in rel): | an Unknown relation counts as by birth, as in the other checks
+gwt_check/links.py | return [C[h] for h in handles or [] if h in C and not C[h].get("private")] | return [C[h] for h in handles or [] if h in C] | a private citation is not read
+gwt_check/links.py | if n in N and not N[n].get("private")] | if n in N] | a private note is not read
+gwt_check/links.py | (w & given and w & FILIATION) | (w & given) | one given name of several counts only beside a filiation word
+gwt_check/links.py | if _public_cits(tree, r.get("citation_list")): | if False: | a citation on the link itself is the top level
+gwt_check/links.py | flags = [f"the link is marked {mark}"] if mark in FLAG_MARKS else [] | flags = [] | an open [probable] or [wrong link] mark is flagged
+gwt_check/links.py | rows = [r for r in rep["rows"] if only is None or r["level"] == only or (only == "flagged" and r["flags"])] | rows = rep["rows"] | --level prints only the rows of that level
+gwt_check/links.py | for r in rows[:limit]: | for r in rows: | --limit caps the printed rows
+gwt_check/act.py | elif len(rows) > 1: | elif False: | an act whose subject fits several people is never matched to one
+gwt_check/act.py | if registered: | if False: | a tree date that is the registration day is reported as such, not as a plain difference
+gwt_check/act.py | if r.get("role") == "Primary" and r.get("ref") in E | if r.get("ref") in E | a godparent's or witness's ref to an event is never read as the person's own event
+gwt_check/act.py | if p.get("private"):  # counted | if False:  # counted | a person marked private is counted but nothing of them is shown
+gwt_check/act.py | if not c or c.get("private"): | if not c: | a private citation is never searched for the act's reference
+gwt_check/act.py | and all(isinstance(who.get(k) or "", str) for k in ("given", "surname"))) | and True) | a name given as a list or a number is refused as bad input, not a crash
+gwt_check/act.py | cands = wed or cands | cands = cands | a marriage act counts only the namesakes who have a family with the named spouse
+gwt_check/act.py | p.get("gramps_id") == person] | True] | --person picks exactly the named person
+gwt_check/act.py | if want == names[0]: | if want in names: | a place that only encloses the tree's place is not reported as the same place
+gwt_check/act.py | r"(?<!\w)" + re.escape(want) | re.escape(want) | a reference is not found inside a longer number ("1" in "folio 21")
+gwt_check/act.py | x in P and x != p["handle"] and _fits | x in P and _fits | a spouse name that fits the subject is never the subject himself
 gwt_check/cites.py | if want and acts and want not in acts: | if want and acts: | a citation whose page names the event's own kind of act is not other-act
 gwt_check/cites.py | (?:s|es)?(?!\w)", f) | ", f) | an act word matches whole, never inside a longer word such as birthplace
 gwt_check/cites.py | "boda", | "bodx", | a marriage cited by a «Bodas» page is not another kind of act
