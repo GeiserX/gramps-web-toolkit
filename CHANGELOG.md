@@ -6,6 +6,14 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+None.
+
+### Added
+
+- `gwt-check repos --classify` sorts the sources with no repository by what they name (a repository the tree has, another institution, nothing) and reports repositories with no URL or address, two on one web host, and linked sources with no call number. It only reports.
+
 ## [0.2.3] - 2026-10-26
 
 ### Change lists

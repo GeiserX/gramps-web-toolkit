@@ -316,7 +316,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--type", dest="rtype", help="repository type, e.g. Archive")
     p.add_argument("--unlinked", action="store_true", help="also list sources with no repository and repositories no source lists")
     p.add_argument("--json", action="store_true", help="print the result as JSON")
-    p.add_argument("--limit", type=int, default=30, help="sources listed with --unlinked (default 30)")
+    p.add_argument("--limit", type=int, default=30, help="sources listed with --unlinked or --classify (default 30)")
+    p.add_argument("--classify", action="store_true", help="instead of the list: sort the sources with no repository by what their own text names (a repository the tree has, another institution, nothing) and report repository hygiene")
     live_opts(p)
 
     p = sub.add_parser("fill-places", help="for each event with no place, the place its own citations name, with the quote; proposals only")
@@ -414,6 +415,15 @@ def main(argv: list[str] | None = None) -> int:
             tree = load(args.tree) if args.tree else Tree(live_dump(args)["objects"], source="live tree")
             if tree.partial:
                 raise BadInput(f"{tree.source}: a .gramps backup has no repository details; use a dump")
+            if args.classify:
+                from .repos import classify_repositories, print_classification
+                rep = classify_repositories(tree)
+                if args.json:
+                    json.dump(rep, sys.stdout, ensure_ascii=False, indent=1)
+                    print()
+                else:
+                    print_classification(rep, args.limit)
+                return 0
             rep = repository_report(tree, name=args.name, rtype=args.rtype)
             if args.json:
                 json.dump(rep, sys.stdout, ensure_ascii=False, indent=1)

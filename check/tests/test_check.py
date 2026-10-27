@@ -14,7 +14,7 @@ import urllib.parse
 
 import pytest
 
-from gwt_check import checks, selftest
+from gwt_check import checks, repos as repositories, selftest
 from gwt_check.cli import main
 from gwt_check.client import ApiError, Client
 from gwt_check.tree import Tree, load
@@ -1269,3 +1269,49 @@ def test_fill_places_refuses_a_backup(tmp_path, capsys):
     backup.write_bytes(_to_xml(selftest.clean_tree()))
     assert main(["fill-places", str(backup)]) == 2
     assert "no citation text" in capsys.readouterr().err
+
+
+def test_repos_classify_sorts_sources_with_no_repository_by_what_they_name(tmp_path, capsys):
+    data = selftest.clean_tree()   # R0001 "Archivo Diocesano de Ejemplo"
+    base = data["sources"][0]
+    def add(sid, **kw):
+        data["sources"].append({**copy.deepcopy(base), "handle": "h" + sid, "gramps_id": sid, "title": "Libro " + sid,
+                                "author": "", "pubinfo": "", "reporef_list": [], **kw})
+    add("S0201", title="Registro del Archivo Diocesano de Ejemplo")           # names the repository the tree has
+    add("S0202", pubinfo="Archivo Diocesano de Ejemploxyz")                    # a longer word: not that repository
+    add("S0203", author="Mairie de Villa Inventada \u2014 etat civil")        # an institution the tree lacks
+    add("S0204", title="Mairie de Villa Inventada")                            # the same one: grouped
+    add("S0205", pubinfo="Foto del documento en poder de la familia")        # no institution
+    data["repositories"][0]["urls"] = []
+    dump = _write(tmp_path, "t.json", data)
+    rep = repositories.classify_repositories(load(dump))
+    assert [(x["source"], x["repositories"], x["certain"]) for x in rep["names_existing"]] == [("S0201", ["R0001"], True)]
+    assert rep["names_other"][0] == {"institution": "mairie villa inventada", "sources": ["S0203", "S0204"]}
+    assert "S0205" in rep["names_nothing"] and "S0202" not in [x["source"] for x in rep["names_existing"]]
+    assert rep["repositories_without_url_or_address"] == ["R0001"]
+    linked = base["gramps_id"]   # already has a repository: in no group
+    assert linked not in [x["source"] for x in rep["names_existing"]] + rep["names_nothing"]
+    assert linked not in [s for x in rep["names_other"] for s in x["sources"]]
+    assert main(["repos", dump, "--classify"]) == 0
+    assert "sources that name no institution" in capsys.readouterr().out
+
+
+def test_repos_classify_matches_a_web_host_only_as_the_exact_host(tmp_path):
+    data = selftest.clean_tree()
+    base = data["sources"][0]
+    data["repositories"][0]["name"] = "Fondo Sin Parecido"
+    data["repositories"][0]["urls"] = [{"path": "https://www.archives.example.org/fonds", "type": "Web Home"}]
+    cases = {"S0301": ("See https://archives.example.org.evil.invalid/document", False),   # suffixed domain
+             "S0302": ("See https://archives.example.com/document", False),                  # look-alike domain
+             "S0303": ("See https://archives.example.org@evil.invalid/document", False),     # host is after the @
+             "S0304": ("See https://evil.invalid/archives.example.org", False),              # host only in the path
+             "S0305": ("See https://evil.invalid/?u=archives.example.org", False),
+             "S0306": ("See https://user:pw@archives.example.org:8443/x", True),             # credentials and port, same host
+             "S0307": ("Copy at WWW.Archives.Example.ORG.", True),                           # bare host, case, www, full stop
+             "S0308": ("the archives.example.organisation page", False)}
+    for sid, (text, _) in cases.items():
+        data["sources"].append({**copy.deepcopy(base), "handle": "h" + sid, "gramps_id": sid, "title": "Libro " + sid,
+                                "author": "", "pubinfo": text, "reporef_list": []})
+    rep = repositories.classify_repositories(load(_write(tmp_path, "t.json", data)))
+    got = {x["source"] for x in rep["names_existing"]}
+    assert got == {sid for sid, (_, hit) in cases.items() if hit}
