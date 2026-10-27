@@ -346,6 +346,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--json", action="store_true", help="print the result as JSON")
     live_opts(p)
 
+    p = sub.add_parser("insight", help="read-only reading aid: what citation and note texts say (possible mismatches, conflict notes, fill proposals, search order, witnesses); proves nothing")
+    p.add_argument("tree", nargs="?", help="dump file; without it the live tree is read")
+    p.add_argument("--only", help="comma-separated sections: citations, discrepancies, fill, frontier, witnesses")
+    p.add_argument("--archives", help="JSON file: {place name: {from, to, online}} for the frontier ordering")
+    p.add_argument("--json", action="store_true", help="print the result as JSON")
+    p.add_argument("--limit", type=int, default=15, help="lines printed per section (default 15)")
+    live_opts(p)
+
     sub.add_parser("selftest", help="plant every error kind in a synthetic tree and prove each check fires")
 
     args = ap.parse_args(argv)
@@ -408,6 +416,27 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps(rep, ensure_ascii=False, indent=1))
             else:
                 print_places(rep, args.limit)
+            return 0
+        if args.cmd == "insight":
+            from .insight import SECTIONS, dumps, insight, print_insight
+            only = set(args.only.split(",")) if args.only else None
+            if only and only - set(SECTIONS):
+                raise BadInput(f"unknown section: {', '.join(sorted(only - set(SECTIONS)))}")
+            tree = load(args.tree) if args.tree else Tree(live_dump(args)["objects"], source="live tree")
+            if tree.partial:
+                raise BadInput(f"{tree.source}: a .gramps backup has no details; use a dump")
+            archives = None
+            if args.archives:
+                try:
+                    with open(args.archives, encoding="utf-8") as fh:
+                        archives = json.load(fh)
+                except (OSError, ValueError) as exc:
+                    raise BadInput(f"{args.archives}: {exc}") from exc
+            rep = insight(tree, only, archives)
+            if args.json:
+                print(dumps(rep))
+            else:
+                print_insight(rep, args.limit)
             return 0
         if args.cmd == "repos":
             from .repos import print_repository_report, repository_report
