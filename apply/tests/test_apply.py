@@ -643,6 +643,26 @@ def test_add_tag_puts_a_tag_on_an_existing_object_and_makes_it_once(fake):
         assert validate([bad]), bad
 
 
+def test_add_tag_keeps_the_tags_the_object_has_and_reaches_a_note(fake):
+    fake.add("tags", {"handle": "tag-other", "name": "Other"})
+    fake.store["places"]["plc1"]["tag_list"] = ["tag-other"]
+    ops = [{"op": "add_note", "key": "n", "ruling": R, "text": "Maybe the same man.", "attach": [{"person": "I0001"}]},
+           {"op": "add_tag", "key": "t1", "ruling": R, "target": {"place": "P0001"}, "name": "Hypothesis"},
+           {"op": "add_tag", "key": "t2", "ruling": R, "target": {"note": "key:n"}, "name": "Hypothesis"}]
+    assert [r.status for r in run(fake, ops)] == ["done", "done", "done"]
+    tag = next(t["handle"] for t in fake.store["tags"].values() if t["name"] == "Hypothesis")
+    assert fake.store["places"]["plc1"]["tag_list"] == ["tag-other", tag]
+    assert fake.store["notes"][stable_handle("n")]["tag_list"] == [tag]
+    assert [r.status for r in run(fake, ops)] == ["skip", "skip", "skip"]
+
+
+def test_add_tag_refuses_a_target_that_cannot_carry_tags_before_writing():
+    op = {"op": "add_tag", "key": "t", "ruling": R, "name": "Hypothesis"}
+    for bad in ({"child_ref": {"family": "F0001", "child": "I0001"}}, {"association": {"person": "I0001", "target": "I0002"}},
+                {"bogus": "I0001"}, {"note": ""}, {"note": "N0001", "person": "I0001"}):
+        assert validate([dict(op, target=bad)]), bad
+
+
 def test_coordinates_that_are_not_numbers_are_a_validation_error():
     # float(None) is a TypeError: it must come out as a line in the error list, not a crash
     for bad in (None, "north", [1]):

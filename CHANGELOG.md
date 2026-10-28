@@ -12,7 +12,7 @@ None.
 
 ### Added
 
-- `gwt-apply` `add_tag` puts a tag on an object the tree already has, for example a research mark such as `Hypothesis`.
+- `gwt-apply` `add_tag` puts a tag on an object the tree already has, for example a research mark such as `Hypothesis` on a person, an event or a note.
 
 ## [0.2.6] - 2026-10-28
 

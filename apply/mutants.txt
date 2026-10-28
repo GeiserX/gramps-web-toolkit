@@ -81,3 +81,5 @@ gwt_apply/ops.py | if current.get("value") != name: | if True: | a rerun of an u
 gwt_apply/ops.py | and fold(str(row.get("place_type"))) == fold(str(place.get("place_type"))) | and True | update_place may rename a place to a name another type of place under the same parent has
 gwt_apply/ops.py | if "name" in s and not (isinstance(s["name"], str) and s["name"].strip()): | if False: | validate refuses an update_place name that is empty or not a string
 gwt_apply/ops.py | if handle in (target.get("tag_list") or []): | if False: | a tag already on the object is skipped, not added twice
+gwt_apply/ops.py | target["tag_list"] = [*(target.get("tag_list") or []), handle] | target["tag_list"] = [handle] | add_tag keeps the tags the object already has
+gwt_apply/ops.py | if cls in ("ChildRef", "PersonRef"): | if False: | validate refuses an add_tag on a child_ref or an association, which have no tags
