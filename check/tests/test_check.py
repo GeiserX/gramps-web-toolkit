@@ -1327,6 +1327,9 @@ def test_repos_classify_groups_by_the_institution_alone_in_its_own_spelling(tmp_
             "S0405": ("author", "Ayuntamiento de Villa Inventada"),
             "S0406": ("pubinfo", "Boletín Oficial de la Provincia de Inventia"),
             "S0407": ("title", "Bibliothèque municipale de Villeinventée"),
+            "S0409": ("title", "Hemeroteca Municipal de Villa Inventada"),
+            "S0410": ("title", "Arxiu Comarcal de Vila Inventada"),
+            "S0411": ("title", "Archivio di Stato di Città Inventata"),
             "S0408": ("title", "Copia en https://web.archive.org/web/2013/http://example.invalid/")}  # a URL is no archive
     for sid, (field, text) in rows.items():
         data["sources"].append({**copy.deepcopy(base), "handle": "h" + sid, "gramps_id": sid, "title": "Libro " + sid,
@@ -1337,6 +1340,8 @@ def test_repos_classify_groups_by_the_institution_alone_in_its_own_spelling(tmp_
     assert groups["Archivo Municipal de Villa Inventada"] == ["S0401", "S0402", "S0403"]
     for sid, label in (("S0404", "Biblioteca Nacional de Inventia"), ("S0405", "Ayuntamiento de Villa Inventada"),
                        ("S0406", "Boletín Oficial de la Provincia de Inventia"),
-                       ("S0407", "Bibliothèque municipale de Villeinventée")):
+                       ("S0407", "Bibliothèque municipale de Villeinventée"),
+                       ("S0409", "Hemeroteca Municipal de Villa Inventada"), ("S0410", "Arxiu Comarcal de Vila Inventada"),
+                       ("S0411", "Archivio di Stato di Città Inventata")):
         assert groups[label] == [sid]
     assert "S0408" in rep["names_nothing"]

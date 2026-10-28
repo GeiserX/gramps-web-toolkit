@@ -63,7 +63,8 @@ def print_repository_report(rep: dict, *, unlinked: bool, limit: int) -> None:
 # Words that open the name of an institution that keeps records, lowercase and without accents. One table, so a
 # language is added here and nowhere else.
 INSTITUTION_WORDS = ("archives", "archive", "archivo", "archiv", "boletin oficial", "registro civil", "registre",
-                     "mairie", "ayuntamiento", "musee", "museo", "biblioteca", "bibliotheque", "parroquia", "paroisse")
+                     "mairie", "ayuntamiento", "musee", "museo", "biblioteca", "bibliotheque", "parroquia", "paroisse",
+                     "hemeroteca", "arxiu", "archivio")
 
 
 def _host(url: str) -> str:
