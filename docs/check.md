@@ -76,7 +76,7 @@ It trusts the stamps for everything else. A change that reaches the database wit
 | `--pagesize`, `--workers` | Objects per request (default 1000) and requests in flight (default 4) |
 | `--live` | The old strict read of the live tree, which stops when the tree changes during it |
 
-**Scope.** The structural and dated checks always run on the whole tree. The fuzzy duplicate checks (`dup-couple-names`, `dup-person-birth`, `dup-person-relative`, `dup-person-fuzzy`, `dup-vital-event`, `dup-citation`) report a pair only when at least one side is in scope, so a run is not blamed for duplicates that were already there. Without `--since` or `--tag`, everything is in scope.
+**Scope.** The structural and dated checks always run on the whole tree. The scoped duplicate checks (`dup-couple-names`, `dup-person-birth`, `dup-person-relative`, `dup-person-fuzzy`, `dup-vital-event`, `dup-citation`, `dup-media`) report a group only when at least one member is in scope, so a run is not blamed for duplicates that were already there. Without `--since` or `--tag`, everything is in scope.
 
 **Reasons.** Rows of a known file may carry a `reason`, and the report prints it (`known N0099: kept on purpose`). `gwt-check mark-known REPORT.json --check NAME --key KEY [--key KEY ...] --reason "..." --out known.json` adds findings of a report to a known file with the reason; it refuses a key the report does not have and a blank reason, and adding one twice changes nothing.
 
