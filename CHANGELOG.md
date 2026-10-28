@@ -6,6 +6,14 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+None.
+
+### Added
+
+- `gwt-check check` reports `dup-media`: two media objects with the same checksum or the same path.
+
 ## [0.2.3] - 2026-10-26
 
 ### Change lists

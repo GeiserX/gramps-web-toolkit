@@ -173,6 +173,19 @@ def p_source_no_repository(d):
                               attribute_list=[], media_list=[], note_list=[], reporef_list=[]))
 
 
+def p_dup_media(d):
+    for n, path in ((97, "ejemplo/acta-0097.jpg"), (98, "ejemplo/acta-0098-copia.jpg")):
+        d["media"].append({**copy.deepcopy(d["media"][0]), "handle": f"hO00{n}", "gramps_id": f"O00{n}",
+                           "path": path, "checksum": "a" * 32})
+
+
+def p_dup_media_path(d):
+    # the same path under two checksums (one empty): found by path alone
+    for n, cs in ((95, ""), (96, "b" * 32)):
+        d["media"].append({**copy.deepcopy(d["media"][0]), "handle": f"hO00{n}", "gramps_id": f"O00{n}",
+                           "path": "ejemplo/acta-0095.jpg", "checksum": cs})
+
+
 def p_dup_repository(d):
     d["repositories"].append({**copy.deepcopy(d["repositories"][0]), "handle": "hR0098", "gramps_id": "R0098",
                               "name": "ARCHIVO DIOCESANO DE EJEMPLO"})
@@ -482,6 +495,8 @@ PLANTS = [
     (p_orphan_repository, "orphan-repository", "R0099", False),
     (p_source_no_repository, "info:sources without repository", "S0099", False),
     (p_dup_repository, "dup-repository", "R0001,R0098", False),
+    (p_dup_media, "dup-media", "O0097,O0098", False),
+    (p_dup_media_path, "dup-media", "O0095,O0096", False),
     (p_dup_citation, "dup-citation", "C0001,C0098", False),
     (p_dangling_child, "dangling-ref", "F0002 child_ref_list -> people ghost-person", False),
     (p_dangling_subref, "dangling-ref", "F0003 child_ref_list[I0003].note_list -> notes ghost-note", False),
