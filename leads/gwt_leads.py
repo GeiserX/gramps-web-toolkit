@@ -398,9 +398,9 @@ def leads(T, root_gid=None, kinds=DEFAULT_KINDS, living_after=None, hold=True, l
 
 
 def id_order(gid):
-    """I2 before I10: the letters, then the number."""
+    """I2 before I10: the letters, then the number, then the ID itself (I01 before I1, whatever the input order)."""
     m = re.fullmatch(r'([A-Za-z]*)(\d+)', gid or '')
-    return (m.group(1), int(m.group(2)), '') if m else (gid, -1, gid)
+    return (m.group(1), int(m.group(2)), gid) if m else (gid, -1, gid)
 
 
 def task_of(row):
