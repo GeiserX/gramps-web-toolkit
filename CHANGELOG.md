@@ -12,7 +12,7 @@ None.
 
 ### Added
 
-- `gwt-check check` reports `dup-media`: two media objects with the same checksum or the same path.
+- `gwt-check check` reports `dup-media`: two media objects with the same checksum, the same file entered twice.
 
 ## [0.2.3] - 2026-10-26
 

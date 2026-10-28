@@ -1271,24 +1271,23 @@ def test_fill_places_refuses_a_backup(tmp_path, capsys):
     assert "no citation text" in capsys.readouterr().err
 
 
-def test_dup_media_compares_paths_exactly_and_respects_the_scope():
-    d = selftest.clean_tree()
-    base = d["media"][0]
-    for n, path in ((95, "a/Scan.jpg"), (96, "a/scan.jpg")):   # two files on a case-sensitive file system
-        d["media"].append({**copy.deepcopy(base), "handle": f"hO00{n}", "gramps_id": f"O00{n}", "path": path, "checksum": ""})
-    assert not [f for f in checks.run_checks(Tree(d))[0] if f["check"] == "dup-media"]
-    for n in (95, 96):   # now the very same path
-        d["media"][-1 if n == 96 else -2]["path"] = "a/scan.jpg"
-    assert [f["key"] for f in checks.run_checks(Tree(d))[0] if f["check"] == "dup-media"] == ["O0095,O0096"]
-    elsewhere = {("people", "irrelevant")}
-    assert not [f for f in checks.run_checks(Tree(d), scope=elsewhere)[0] if f["check"] == "dup-media"]
-    inside = {("media", "hO0095")}
-    assert [f["key"] for f in checks.run_checks(Tree(d), scope=inside)[0] if f["check"] == "dup-media"] == ["O0095,O0096"]
+def _dup_media_keys(d, scope=None):
+    return [f["key"] for f in checks.run_checks(Tree(d), scope=scope)[0] if f["check"] == "dup-media"]
 
 
-def test_dup_media_does_not_trim_paths():
+def test_dup_media_compares_checksums_only_and_respects_the_scope():
     d = selftest.clean_tree()
     base = d["media"][0]
-    for n, path in ((95, "a/scan.jpg"), (96, "a/scan.jpg "), (97, " a/scan.jpg")):  # three different files
-        d["media"].append({**copy.deepcopy(base), "handle": f"hO00{n}", "gramps_id": f"O00{n}", "path": path, "checksum": ""})
-    assert not [f for f in checks.run_checks(Tree(d))[0] if f["check"] == "dup-media"]
+    # one path under two checksums: the key is the checksum alone, so a shared path is not a finding
+    for n, cs in ((95, "b" * 32), (96, "c" * 32)):
+        d["media"].append({**copy.deepcopy(base), "handle": f"hO00{n}", "gramps_id": f"O00{n}",
+                           "path": "a/scan.jpg", "checksum": cs})
+    # two media never read (empty checksum) are not duplicates of each other
+    for n in (93, 94):
+        d["media"].append({**copy.deepcopy(base), "handle": f"hO00{n}", "gramps_id": f"O00{n}",
+                           "path": f"a/other-{n}.jpg", "checksum": ""})
+    assert _dup_media_keys(d) == []
+    d["media"][-3]["checksum"] = "b" * 32   # O0096 now holds the same bytes as O0095
+    assert _dup_media_keys(d) == ["O0095,O0096"]
+    assert _dup_media_keys(d, scope={("people", "irrelevant")}) == []
+    assert _dup_media_keys(d, scope={("media", "hO0096")}) == ["O0095,O0096"]
