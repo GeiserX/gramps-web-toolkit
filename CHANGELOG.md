@@ -6,6 +6,14 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+None.
+
+### Fixed
+
+- `gwt-check check`: a finding key that lists several IDs (`dup-media`, `dup-citation`, `own-ancestor` and the others sorted by ID) no longer depends on the order the dump lists the objects in when two IDs have the same number (`O01` and `O001`). The ID itself breaks the tie, so `--known` and `--baseline` keep matching. `gwt-leads` orders such IDs the same way.
+
 ## [0.2.5] - 2026-10-28
 
 ### Change lists

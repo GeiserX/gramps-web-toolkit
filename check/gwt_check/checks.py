@@ -163,9 +163,10 @@ class Findings:
             self.items.append({"check": check, "key": key, "detail": detail})
 
 
-def id_order(gid: str) -> list:
-    """Gramps IDs in numeric order: I9001 before I10000."""
-    return [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", gid)]
+def id_order(gid: str) -> tuple:
+    """Gramps IDs in numeric order: I9001 before I10000. The ID itself breaks a tie (O01 and O001), so a finding key
+    does not depend on the order the dump lists the objects in."""
+    return [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", gid)], gid
 
 
 def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
