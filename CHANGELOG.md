@@ -6,6 +6,8 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-10-28
+
 ### Change lists
 
 None.
