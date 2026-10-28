@@ -73,6 +73,8 @@ CHECKS = {
     "dup-citation": "two citations of one source with the same page text, ignoring case and spacing",
     "private": "object or sub-reference marked private",
     "place-no-coords": "place used by an event without coordinates",
+    "place-vs-description": "an event whose description names another place of the tree and not its own place "
+                            "(or one enclosing it)",
     "surname-marker": "surname with a « [ » marker",
     "missing-object": "object of the earlier tree that is gone",
     "ahnentafel-lost": "Ahnentafel number of the earlier tree that is gone",
@@ -519,6 +521,40 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
         pl = T["places"][h]
         if not (str(pl.get("lat") or "").strip() and str(pl.get("long") or "").strip()):
             out.add("place-no-coords", pl.get("gramps_id") or h)
+    # an event whose description names a place of the tree, but not the one it points at
+    def chain_names(h: str) -> set[str]:
+        """The place's own name and the names of every place that encloses it, by every placeref."""
+        seen: set[str] = set()
+        names: set[str] = set()
+        todo = [h]
+        while todo:
+            h = todo.pop()
+            if h in seen or h not in T["places"]:
+                continue
+            seen.add(h)
+            pl = T["places"][h]
+            names.add(norm(re.sub(r"[^\w]+", " ", (pl.get("name") or {}).get("value") or "")))
+            todo += [r.get("ref") for r in pl.get("placeref_list") or []]
+        return names - {""}
+
+    place_words = {}
+    for h, pl in T["places"].items():
+        n = norm(re.sub(r"[^\w]+", " ", (pl.get("name") or {}).get("value") or ""))
+        if len(n) >= 4:
+            place_words[h] = n
+    for e in E.values():
+        h = e.get("place")
+        desc = norm(re.sub(r"[^\w]+", " ", e.get("description") or ""))
+        if h not in T["places"] or not desc:
+            continue
+        own = chain_names(h)
+        padded = f" {desc} "
+        if any(f" {n} " in padded for n in own):
+            continue
+        others = sorted({n for oh, n in place_words.items() if n not in own and f" {n} " in padded})
+        if others:
+            out.add("place-vs-description", e["gramps_id"],
+                    f"place {(T['places'][h].get('name') or {}).get('value')}, description names {', '.join(others)}")
     no_place = [e for e in E.values() if not e.get("place")]
     info["events without place"] = len(no_place)
     if scope is not None:

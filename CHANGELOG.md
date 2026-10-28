@@ -14,6 +14,7 @@ None.
 
 - `gwt-check repos --classify` sorts the sources with no repository by what they name (a repository the tree has, another institution, nothing), with the institutions grouped so one new repository can serve many sources. It only reports.
 - `gwt-check check` reports `dup-media`: two media objects with the same checksum, the same file entered twice.
+- `gwt-check check` reports `place-vs-description`: an event whose description names another place of the tree and not its own place or one enclosing it. Names are compared without accents, as whole words, and names under four letters are skipped. It only reports.
 
 ## [0.2.3] - 2026-10-26
 

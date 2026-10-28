@@ -243,6 +243,17 @@ def p_place_no_coords(d):
     _get(d, "places", "P0001")["lat"] = ""
 
 
+def _other_place(d):
+    d["places"].append(_base("P0003", name={"value": "Otropueblo"}, place_type="Village", lat="41.6", long="-1.6",
+                             placeref_list=[], citation_list=[], media_list=[], note_list=[], alt_names=[],
+                             urls=[]))
+
+
+def p_place_vs_description(d):
+    _other_place(d)
+    _get(d, "events", "E0001").update(description="Nacimiento en Otropueblo", change=1700000500)
+
+
 def p_citation_ghost_source(d):
     _get(d, "citations", "C0002")["source_handle"] = "ghost-source"
 
@@ -503,6 +514,7 @@ PLANTS = [
     (p_private, "private", "I0007 primary_name", False),
     (p_living_media, "living-media-sensitive", "I0090 O0090", False),
     (p_place_no_coords, "place-no-coords", "P0001", False),
+    (p_place_vs_description, "place-vs-description", "E0001", False),
     (p_citation_ghost_source, "dangling-ref", "C0002 source_handle -> sources ghost-source", False),
     (p_surname_marker, "surname-marker", "I0007 Vidal [¿?]", False),
     (p_dup_couple, "dup-couple", "F0001,F0099", False),

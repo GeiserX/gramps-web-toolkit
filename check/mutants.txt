@@ -40,3 +40,6 @@ gwt_check/fill.py | if rep.get("held_back"): | if False: | the text output count
 gwt_check/client.py | got += pool.map(first_page, TYPES[1:]) | got += [first_page(t) for t in TYPES[1:]] | the first pages of the types are read together, not one type after another
 gwt_check/checks.py | if len(group) > 1 and any(in_scope("media", h) for h, _ in group): | if len(group) > 1: | dup-media reports a group only when one member is in scope
 gwt_check/checks.py | if o.get("checksum"): | if True: | a media object with no checksum is never a duplicate
+gwt_check/checks.py | if len(n) >= 4: | if len(n) >= 0: | place names under four letters are skipped
+gwt_check/checks.py | if any(f" {n} " in padded for n in own): | if False: | a description that names the event's own place is quiet
+gwt_check/checks.py | todo += [r.get("ref") for r in pl.get("placeref_list") or []] | todo += [] | a description naming a place that encloses the event's place is quiet
