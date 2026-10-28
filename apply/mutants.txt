@@ -77,3 +77,6 @@ gwt_apply/snapshot.py | except (OverflowError, OSError, ValueError):  # out of r
 gwt_apply/ops.py | if h == place["handle"]: | if False: | update_place refuses a parent inside the place, a loop
 gwt_apply/ops.py | if [r.get("ref") for r in place.get("placeref_list") or []] != [parent]: | if True: | a rerun of an update_place move leaves a dated PlaceRef to the same parent as it is
 gwt_apply/ops.py | if s.get("enclosed_by") == op.get("place"): | if False: | validate refuses a place that encloses itself
+gwt_apply/ops.py | if current.get("value") != name: | if True: | a rerun of an update_place rename is a skip
+gwt_apply/ops.py | and fold(str(row.get("place_type"))) == fold(str(place.get("place_type"))) | and True | update_place may rename a place to a name another type of place under the same parent has
+gwt_apply/ops.py | if "name" in s and not (isinstance(s["name"], str) and s["name"].strip()): | if False: | validate refuses an update_place name that is empty or not a string
