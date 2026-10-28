@@ -659,7 +659,7 @@ def test_add_tag_keeps_the_tags_the_object_has_and_reaches_a_note(fake):
 def test_add_tag_refuses_a_target_that_cannot_carry_tags_before_writing():
     op = {"op": "add_tag", "key": "t", "ruling": R, "name": "Hypothesis"}
     for bad in ({"child_ref": {"family": "F0001", "child": "I0001"}}, {"association": {"person": "I0001", "target": "I0002"}},
-                {"bogus": "I0001"}, {"note": ""}, {"note": "N0001", "person": "I0001"}):
+                {"bogus": "I0001"}, {"note": ""}, {"note": None}, {"note": "N0001", "person": "I0001"}):
         assert validate([dict(op, target=bad)]), bad
 
 
