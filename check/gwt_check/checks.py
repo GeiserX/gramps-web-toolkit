@@ -95,7 +95,8 @@ CHECKS = {
 }
 
 # Checks reported without failing: a finding of these is never new, so it never sets the exit code.
-INFO_CHECKS = {"unconnected", "parent-age", "marriage-age", "sibling-spacing", "lifespan", "dup-citation"}
+INFO_CHECKS = {"unconnected", "parent-age", "marriage-age", "sibling-spacing", "lifespan", "dup-citation",
+               "note-marker-no-tag"}
 
 # words in a note that a tag of the same stem is meant to mark; matched without accents, whole word
 NOTE_MARKERS = ("hipotesis", "homonimo")

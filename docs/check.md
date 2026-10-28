@@ -214,7 +214,7 @@ gwt-check repos dump.json.gz --json                   # repositories with their 
 | `parent-age` | For information only. A mother under 14 or over 52, or a father under 14 or over 85, at a child's birth |
 | `marriage-age` | For information only. A bride under 12 or a groom under 14 at the marriage: the canon-law minimum before 1917. A person of unknown sex is held to 12 |
 | `sibling-spacing` | For information only. Two children of one mother born less than 240 days apart and more than a day apart (twins). Birth events with an exact day only: a baptism can be late |
-| `note-marker-no-tag` | A note whose text says «hipótesis» or «homónimo» (any accent, whole word) but carries no tag whose name holds that word. Only where the tree has such a tag: a tree that does not use the convention is not blamed |
+| `note-marker-no-tag` | For information only. A note whose text says «hipótesis» or «homónimo» (any accent, whole word) but carries no tag whose name holds that word. Only where the tree has such a tag: a tree that does not use the convention is not blamed |
 | `lifespan` | For information only. A life of more than 105 years, from birth or baptism to death or burial |
 
 Names are compared lowercased, without accents, with b/v and i/y folded and the particle "de" dropped. `dup-person-fuzzy` also drops "del", "la", "las", "los" and "y", and matches "Pedro Lasa" with "Pedro José Lasa Ibarra". For a pair to count, at least one side must be in scope, or belong to a family that is. That covers an old person the run gave a new spouse or new parents. A different spelling of the same word ("Lasa" against "Lassa") is still not matched. A run that allowed namesakes still needs its homonyms read one by one.

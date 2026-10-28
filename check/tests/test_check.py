@@ -1482,3 +1482,13 @@ def test_a_duplicate_key_does_not_depend_on_the_order_of_the_dump():
                                "path": f"a/copy-{n}.jpg", "checksum": "d" * 32})
         keys.append(_dup_media_keys(d))
     assert keys[0] == keys[1] == ["O001,O01"]
+
+
+def test_note_marker_never_sets_the_exit_code(tmp_path, capsys):
+    d = selftest.clean_tree()
+    selftest.p_note_marker_no_tag(d)
+    report = tmp_path / "r.json"
+    assert main(["check", _write(tmp_path, "n.json", d), "--json", str(report)]) == 0
+    assert "info note-marker-no-tag: 1 found (0 known)" in capsys.readouterr().out
+    assert [(f["check"], f["key"], f["info"]) for f in json.loads(report.read_text())["findings"]] == [
+        ("note-marker-no-tag", "N0098 hipotesis", True)]
