@@ -1288,7 +1288,6 @@ def test_repos_classify_sorts_sources_with_no_repository_by_what_they_name(tmp_p
     assert [(x["source"], x["repositories"], x["certain"]) for x in rep["names_existing"]] == [("S0201", ["R0001"], True)]
     assert rep["names_other"][0] == {"institution": "Mairie de Villa Inventada", "sources": ["S0203", "S0204"]}
     assert "S0205" in rep["names_nothing"] and "S0202" not in [x["source"] for x in rep["names_existing"]]
-    assert rep["repositories_without_url_or_address"] == ["R0001"]
     linked = base["gramps_id"]   # already has a repository: in no group
     assert linked not in [x["source"] for x in rep["names_existing"]] + rep["names_nothing"]
     assert linked not in [s for x in rep["names_other"] for s in x["sources"]]
@@ -1345,3 +1344,12 @@ def test_repos_classify_groups_by_the_institution_alone_in_its_own_spelling(tmp_
                        ("S0411", "Archivio di Stato di Città Inventata")):
         assert groups[label] == [sid]
     assert "S0408" in rep["names_nothing"]
+
+
+def test_repos_classify_reports_sources_only_and_survives_a_repository_without_an_id(tmp_path):
+    data = selftest.clean_tree()
+    extra = {**copy.deepcopy(data["repositories"][0]), "handle": "hR2", "gramps_id": None, "name": "Fondo Inventado",
+             "urls": [], "address_list": []}
+    data["repositories"].append(extra)
+    rep = repositories.classify_repositories(load(_write(tmp_path, "t.json", data)))
+    assert set(rep) == {"names_existing", "names_other", "names_nothing"}

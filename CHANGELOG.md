@@ -12,7 +12,7 @@ None.
 
 ### Added
 
-- `gwt-check repos --classify` sorts the sources with no repository by what they name (a repository the tree has, another institution, nothing) and reports repositories with no URL or address, two on one web host, and linked sources with no call number. It only reports.
+- `gwt-check repos --classify` sorts the sources with no repository by what they name (a repository the tree has, another institution, nothing), with the institutions grouped so one new repository can serve many sources. It only reports.
 
 ## [0.2.3] - 2026-10-26
 

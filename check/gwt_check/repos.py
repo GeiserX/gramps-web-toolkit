@@ -146,9 +146,7 @@ def classify_repositories(tree: Tree) -> dict:
     """Read-only. Sources with no repository, sorted by what their own text says:
     `names_existing`: title, author or publication info names a repository the tree has (by its name as whole words,
     or by its web host); `names_other`: it opens with an institution word but that institution is not a repository
-    of the tree (grouped, so one new repository can serve many sources); `names_nothing`: no institution at all.
-    Also repository hygiene: repositories with no URL and no address, two repositories on one web host, and linked
-    sources with no call number."""
+    of the tree (grouped, so one new repository can serve many sources); `names_nothing`: no institution at all."""
     repos, sources = tree.objs["repositories"], tree.objs["sources"]
     known = []
     for h, o in repos.items():
@@ -161,8 +159,9 @@ def classify_repositories(tree: Tree) -> dict:
         if s.get("reporef_list"):
             continue
         fields = {k: _fold(s.get(k)) for k in ("title", "author", "pubinfo")}
+        named_hosts = {k: _hosts_in(s.get(k)) for k in fields}
         hit = [(rid, f) for rid, name, hosts in known
-               for f in fields if _first_whole(fields[f], name) >= 0 or (hosts & _hosts_in(s.get(f)))]
+               for f in fields if _first_whole(fields[f], name) >= 0 or (hosts & named_hosts[f])]
         if hit:
             ids = sorted({r for r, _ in hit})
             existing.append({"source": s.get("gramps_id"), "title": s.get("title", ""), "repositories": ids,
@@ -173,20 +172,11 @@ def classify_repositories(tree: Tree) -> dict:
             other.setdefault(_fold(label), (label, []))[1].append(s.get("gramps_id"))
         else:
             nothing.append(s.get("gramps_id"))
-    by_host: dict[str, list[str]] = {}
-    for rid, _, hosts in known:
-        for h in hosts:
-            by_host.setdefault(h, []).append(rid)
-    no_call = sum(1 for s in sources.values() for r in s.get("reporef_list") or [] if not (r.get("call_number") or "").strip())
     return {
         "names_existing": sorted(existing, key=lambda x: x["source"] or ""),
         "names_other": [{"institution": label, "sources": sorted(ids, key=lambda x: x or "")}
                         for _, (label, ids) in sorted(other.items(), key=lambda kv: (-len(kv[1][1]), kv[0]))],
         "names_nothing": sorted(nothing, key=lambda x: x or ""),
-        "repositories_without_url_or_address": sorted(
-            o.get("gramps_id") for o in repos.values() if not (o.get("urls") or o.get("address_list"))),
-        "repositories_sharing_a_host": {h: ids for h, ids in sorted(by_host.items()) if len(ids) > 1},
-        "linked_sources_without_call_number": no_call,
     }
 
 
@@ -200,9 +190,4 @@ def print_classification(rep: dict, limit: int) -> None:
     for x in rep["names_other"][:limit]:
         print(f"  {len(x['sources']):3d} sources  {x['institution']}")
     print(f"sources that name no institution (a family photo, an e-mail, a website): {len(rep['names_nothing'])}")
-    print(f"repositories with no URL and no address: {len(rep['repositories_without_url_or_address'])}"
-          + (": " + ", ".join(rep["repositories_without_url_or_address"]) if rep["repositories_without_url_or_address"] else ""))
-    for h, ids in rep["repositories_sharing_a_host"].items():
-        print(f"repositories on the same web host {h}: {', '.join(ids)}")
-    print(f"linked sources with no call number: {rep['linked_sources_without_call_number']}")
     print("report only: nothing is changed; link with gwt-apply link_repository after reading each source")
