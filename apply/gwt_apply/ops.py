@@ -57,6 +57,7 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "add_note": ({"text", "attach"}, {"type", "gramps_id"}),
     "add_transcription": ({"text", "margin_reading", "attach"}, {"gramps_id"}),
     "attach_existing": ({"object", "attach"}, set()),
+    "add_tag": ({"target", "name"}, set()),
     "dedupe_list": ({"target", "list"}, set()),
     "set_attribute": ({"target", "type", "value"}, set()),
     "merge_person": ({"winner", "loser"}, {"use_loser", "reason"}),
@@ -178,6 +179,18 @@ def _parse_target(spec) -> tuple[str, object]:
     if kind not in TARGET_KINDS or not isinstance(ref, str) or not ref:
         raise ValueError(f"bad target {spec!r}")
     return TARGET_KINDS[kind], ref
+
+
+def _tag_target(spec) -> tuple[str, str]:
+    """add_tag's target: any target kind or a note ({"note": "N0001"}); a child_ref or an association has no tags."""
+    if isinstance(spec, dict) and len(spec) == 1 and "note" in spec:
+        if not isinstance(spec["note"], str) or not spec["note"]:
+            raise ValueError(f"bad target {spec!r}")
+        return "Note", spec["note"]
+    cls, ref = _parse_target(spec)
+    if cls in ("ChildRef", "PersonRef"):
+        raise ValueError("a child_ref or an association has no tags")
+    return cls, ref
 
 
 def _parse_object(spec) -> tuple[str, str, str]:
@@ -435,6 +448,8 @@ def validate(ops: list[dict]) -> list[str]:
                 ocls, _, lst = _parse_object(op.get("object"))
                 if cls not in CARRIES[lst]:
                     raise ValueError(f"a {cls} cannot carry a {lst[:-5]}")
+            if name == "add_tag":
+                _tag_target(op.get("target"))
             if name == "set_attribute" and _parse_target(op.get("target"))[0] in ("ChildRef", "PersonRef"):
                 raise ValueError("a child_ref or an association has no attributes")
             if name in ("add_repository", "update_repository"):
@@ -1681,6 +1696,20 @@ class Applier:
         """
         cls, ref, lst = _parse_object(op["object"])
         self.attach(op["attach"], lst, self.resolve(cls, ref))
+
+    def add_tag(self, op):
+        """Put a tag (made if the tree has none) on an object the tree already has: a research mark such as
+        `Hypothesis`. Nothing else on the object changes."""
+        cls, ref = _tag_target(op["target"])
+        target = self.obj(cls, ref)
+        target.setdefault("_class", cls)
+        handle = self.tag_handle(op["name"].strip())
+        if handle in (target.get("tag_list") or []):
+            self.actions.append(f"skip: {cls} {self.label(target)} already has the tag {op['name'].strip()!r}")
+            return
+        before = copy.deepcopy(target)
+        target["tag_list"] = [*(target.get("tag_list") or []), handle]
+        self.save(before, target)
 
     def dedupe_list(self, op):
         """Keep the first of each repeated reference in one list: the same citation twice on a person."""
