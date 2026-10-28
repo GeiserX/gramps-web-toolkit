@@ -95,7 +95,8 @@ CHECKS = {
 }
 
 # Checks reported without failing: a finding of these is never new, so it never sets the exit code.
-INFO_CHECKS = {"unconnected", "parent-age", "marriage-age", "sibling-spacing", "lifespan", "dup-citation"}
+INFO_CHECKS = {"unconnected", "parent-age", "marriage-age", "sibling-spacing", "lifespan", "dup-citation",
+               "place-vs-description"}
 
 # limits of the dated checks
 POSTHUMOUS_DAYS = 300                       # a child can be born this long after the father's death
@@ -546,7 +547,7 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
     for e in E.values():
         h = e.get("place")
         desc = norm(re.sub(r"[^\w]+", " ", e.get("description") or ""))
-        if h not in T["places"] or not desc:
+        if h not in T["places"] or not desc or not in_scope("events", e["handle"]):
             continue
         own = chain_names(h)
         padded = f" {desc} "

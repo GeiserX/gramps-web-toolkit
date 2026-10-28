@@ -250,8 +250,10 @@ def _other_place(d):
 
 
 def p_place_vs_description(d):
+    # a new event, because the check follows the run scope and an edited old one is not in it
     _other_place(d)
-    _get(d, "events", "E0001").update(description="Nacimiento en Otropueblo", change=1700000500)
+    _event(d, _get(d, "people", "I0001"), "E0730", "Residence", (1850,))
+    _get(d, "events", "E0730")["description"] = "Residencia en Otropueblo"
 
 
 def p_citation_ghost_source(d):
@@ -514,7 +516,7 @@ PLANTS = [
     (p_private, "private", "I0007 primary_name", False),
     (p_living_media, "living-media-sensitive", "I0090 O0090", False),
     (p_place_no_coords, "place-no-coords", "P0001", False),
-    (p_place_vs_description, "place-vs-description", "E0001", False),
+    (p_place_vs_description, "place-vs-description", "E0730", False),
     (p_citation_ghost_source, "dangling-ref", "C0002 source_handle -> sources ghost-source", False),
     (p_surname_marker, "surname-marker", "I0007 Vidal [¿?]", False),
     (p_dup_couple, "dup-couple", "F0001,F0099", False),

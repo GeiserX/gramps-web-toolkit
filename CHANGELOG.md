@@ -12,7 +12,7 @@ None.
 
 ### Added
 
-- `gwt-check check` reports `place-vs-description`: an event whose description names another place of the tree and not its own place or one enclosing it. Names are compared without accents, as whole words, and names under four letters are skipped. It only reports.
+- `gwt-check check` reports `place-vs-description`: an event whose description names another place of the tree and not its own place or one enclosing it. Names are compared without accents, as whole words, and names under four letters are skipped. It is for information only (it never sets the exit code) and reports only events in scope with `--since` or `--tag`.
 
 ## [0.2.6] - 2026-10-28
 

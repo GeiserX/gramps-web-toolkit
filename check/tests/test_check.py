@@ -1498,3 +1498,28 @@ def test_a_duplicate_key_does_not_depend_on_the_order_of_the_dump():
                                "path": f"a/copy-{n}.jpg", "checksum": "d" * 32})
         keys.append(_dup_media_keys(d))
     assert keys[0] == keys[1] == ["O001,O01"]
+
+
+def test_place_vs_description_is_info_and_never_fails_the_run(tmp_path, capsys):
+    from gwt_check import selftest as st
+
+    d = st.clean_tree()
+    st._other_place(d)
+    st._get(d, "events", "E0001")["description"] = "Nacimiento en Otropueblo"
+    dump = tmp_path / "t.json"
+    dump.write_text(json.dumps(d), encoding="utf-8")
+    assert main(["check", str(dump)]) == 0
+    assert "info place-vs-description" in capsys.readouterr().out
+
+
+def test_place_vs_description_reports_only_events_in_scope():
+    from gwt_check import selftest as st
+
+    d = st.clean_tree()
+    st._other_place(d)
+    st._get(d, "events", "E0001")["description"] = "Nacimiento en Otropueblo"
+    tree = Tree(d)
+    found = lambda scope: [f["key"] for f in checks.run_checks(tree, scope)[0]  # noqa: E731
+                           if f["check"] == "place-vs-description"]
+    assert found({("events", "hE0001")}) == ["E0001"]
+    assert found(set()) == []
