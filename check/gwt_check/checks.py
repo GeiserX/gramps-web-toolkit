@@ -73,6 +73,8 @@ CHECKS = {
     "dup-citation": "two citations of one source with the same page text, ignoring case and spacing",
     "private": "object or sub-reference marked private",
     "place-no-coords": "place used by an event without coordinates",
+    "place-vs-description": "an event whose description names another place of the tree and not its own place "
+                            "(or one enclosing it)",
     "surname-marker": "surname with a « [ » marker",
     "note-marker-no-tag": "note whose text says «hipótesis» or «homónimo» but lacks the tag of that name, in a "
                           "tree that has such a tag",
@@ -96,7 +98,7 @@ CHECKS = {
 
 # Checks reported without failing: a finding of these is never new, so it never sets the exit code.
 INFO_CHECKS = {"unconnected", "parent-age", "marriage-age", "sibling-spacing", "lifespan", "dup-citation",
-               "note-marker-no-tag"}
+               "place-vs-description", "note-marker-no-tag"}
 
 # words in a note that a tag of the same stem is meant to mark; matched without accents, whole word
 NOTE_MARKERS = ("hipotesis", "homonimo")
@@ -534,6 +536,47 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
         pl = T["places"][h]
         if not (str(pl.get("lat") or "").strip() and str(pl.get("long") or "").strip()):
             out.add("place-no-coords", pl.get("gramps_id") or h)
+    # an event whose description names a place of the tree, but not the one it points at
+    def chain_names(h: str) -> set[str]:
+        """The place's own name and the names of every place that encloses it, by every placeref."""
+        seen: set[str] = set()
+        names: set[str] = set()
+        todo = [h]
+        while todo:
+            h = todo.pop()
+            if h in seen or h not in T["places"]:
+                continue
+            seen.add(h)
+            pl = T["places"][h]
+            names.add(norm(re.sub(r"[^\w]+", " ", (pl.get("name") or {}).get("value") or "")))
+            todo += [r.get("ref") for r in pl.get("placeref_list") or []]
+        return names - {""}
+
+    place_words = {}
+    for h, pl in T["places"].items():
+        n = norm(re.sub(r"[^\w]+", " ", (pl.get("name") or {}).get("value") or ""))
+        if len(n) >= 4:
+            place_words[h] = n
+
+    def place_label(h: str) -> str:
+        """The place as the tree writes it, with its ID, so a person can find it (norm folds the name)."""
+        return f"{(T['places'][h].get('name') or {}).get('value')} ({label('places', h)})"
+
+    for e in E.values():
+        h = e.get("place")
+        desc = norm(re.sub(r"[^\w]+", " ", e.get("description") or ""))
+        if h not in T["places"] or not desc or not in_scope("events", e["handle"]):
+            continue
+        own = chain_names(h)
+        padded = f" {desc} "
+        if any(f" {n} " in padded for n in own):
+            continue
+        hits = {oh: n for oh, n in place_words.items() if n not in own and f" {n} " in padded}
+        # a name inside a longer one that also matched («Otropueblo» in «Parroquia de Otropueblo») adds nothing
+        hits = {oh: n for oh, n in hits.items() if not any(f" {n} " in f" {m} " and n != m for m in hits.values())}
+        if hits:
+            out.add("place-vs-description", e["gramps_id"],
+                    f"place {place_label(h)}, description names {', '.join(sorted(place_label(oh) for oh in hits))}")
     no_place = [e for e in E.values() if not e.get("place")]
     info["events without place"] = len(no_place)
     if scope is not None:

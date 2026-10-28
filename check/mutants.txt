@@ -50,3 +50,8 @@ gwt_check/checks.py | if not in_scope("notes", n["handle"]) or wanted & set(n.ge
 gwt_check/checks.py | NOTE_DISCARDED_BEFORE = re.compile(rf"\b{_DISCARD}{_SEP}{_GAP}$") | NOTE_DISCARDED_BEFORE = re.compile(rf"\b{_DISCARD}{_SEP}{_GAP}") | a discard word before the marker counts only when it is within three words of it
 gwt_check/checks.py | _GAP = rf"(?:(?!(?:no|ni|sin|nada)\b)\w+{_SEP}){{0,3}}" | _GAP = rf"(?:(?!(?:no|ni|sin|nada)\b)\w+{_SEP}){{0,30}}" | a discard word more than three words from the marker does not discard it
 gwt_check/checks.py | _DISCARD = r"(?:descartad|refutad|superad|sustituid|desmentid)[oa]s?" | _DISCARD = r"(?:descartad|refutad|superad|sustituid)[oa]s?" | «desmentida» discards a hypothesis like «descartada»
+gwt_check/checks.py | if len(n) >= 4: | if len(n) >= 0: | place names under four letters are skipped
+gwt_check/checks.py | if any(f" {n} " in padded for n in own): | if False: | a description that names the event's own place is quiet
+gwt_check/checks.py | todo += [r.get("ref") for r in pl.get("placeref_list") or []] | todo += [] | a description naming a place that encloses the event's place is quiet
+gwt_check/checks.py | if h not in T["places"] or not desc or not in_scope("events", e["handle"]): | if h not in T["places"] or not desc: | place-vs-description reports only events in the run scope
+gwt_check/checks.py | hits = {oh: n for oh, n in hits.items() if not any(f" {n} " in f" {m} " and n != m for m in hits.values())} | hits = hits | place-vs-description names a place once, by its longest match

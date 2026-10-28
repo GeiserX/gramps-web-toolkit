@@ -1472,6 +1472,75 @@ def test_note_marker_tag_name_needs_the_whole_word():
     assert [f for f in checks.run_checks(Tree(d))[0] if f["check"] == "note-marker-no-tag"]
 
 
+def _run_place_desc(description, own_place="hP0001", extra_place=True):
+    from gwt_check import selftest as st
+
+    d = st.clean_tree()
+    if extra_place:
+        st._other_place(d)
+    st._get(d, "events", "E0001").update(description=description, place=own_place)
+    findings, _ = checks.run_checks(Tree(d))
+    return [f for f in findings if f["check"] == "place-vs-description"]
+
+
+def test_place_vs_description_flags_another_place_of_the_tree_and_not_the_own_one():
+    found = _run_place_desc("Nacimiento en Otropueblo")
+    assert [f["key"] for f in found] == ["E0001"]
+    assert found[0]["detail"] == "place Villaejemplo (P0001), description names Otropueblo (P0003)"
+
+
+def test_place_vs_description_is_quiet_when_the_own_place_or_one_enclosing_it_is_named():
+    assert _run_place_desc("Nacimiento en Villaejemplo, parroquia de Otropueblo") == []
+    assert _run_place_desc("Nacimiento en la Provincia Imaginaria, cerca de Otropueblo") == []
+
+
+def test_place_vs_description_is_quiet_without_a_description_or_a_known_place():
+    assert _run_place_desc("") == []
+    assert _run_place_desc("Nacimiento en un lugar sin registrar") == []
+    assert _run_place_desc("Nacimiento en Otropuebloalto") == []
+
+
+def test_place_vs_description_skips_place_names_under_four_letters():
+    from gwt_check import selftest as st
+
+    d = st.clean_tree()
+    st._other_place(d)
+    st._get(d, "places", "P0003")["name"] = {"value": "Ala"}
+    st._get(d, "events", "E0001")["description"] = "Nacimiento en Ala"
+    findings, _ = checks.run_checks(Tree(d))
+    assert [f for f in findings if f["check"] == "place-vs-description"] == []
+
+
+def _fork_tree(refs, loop=False):
+    from gwt_check import selftest as st
+
+    d = st.clean_tree()
+    st._other_place(d)
+    p1 = st._get(d, "places", "P0001")
+    p1["placeref_list"] = [{"ref": r, "date": st._date()} for r in refs]
+    if loop:
+        st._get(d, "places", "P0002")["placeref_list"] = [{"ref": "hP0001", "date": st._date()}]
+    return d
+
+
+def test_place_vs_description_follows_every_enclosing_place_not_only_the_first():
+    from gwt_check import selftest as st
+
+    d = _fork_tree(["hP0003", "hP0002"])
+    st._get(d, "events", "E0001")["description"] = "Nacimiento en la Provincia Imaginaria"
+    findings, _ = checks.run_checks(Tree(d))
+    assert [f for f in findings if f["check"] == "place-vs-description"] == []
+
+
+def test_place_vs_description_survives_places_that_enclose_each_other():
+    from gwt_check import selftest as st
+
+    d = _fork_tree(["hP0002"], loop=True)
+    st._get(d, "events", "E0001")["description"] = "Nacimiento en Otropueblo"
+    findings, _ = checks.run_checks(Tree(d))
+    assert [f["key"] for f in findings if f["check"] == "place-vs-description"] == ["E0001"]
+
+
 def test_a_duplicate_key_does_not_depend_on_the_order_of_the_dump():
     # O01 and O001 sort as equal numbers; the ID itself breaks the tie, so both dump orders give one key
     keys = []
@@ -1531,3 +1600,41 @@ def test_note_marker_reports_only_a_note_in_scope():
 
     assert keys({("people", "hI0003")}) == []
     assert keys({("notes", "hN0098")}) == ["N0098 hipotesis"]
+
+
+def test_place_vs_description_is_info_and_never_fails_the_run(tmp_path, capsys):
+    from gwt_check import selftest as st
+
+    d = st.clean_tree()
+    st._other_place(d)
+    st._get(d, "events", "E0001")["description"] = "Nacimiento en Otropueblo"
+    dump = tmp_path / "t.json"
+    dump.write_text(json.dumps(d), encoding="utf-8")
+    assert main(["check", str(dump)]) == 0
+    assert "info place-vs-description" in capsys.readouterr().out
+
+
+def test_place_vs_description_reports_only_events_in_scope():
+    from gwt_check import selftest as st
+
+    d = st.clean_tree()
+    st._other_place(d)
+    st._get(d, "events", "E0001")["description"] = "Nacimiento en Otropueblo"
+    tree = Tree(d)
+    found = lambda scope: [f["key"] for f in checks.run_checks(tree, scope)[0]  # noqa: E731
+                           if f["check"] == "place-vs-description"]
+    assert found({("events", "hE0001")}) == ["E0001"]
+    assert found(set()) == []
+
+
+def test_place_vs_description_names_a_place_once_by_its_longest_match():
+    from gwt_check import selftest as st
+
+    d = st.clean_tree()
+    st._other_place(d)
+    d["places"].append({**copy.deepcopy(st._get(d, "places", "P0003")), "handle": "hP0004", "gramps_id": "P0004",
+                        "name": {"value": "Parroquia de Otropueblo"}})
+    st._get(d, "events", "E0001")["description"] = "Bautismo en la Parroquia de Otropueblo"
+    findings, _ = checks.run_checks(Tree(d))
+    assert [f["detail"] for f in findings if f["check"] == "place-vs-description"] == [
+        "place Villaejemplo (P0001), description names Parroquia de Otropueblo (P0004)"]

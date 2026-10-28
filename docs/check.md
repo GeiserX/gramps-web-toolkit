@@ -76,7 +76,7 @@ It trusts the stamps for everything else. A change that reaches the database wit
 | `--pagesize`, `--workers` | Objects per request (default 1000) and requests in flight (default 4) |
 | `--live` | The old strict read of the live tree, which stops when the tree changes during it |
 
-**Scope.** The structural and dated checks always run on the whole tree. The scoped duplicate checks (`dup-couple-names`, `dup-person-birth`, `dup-person-relative`, `dup-person-fuzzy`, `dup-vital-event`, `dup-citation`, `dup-media`) report a group only when at least one member is in scope, so a run is not blamed for duplicates that were already there. Without `--since` or `--tag`, everything is in scope.
+**Scope.** The structural and dated checks always run on the whole tree. The scoped duplicate checks (`dup-couple-names`, `dup-person-birth`, `dup-person-relative`, `dup-person-fuzzy`, `dup-vital-event`, `dup-citation`, `dup-media`) report a group only when at least one member is in scope, so a run is not blamed for duplicates that were already there. `place-vs-description` reports only events in scope. Without `--since` or `--tag`, everything is in scope.
 
 **Reasons.** Rows of a known file may carry a `reason`, and the report prints it (`known N0099: kept on purpose`). `gwt-check mark-known REPORT.json --check NAME --key KEY [--key KEY ...] --reason "..." --out known.json` adds findings of a report to a known file with the reason; it refuses a key the report does not have and a blank reason, and adding one twice changes nothing.
 
@@ -201,6 +201,7 @@ gwt-check repos dump.json.gz --json                   # repositories with their 
 | `dup-media` | Two media objects with the same checksum: the same file entered twice, often under another name. A media object whose file was never read has no checksum and is left out. A page scanned twice is two different files and is not found |
 | `dup-citation` | For information only. Two or more citations of one source with the same page text, ignoring case and repeated spaces (`folio 12v` and `folio 12` are different pages). Usually one record entered twice; merge them, or keep both with `--known` when they cite different entries on one page |
 | `place-no-coords` | A place that an event uses, without latitude or longitude |
+| `place-vs-description` | For information only. An event whose description names another place of the tree (whole words, accents and case ignored, names under 4 letters skipped) and does not name its own place or one enclosing it. Typical cause: an import that attached the wrong place to a described event. Naming both is fine. It reads the description only, never citations or notes. With `--since` or `--tag` it reports only events in scope (new since `OLD`, or carrying the tag), so an old event the run edited is not checked. A description is often a transcription that names relatives, godparents and where they came from, and many surnames are also town names, so most findings on a real tree are not wrong places |
 | `surname-marker` | A surname containing `[`, such as `Vidal [¿?]` |
 | `missing-object` | With `--since`: an object of the earlier tree that is gone |
 | `ahnentafel-lost`, `ahnentafel-changed` | With `--since` and `--root`: a number that disappeared, or holds another person |
