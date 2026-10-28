@@ -1353,3 +1353,18 @@ def test_repos_classify_reports_sources_only_and_survives_a_repository_without_a
     data["repositories"].append(extra)
     rep = repositories.classify_repositories(load(_write(tmp_path, "t.json", data)))
     assert set(rep) == {"names_existing", "names_other", "names_nothing"}
+
+
+def test_repos_classify_refuses_the_list_filters_and_says_what_it_cut(tmp_path, capsys):
+    data = selftest.clean_tree()
+    base = data["sources"][0]
+    for n in range(3):
+        sid = f"S05{n:02d}"
+        data["sources"].append({**copy.deepcopy(base), "handle": "h" + sid, "gramps_id": sid, "title": f"Mairie de Ville {n}",
+                                "author": "", "pubinfo": "", "reporef_list": []})
+    dump = _write(tmp_path, "t.json", data)
+    for extra in (["--name", "Fondo"], ["--type", "Archive"], ["--unlinked"]):
+        assert main(["repos", dump, "--classify", *extra]) == 2
+        assert "--classify stands alone" in capsys.readouterr().err
+    assert main(["repos", dump, "--classify", "--limit", "1"]) == 0
+    assert "... 2 more (--limit, or --json)" in capsys.readouterr().out

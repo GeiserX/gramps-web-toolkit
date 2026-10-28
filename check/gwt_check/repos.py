@@ -186,8 +186,12 @@ def print_classification(rep: dict, limit: int) -> None:
           f"({sum(1 for x in ex if x['certain'])} name exactly one)")
     for x in ex[:limit]:
         print(f"  {x['source']} -> {','.join(x['repositories'])}  (in {', '.join(x['fields'])})  {x['title'][:60]}")
+    if len(ex) > limit:
+        print(f"  ... {len(ex) - limit} more (--limit, or --json)")
     print(f"institutions named but not a repository of the tree: {len(rep['names_other'])}")
     for x in rep["names_other"][:limit]:
         print(f"  {len(x['sources']):3d} sources  {x['institution']}")
+    if len(rep["names_other"]) > limit:
+        print(f"  ... {len(rep['names_other']) - limit} more (--limit, or --json)")
     print(f"sources that name no institution (a family photo, an e-mail, a website): {len(rep['names_nothing'])}")
     print("report only: nothing is changed; link with gwt-apply link_repository after reading each source")

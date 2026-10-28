@@ -412,6 +412,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.cmd == "repos":
             from .repos import print_repository_report, repository_report
+            if args.classify and (args.name or args.rtype or args.unlinked):
+                raise BadInput("--classify stands alone; it takes no --name, --type or --unlinked")
             tree = load(args.tree) if args.tree else Tree(live_dump(args)["objects"], source="live tree")
             if tree.partial:
                 raise BadInput(f"{tree.source}: a .gramps backup has no repository details; use a dump")
