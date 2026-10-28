@@ -1486,3 +1486,15 @@ def test_place_vs_description_survives_places_that_enclose_each_other():
     st._get(d, "events", "E0001")["description"] = "Nacimiento en Otropueblo"
     findings, _ = checks.run_checks(Tree(d))
     assert [f["key"] for f in findings if f["check"] == "place-vs-description"] == ["E0001"]
+
+
+def test_a_duplicate_key_does_not_depend_on_the_order_of_the_dump():
+    # O01 and O001 sort as equal numbers; the ID itself breaks the tie, so both dump orders give one key
+    keys = []
+    for order in ((1, "O01"), (2, "O001")), ((2, "O001"), (1, "O01")):
+        d = selftest.clean_tree()
+        for n, gid in order:
+            d["media"].append({**copy.deepcopy(d["media"][0]), "handle": f"hdup{n}", "gramps_id": gid,
+                               "path": f"a/copy-{n}.jpg", "checksum": "d" * 32})
+        keys.append(_dup_media_keys(d))
+    assert keys[0] == keys[1] == ["O001,O01"]

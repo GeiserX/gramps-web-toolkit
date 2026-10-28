@@ -510,8 +510,125 @@ def test_update_place_sets_coordinates_on_an_existing_place(fake):
     pl = fake.store["places"]["plc1"]
     assert (pl["lat"], pl["long"]) == ("47.39", "0.689")
     assert run(fake, ops)[0].status == "skip"
-    for bad in ({"lat": 47.39}, {"lat": 95, "long": 0}, {"name": "x"}, {}):
+    for bad in ({"lat": 47.39}, {"lat": 95, "long": 0}, {"title": "x"}, {}):
         assert validate([dict(ops[0], key="bad", set=bad)]), bad
+
+
+def _places_under(fake):
+    """plc1 (P0001) > town (P0002) > parish (P0003), and a second town, other (P0004), under plc1."""
+    fake.add("places", {"handle": "town", "name": {"value": "Oakford"}, "place_type": "Town", "placeref_list": [{"ref": "plc1"}]})
+    fake.add("places", {"handle": "parish", "name": {"value": "St Mary"}, "place_type": "Parish",
+                        "placeref_list": [{"ref": "town", "date": {"dateval": [0, 0, 1850, False]}}], "lat": "1.5", "long": "2.5"})
+    fake.add("places", {"handle": "other", "name": {"value": "Elmbridge"}, "place_type": "Town", "placeref_list": [{"ref": "plc1"}]})
+
+
+def test_update_place_moves_a_place_under_another_parent(fake):
+    _places_under(fake)
+    ops = [{"op": "update_place", "key": "mv", "ruling": R, "place": "P0003", "set": {"enclosed_by": "P0004"}}]
+    plan = run(fake, ops, dry_run=True)[0]
+    assert plan.status == "done" and fake.writes() == []
+    res = run(fake, ops)[0]
+    assert res.status == "done", res.actions
+    parish = fake.store["places"]["parish"]
+    assert [r["ref"] for r in parish["placeref_list"]] == ["other"]  # one parent, the old one gone
+    assert "date" not in parish["placeref_list"][0]
+    assert (parish["name"], parish["lat"], parish["long"]) == ({"value": "St Mary"}, "1.5", "2.5")  # the rest kept
+    assert fake.store["places"]["town"]["placeref_list"] == [{"ref": "plc1"}]
+
+
+def test_update_place_rerun_of_a_move_is_a_skip(fake):
+    _places_under(fake)
+    ops = [{"op": "update_place", "key": "mv", "ruling": R, "place": "P0003", "set": {"enclosed_by": "P0004"}}]
+    assert run(fake, ops)[0].status == "done"
+    before = len(fake.writes())
+    res = run(fake, ops)[0]
+    assert res.status == "skip" and "already has those values" in res.actions[-1]
+    assert fake.writes()[before:] == []
+    # already under that parent from the start, with a dated PlaceRef: a skip that leaves the PlaceRef as it is
+    same = [dict(ops[0], key="same", set={"enclosed_by": "P0002"}, place="P0003")]
+    fake.store["places"]["parish"]["placeref_list"] = [{"ref": "town", "date": {"dateval": [0, 0, 1850, False]}}]
+    assert run(fake, same)[0].status == "skip"
+    assert fake.store["places"]["parish"]["placeref_list"][0]["date"] == {"dateval": [0, 0, 1850, False]}
+
+
+def test_update_place_refuses_a_parent_that_does_not_exist(fake):
+    _places_under(fake)
+    ops = [{"op": "update_place", "key": "mv", "ruling": R, "place": "P0003", "set": {"enclosed_by": "P0999"}}]
+    res = run(fake, ops)[0]
+    assert res.status == "conflict" and "no Place with Gramps ID P0999" in res.actions[-1]
+    assert fake.store["places"]["parish"]["placeref_list"][0]["ref"] == "town"
+    for bad in ({"enclosed_by": "town"}, {"enclosed_by": None}, {"enclosed_by": "P0003"}):
+        assert validate([dict(ops[0], key="bad", set=bad)]), bad
+
+
+def test_update_place_refuses_a_move_that_makes_a_loop(fake):
+    _places_under(fake)
+    for parent in ("P0003", "P0002"):  # the top place under its grandchild, then under its child
+        ops = [{"op": "update_place", "key": "loop", "ruling": R, "place": "P0001", "set": {"enclosed_by": parent}}]
+        res = run(fake, ops)[0]
+        assert res.status == "conflict" and "would make a loop" in res.actions[-1], res.actions
+    assert fake.store["places"]["plc1"].get("placeref_list") in (None, [])  # nothing written
+
+
+def test_verify_sees_a_move_undone_after_the_apply(fake, tmp_path, env, capsys):
+    _places_under(fake)
+    p = tmp_path / "move.jsonl"
+    p.write_text(json.dumps({"op": "update_place", "key": "mv", "ruling": R, "place": "P0003",
+                             "set": {"enclosed_by": "P0004"}}) + "\n")
+    assert main([str(p), "--verify"]) == 1
+    assert "differs: Place P0003 placeref_list" in capsys.readouterr().out
+    assert main([str(p), "--apply"]) == 0
+    capsys.readouterr()
+    assert main([str(p), "--verify"]) == 0
+    fake.store["places"]["parish"]["placeref_list"] = [{"ref": "town"}]  # moved back by hand
+    assert main([str(p), "--verify"]) == 1
+
+
+def test_update_place_renames_a_place_and_keeps_the_rest(fake):
+    _places_under(fake)
+    fake.store["places"]["parish"]["name"] = {"value": "St Mary", "lang": "en", "date": {"dateval": [0, 0, 1850, False]}}
+    ops = [{"op": "update_place", "key": "rn", "ruling": R, "place": "P0003", "set": {"name": " St Mary the Virgin "}}]
+    assert run(fake, ops, dry_run=True)[0].status == "done" and fake.writes() == []
+    res = run(fake, ops)[0]
+    assert res.status == "done", res.actions
+    parish = fake.store["places"]["parish"]
+    assert parish["name"]["value"] == "St Mary the Virgin"
+    assert (parish["name"]["lang"], parish["name"]["date"]) == ("en", {"dateval": [0, 0, 1850, False]})
+    assert [r["ref"] for r in parish["placeref_list"]] == ["town"] and parish["lat"] == "1.5"
+    before = len(fake.writes())
+    res = run(fake, ops)[0]  # a rerun: the name is already that text
+    assert res.status == "skip" and "already has those values" in res.actions[-1]
+    assert fake.writes()[before:] == []
+    for bad in ({"name": ""}, {"name": "  "}, {"name": None}, {"name": {"value": "X"}}):
+        assert validate([dict(ops[0], key="bad", set=bad)]), bad
+
+
+def test_update_place_refuses_a_name_a_sibling_already_has(fake):
+    _places_under(fake)
+    fake.add("places", {"handle": "parish2", "name": {"value": "St Mark"}, "place_type": "Parish", "placeref_list": [{"ref": "town"}]})
+    ops = [{"op": "update_place", "key": "rn", "ruling": R, "place": "P0003", "set": {"name": "st márk"}}]
+    res = run(fake, ops)[0]
+    assert res.status == "conflict" and "P0005" in res.actions[-1] and "merge" in res.actions[-1], res.actions
+    assert fake.store["places"]["parish"]["name"]["value"] == "St Mary"
+    # a place of another type with that name under the same parent is not a duplicate: allowed
+    fake.add("places", {"handle": "chapel", "name": {"value": "Hilltop"}, "place_type": "Building", "placeref_list": [{"ref": "town"}]})
+    assert run(fake, [dict(ops[0], key="rn3", set={"name": "Hilltop"})])[0].status == "done"
+    # the same name under another parent is another place: allowed
+    other = [dict(ops[0], key="rn2", set={"name": "St Mark", "enclosed_by": "P0004"})]
+    assert run(fake, other)[0].status == "done"
+
+
+def test_verify_sees_a_rename_undone_after_the_apply(fake, tmp_path, env, capsys):
+    _places_under(fake)
+    p = tmp_path / "rename.jsonl"
+    p.write_text(json.dumps({"op": "update_place", "key": "rn", "ruling": R, "place": "P0003",
+                             "set": {"name": "St Mary the Virgin"}}) + "\n")
+    assert main([str(p), "--apply"]) == 0
+    assert main([str(p), "--verify"]) == 0
+    fake.store["places"]["parish"]["name"] = {"value": "St Mary"}  # renamed back by hand
+    capsys.readouterr()
+    assert main([str(p), "--verify"]) == 1
+    assert "differs: Place P0003 name" in capsys.readouterr().out
 
 
 def test_coordinates_that_are_not_numbers_are_a_validation_error():
