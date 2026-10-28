@@ -1433,7 +1433,7 @@ def _run_place_desc(description, own_place="hP0001", extra_place=True):
 def test_place_vs_description_flags_another_place_of_the_tree_and_not_the_own_one():
     found = _run_place_desc("Nacimiento en Otropueblo")
     assert [f["key"] for f in found] == ["E0001"]
-    assert "otropuevlo" in found[0]["detail"]  # names are folded like people's (b to v)
+    assert found[0]["detail"] == "place Villaejemplo (P0001), description names Otropueblo (P0003)"
 
 
 def test_place_vs_description_is_quiet_when_the_own_place_or_one_enclosing_it_is_named():
@@ -1523,3 +1523,16 @@ def test_place_vs_description_reports_only_events_in_scope():
                            if f["check"] == "place-vs-description"]
     assert found({("events", "hE0001")}) == ["E0001"]
     assert found(set()) == []
+
+
+def test_place_vs_description_names_a_place_once_by_its_longest_match():
+    from gwt_check import selftest as st
+
+    d = st.clean_tree()
+    st._other_place(d)
+    d["places"].append({**copy.deepcopy(st._get(d, "places", "P0003")), "handle": "hP0004", "gramps_id": "P0004",
+                        "name": {"value": "Parroquia de Otropueblo"}})
+    st._get(d, "events", "E0001")["description"] = "Bautismo en la Parroquia de Otropueblo"
+    findings, _ = checks.run_checks(Tree(d))
+    assert [f["detail"] for f in findings if f["check"] == "place-vs-description"] == [
+        "place Villaejemplo (P0001), description names Parroquia de Otropueblo (P0004)"]

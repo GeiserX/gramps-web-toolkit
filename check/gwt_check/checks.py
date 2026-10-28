@@ -544,6 +544,11 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
         n = norm(re.sub(r"[^\w]+", " ", (pl.get("name") or {}).get("value") or ""))
         if len(n) >= 4:
             place_words[h] = n
+
+    def place_label(h: str) -> str:
+        """The place as the tree writes it, with its ID, so a person can find it (norm folds the name)."""
+        return f"{(T['places'][h].get('name') or {}).get('value')} ({label('places', h)})"
+
     for e in E.values():
         h = e.get("place")
         desc = norm(re.sub(r"[^\w]+", " ", e.get("description") or ""))
@@ -553,10 +558,12 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
         padded = f" {desc} "
         if any(f" {n} " in padded for n in own):
             continue
-        others = sorted({n for oh, n in place_words.items() if n not in own and f" {n} " in padded})
-        if others:
+        hits = {oh: n for oh, n in place_words.items() if n not in own and f" {n} " in padded}
+        # a name inside a longer one that also matched («Otropueblo» in «Parroquia de Otropueblo») adds nothing
+        hits = {oh: n for oh, n in hits.items() if not any(f" {n} " in f" {m} " and n != m for m in hits.values())}
+        if hits:
             out.add("place-vs-description", e["gramps_id"],
-                    f"place {(T['places'][h].get('name') or {}).get('value')}, description names {', '.join(others)}")
+                    f"place {place_label(h)}, description names {', '.join(sorted(place_label(oh) for oh in hits))}")
     no_place = [e for e in E.values() if not e.get("place")]
     info["events without place"] = len(no_place)
     if scope is not None:

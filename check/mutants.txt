@@ -44,3 +44,4 @@ gwt_check/checks.py | if len(n) >= 4: | if len(n) >= 0: | place names under four
 gwt_check/checks.py | if any(f" {n} " in padded for n in own): | if False: | a description that names the event's own place is quiet
 gwt_check/checks.py | todo += [r.get("ref") for r in pl.get("placeref_list") or []] | todo += [] | a description naming a place that encloses the event's place is quiet
 gwt_check/checks.py | if h not in T["places"] or not desc or not in_scope("events", e["handle"]): | if h not in T["places"] or not desc: | place-vs-description reports only events in the run scope
+gwt_check/checks.py | hits = {oh: n for oh, n in hits.items() if not any(f" {n} " in f" {m} " and n != m for m in hits.values())} | hits = hits | place-vs-description names a place once, by its longest match
