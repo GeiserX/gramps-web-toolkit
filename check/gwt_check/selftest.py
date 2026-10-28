@@ -160,7 +160,8 @@ def p_orphan_note(d):
 
 
 def p_orphan_media(d):
-    d["media"].append({**copy.deepcopy(d["media"][0]), "handle": "hO0099", "gramps_id": "O0099"})
+    d["media"].append({**copy.deepcopy(d["media"][0]), "handle": "hO0099", "gramps_id": "O0099",
+                       "path": "ejemplo/acta-0099.jpg", "checksum": "9" * 32})
 
 
 def p_orphan_repository(d):
@@ -171,6 +172,12 @@ def p_orphan_repository(d):
 def p_source_no_repository(d):
     d["sources"].append(_base("S0099", title="Libro inventado sin archivo", author="", pubinfo="", abbrev="",
                               attribute_list=[], media_list=[], note_list=[], reporef_list=[]))
+
+
+def p_dup_media(d):
+    for n, path in ((97, "ejemplo/acta-0097.jpg"), (98, "ejemplo/acta-0098-copia.jpg")):
+        d["media"].append({**copy.deepcopy(d["media"][0]), "handle": f"hO00{n}", "gramps_id": f"O00{n}",
+                           "path": path, "checksum": "a" * 32})
 
 
 def p_dup_repository(d):
@@ -219,7 +226,9 @@ def p_private(d):
 
 
 def _sensitive_media(d, gid, person_gid, birth, desc):
-    m = {**copy.deepcopy(d["media"][0]), "handle": "h" + gid, "gramps_id": gid, "desc": desc}
+    # its own file, so the copy of O0001 is not also a dup-media
+    m = {**copy.deepcopy(d["media"][0]), "handle": "h" + gid, "gramps_id": gid, "desc": desc,
+         "checksum": f"{int(gid[1:]):032x}"}
     d["media"].append(m)
     p = _new_person(d, person_gid, "Nuria", "Prado Lago", birth=birth)
     p["media_list"] = [_ref(m["handle"], rect=[])]
@@ -482,6 +491,7 @@ PLANTS = [
     (p_orphan_repository, "orphan-repository", "R0099", False),
     (p_source_no_repository, "info:sources without repository", "S0099", False),
     (p_dup_repository, "dup-repository", "R0001,R0098", False),
+    (p_dup_media, "dup-media", "O0097,O0098", False),
     (p_dup_citation, "dup-citation", "C0001,C0098", False),
     (p_dangling_child, "dangling-ref", "F0002 child_ref_list -> people ghost-person", False),
     (p_dangling_subref, "dangling-ref", "F0003 child_ref_list[I0003].note_list -> notes ghost-note", False),
