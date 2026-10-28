@@ -38,3 +38,5 @@ gwt_check/cites.py | prob = citation_problem(e, c) if c else None | prob = citat
 gwt_check/cli.py | raise BadInput(f"{tree.source}: a .gramps backup has no citation pages; use a dump") | pass | cites refuses a .gramps backup
 gwt_check/fill.py | if rep.get("held_back"): | if False: | the text output counts the held-back events
 gwt_check/client.py | got += pool.map(first_page, TYPES[1:]) | got += [first_page(t) for t in TYPES[1:]] | the first pages of the types are read together, not one type after another
+gwt_check/checks.py | if len(group) > 1 and any(in_scope("media", h) for h, _ in group): | if len(group) > 1: | dup-media reports a group only when one member is in scope
+gwt_check/checks.py | if o.get("checksum"): | if True: | a media object with no checksum is never a duplicate

@@ -1269,3 +1269,36 @@ def test_fill_places_refuses_a_backup(tmp_path, capsys):
     backup.write_bytes(_to_xml(selftest.clean_tree()))
     assert main(["fill-places", str(backup)]) == 2
     assert "no citation text" in capsys.readouterr().err
+
+
+def _dup_media_keys(d, scope=None):
+    return [f["key"] for f in checks.run_checks(Tree(d), scope=scope)[0] if f["check"] == "dup-media"]
+
+
+def test_dup_media_compares_checksums_only_and_respects_the_scope():
+    d = selftest.clean_tree()
+    base = d["media"][0]
+    # one path under two checksums: the key is the checksum alone, so a shared path is not a finding
+    for n, cs in ((95, "b" * 32), (96, "c" * 32)):
+        d["media"].append({**copy.deepcopy(base), "handle": f"hO00{n}", "gramps_id": f"O00{n}",
+                           "path": "a/scan.jpg", "checksum": cs})
+    # two media never read (empty checksum) are not duplicates of each other
+    for n in (93, 94):
+        d["media"].append({**copy.deepcopy(base), "handle": f"hO00{n}", "gramps_id": f"O00{n}",
+                           "path": f"a/other-{n}.jpg", "checksum": ""})
+    assert _dup_media_keys(d) == []
+    d["media"][-3]["checksum"] = "b" * 32   # O0096 now holds the same bytes as O0095
+    assert _dup_media_keys(d) == ["O0095,O0096"]
+    assert _dup_media_keys(d, scope={("people", "irrelevant")}) == []
+    assert _dup_media_keys(d, scope={("media", "hO0096")}) == ["O0095,O0096"]
+
+
+def test_no_other_plant_trips_dup_media():
+    # a plant that copies O0001 must not also copy its file, or the selftest hides a dup-media it never meant
+    clean = selftest.clean_tree()
+    for plant, check_name, _, _ in selftest.PLANTS:
+        if check_name == "dup-media":
+            continue
+        d = copy.deepcopy(clean)
+        plant(d)
+        assert _dup_media_keys(d) == [], plant.__name__
