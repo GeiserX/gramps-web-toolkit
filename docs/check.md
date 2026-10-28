@@ -174,6 +174,8 @@ gwt-check repos dump.json.gz --json                   # repositories with their 
 
 `--unlinked` adds the sources that list no repository and the repositories no source lists. Fix them with `link_repository` and `merge_repository` in [`gwt-apply`](apply.md).
 
+`--classify` stands alone and only reports. It sorts the sources with no repository by what their own title, author and publication info say: sources that name a repository the tree has (by its name as whole words or by its web host; a letter or a request to an archive can name it without being kept there, so read each one before linking), institutions named that are not a repository of the tree (grouped, so one new repository can serve many sources; the opening words are in one table, `INSTITUTION_WORDS` in `gwt_check/repos.py`), and sources that name no institution. An institution's name runs from its opening word to the first comma, colon, semicolon, bracket or dash, and a web address never counts as one. Nothing is written; link with `link_repository` in [`gwt-apply`](apply.md).
+
 ## The checks
 
 | Check | Fires on |

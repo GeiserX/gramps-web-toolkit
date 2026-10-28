@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
+from urllib.parse import urlsplit
+
 from .checks import norm
 from .tree import Tree
 
@@ -54,3 +58,140 @@ def print_repository_report(rep: dict, *, unlinked: bool, limit: int) -> None:
             print(f"  {s['id']}  {s['title']}")
         if len(bare) > limit:
             print(f"  ... {len(bare) - limit} more (--limit, or --json)")
+
+
+# Words that open the name of an institution that keeps records, lowercase and without accents. One table, so a
+# language is added here and nowhere else.
+INSTITUTION_WORDS = ("archives", "archive", "archivo", "archiv", "boletin oficial", "registro civil", "registre",
+                     "mairie", "ayuntamiento", "musee", "museo", "biblioteca", "bibliotheque", "parroquia", "paroisse",
+                     "hemeroteca", "arxiu", "archivio")
+
+
+def _host(url: str) -> str:
+    """The host of a URL or bare address: no scheme, credentials, port, path or `www.`; lowercase."""
+    url = (url or "").strip().lower()
+    if "://" not in url:
+        url = "//" + url
+    try:
+        host = urlsplit(url).hostname or ""
+    except ValueError:
+        return ""
+    return host.strip(".").removeprefix("www.")
+
+
+_ADDRESS = re.compile(r"(?:[a-z][a-z0-9+.-]*://)?[^\s|<>\"'()\[\]{},;]+")
+
+
+def _hosts_in(text: str) -> set[str]:
+    """Hosts a free text mentions: each address-looking token (a scheme, or a dot between name parts) is parsed on
+    its own, so `host.evil.invalid`, `host@evil.invalid` and `evil.invalid/host` are never the host."""
+    out = set()
+    for tok in _ADDRESS.findall((text or "").lower()):
+        tok = tok.rstrip(".:!?")
+        if "://" in tok or re.search(r"[a-z0-9]\.[a-z]{2,}", tok):
+            h = _host(tok)
+            if "." in h:
+                out.add(h)
+    return out
+
+
+def _fold(s: str) -> str:
+    return norm((s or "").replace("\u2019", "'").replace("\u2018", "'"))
+
+
+def _first_whole(text: str, phrase: str) -> int:
+    """Where `phrase` first occurs in `text` as whole words, or -1."""
+    i = text.find(phrase)
+    while i >= 0:
+        before = text[i - 1] if i else " "
+        after = text[i + len(phrase)] if i + len(phrase) < len(text) else " "
+        if not before.isalnum() and not after.isalnum():
+            return i
+        i = text.find(phrase, i + 1)
+    return -1
+
+
+def _plain(s: str) -> str:
+    """Lowercase, no accents, the same length as `s`, so an index into it is an index into `s`. Web addresses are
+    blanked with NUL: `web.archive.org` is not an archive named in the text."""
+    out = []
+    for c in s:
+        base = unicodedata.normalize("NFD", c)[0]
+        low = base.lower()
+        out.append(low if len(low) == 1 else base)
+    text = "".join(out)
+    for m in _ADDRESS.finditer(text):
+        tok = m.group().rstrip(".:!?")
+        if "://" in tok or re.search(r"[a-z0-9]\.[a-z]{2,}", tok):
+            text = text[:m.start()] + "\0" * len(tok) + text[m.start() + len(tok):]
+    return text
+
+
+_LABEL_END = re.compile(r"[,;:()\0]| [|/\-\u2014\u2013] ")
+
+
+def _institution(raw: str) -> str:
+    """The institution `raw` names, in its own spelling: from the first institution word to the first comma, colon,
+    semicolon, bracket, web address or dash; "" when it names none."""
+    text = _plain(raw)
+    starts = [i for i in (_first_whole(text, w) for w in INSTITUTION_WORDS) if i >= 0]
+    if not starts:
+        return ""
+    i = min(starts)
+    m = _LABEL_END.search(text, i)
+    return " ".join(raw[i:m.start() if m else len(raw)][:60].split()).strip(" ,;.-")
+
+
+def classify_repositories(tree: Tree) -> dict:
+    """Read-only. Sources with no repository, sorted by what their own text says:
+    `names_existing`: title, author or publication info names a repository the tree has (by its name as whole words,
+    or by its web host); `names_other`: it opens with an institution word but that institution is not a repository
+    of the tree (grouped, so one new repository can serve many sources); `names_nothing`: no institution at all."""
+    repos, sources = tree.objs["repositories"], tree.objs["sources"]
+    known = []
+    for h, o in repos.items():
+        name = _fold(o.get("name"))
+        hosts = {_host(u.get("path") or "") for u in o.get("urls") or []} - {""}
+        if name:
+            known.append((o.get("gramps_id"), name, hosts))
+    existing, other, nothing = [], {}, []
+    for s in sources.values():
+        if s.get("reporef_list"):
+            continue
+        fields = {k: _fold(s.get(k)) for k in ("title", "author", "pubinfo")}
+        named_hosts = {k: _hosts_in(s.get(k)) for k in fields}
+        hit = [(rid, f) for rid, name, hosts in known
+               for f in fields if _first_whole(fields[f], name) >= 0 or (hosts & named_hosts[f])]
+        if hit:
+            ids = sorted({r for r, _ in hit})
+            existing.append({"source": s.get("gramps_id"), "title": s.get("title", ""), "repositories": ids,
+                             "fields": sorted({f for _, f in hit}), "certain": len(ids) == 1})
+            continue
+        label = next((x for x in (_institution(s.get(k) or "") for k in ("title", "author", "pubinfo")) if x), "")
+        if label:
+            other.setdefault(_fold(label), (label, []))[1].append(s.get("gramps_id"))
+        else:
+            nothing.append(s.get("gramps_id"))
+    return {
+        "names_existing": sorted(existing, key=lambda x: x["source"] or ""),
+        "names_other": [{"institution": label, "sources": sorted(ids, key=lambda x: x or "")}
+                        for _, (label, ids) in sorted(other.items(), key=lambda kv: (-len(kv[1][1]), kv[0]))],
+        "names_nothing": sorted(nothing, key=lambda x: x or ""),
+    }
+
+
+def print_classification(rep: dict, limit: int) -> None:
+    ex = rep["names_existing"]
+    print(f"sources with no repository that name one the tree has: {len(ex)} "
+          f"({sum(1 for x in ex if x['certain'])} name exactly one)")
+    for x in ex[:limit]:
+        print(f"  {x['source']} -> {','.join(x['repositories'])}  (in {', '.join(x['fields'])})  {x['title'][:60]}")
+    if len(ex) > limit:
+        print(f"  ... {len(ex) - limit} more (--limit, or --json)")
+    print(f"institutions named but not a repository of the tree: {len(rep['names_other'])}")
+    for x in rep["names_other"][:limit]:
+        print(f"  {len(x['sources']):3d} sources  {x['institution']}")
+    if len(rep["names_other"]) > limit:
+        print(f"  ... {len(rep['names_other']) - limit} more (--limit, or --json)")
+    print(f"sources that name no institution (a family photo, an e-mail, a website): {len(rep['names_nothing'])}")
+    print("report only: nothing is changed; link with gwt-apply link_repository after reading each source")

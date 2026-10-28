@@ -14,7 +14,7 @@ import urllib.parse
 
 import pytest
 
-from gwt_check import checks, selftest
+from gwt_check import checks, repos as repositories, selftest
 from gwt_check.cli import main
 from gwt_check.client import ApiError, Client
 from gwt_check.tree import Tree, load
@@ -1269,6 +1269,121 @@ def test_fill_places_refuses_a_backup(tmp_path, capsys):
     backup.write_bytes(_to_xml(selftest.clean_tree()))
     assert main(["fill-places", str(backup)]) == 2
     assert "no citation text" in capsys.readouterr().err
+
+
+def test_repos_classify_sorts_sources_with_no_repository_by_what_they_name(tmp_path, capsys):
+    data = selftest.clean_tree()   # R0001 "Archivo Diocesano de Ejemplo"
+    base = data["sources"][0]
+    def add(sid, **kw):
+        data["sources"].append({**copy.deepcopy(base), "handle": "h" + sid, "gramps_id": sid, "title": "Libro " + sid,
+                                "author": "", "pubinfo": "", "reporef_list": [], **kw})
+    add("S0201", title="Registro del Archivo Diocesano de Ejemplo")           # names the repository the tree has
+    add("S0202", pubinfo="Archivo Diocesano de Ejemploxyz")                    # a longer word: not that repository
+    add("S0203", author="Mairie de Villa Inventada \u2014 etat civil")        # an institution the tree lacks
+    add("S0204", title="Mairie de Villa Inventada")                            # the same one: grouped
+    add("S0205", pubinfo="Foto del documento en poder de la familia")        # no institution
+    data["repositories"][0]["urls"] = []
+    dump = _write(tmp_path, "t.json", data)
+    rep = repositories.classify_repositories(load(dump))
+    assert [(x["source"], x["repositories"], x["certain"]) for x in rep["names_existing"]] == [("S0201", ["R0001"], True)]
+    assert rep["names_other"][0] == {"institution": "Mairie de Villa Inventada", "sources": ["S0203", "S0204"]}
+    assert "S0205" in rep["names_nothing"] and "S0202" not in [x["source"] for x in rep["names_existing"]]
+    linked = base["gramps_id"]   # already has a repository: in no group
+    assert linked not in [x["source"] for x in rep["names_existing"]] + rep["names_nothing"]
+    assert linked not in [s for x in rep["names_other"] for s in x["sources"]]
+    assert main(["repos", dump, "--classify"]) == 0
+    assert "sources that name no institution" in capsys.readouterr().out
+
+
+def test_repos_classify_matches_a_web_host_only_as_the_exact_host(tmp_path):
+    data = selftest.clean_tree()
+    base = data["sources"][0]
+    data["repositories"][0]["name"] = "Fondo Sin Parecido"
+    data["repositories"][0]["urls"] = [{"path": "https://www.archives.example.org/fonds", "type": "Web Home"}]
+    cases = {"S0301": ("See https://archives.example.org.evil.invalid/document", False),   # suffixed domain
+             "S0302": ("See https://archives.example.com/document", False),                  # look-alike domain
+             "S0303": ("See https://archives.example.org@evil.invalid/document", False),     # host is after the @
+             "S0304": ("See https://evil.invalid/archives.example.org", False),              # host only in the path
+             "S0305": ("See https://evil.invalid/?u=archives.example.org", False),
+             "S0306": ("See https://user:pw@archives.example.org:8443/x", True),             # credentials and port, same host
+             "S0307": ("Copy at WWW.Archives.Example.ORG.", True),                           # bare host, case, www, full stop
+             "S0308": ("the archives.example.organisation page", False)}
+    for sid, (text, _) in cases.items():
+        data["sources"].append({**copy.deepcopy(base), "handle": "h" + sid, "gramps_id": sid, "title": "Libro " + sid,
+                                "author": "", "pubinfo": text, "reporef_list": []})
+    rep = repositories.classify_repositories(load(_write(tmp_path, "t.json", data)))
+    got = {x["source"] for x in rep["names_existing"]}
+    assert got == {sid for sid, (_, hit) in cases.items() if hit}
+
+
+def test_repos_classify_groups_by_the_institution_alone_in_its_own_spelling(tmp_path):
+    data = selftest.clean_tree()
+    base = data["sources"][0]
+    rows = {"S0401": ("title", "Archivo Municipal de Villa Inventada, padrón de 1807"),
+            "S0402": ("title", "Archivo municipal Villa Inventada: padrón de 1815"),       # same archive, other series
+            "S0403": ("pubinfo", "Archivos varios; Archivo Municipal de Villa Inventada"),  # first whole word, not «archivos»
+            "S0404": ("title", "Biblioteca Nacional de Inventia"),                         # words that norm() would fold
+            "S0405": ("author", "Ayuntamiento de Villa Inventada"),
+            "S0406": ("pubinfo", "Boletín Oficial de la Provincia de Inventia"),
+            "S0407": ("title", "Bibliothèque municipale de Villeinventée"),
+            "S0409": ("title", "Hemeroteca Municipal de Villa Inventada"),
+            "S0410": ("title", "Arxiu Comarcal de Vila Inventada"),
+            "S0411": ("title", "Archivio di Stato di Città Inventata"),
+            "S0408": ("title", "Copia en https://web.archive.org/web/2013/http://example.invalid/"),  # a URL is no archive
+            "S0412": ("title", "Registro Civil de Villa Inventada; libro 3"),               # each cut ends the name
+            "S0413": ("title", "Parroquia de San Inventado (bautismos)"),
+            "S0414": ("title", "Museo de Villa Inventada - fondo fotográfico"),
+            "S0415": ("title", "Mairie de Villeinventée https://example.invalid/etat-civil"),
+            "S0416": ("title", "Copia del Ayuntamiento de Pueblo Inventado en el Archivo Provincial"),  # the earliest word
+            "S0417": ("title", "Archivo Provincial de Inventia.")}                         # no trailing full stop
+    for sid, (field, text) in rows.items():
+        data["sources"].append({**copy.deepcopy(base), "handle": "h" + sid, "gramps_id": sid, "title": "Libro " + sid,
+                                "author": "", "pubinfo": "", "reporef_list": [], field: text})
+    data["repositories"][0]["name"] = "Fondo Sin Parecido"
+    rep = repositories.classify_repositories(load(_write(tmp_path, "t.json", data)))
+    groups = {x["institution"]: x["sources"] for x in rep["names_other"]}
+    assert groups["Archivo Municipal de Villa Inventada"] == ["S0401", "S0402", "S0403"]
+    for sid, label in (("S0404", "Biblioteca Nacional de Inventia"), ("S0405", "Ayuntamiento de Villa Inventada"),
+                       ("S0406", "Boletín Oficial de la Provincia de Inventia"),
+                       ("S0407", "Bibliothèque municipale de Villeinventée"),
+                       ("S0409", "Hemeroteca Municipal de Villa Inventada"), ("S0410", "Arxiu Comarcal de Vila Inventada"),
+                       ("S0411", "Archivio di Stato di Città Inventata"),
+                       ("S0412", "Registro Civil de Villa Inventada"), ("S0413", "Parroquia de San Inventado"),
+                       ("S0414", "Museo de Villa Inventada"), ("S0415", "Mairie de Villeinventée"),
+                       ("S0416", "Ayuntamiento de Pueblo Inventado en el Archivo Provincial"),
+                       ("S0417", "Archivo Provincial de Inventia")):
+        assert groups[label] == [sid]
+    assert "S0408" in rep["names_nothing"]
+
+
+def test_repos_classify_reports_sources_only_and_survives_a_repository_without_an_id(tmp_path):
+    data = selftest.clean_tree()
+    extra = {**copy.deepcopy(data["repositories"][0]), "handle": "hR2", "gramps_id": None, "name": "Fondo Inventado",
+             "urls": [], "address_list": []}
+    data["repositories"].append(extra)
+    rep = repositories.classify_repositories(load(_write(tmp_path, "t.json", data)))
+    assert set(rep) == {"names_existing", "names_other", "names_nothing"}
+
+
+def test_repos_classify_refuses_the_list_filters_and_says_what_it_cut(tmp_path, capsys):
+    data = selftest.clean_tree()
+    base = data["sources"][0]
+    for n in range(3):
+        sid = f"S05{n:02d}"
+        data["sources"].append({**copy.deepcopy(base), "handle": "h" + sid, "gramps_id": sid, "title": f"Mairie de Ville {n}",
+                                "author": "", "pubinfo": "", "reporef_list": []})
+    for n in range(2):   # name the tree's repository: listed under names_existing, cut by --limit too
+        sid = f"S06{n:02d}"
+        data["sources"].append({**copy.deepcopy(base), "handle": "h" + sid, "gramps_id": sid,
+                                "title": f"Carta {n} al Archivo Diocesano de Ejemplo", "author": "", "pubinfo": "",
+                                "reporef_list": []})
+    dump = _write(tmp_path, "t.json", data)
+    for extra in (["--name", "Fondo"], ["--type", "Archive"], ["--unlinked"]):
+        assert main(["repos", dump, "--classify", *extra]) == 2
+        assert "--classify stands alone" in capsys.readouterr().err
+    assert main(["repos", dump, "--classify", "--limit", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "... 1 more (--limit, or --json)" in out and "... 2 more (--limit, or --json)" in out
 
 
 def _dup_media_keys(d, scope=None):
