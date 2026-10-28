@@ -74,6 +74,8 @@ CHECKS = {
     "private": "object or sub-reference marked private",
     "place-no-coords": "place used by an event without coordinates",
     "surname-marker": "surname with a « [ » marker",
+    "note-marker-no-tag": "note whose text says «hipótesis» or «homónimo» but lacks the tag of that name, in a "
+                          "tree that has such a tag",
     "missing-object": "object of the earlier tree that is gone",
     "ahnentafel-lost": "Ahnentafel number of the earlier tree that is gone",
     "ahnentafel-changed": "Ahnentafel number that now holds another person",
@@ -93,7 +95,19 @@ CHECKS = {
 }
 
 # Checks reported without failing: a finding of these is never new, so it never sets the exit code.
-INFO_CHECKS = {"unconnected", "parent-age", "marriage-age", "sibling-spacing", "lifespan", "dup-citation"}
+INFO_CHECKS = {"unconnected", "parent-age", "marriage-age", "sibling-spacing", "lifespan", "dup-citation",
+               "note-marker-no-tag"}
+
+# words in a note that a tag of the same stem is meant to mark; matched without accents, whole word
+NOTE_MARKERS = ("hipotesis", "homonimo")
+# a marker with one of these words within three words after it («hipótesis descartada») or before it
+# («queda descartada la hipótesis») was discarded or replaced and no longer needs its tag. A «no», «ni»,
+# «sin» or «nada» between them denies the discard: «hipótesis no descartada» is still open. All in one sentence
+_DISCARD = r"(?:descartad|refutad|superad|sustituid|desmentid)[oa]s?"
+_SEP = r"[^\w.;:!?]+"                      # the words must sit in one sentence
+_GAP = rf"(?:(?!(?:no|ni|sin|nada)\b)\w+{_SEP}){{0,3}}"
+NOTE_DISCARDED_AFTER = re.compile(rf"{_SEP}{_GAP}{_DISCARD}\b")
+NOTE_DISCARDED_BEFORE = re.compile(rf"\b{_DISCARD}{_SEP}{_GAP}$")
 
 # limits of the dated checks
 POSTHUMOUS_DAYS = 300                       # a child can be born this long after the father's death
@@ -557,6 +571,28 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
             for s in n.get("surname_list", []):
                 if "[" in (s.get("surname") or ""):
                     out.add("surname-marker", f"{p['gramps_id']} {s['surname']}")
+
+    # a note that announces a hypothesis or a namesake but carries no such tag. Only where the tree already
+    # has a tag of that name: a tree that does not use the convention is not blamed for it
+    def fold(t: str) -> str:
+        return "".join(c for c in unicodedata.normalize("NFD", t.lower()) if unicodedata.category(c) != "Mn")
+
+    tag_names = {h: fold(t.get("name") or "") for h, t in T["tags"].items()}
+    for stem in NOTE_MARKERS:
+        word = re.compile(rf"\b{stem}s?\b")
+        wanted = {h for h, name in tag_names.items() if word.search(name)}
+        if not wanted:
+            continue
+        for n in T["notes"].values():
+            if not in_scope("notes", n["handle"]) or wanted & set(n.get("tag_list") or []):
+                continue
+            text = n.get("text")
+            text = text.get("string", "") if isinstance(text, dict) else str(text or "")
+            text = fold(text)
+            # each mention counts on its own: one discarded hypothesis does not hide another still open
+            if any(not NOTE_DISCARDED_AFTER.match(text, m.end())
+                   and not NOTE_DISCARDED_BEFORE.search(text[:m.start()]) for m in word.finditer(text)):
+                out.add("note-marker-no-tag", f"{n['gramps_id']} {stem}")
 
     # family components: people joined by a family as father, mother or child. Godparents, witnesses and
     # associations do not join anyone, and people in no family are left out: they are not a batch

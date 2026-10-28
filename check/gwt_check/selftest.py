@@ -251,6 +251,13 @@ def p_surname_marker(d):
     _get(d, "people", "I0007")["primary_name"]["surname_list"][0]["surname"] = "Vidal [¿?]"
 
 
+def p_note_marker_no_tag(d):
+    d["tags"].append(_base("", handle="htag2", name="Hipotesis", color="#000000", priority=0))
+    d["notes"].append(_base("N0098", type="General", format=0, text={
+        "_class": "StyledText", "string": "HIPÓTESIS (?) inventada, sin acta", "tags": []}))
+    _get(d, "people", "I0003")["note_list"].append("hN0098")
+
+
 def p_dup_couple(d):
     _new_family(d, "F0099", "hI0002", "hI0003")
     for gid in ("I0002", "I0003"):
@@ -505,6 +512,7 @@ PLANTS = [
     (p_place_no_coords, "place-no-coords", "P0001", False),
     (p_citation_ghost_source, "dangling-ref", "C0002 source_handle -> sources ghost-source", False),
     (p_surname_marker, "surname-marker", "I0007 Vidal [¿?]", False),
+    (p_note_marker_no_tag, "note-marker-no-tag", "N0098 hipotesis", False),
     (p_dup_couple, "dup-couple", "F0001,F0099", False),
     (p_dup_person_birth, "dup-person-birth", "I0008,I0099", False),
     (p_dup_couple_names, "dup-couple-names", "F0002,F0097", False),
