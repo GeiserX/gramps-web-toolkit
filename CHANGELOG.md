@@ -12,6 +12,7 @@ None.
 
 ### Added
 
+- `gwt-apply` `add_tag` puts a tag on an object the tree already has, for example a research mark such as `Hypothesis` on a person, an event or a note.
 - `gwt-check check` reports `note-marker-no-tag`: a note that says «hipótesis» or «homónimo» without the tag of that name, in a tree that has such a tag. For information only: it never sets the exit code. A mention with «descartada», «refutada» or a like word next to it in the same sentence is not reported, unless a «no» comes between them. A tree with no such tag is never blamed.
 
 ## [0.2.6] - 2026-10-28
