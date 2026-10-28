@@ -1329,7 +1329,13 @@ def test_repos_classify_groups_by_the_institution_alone_in_its_own_spelling(tmp_
             "S0409": ("title", "Hemeroteca Municipal de Villa Inventada"),
             "S0410": ("title", "Arxiu Comarcal de Vila Inventada"),
             "S0411": ("title", "Archivio di Stato di Città Inventata"),
-            "S0408": ("title", "Copia en https://web.archive.org/web/2013/http://example.invalid/")}  # a URL is no archive
+            "S0408": ("title", "Copia en https://web.archive.org/web/2013/http://example.invalid/"),  # a URL is no archive
+            "S0412": ("title", "Registro Civil de Villa Inventada; libro 3"),               # each cut ends the name
+            "S0413": ("title", "Parroquia de San Inventado (bautismos)"),
+            "S0414": ("title", "Museo de Villa Inventada - fondo fotográfico"),
+            "S0415": ("title", "Mairie de Villeinventée https://example.invalid/etat-civil"),
+            "S0416": ("title", "Copia del Ayuntamiento de Pueblo Inventado en el Archivo Provincial"),  # the earliest word
+            "S0417": ("title", "Archivo Provincial de Inventia.")}                         # no trailing full stop
     for sid, (field, text) in rows.items():
         data["sources"].append({**copy.deepcopy(base), "handle": "h" + sid, "gramps_id": sid, "title": "Libro " + sid,
                                 "author": "", "pubinfo": "", "reporef_list": [], field: text})
@@ -1341,7 +1347,11 @@ def test_repos_classify_groups_by_the_institution_alone_in_its_own_spelling(tmp_
                        ("S0406", "Boletín Oficial de la Provincia de Inventia"),
                        ("S0407", "Bibliothèque municipale de Villeinventée"),
                        ("S0409", "Hemeroteca Municipal de Villa Inventada"), ("S0410", "Arxiu Comarcal de Vila Inventada"),
-                       ("S0411", "Archivio di Stato di Città Inventata")):
+                       ("S0411", "Archivio di Stato di Città Inventata"),
+                       ("S0412", "Registro Civil de Villa Inventada"), ("S0413", "Parroquia de San Inventado"),
+                       ("S0414", "Museo de Villa Inventada"), ("S0415", "Mairie de Villeinventée"),
+                       ("S0416", "Ayuntamiento de Pueblo Inventado en el Archivo Provincial"),
+                       ("S0417", "Archivo Provincial de Inventia")):
         assert groups[label] == [sid]
     assert "S0408" in rep["names_nothing"]
 
@@ -1362,9 +1372,15 @@ def test_repos_classify_refuses_the_list_filters_and_says_what_it_cut(tmp_path, 
         sid = f"S05{n:02d}"
         data["sources"].append({**copy.deepcopy(base), "handle": "h" + sid, "gramps_id": sid, "title": f"Mairie de Ville {n}",
                                 "author": "", "pubinfo": "", "reporef_list": []})
+    for n in range(2):   # name the tree's repository: listed under names_existing, cut by --limit too
+        sid = f"S06{n:02d}"
+        data["sources"].append({**copy.deepcopy(base), "handle": "h" + sid, "gramps_id": sid,
+                                "title": f"Carta {n} al Archivo Diocesano de Ejemplo", "author": "", "pubinfo": "",
+                                "reporef_list": []})
     dump = _write(tmp_path, "t.json", data)
     for extra in (["--name", "Fondo"], ["--type", "Archive"], ["--unlinked"]):
         assert main(["repos", dump, "--classify", *extra]) == 2
         assert "--classify stands alone" in capsys.readouterr().err
     assert main(["repos", dump, "--classify", "--limit", "1"]) == 0
-    assert "... 2 more (--limit, or --json)" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "... 1 more (--limit, or --json)" in out and "... 2 more (--limit, or --json)" in out

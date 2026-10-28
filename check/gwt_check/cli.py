@@ -317,7 +317,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--unlinked", action="store_true", help="also list sources with no repository and repositories no source lists")
     p.add_argument("--json", action="store_true", help="print the result as JSON")
     p.add_argument("--limit", type=int, default=30, help="sources listed with --unlinked or --classify (default 30)")
-    p.add_argument("--classify", action="store_true", help="instead of the list: sort the sources with no repository by what their own text names (a repository the tree has, another institution, nothing) and report repository hygiene")
+    p.add_argument("--classify", action="store_true", help="instead of the list: sort the sources with no repository by what their own text names (a repository the tree has, another institution, nothing)")
     live_opts(p)
 
     p = sub.add_parser("fill-places", help="for each event with no place, the place its own citations name, with the quote; proposals only")
