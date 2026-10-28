@@ -46,3 +46,7 @@ gwt_check/checks.py | _GAP = rf"(?:(?!(?:no|ni|sin|nada)\b)\w+{_SEP}){{0,3}}" | 
 gwt_check/checks.py | for m in word.finditer(text)): | for m in list(word.finditer(text))[:1]): | one discarded hypothesis does not hide another still open in the same note
 gwt_check/checks.py | _SEP = r"[^\w.;:!?]+" | _SEP = r"\W+" | a discard word in another sentence does not discard the hypothesis
 gwt_check/checks.py | if not wanted: | if False: | a tree with no such tag is never blamed for missing it
+gwt_check/checks.py | if not in_scope("notes", n["handle"]) or wanted & set(n.get("tag_list") or []): | if wanted & set(n.get("tag_list") or []): | a note out of scope is not reported
+gwt_check/checks.py | NOTE_DISCARDED_BEFORE = re.compile(rf"\b{_DISCARD}{_SEP}{_GAP}$") | NOTE_DISCARDED_BEFORE = re.compile(rf"\b{_DISCARD}{_SEP}{_GAP}") | a discard word before the marker counts only when it is within three words of it
+gwt_check/checks.py | _GAP = rf"(?:(?!(?:no|ni|sin|nada)\b)\w+{_SEP}){{0,3}}" | _GAP = rf"(?:(?!(?:no|ni|sin|nada)\b)\w+{_SEP}){{0,30}}" | a discard word more than three words from the marker does not discard it
+gwt_check/checks.py | _DISCARD = r"(?:descartad|refutad|superad|sustituid|desmentid)[oa]s?" | _DISCARD = r"(?:descartad|refutad|superad|sustituid)[oa]s?" | «desmentida» discards a hypothesis like «descartada»

@@ -1512,3 +1512,22 @@ def test_note_marker_never_sets_the_exit_code(tmp_path, capsys):
     assert "info note-marker-no-tag: 1 found (0 known)" in capsys.readouterr().out
     assert [(f["check"], f["key"], f["info"]) for f in json.loads(report.read_text())["findings"]] == [
         ("note-marker-no-tag", "N0098 hipotesis", True)]
+
+
+def test_note_marker_discard_word_counts_only_within_three_words_of_the_marker():
+    assert not _note_marker_found("Hipótesis del hermano, luego descartada")
+    assert _note_marker_found("Hipótesis del hermano mayor de la casa, descartada")
+    assert _note_marker_found("Descartado el primo, la otra rama apunta a la hipótesis del hermano")
+    assert not _note_marker_found("Hipótesis desmentida por el padrón")
+
+
+def test_note_marker_reports_only_a_note_in_scope():
+    d = selftest.clean_tree()
+    selftest.p_note_marker_no_tag(d)
+
+    def keys(scope):
+        return [f["key"] for f in checks.run_checks(Tree(copy.deepcopy(d)), scope=scope)[0]
+                if f["check"] == "note-marker-no-tag"]
+
+    assert keys({("people", "hI0003")}) == []
+    assert keys({("notes", "hN0098")}) == ["N0098 hipotesis"]
