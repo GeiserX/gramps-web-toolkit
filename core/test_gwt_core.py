@@ -74,6 +74,10 @@ class Dispatcher(unittest.TestCase):
             self.assertIn("usage: gwt-" + name, out.replace("\n", " "), name)
 
     def test_one_tool_does_not_import_the_others(self):
+        saved = {m: v for m, v in sys.modules.items() if m.startswith("gwt_")}
+        self.addCleanup(lambda: (
+            [sys.modules.pop(m) for m in [m for m in sys.modules if m.startswith("gwt_")]],
+            sys.modules.update(saved)))
         for mod in [m for m in sys.modules if m.startswith("gwt_") and m != "gwt_core" and not m.startswith("gwt_core.")]:
             del sys.modules[mod]
         run(["ledger", "--help"])
