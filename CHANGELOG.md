@@ -6,6 +6,14 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+None.
+
+### Added
+
+- `gwt-apply` `update_place` takes `name` in `set`: it renames a place and keeps the date and language of its name. A sibling of the same type that already has the name is a conflict, a rerun is a skip, and `--verify` reports a place renamed back as differing.
+
 ## [0.2.4] - 2026-10-28
 
 ### Change lists
