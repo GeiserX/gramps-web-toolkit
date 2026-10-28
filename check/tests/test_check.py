@@ -1286,7 +1286,7 @@ def test_repos_classify_sorts_sources_with_no_repository_by_what_they_name(tmp_p
     dump = _write(tmp_path, "t.json", data)
     rep = repositories.classify_repositories(load(dump))
     assert [(x["source"], x["repositories"], x["certain"]) for x in rep["names_existing"]] == [("S0201", ["R0001"], True)]
-    assert rep["names_other"][0] == {"institution": "mairie villa inventada", "sources": ["S0203", "S0204"]}
+    assert rep["names_other"][0] == {"institution": "Mairie de Villa Inventada", "sources": ["S0203", "S0204"]}
     assert "S0205" in rep["names_nothing"] and "S0202" not in [x["source"] for x in rep["names_existing"]]
     assert rep["repositories_without_url_or_address"] == ["R0001"]
     linked = base["gramps_id"]   # already has a repository: in no group
@@ -1315,3 +1315,28 @@ def test_repos_classify_matches_a_web_host_only_as_the_exact_host(tmp_path):
     rep = repositories.classify_repositories(load(_write(tmp_path, "t.json", data)))
     got = {x["source"] for x in rep["names_existing"]}
     assert got == {sid for sid, (_, hit) in cases.items() if hit}
+
+
+def test_repos_classify_groups_by_the_institution_alone_in_its_own_spelling(tmp_path):
+    data = selftest.clean_tree()
+    base = data["sources"][0]
+    rows = {"S0401": ("title", "Archivo Municipal de Villa Inventada, padrón de 1807"),
+            "S0402": ("title", "Archivo municipal Villa Inventada: padrón de 1815"),       # same archive, other series
+            "S0403": ("pubinfo", "Archivos varios; Archivo Municipal de Villa Inventada"),  # first whole word, not «archivos»
+            "S0404": ("title", "Biblioteca Nacional de Inventia"),                         # words that norm() would fold
+            "S0405": ("author", "Ayuntamiento de Villa Inventada"),
+            "S0406": ("pubinfo", "Boletín Oficial de la Provincia de Inventia"),
+            "S0407": ("title", "Bibliothèque municipale de Villeinventée"),
+            "S0408": ("title", "Copia en https://web.archive.org/web/2013/http://example.invalid/")}  # a URL is no archive
+    for sid, (field, text) in rows.items():
+        data["sources"].append({**copy.deepcopy(base), "handle": "h" + sid, "gramps_id": sid, "title": "Libro " + sid,
+                                "author": "", "pubinfo": "", "reporef_list": [], field: text})
+    data["repositories"][0]["name"] = "Fondo Sin Parecido"
+    rep = repositories.classify_repositories(load(_write(tmp_path, "t.json", data)))
+    groups = {x["institution"]: x["sources"] for x in rep["names_other"]}
+    assert groups["Archivo Municipal de Villa Inventada"] == ["S0401", "S0402", "S0403"]
+    for sid, label in (("S0404", "Biblioteca Nacional de Inventia"), ("S0405", "Ayuntamiento de Villa Inventada"),
+                       ("S0406", "Boletín Oficial de la Provincia de Inventia"),
+                       ("S0407", "Bibliothèque municipale de Villeinventée")):
+        assert groups[label] == [sid]
+    assert "S0408" in rep["names_nothing"]
