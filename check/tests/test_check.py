@@ -1291,3 +1291,14 @@ def test_dup_media_compares_checksums_only_and_respects_the_scope():
     assert _dup_media_keys(d) == ["O0095,O0096"]
     assert _dup_media_keys(d, scope={("people", "irrelevant")}) == []
     assert _dup_media_keys(d, scope={("media", "hO0096")}) == ["O0095,O0096"]
+
+
+def test_no_other_plant_trips_dup_media():
+    # a plant that copies O0001 must not also copy its file, or the selftest hides a dup-media it never meant
+    clean = selftest.clean_tree()
+    for plant, check_name, _, _ in selftest.PLANTS:
+        if check_name == "dup-media":
+            continue
+        d = copy.deepcopy(clean)
+        plant(d)
+        assert _dup_media_keys(d) == [], plant.__name__

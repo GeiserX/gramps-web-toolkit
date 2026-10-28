@@ -160,7 +160,8 @@ def p_orphan_note(d):
 
 
 def p_orphan_media(d):
-    d["media"].append({**copy.deepcopy(d["media"][0]), "handle": "hO0099", "gramps_id": "O0099"})
+    d["media"].append({**copy.deepcopy(d["media"][0]), "handle": "hO0099", "gramps_id": "O0099",
+                       "path": "ejemplo/acta-0099.jpg", "checksum": "9" * 32})
 
 
 def p_orphan_repository(d):
@@ -225,7 +226,9 @@ def p_private(d):
 
 
 def _sensitive_media(d, gid, person_gid, birth, desc):
-    m = {**copy.deepcopy(d["media"][0]), "handle": "h" + gid, "gramps_id": gid, "desc": desc}
+    # its own file, so the copy of O0001 is not also a dup-media
+    m = {**copy.deepcopy(d["media"][0]), "handle": "h" + gid, "gramps_id": gid, "desc": desc,
+         "checksum": f"{int(gid[1:]):032x}"}
     d["media"].append(m)
     p = _new_person(d, person_gid, "Nuria", "Prado Lago", birth=birth)
     p["media_list"] = [_ref(m["handle"], rect=[])]
