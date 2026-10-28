@@ -40,3 +40,5 @@ gwt_check/fill.py | if rep.get("held_back"): | if False: | the text output count
 gwt_check/client.py | got += pool.map(first_page, TYPES[1:]) | got += [first_page(t) for t in TYPES[1:]] | the first pages of the types are read together, not one type after another
 gwt_check/checks.py | if len(group) > 1 and any(in_scope("media", h) for h, _ in group): | if len(group) > 1: | dup-media reports a group only when one member is in scope
 gwt_check/checks.py | if o.get("checksum"): | if True: | a media object with no checksum is never a duplicate
+gwt_check/checks.py | and not NOTE_DISCARDED.search(fold(text)) | and True | a note that discards its hypothesis is not reported
+gwt_check/checks.py | if not wanted: | if False: | a tree with no such tag is never blamed for missing it
