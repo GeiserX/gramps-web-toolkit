@@ -57,6 +57,7 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "add_note": ({"text", "attach"}, {"type", "gramps_id"}),
     "add_transcription": ({"text", "margin_reading", "attach"}, {"gramps_id"}),
     "attach_existing": ({"object", "attach"}, set()),
+    "add_tag": ({"target", "name"}, set()),
     "dedupe_list": ({"target", "list"}, set()),
     "set_attribute": ({"target", "type", "value"}, set()),
     "merge_person": ({"winner", "loser"}, {"use_loser", "reason"}),
@@ -1631,6 +1632,20 @@ class Applier:
         """
         cls, ref, lst = _parse_object(op["object"])
         self.attach(op["attach"], lst, self.resolve(cls, ref))
+
+    def add_tag(self, op):
+        """Put a tag (made if the tree has none) on an object the tree already has: a research mark such as
+        `Hypothesis`. Nothing else on the object changes."""
+        cls, ref = _parse_target(op["target"])
+        target = self.obj(cls, ref)
+        target.setdefault("_class", cls)
+        handle = self.tag_handle(op["name"].strip())
+        if handle in (target.get("tag_list") or []):
+            self.actions.append(f"skip: {cls} {self.label(target)} already has the tag {op['name'].strip()!r}")
+            return
+        before = copy.deepcopy(target)
+        target["tag_list"] = [*(target.get("tag_list") or []), handle]
+        self.save(before, target)
 
     def dedupe_list(self, op):
         """Keep the first of each repeated reference in one list: the same citation twice on a person."""

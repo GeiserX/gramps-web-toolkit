@@ -514,6 +514,18 @@ def test_update_place_sets_coordinates_on_an_existing_place(fake):
         assert validate([dict(ops[0], key="bad", set=bad)]), bad
 
 
+def test_add_tag_puts_a_tag_on_an_existing_object_and_makes_it_once(fake):
+    ops = [{"op": "add_tag", "key": "t1", "ruling": R, "target": {"place": "P0001"}, "name": "Hypothesis"}]
+    assert run(fake, ops)[0].status == "done"
+    tags = [t for t in fake.store["tags"].values() if t["name"] == "Hypothesis"]
+    assert len(tags) == 1
+    assert fake.store["places"]["plc1"]["tag_list"] == [tags[0]["handle"]]
+    assert run(fake, ops)[0].status == "skip"
+    assert len([t for t in fake.store["tags"].values() if t["name"] == "Hypothesis"]) == 1
+    for bad in (dict(ops[0], key="b1", name=" "), dict(ops[0], key="b2", target={"place": "0123456789abcdef0123456789ab"})):
+        assert validate([bad]), bad
+
+
 def test_coordinates_that_are_not_numbers_are_a_validation_error():
     # float(None) is a TypeError: it must come out as a line in the error list, not a crash
     for bad in (None, "north", [1]):
