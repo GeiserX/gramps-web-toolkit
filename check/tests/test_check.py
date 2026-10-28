@@ -1419,6 +1419,59 @@ def test_no_other_plant_trips_dup_media():
         assert _dup_media_keys(d) == [], plant.__name__
 
 
+def test_note_marker_no_tag_only_where_the_convention_is_used_and_not_when_tagged():
+    d = selftest.clean_tree()
+    selftest.p_note_marker_no_tag(d)
+    keys = {f["key"] for f in checks.run_checks(Tree(copy.deepcopy(d)))[0] if f["check"] == "note-marker-no-tag"}
+    assert keys == {"N0098 hipotesis"}
+    tagged = copy.deepcopy(d)
+    next(n for n in tagged["notes"] if n["gramps_id"] == "N0098")["tag_list"] = ["htag2"]
+    assert not [f for f in checks.run_checks(Tree(tagged))[0] if f["check"] == "note-marker-no-tag"]
+    no_tag = copy.deepcopy(d)
+    no_tag["tags"] = [t for t in no_tag["tags"] if t["handle"] != "htag2"]
+    assert not [f for f in checks.run_checks(Tree(no_tag))[0] if f["check"] == "note-marker-no-tag"]
+
+
+def test_note_marker_needs_the_whole_word():
+    def found(text):
+        d = selftest.clean_tree()
+        selftest.p_note_marker_no_tag(d)
+        d["tags"].append(selftest._base("", handle="htag3", name="Homonimo-sin-confirmar", color="#000000",
+                                        priority=0))
+        next(n for n in d["notes"] if n["gramps_id"] == "N0098")["text"]["string"] = text
+        return bool([f for f in checks.run_checks(Tree(d))[0] if f["check"] == "note-marker-no-tag"])
+
+    assert found("Dos hipótesis (?) y un homónimo")      # plural and singular are meant to match
+    assert found("Homónimos sin confirmar")
+    assert not found("hipotesista inventada")
+    assert not found("homonimología inventada")
+    assert not found("antihipotesis inventada")
+
+
+def test_note_marker_skips_a_note_that_discards_or_replaces_the_hypothesis():
+    def found(text):
+        d = selftest.clean_tree()
+        selftest.p_note_marker_no_tag(d)
+        next(n for n in d["notes"] if n["gramps_id"] == "N0098")["text"]["string"] = text
+        return bool([f for f in checks.run_checks(Tree(d))[0] if f["check"] == "note-marker-no-tag"])
+
+    assert found("Hipótesis: es el hermano (?)")
+    assert not found("Hipótesis descartada: el acta nombra a otro padre")
+    assert not found("La hipótesis quedó superada por el acta de 1851")
+    assert not found("Homónimo refutado con el acta")
+    assert not found("Hipotesis sustituida por la nota N0100")
+    assert found("Hipótesis sin descartar todavía")   # "sin descartar" does not discard it
+
+
+def test_note_marker_tag_name_needs_the_whole_word():
+    d = selftest.clean_tree()
+    selftest.p_note_marker_no_tag(d)
+    next(t for t in d["tags"] if t["handle"] == "htag2")["name"] = "Hipotesista"
+    assert not [f for f in checks.run_checks(Tree(d))[0] if f["check"] == "note-marker-no-tag"]
+    next(t for t in d["tags"] if t["handle"] == "htag2")["name"] = "hipotesis-1022"
+    assert [f for f in checks.run_checks(Tree(d))[0] if f["check"] == "note-marker-no-tag"]
+
+
 def _run_place_desc(description, own_place="hP0001", extra_place=True):
     from gwt_check import selftest as st
 
@@ -1498,6 +1551,55 @@ def test_a_duplicate_key_does_not_depend_on_the_order_of_the_dump():
                                "path": f"a/copy-{n}.jpg", "checksum": "d" * 32})
         keys.append(_dup_media_keys(d))
     assert keys[0] == keys[1] == ["O001,O01"]
+
+
+def _note_marker_found(text):
+    d = selftest.clean_tree()
+    selftest.p_note_marker_no_tag(d)
+    next(n for n in d["notes"] if n["gramps_id"] == "N0098")["text"]["string"] = text
+    return bool([f for f in checks.run_checks(Tree(d))[0] if f["check"] == "note-marker-no-tag"])
+
+
+def test_note_marker_a_denied_discard_keeps_the_hypothesis_open():
+    assert _note_marker_found("Hipótesis no descartada: sigue abierta")
+    assert _note_marker_found("La hipótesis no está descartada")
+    assert _note_marker_found("Hipótesis aún no refutada")
+    assert _note_marker_found("Hipótesis: es el hermano; descartado el primo en otra nota inventada")
+    assert not _note_marker_found("Queda descartada la hipótesis del hermano")
+
+
+def test_note_marker_one_discarded_hypothesis_does_not_hide_another():
+    assert _note_marker_found("Hipótesis A descartada. Hipótesis B: es el hermano")
+    assert not _note_marker_found("Hipótesis A descartada. Hipótesis B refutada")
+
+
+def test_note_marker_never_sets_the_exit_code(tmp_path, capsys):
+    d = selftest.clean_tree()
+    selftest.p_note_marker_no_tag(d)
+    report = tmp_path / "r.json"
+    assert main(["check", _write(tmp_path, "n.json", d), "--json", str(report)]) == 0
+    assert "info note-marker-no-tag: 1 found (0 known)" in capsys.readouterr().out
+    assert [(f["check"], f["key"], f["info"]) for f in json.loads(report.read_text())["findings"]] == [
+        ("note-marker-no-tag", "N0098 hipotesis", True)]
+
+
+def test_note_marker_discard_word_counts_only_within_three_words_of_the_marker():
+    assert not _note_marker_found("Hipótesis del hermano, luego descartada")
+    assert _note_marker_found("Hipótesis del hermano mayor de la casa, descartada")
+    assert _note_marker_found("Descartado el primo, la otra rama apunta a la hipótesis del hermano")
+    assert not _note_marker_found("Hipótesis desmentida por el padrón")
+
+
+def test_note_marker_reports_only_a_note_in_scope():
+    d = selftest.clean_tree()
+    selftest.p_note_marker_no_tag(d)
+
+    def keys(scope):
+        return [f["key"] for f in checks.run_checks(Tree(copy.deepcopy(d)), scope=scope)[0]
+                if f["check"] == "note-marker-no-tag"]
+
+    assert keys({("people", "hI0003")}) == []
+    assert keys({("notes", "hN0098")}) == ["N0098 hipotesis"]
 
 
 def test_place_vs_description_is_info_and_never_fails_the_run(tmp_path, capsys):

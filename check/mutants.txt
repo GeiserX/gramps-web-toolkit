@@ -40,6 +40,16 @@ gwt_check/fill.py | if rep.get("held_back"): | if False: | the text output count
 gwt_check/client.py | got += pool.map(first_page, TYPES[1:]) | got += [first_page(t) for t in TYPES[1:]] | the first pages of the types are read together, not one type after another
 gwt_check/checks.py | if len(group) > 1 and any(in_scope("media", h) for h, _ in group): | if len(group) > 1: | dup-media reports a group only when one member is in scope
 gwt_check/checks.py | if o.get("checksum"): | if True: | a media object with no checksum is never a duplicate
+gwt_check/checks.py | if any(not NOTE_DISCARDED_AFTER.match(text, m.end()) | if any(True | a hypothesis discarded right after it is not reported
+gwt_check/checks.py | and not NOTE_DISCARDED_BEFORE.search(text[:m.start()]) for | and True for | a hypothesis discarded right before it is not reported
+gwt_check/checks.py | _GAP = rf"(?:(?!(?:no|ni|sin|nada)\b)\w+{_SEP}){{0,3}}" | _GAP = rf"(?:\w+{_SEP}){{0,3}}" | a «no» between the marker and the discard word keeps the hypothesis open
+gwt_check/checks.py | for m in word.finditer(text)): | for m in list(word.finditer(text))[:1]): | one discarded hypothesis does not hide another still open in the same note
+gwt_check/checks.py | _SEP = r"[^\w.;:!?]+" | _SEP = r"\W+" | a discard word in another sentence does not discard the hypothesis
+gwt_check/checks.py | if not wanted: | if False: | a tree with no such tag is never blamed for missing it
+gwt_check/checks.py | if not in_scope("notes", n["handle"]) or wanted & set(n.get("tag_list") or []): | if wanted & set(n.get("tag_list") or []): | a note out of scope is not reported
+gwt_check/checks.py | NOTE_DISCARDED_BEFORE = re.compile(rf"\b{_DISCARD}{_SEP}{_GAP}$") | NOTE_DISCARDED_BEFORE = re.compile(rf"\b{_DISCARD}{_SEP}{_GAP}") | a discard word before the marker counts only when it is within three words of it
+gwt_check/checks.py | _GAP = rf"(?:(?!(?:no|ni|sin|nada)\b)\w+{_SEP}){{0,3}}" | _GAP = rf"(?:(?!(?:no|ni|sin|nada)\b)\w+{_SEP}){{0,30}}" | a discard word more than three words from the marker does not discard it
+gwt_check/checks.py | _DISCARD = r"(?:descartad|refutad|superad|sustituid|desmentid)[oa]s?" | _DISCARD = r"(?:descartad|refutad|superad|sustituid)[oa]s?" | «desmentida» discards a hypothesis like «descartada»
 gwt_check/checks.py | if len(n) >= 4: | if len(n) >= 0: | place names under four letters are skipped
 gwt_check/checks.py | if any(f" {n} " in padded for n in own): | if False: | a description that names the event's own place is quiet
 gwt_check/checks.py | todo += [r.get("ref") for r in pl.get("placeref_list") or []] | todo += [] | a description naming a place that encloses the event's place is quiet
