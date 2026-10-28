@@ -1470,3 +1470,15 @@ def test_note_marker_tag_name_needs_the_whole_word():
     assert not [f for f in checks.run_checks(Tree(d))[0] if f["check"] == "note-marker-no-tag"]
     next(t for t in d["tags"] if t["handle"] == "htag2")["name"] = "hipotesis-1022"
     assert [f for f in checks.run_checks(Tree(d))[0] if f["check"] == "note-marker-no-tag"]
+
+
+def test_a_duplicate_key_does_not_depend_on_the_order_of_the_dump():
+    # O01 and O001 sort as equal numbers; the ID itself breaks the tie, so both dump orders give one key
+    keys = []
+    for order in ((1, "O01"), (2, "O001")), ((2, "O001"), (1, "O01")):
+        d = selftest.clean_tree()
+        for n, gid in order:
+            d["media"].append({**copy.deepcopy(d["media"][0]), "handle": f"hdup{n}", "gramps_id": gid,
+                               "path": f"a/copy-{n}.jpg", "checksum": "d" * 32})
+        keys.append(_dup_media_keys(d))
+    assert keys[0] == keys[1] == ["O001,O01"]

@@ -78,6 +78,9 @@ class LeadsTest(unittest.TestCase):
 
     # --- the gaps ---
 
+    def test_id_order_breaks_a_tie_with_the_id(self):
+        self.assertEqual(sorted(['I1', 'I01'], key=L.id_order), sorted(['I01', 'I1'], key=L.id_order))
+
     def test_generations_count_ancestors_only(self):
         g = L.generations(tree(), 'r')
         self.assertEqual((g['r'], g['fa'], g['gm']), (0, 1, 2))

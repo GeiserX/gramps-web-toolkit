@@ -12,9 +12,39 @@ None.
 
 ### Added
 
+- `gwt-check check` reports `note-marker-no-tag`: a note that says «hipótesis» or «homónimo» without the tag of that name, in a tree that has such a tag. A note that says the hypothesis was discarded, replaced or refuted is not reported. A tree with no such tag is never blamed.
+
+## [0.2.6] - 2026-10-28
+
+### Change lists
+
+None.
+
+### Fixed
+
+- `gwt-check check`: a finding key that lists several IDs (`dup-media`, `dup-citation`, `own-ancestor` and the others sorted by ID) no longer depends on the order the dump lists the objects in when two IDs have the same number (`O01` and `O001`). The ID itself breaks the tie, so `--known` and `--baseline` keep matching. `gwt-leads` orders such IDs the same way.
+
+## [0.2.5] - 2026-10-28
+
+### Change lists
+
+None.
+
+### Added
+
+- `gwt-apply` `update_place` takes `name` in `set`: it renames a place and keeps the date and language of its name. A sibling of the same type that already has the name is a conflict, a rerun is a skip, and `--verify` reports a place renamed back as differing.
+
+## [0.2.4] - 2026-10-28
+
+### Change lists
+
+None.
+
+### Added
+
+- `gwt-apply` `update_place` takes `enclosed_by` in `set`: it moves a place under another parent, refusing a parent that does not exist or one inside the place. A rerun is a skip, and `--verify` reports a place moved back as differing.
 - `gwt-check repos --classify` sorts the sources with no repository by what they name (a repository the tree has, another institution, nothing), with the institutions grouped so one new repository can serve many sources. It only reports.
 - `gwt-check check` reports `dup-media`: two media objects with the same checksum, the same file entered twice.
-- `gwt-check check` reports `note-marker-no-tag`: a note that says «hipótesis» or «homónimo» without the tag of that name, in a tree that has such a tag. A note that says the hypothesis was discarded, replaced or refuted is not reported. A tree with no such tag is never blamed.
 
 ## [0.2.3] - 2026-10-26
 

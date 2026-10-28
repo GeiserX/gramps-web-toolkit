@@ -87,7 +87,7 @@ PERSON_FIELDS = {"first_name", "surname", "gender"}
 ADDRESS_KEYS = {"street", "locality", "city", "county", "state", "country", "postal", "phone"}
 REPOSITORY_FIELDS = {"name", "type", "url", "address"}
 EVENT_FIELDS = {"type", "date", "place", "description"}
-PLACE_FIELDS = {"lat", "long"}
+PLACE_FIELDS = {"lat", "long", "enclosed_by", "name"}
 NOTE_FIELDS = {"text", "type"}
 CITATION_FIELDS = {"page", "confidence", "date"}
 FAMILY_FIELDS = {"type"}
@@ -378,6 +378,13 @@ def validate(ops: list[dict]) -> list[str]:
                 if not isinstance(s, dict) or not s or set(s) - PLACE_FIELDS:
                     raise ValueError(f"set takes only {sorted(PLACE_FIELDS)}")
                 _check_coords(s)
+                if "enclosed_by" in s and not (isinstance(s["enclosed_by"], str) and (
+                        s["enclosed_by"].startswith("key:") or _GRAMPS_ID.match(s["enclosed_by"]))):
+                    raise ValueError(f"{s['enclosed_by']!r} is neither key:<key> nor a Gramps ID (never a handle)")
+                if s.get("enclosed_by") == op.get("place"):
+                    raise ValueError("a place cannot enclose itself")
+                if "name" in s and not (isinstance(s["name"], str) and s["name"].strip()):
+                    raise ValueError("name is a non-empty string")
             if name == "update_note":
                 f = op.get("set")
                 if not isinstance(f, dict) or not f or set(f) - NOTE_FIELDS:
@@ -924,11 +931,54 @@ class Applier:
         place.setdefault("_class", "Place")
         before = copy.deepcopy(place)
         s = op["set"]
-        place["lat"], place["long"] = str(s["lat"]), str(s["long"])
+        if "lat" in s:
+            place["lat"], place["long"] = str(s["lat"]), str(s["long"])
+        if "enclosed_by" in s:
+            parent = self.resolve("Place", s["enclosed_by"])
+            # compared with the parent the place has now, by handle: a place already under that one parent and no
+            # other is left as it is, with whatever its PlaceRef carries, so a rerun is a skip
+            if [r.get("ref") for r in place.get("placeref_list") or []] != [parent]:
+                self._refuse_place_loop(place, parent)
+                place["placeref_list"] = [{"_class": "PlaceRef", "ref": parent}]
+        if "name" in s:
+            name = s["name"].strip()
+            current = place.get("name") or {}
+            # compared with the name the place has now: the same text is a skip; only the value changes, so the
+            # PlaceName keeps its date and language
+            if current.get("value") != name:
+                self._refuse_place_namesake(place, name)
+                place["name"] = {**current, "_class": "PlaceName", "value": name}
         if place == before:
-            self.actions.append(f"skip: Place {self.label(place)} already has those coordinates")
+            self.actions.append(f"skip: Place {self.label(place)} already has those values")
             return
         self.save(before, place)
+
+    def _refuse_place_namesake(self, place: dict, name: str) -> None:
+        """A conflict when another place of the same type under the same parent already has that name, as add_place
+        would match it: renaming would make a duplicate to merge, not a fix."""
+        parent = next((r.get("ref") for r in place.get("placeref_list") or []), None)
+        for row in self.c.list_all("Place", ["name", "place_type", "placeref_list", "gramps_id"]):
+            if (row["handle"] != place["handle"]
+                    and fold((row.get("name") or {}).get("value")) == fold(name)
+                    and fold(str(row.get("place_type"))) == fold(str(place.get("place_type")))
+                    and next((r.get("ref") for r in row.get("placeref_list") or []), None) == parent):
+                raise Conflict(f"Place {row.get('gramps_id') or row['handle']} under the same parent is already "
+                               f"called {(row.get('name') or {}).get('value')!r}; merge the two instead of renaming")
+
+    def _refuse_place_loop(self, place: dict, parent: str) -> None:
+        """A conflict when `parent` is the place itself or lies inside it, at any depth: the place would enclose
+        itself. Walks every PlaceRef up from the new parent."""
+        seen, todo = set(), [parent]
+        while todo:
+            h = todo.pop()
+            if h == place["handle"]:
+                p = self.c.get("Place", parent) or {}
+                raise Conflict(f"Place {p.get('gramps_id') or parent} lies inside Place {self.label(place)}: "
+                               "enclosing it there would make a loop")
+            if h in seen:
+                continue
+            seen.add(h)
+            todo += [r["ref"] for r in (self.c.get("Place", h) or {}).get("placeref_list") or [] if r.get("ref")]
 
     def add_event(self, op):
         target_cls = "Person" if op.get("person") else "Family"
