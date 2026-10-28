@@ -1484,6 +1484,26 @@ def test_a_duplicate_key_does_not_depend_on_the_order_of_the_dump():
     assert keys[0] == keys[1] == ["O001,O01"]
 
 
+def _note_marker_found(text):
+    d = selftest.clean_tree()
+    selftest.p_note_marker_no_tag(d)
+    next(n for n in d["notes"] if n["gramps_id"] == "N0098")["text"]["string"] = text
+    return bool([f for f in checks.run_checks(Tree(d))[0] if f["check"] == "note-marker-no-tag"])
+
+
+def test_note_marker_a_denied_discard_keeps_the_hypothesis_open():
+    assert _note_marker_found("Hipótesis no descartada: sigue abierta")
+    assert _note_marker_found("La hipótesis no está descartada")
+    assert _note_marker_found("Hipótesis aún no refutada")
+    assert _note_marker_found("Hipótesis: es el hermano; descartado el primo en otra nota inventada")
+    assert not _note_marker_found("Queda descartada la hipótesis del hermano")
+
+
+def test_note_marker_one_discarded_hypothesis_does_not_hide_another():
+    assert _note_marker_found("Hipótesis A descartada. Hipótesis B: es el hermano")
+    assert not _note_marker_found("Hipótesis A descartada. Hipótesis B refutada")
+
+
 def test_note_marker_never_sets_the_exit_code(tmp_path, capsys):
     d = selftest.clean_tree()
     selftest.p_note_marker_no_tag(d)

@@ -100,8 +100,14 @@ INFO_CHECKS = {"unconnected", "parent-age", "marriage-age", "sibling-spacing", "
 
 # words in a note that a tag of the same stem is meant to mark; matched without accents, whole word
 NOTE_MARKERS = ("hipotesis", "homonimo")
-# a note that says the hypothesis was discarded or replaced no longer needs its tag
-NOTE_DISCARDED = re.compile(r"(?<!sin )\b(?:descartad[oa]s?|refutad[oa]s?|superad[oa]s?|sustituid[oa]s?|desmentid[oa]s?)\b")
+# a marker with one of these words within three words after it («hipótesis descartada») or before it
+# («queda descartada la hipótesis») was discarded or replaced and no longer needs its tag. A «no», «ni»,
+# «sin» or «nada» between them denies the discard: «hipótesis no descartada» is still open. All in one sentence
+_DISCARD = r"(?:descartad|refutad|superad|sustituid|desmentid)[oa]s?"
+_SEP = r"[^\w.;:!?]+"                      # the words must sit in one sentence
+_GAP = rf"(?:(?!(?:no|ni|sin|nada)\b)\w+{_SEP}){{0,3}}"
+NOTE_DISCARDED_AFTER = re.compile(rf"{_SEP}{_GAP}{_DISCARD}\b")
+NOTE_DISCARDED_BEFORE = re.compile(rf"\b{_DISCARD}{_SEP}{_GAP}$")
 
 # limits of the dated checks
 POSTHUMOUS_DAYS = 300                       # a child can be born this long after the father's death
@@ -582,7 +588,10 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
                 continue
             text = n.get("text")
             text = text.get("string", "") if isinstance(text, dict) else str(text or "")
-            if word.search(fold(text)) and not NOTE_DISCARDED.search(fold(text)):
+            text = fold(text)
+            # each mention counts on its own: one discarded hypothesis does not hide another still open
+            if any(not NOTE_DISCARDED_AFTER.match(text, m.end())
+                   and not NOTE_DISCARDED_BEFORE.search(text[:m.start()]) for m in word.finditer(text)):
                 out.add("note-marker-no-tag", f"{n['gramps_id']} {stem}")
 
     # family components: people joined by a family as father, mother or child. Godparents, witnesses and
