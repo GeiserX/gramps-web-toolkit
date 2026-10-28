@@ -3,12 +3,15 @@
 
   gwt-read pares search [--given G] [--surname S [--surname S2]] [--words "W ..."] --out DIR
   gwt-read pares record ID --out DIR                  ID: a PARES description id or its URL
+  gwt-read genae search [--given G] [--surname S [--surname S2]] [--province mu] [--locality L] [--from Y] [--to Y]
+                        --out DIR
   gwt-read familysearch search [--given G] [--surname S [--surname S2]] [--by Y] [--dy Y] [--years N]
                                [--place P] [--father "G S"] [--mother "G S"] [--collection ID]
                                [--count N] --out DIR
   gwt-read familysearch record ARK --out DIR          ARK: 1:1:XXXX-XXX or its https://.../ark:/61903/ URL
 
-PARES (the Spanish state archives' catalogue) is public: no account and no token.
+PARES (the Spanish state archives' catalogue) and Genae (a volunteer index of parish baptisms, marriages and
+burials) are public: no account and no token. Genae rows are an index, never the record.
 
 The FamilySearch session token is the one the signed-in browser already holds (its `fssessionid` cookie), read from
 $GWT_FS_TOKEN or the file named in $GWT_FS_TOKEN_FILE. The tool never asks for a password and never logs in.
@@ -32,7 +35,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 try:                     # installed: the other tools are modules beside this one
     import gwt_reader
     import gwt_pares
-    from gwt_fscache import FSCache, FAMILYSEARCH_RULES, PARES_RULES
+    import gwt_genae
+    from gwt_fscache import FSCache, FAMILYSEARCH_RULES, PARES_RULES, GENAE_RULES
     from gwt_gate import Gate, Paused
     import gwt_rank
 except ImportError:      # a clone: they live in ../gate, ../fscache, ../rank
@@ -42,7 +46,8 @@ except ImportError:      # a clone: they live in ../gate, ../fscache, ../rank
             sys.path.insert(0, p)
     import gwt_reader
     import gwt_pares
-    from gwt_fscache import FSCache, FAMILYSEARCH_RULES, PARES_RULES
+    import gwt_genae
+    from gwt_fscache import FSCache, FAMILYSEARCH_RULES, PARES_RULES, GENAE_RULES
     from gwt_gate import Gate, Paused
     import gwt_rank
 
@@ -227,6 +232,30 @@ def cmd_pares_record(a, R):
                       lambda p: gwt_pares.record_candidates(p, did), lambda p: None)
 
 
+def cmd_genae_search(a, R):
+    if not (a.given or a.surname):
+        err('give --given, --surname or both')
+        return EXIT_USAGE
+    sur = (list(a.surname) + ['', ''])[:2]
+    query = gwt_genae.params(a.given, sur[0], sur[1], a.province, a.locality, a.year_from, a.year_to)
+    h = {'accept': gwt_genae.ACCEPT, 'accept-language': gwt_genae.LANGUAGE, 'hx-request': 'true'}
+    cands, pages, totals = [], {}, {}
+    for block in gwt_genae.BLOCKS:
+        url = gwt_genae.block_url(block, query)
+        status, rh, body, cached = R.get(url, h, refresh=a.refresh, page=lambda p, b=block: gwt_genae.is_block(p, b))
+        page = body.decode('utf-8', 'replace')
+        found = gwt_genae.candidates(page, block)
+        pages[block] = {'url': url, 'html': page, 'rows': len(found), 'from_cache': cached}
+        cands += found
+    key = gwt_reader.search_key(gwt_genae.block_url('bautismos', query), ['genae', a.given] + list(a.surname))
+    env = gwt_reader.envelope(gwt_genae.block_url('bautismos', query), None,
+                              text=' '.join(gwt_genae.text(p['html']) for p in pages.values()), blocks=pages)
+    base = gwt_reader.write_search(a.out, key, env, cands)
+    gwt_reader.print_paths(gwt_genae.SOURCE, base, out)
+    out('results\t%s' % ', '.join('%s %d' % (b, pages[b]['rows']) for b in gwt_genae.BLOCKS))
+    return EXIT_OK if cands else EXIT_EMPTY
+
+
 def _save_page(a, R, url, h, page_ok, key, to_cands, total_of):
     status, rh, body, cached = R.get(url, h, refresh=a.refresh, page=page_ok)
     page = body.decode('utf-8', 'replace')
@@ -264,6 +293,18 @@ def parser():
     r = psub.add_parser('record', help='one archival description by its id')
     r.add_argument('id')
     r.add_argument('--out', required=True)
+    ge = sites.add_parser('genae', help='Genae, a volunteer index of parish baptisms, marriages and burials; public')
+    _common(ge, 'GWT_GENAE_USER_AGENT')
+    ge.add_argument('--gate-dir', help='default ~/.cache/gwt-gate-genae')
+    gsub = ge.add_subparsers(dest='cmd', required=True)
+    s = gsub.add_parser('search', help='a search over baptisms, marriages and burials; first page of each')
+    s.add_argument('--given', default='')
+    s.add_argument('--surname', action='append', default=[], help='first surname, then again for the second')
+    s.add_argument('--province', default='mu', choices=gwt_genae.PROVINCES)
+    s.add_argument('--locality', default='')
+    s.add_argument('--from', dest='year_from', type=int, default=1503)
+    s.add_argument('--to', dest='year_to', type=int, default=1986)
+    s.add_argument('--out', required=True)
     fs = sites.add_parser('familysearch', help='FamilySearch historical records, with your own session token')
     fs.add_argument('--account', default=os.environ.get('GWT_FS_ACCOUNT', 'default'),
                     help='names the account; each account gets its own gate (pace)')
@@ -297,6 +338,12 @@ def main(argv=None, urlopen=None, gate=None):
         R = gwt_reader.Reader(FSCache(a.cache_dir, rules=PARES_RULES), gate, a.lane,
                               urllib_fetcher(None, a.user_agent, urlopen), log=err)
         return _run(R, {'search': cmd_pares_search, 'record': cmd_pares_record}[a.cmd], a)
+    if a.site == 'genae':
+        urlopen = urlopen or urllib.request.urlopen
+        gate = gate or Gate(a.gate_dir or '~/.cache/gwt-gate-genae', **gwt_genae.PACE)
+        R = gwt_reader.Reader(FSCache(a.cache_dir, rules=GENAE_RULES), gate, a.lane,
+                              urllib_fetcher(None, a.user_agent, urlopen), log=err)
+        return _run(R, cmd_genae_search, a)
     urlopen = urlopen or urllib.request.urlopen
     token = token_from_env()
     if not token:

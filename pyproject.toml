@@ -71,3 +71,4 @@ dev-mode-dirs = ["apply", "check", "fetch", "core", "ledger", "gate", "fscache",
 "read/gwt_reader.py" = "gwt_reader.py"
 "read/gwt_read.py" = "gwt_read.py"
 "read/gwt_pares.py" = "gwt_pares.py"
+"read/gwt_genae.py" = "gwt_genae.py"

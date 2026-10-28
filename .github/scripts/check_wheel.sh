@@ -16,8 +16,8 @@ tools=$("$bin/python" - "$work/venv" <<'PY'
 import importlib, sys
 from gwt_core.cli import TOOLS
 # gwt_mh_browser loads only on a real `gwt mh` run (not on --help), so it is listed by name here, and
-# gwt_reader (the shape gwt-mh and gwt-read share) and gwt_pares (a gwt-read site) with it
-for mod in [m for m, _ in TOOLS.values()] + ["gwt_mh", "gwt_mh_browser", "gwt_reader", "gwt_pares"]:
+# gwt_reader (the shape gwt-mh and gwt-read share) and gwt_pares and gwt_genae (gwt-read sites) with it
+for mod in [m for m, _ in TOOLS.values()] + ["gwt_mh", "gwt_mh_browser", "gwt_reader", "gwt_pares", "gwt_genae"]:
     f = importlib.import_module(mod).__file__
     if not f.startswith(sys.argv[1]):
         sys.exit(f"{mod} loaded from {f}, not from the installed wheel")
