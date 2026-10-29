@@ -286,8 +286,8 @@ def _boe_read(a, R, phrase, pages, born=None):
 
 
 def _boe_pdf_context(a, R, cands, phrase):
-    """The words around the name in the PDF of the first `--pdf-context` acts, one request each at the gate's pace.
-    Without `pdftotext` nothing is fetched."""
+    """The words around the name in the PDF of the first `--pdf-context` acts that `--born` has not ruled out, one
+    request each at the gate's pace. Without `pdftotext` nothing is fetched."""
     n = max(0, min(getattr(a, 'pdf_context', 0), 10))
     if not n:
         return
@@ -295,8 +295,9 @@ def _boe_pdf_context(a, R, cands, phrase):
         err('--pdf-context needs pdftotext (poppler-utils); nothing was fetched')
         return
     h = {'accept': 'application/pdf', 'accept-language': gwt_boe.LANGUAGE}
-    for c in [c for c in cands if c['url'].endswith('.pdf')][:n]:
-        status, rh, body, cached = R.get(c['url'], h, refresh=a.refresh, page=lambda p: bool(p))
+    for c in [c for c in cands if c['url'].endswith('.pdf') and not c.get('implausible')][:n]:
+        # an HTML page served with 200 at a PDF URL is not the act: a STOP, never cached for 90 days
+        status, rh, body, cached = R.get(c['url'], h, refresh=a.refresh, page=lambda p: p.startswith('%PDF'))
         txt = gwt_boe.pdf_text(body)
         ctx = gwt_boe.context(txt, phrase)
         name = phrase

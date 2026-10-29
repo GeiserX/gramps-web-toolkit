@@ -171,6 +171,35 @@ class Search(Boe):
         self.assertIsNone(c[0]['context'])
         self.assertIn('name not whole in the text layer: open the PDF', c[0]['note'])
 
+    def _with_pdftotext(self, net, gate, extra, txt='Ana Zorvalo Quemada.'):
+        real = (gwt_boe.pdf_text, gwt_boe.shutil.which)
+        gwt_boe.pdf_text = lambda data: txt
+        gwt_boe.shutil.which = lambda n: '/usr/bin/pdftotext'
+        try:
+            return self.search(net, gate, extra)
+        finally:
+            gwt_boe.pdf_text, gwt_boe.shutil.which = real
+
+    def test_an_html_page_at_a_pdf_url_is_a_stop_and_never_cached(self):
+        gate = FakeGate()
+        html_ = b'<html><body>Documento no disponible temporalmente</body></html>'
+        code, lines, text = self._with_pdftotext(FakeNet(gate, (200, RESULTS), (200, html_)), gate, ['--pdf-context', '1'])
+        self.assertEqual(code, 3, text)
+        gate2 = FakeGate()
+        net2 = FakeNet(gate2, (200, b'%PDF-1.4 real'))
+        code, lines, text = self._with_pdftotext(net2, gate2, ['--pdf-context', '1'])
+        self.assertEqual(code, 0, text)
+        self.assertEqual(len(net2.requests), 1)   # the search came from the cache, the PDF did not
+        self.assertTrue(net2.requests[0].full_url.endswith('.pdf'))
+
+    def test_pdf_context_skips_acts_born_already_ruled_out(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, RESULTS), (200, b'%PDF-1.4 x'))
+        code, lines, text = self._with_pdftotext(net, gate, ['--pdf-context', '1', '--born', '1903'])
+        self.assertEqual(code, 0, text)
+        self.assertEqual(len(net.requests), 2)
+        self.assertIn('/1949/', net.requests[1].full_url)
+
     def test_pdf_context_without_pdftotext_fetches_nothing(self):
         gate = FakeGate()
         net = FakeNet(gate, (200, RESULTS))
