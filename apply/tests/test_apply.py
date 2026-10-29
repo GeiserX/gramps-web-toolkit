@@ -705,9 +705,17 @@ def test_verify_sees_a_removed_tag_put_back(fake, tmp_path, env, capsys):
     fake.store["places"]["plc1"]["tag_list"] = ["tag-weak"]  # put back by hand
     assert main([str(p), "--verify"]) == 1
     fake.store["places"]["plc1"]["tag_list"] = []
-    del fake.store["tags"]["tag-weak"]  # the tag deleted from the tree: on nothing, so the op holds
+    del fake.store["tags"]["tag-weak"]  # no tag of that name: --verify agrees with --apply, a conflict
     capsys.readouterr()
-    assert main([str(p), "--verify"]) == 0, capsys.readouterr().out
+    assert main([str(p), "--verify"]) == 1
+    assert "no tag 'Weak'" in capsys.readouterr().out
+
+
+def test_remove_tag_reads_the_tag_it_takes_off(fake):
+    """A snapshot apply only checks what was read: a tag renamed since the snapshot must stop the run."""
+    ops = _tagged_place(fake)
+    assert run(fake, ops)[0].status == "done"
+    assert ("GET", "/api/tags/tag-weak") in fake.calls
 
 
 def _two_people_and_events(fake):
@@ -759,12 +767,56 @@ def test_move_event_shifts_the_later_indexes_when_an_earlier_ref_leaves(fake):
     assert [r["ref"] for r in bob["event_ref_list"]] == ["ev-b2", "ev-d2"]
     assert (bob["birth_ref_index"], bob["death_ref_index"]) == (0, 1)  # both still on the birth and the death
     assert [r["ref"] for r in fake.store["families"]["fam1"]["event_ref_list"]] == ["ev-res"]
-    # and the birth itself: off Bob (-1), onto Carl, whose own birth keeps index 0
+    # and the birth itself: off Bob (-1), onto Carl, who has none once his own is gone
+    fake.store["people"]["carl"]["event_ref_list"] = [{"ref": "ev-res", "role": "Witness"}]
+    fake.store["people"]["carl"]["birth_ref_index"] = -1
     res = run(fake, _move("E0002", {"person": "I0002"}, {"person": "I0003"}, key="mv2"))[0]
     assert res.status == "done", res.actions
     bob, carl = fake.store["people"]["bob"], fake.store["people"]["carl"]
     assert (bob["birth_ref_index"], bob["death_ref_index"]) == (-1, 0)
-    assert (carl["birth_ref_index"], carl["death_ref_index"]) == (0, -1)
+    assert (carl["birth_ref_index"], carl["death_ref_index"]) == (1, -1)
+
+
+def test_move_event_between_a_person_and_a_family_swaps_primary_and_family(fake):
+    """A marriage entered on a person belongs to the family in role Family, and back again; `role` overrides."""
+    bob, _ = _two_people_and_events(fake)
+    fake.add("events", {"handle": "ev-m", "gramps_id": "E0005", "type": "Marriage"})
+    bob["event_ref_list"].append({"ref": "ev-m", "role": "Primary", "citation_list": ["cit-m"]})
+    res = run(fake, _move("E0005", {"person": "I0002"}, {"family": "F0001"}))[0]
+    assert res.status == "done", res.actions
+    (moved,) = fake.store["families"]["fam1"]["event_ref_list"]
+    assert (moved["ref"], moved["role"], moved["citation_list"]) == ("ev-m", "Family", ["cit-m"])
+    res = run(fake, _move("E0005", {"family": "F0001"}, {"person": "I0003"}, key="mv2"))[0]
+    assert res.status == "done", res.actions
+    assert fake.store["people"]["carl"]["event_ref_list"][-1]["role"] == "Primary"
+    op = dict(_move("E0005", {"person": "I0003"}, {"family": "F0001"}, key="mv3")[0], role="Unknown")
+    res = run(fake, [op])[0]
+    assert res.status == "done", res.actions
+    assert fake.store["families"]["fam1"]["event_ref_list"][-1]["role"] == "Unknown"
+    assert validate([op]) == [] and validate([dict(op, role=" ")])
+
+
+def test_move_event_refuses_a_second_primary_birth_on_the_new_person(fake):
+    """One birth and one death, as add_event: merge the two instead."""
+    _two_people_and_events(fake)
+    res = run(fake, _move("E0002", {"person": "I0002"}, {"person": "I0003"}))[0]  # Carl has his own birth
+    assert res.status == "conflict" and "already has a Primary Birth (Event E0004)" in res.actions[-1], res.actions
+    assert fake.writes() == []
+
+
+def test_move_event_points_the_old_index_at_the_other_birth_left(fake):
+    """A person entered with two births: moving the indexed one leaves the other as the birth, never -1."""
+    bob, _ = _two_people_and_events(fake)
+    fake.add("events", {"handle": "ev-b2b", "gramps_id": "E0005", "type": "Birth"})
+    bob["event_ref_list"].append({"ref": "ev-b2b", "role": "Primary"})  # index 3, a second birth
+    fake.store["people"]["carl"]["event_ref_list"] = []
+    fake.store["people"]["carl"]["birth_ref_index"] = -1
+    res = run(fake, _move("E0002", {"person": "I0002"}, {"person": "I0003"}))[0]
+    assert res.status == "done", res.actions
+    bob = fake.store["people"]["bob"]
+    assert [r["ref"] for r in bob["event_ref_list"]] == ["ev-res", "ev-d2", "ev-b2b"]
+    assert (bob["birth_ref_index"], bob["death_ref_index"]) == (2, 1)
+    assert fake.store["people"]["carl"]["birth_ref_index"] == 0
 
 
 def test_move_event_conflicts_when_the_tree_is_not_what_the_op_expects(fake):
@@ -815,6 +867,33 @@ def test_move_event_stopped_between_its_writes_is_finished_by_a_rerun(fake, monk
     assert [r["ref"] for r in bob["event_ref_list"]] == ["ev-b2", "ev-d2"]
     assert (bob["birth_ref_index"], bob["death_ref_index"]) == (0, 1)
     assert [r["ref"] for r in carl["event_ref_list"]] == ["ev-b3", "ev-res"]
+
+
+def test_move_event_warns_on_every_try_when_the_second_write_keeps_failing(fake, monkeypatch):
+    """A 503 is retried: the try that gives up must still say the event is on both owners."""
+    _two_people_and_events(fake)
+    real = fake.request
+
+    def busy_bob(method, url, **kw):
+        if method == "PUT" and url.endswith("/people/bob"):
+            return Resp(503, "busy")
+        return real(method, url, **kw)
+
+    monkeypatch.setattr(fake, "request", busy_bob)
+    res = run(fake, _move("E0001", {"person": "I0002"}, {"person": "I0003"}))[0]
+    assert res.status == "error"
+    assert any(a.startswith("warning:") and "on both Person I0002 and Person I0003" in a for a in res.actions), res.actions
+
+
+def test_move_event_whose_first_answer_was_lost_says_the_reread_found_it(fake):
+    _two_people_and_events(fake)
+    fake.drop_after = ("PUT", "/api/people/carl")  # Carl's write lands, its answer does not
+    res = run(fake, _move("E0001", {"person": "I0002"}, {"person": "I0003"}))[0]
+    assert res.status == "done", res.actions
+    assert any("PUT /people/carl; the re-read shows the change in place" in a for a in res.actions), res.actions
+    assert not any("did not find it" in a for a in res.actions), res.actions
+    assert [r["ref"] for r in fake.store["people"]["carl"]["event_ref_list"]] == ["ev-b3", "ev-res"]
+    assert "ev-res" not in [r["ref"] for r in fake.store["people"]["bob"]["event_ref_list"]]
 
 
 def test_verify_sees_a_moved_event_moved_back(fake, tmp_path, env, capsys):

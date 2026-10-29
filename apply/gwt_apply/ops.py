@@ -59,7 +59,7 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "attach_existing": ({"object", "attach"}, set()),
     "add_tag": ({"target", "name"}, set()),
     "remove_tag": ({"target", "name"}, set()),
-    "move_event": ({"event", "from", "to"}, set()),
+    "move_event": ({"event", "from", "to"}, {"role"}),
     "dedupe_list": ({"target", "list"}, set()),
     "set_attribute": ({"target", "type", "value"}, set()),
     "merge_person": ({"winner", "loser"}, {"use_loser", "reason"}),
@@ -546,6 +546,7 @@ class Applier:
         self.keymap: dict[str, str] = {}  # key -> handle of the object it ended up as
         self.actions: list[str] = []
         self.wrote = False
+        self._reread_found = False  # set by an op whose re-read found an earlier try's write in place
         self._names: dict[tuple[str, str], str] | None = None  # (first name, surname) -> Gramps ID
         # person handle -> the associations this run adds to that person and their ops, waiting for one PUT
         self._held: dict[str, dict] = {}
@@ -709,13 +710,14 @@ class Applier:
                 if self.lock is not None:  # every try: a slow server can make one op outlast the lock
                     self.lock.refresh()
                 self.actions, self.reasons, self.wrote, self._holding = [], [], False, None
+                self._reread_found = False
                 self.c.unknown_write = []
                 # a dry run's plan of this try: dropped on a retry, or the next try reads it as already done
                 planned = (dict(self.c.pending), set(self.c.deleted)) if self.c.dry_run else None
                 try:
                     getattr(self, op["op"])(op)
                     res.status = "done" if self.wrote else "skip"
-                    if lost and self.wrote:  # the re-read did not find the change, so this try wrote it
+                    if lost and self.wrote and not self._reread_found:  # the re-read did not find the change, so this try wrote it
                         self.actions += [f"{line}; the re-read did not find it, so this try wrote it"
                                          for line in lost]
                     elif lost:
@@ -1735,10 +1737,9 @@ class Applier:
         name = op["name"].strip()
         handles = {t["handle"] for t in self.c.list_all("Tag", ["name"]) if t.get("name") == name}
         if not handles:
-            if self.verify:  # a tag deleted since the apply is on nothing: what the op asked for holds
-                self.actions.append(f"skip: the tree has no tag {name!r}, so {cls} {self.label(target)} does not carry it")
-                return
             raise Conflict(f"the tree has no tag {name!r}; check the name")
+        for h in handles:
+            self.c.get("Tag", h)  # read, so a snapshot apply checks it was not renamed since
         tags = target.get("tag_list") or []
         keep = [h for h in tags if h not in handles]
         if len(keep) == len(tags):
@@ -1748,22 +1749,28 @@ class Applier:
         target["tag_list"] = keep
         self.save(before, target)
 
-    @staticmethod
-    def _reindex(person: dict, old_refs: list) -> None:
-        """birth_ref_index and death_ref_index point at the same event after event_ref_list changed; -1 when it
-        left the list."""
+    def _reindex(self, person: dict, old_refs: list) -> None:
+        """birth_ref_index and death_ref_index point at the same event after event_ref_list changed. When that
+        event left the list, they point at the first other Primary event of that type the person still lists, and
+        become -1 only when there is none."""
         refs = person.get("event_ref_list") or []
-        for key in USE_LOSER.values():
+        for etype, key in SINGLE_VITAL.items():
             i = person.get(key, -1)
             h = old_refs[i].get("ref") if isinstance(i, int) and 0 <= i < len(old_refs) else None
             new = next((n for n, r in enumerate(refs) if r.get("ref") == h), -1) if h else -1
+            if h and new == -1:  # the indexed event left: another Primary one of that type takes its place
+                prim = [(n, r["ref"]) for n, r in enumerate(refs) if r.get("role") == "Primary" and r.get("ref")]
+                types = {e["handle"]: str(e.get("type")) for e in self.c.get_many("Event", [h for _, h in prim])} if prim else {}
+                new = next((n for n, rh in prim if types.get(rh) == etype), -1)
             if key in person or new != -1:
                 person[key] = new
 
     def move_event(self, op):
-        """Move an event reference, role and all, from one person or family to another. Two writes: the new owner
-        gets it first, then the old one loses it, so a failure in between leaves the event on both, never on
-        neither. A rerun that finds that state, with the same reference on both, finishes the move."""
+        """Move an event reference, citations, notes and all, from one person or family to another. Two writes:
+        the new owner gets it first, then the old one loses it, so a failure in between leaves the event on both,
+        never on neither. A rerun that finds that state, with the same reference on both, finishes the move. The
+        role is `role` when given; otherwise it stays, except that a move between a person and a family swaps
+        Primary and Family, the role each kind of owner gives its own events."""
         handle = self.resolve("Event", op["event"])
         (scls, sref), (dcls, dref) = _event_owner(op["from"]), _event_owner(op["to"])
         src, dst = self.obj(scls, sref), self.obj(dcls, dref)
@@ -1782,18 +1789,29 @@ class Applier:
         if len(mine) > 1:
             raise Conflict(f"{scls} {self.label(src)} lists {what} {len(mine)} times; dedupe it first")
         ref = {k: v for k, v in mine[0].items() if k != "_class"}
+        if op.get("role"):
+            ref["role"] = op["role"]
+        elif scls != dcls:
+            ref["role"] = {"Primary": "Family", "Family": "Primary"}.get(ref.get("role"), ref.get("role"))
         if theirs:
             if [{k: v for k, v in r.items() if k != "_class"} for r in theirs] != [ref]:
                 raise Conflict(f"{dcls} {self.label(dst)} already lists {what} with another reference (role "
                                f"{theirs[0].get('role')!r}); not moved")
-            self.actions.append(f"{what} is on both {scls} {self.label(src)} and {dcls} {self.label(dst)}: an earlier "
-                                "try stopped between the two writes; finishing the move")
+            self._reread_found = True  # the new owner's write is in place, whichever try made it
+            self.actions.append(f"{what} is already on {dcls} {self.label(dst)} with the same reference; finishing "
+                                f"the move by taking it off {scls} {self.label(src)}")
         else:
             before, old = copy.deepcopy(dst), list(dst.get("event_ref_list") or [])
             dst["event_ref_list"] = [*old, {"_class": "EventRef", **ref}]
-            if dcls == "Person":  # appended last, so the indexes it has keep pointing at the same events
-                index_key = SINGLE_VITAL.get(str((self.c.get("Event", handle) or {}).get("type")))
-                if index_key and ref.get("role") == "Primary" and dst.get(index_key, -1) == -1:
+            index_key = SINGLE_VITAL.get(str((self.c.get("Event", handle) or {}).get("type")))
+            if dcls == "Person" and index_key and ref.get("role") == "Primary":
+                etype = next(t for t, k in SINGLE_VITAL.items() if k == index_key)
+                prim = [r["ref"] for r in old if r.get("role") == "Primary" and r.get("ref")]
+                for ev in self.c.get_many("Event", prim) if prim else []:
+                    if str(ev.get("type")) == etype:  # the same rule as add_event: one birth and one death
+                        raise Conflict(f"Person {self.label(dst)} already has a Primary {etype} (Event "
+                                       f"{self.label(ev)}); merge the two with merge_event, or move that one off first")
+                if dst.get(index_key, -1) == -1:  # appended last, so the indexes it has keep their events
                     dst[index_key] = len(old)
             self.save(before, dst)
         before, old = copy.deepcopy(src), list(src.get("event_ref_list") or [])
@@ -1803,10 +1821,9 @@ class Applier:
         try:
             self.save(before, src)
         except Exception:
-            if not theirs:
-                self.actions.append(f"warning: {what} is now on both {scls} {self.label(src)} and {dcls} "
-                                    f"{self.label(dst)}: taking it off {scls} {self.label(src)} failed; a rerun "
-                                    "finishes the move")
+            self.actions.append(f"warning: {what} is now on both {scls} {self.label(src)} and {dcls} "
+                                f"{self.label(dst)}: taking it off {scls} {self.label(src)} failed; a rerun "
+                                "finishes the move")
             raise
 
     def dedupe_list(self, op):
