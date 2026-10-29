@@ -47,6 +47,11 @@ PARES_RULES = (
 GENAE_RULES = (
     (r'/buscar/(resultados|bloque)\?', 7 * DAY),
 )
+# BOE and Gaceta de Madrid search (boe.es): the old Gaceta is closed, the BOE grows daily, so a search is kept a week.
+BOE_RULES = (
+    (r'/buscar/gazeta\.php\?', 7 * DAY),
+    (r'/datos/pdfs/', 90 * DAY),               # a published act never changes
+)
 DEFAULT_TTL = 7 * DAY
 STORE_STATUSES = range(200, 300)
 PRIVATE_HEADERS = ('set-cookie', 'authorization', 'www-authenticate')  # never written to disk

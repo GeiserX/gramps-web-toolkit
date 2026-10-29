@@ -176,10 +176,37 @@ A page that is not the block asked for (an empty frame, the search form, a captc
 
 Genae publishes no terms for scripted use, and its robots.txt disallows `/buscar/` for crawlers. The reader keeps to a person's pace: one search of four requests a minute at most, each answer cached for a week, and it never pages. Genae rows are an index made by volunteers: a hit is a lead, and the act or the image behind it is the evidence.
 
+## BOE and Gaceta de Madrid
+
+The BOE's open-data API (https://boe.es/datosabiertos/api/api.php) answers by date and by law, never by a person's name, and its daily summaries start in 1961. The site's own search (https://www.boe.es/buscar/gazeta.php) covers the Gaceta de Madrid and the BOE from 1661 to 1959 and takes a phrase in the text of the acts. It is public: no account, no token. `boe search` asks it for one phrase and reads the first page.
+
+```bash
+gwt read boe search --name "Ana Zorvalo Quemada" --out runs/
+```
+
+The phrase is always sent in quotes, so the site reads it as one name; it ignores accents. Each result becomes a candidate of role `mention`, never a principal, with the act's title in the note. A mention in an official act (a pardon, a pension, a call for places, an appointment) says a name was printed there. It does not say which person it is, and a common name hits many namesakes, so `gwt-rank` never ranks a mention above `weak`. | Option | Meaning |
+| --- | --- |
+| `--from`, `--to` | first and last publication, a year or `yyyy-mm-dd`; the site's historical search ends in 1959 |
+| `--pages N` | read up to N pages of 50 results (1 to 5, default 1); `results` prints how many rows were read and how many the site found |
+| `--pdf-context N` | read the PDF of the first N hits (0 to 10, default 0), one request each, and add the words around the name to the note; needs `pdftotext` (poppler-utils), and without it nothing is fetched |
+| `--born YEAR` | the person's birth year: a row published before they were 14 or after they would be 100 is marked `IMPLAUSIBLE`, never hidden |
+| `--parents "Father y Mother"` | the parents' first names the tree holds; with `--pdf-context`, an act that writes the parents after the name (the draft lists do: "Ana Zorvalo, de Juan y Antonia") is marked as the tree's parents or as other ones |
+| `--near WORD` | mark a row whose title or department holds the word (a place, a trade); it marks, never hides. Repeat for more |
+
+`sweep --inverted` also searches each name with the surnames first ("Zorvalo Quemada Ana"), the way lists write it; the site ignores the comma. When the text layer of a PDF does not hold the name (edicts split it across columns), `--pdf-context` reads the pages as an image, `pdftoppm` then `tesseract --psm 3` (in Spanish when `spa.traineddata` is installed, set `TESSDATA_PREFIX` to a folder that has it; else English), which finds the columns itself, about 6 s a page and the first 8 pages, and looks for a name that is nearly the same (a letter or two wrong, a hyphen at a line end). The row says `[read by OCR as "...": open the PDF image and check]`: a pointer to the image, never a reading. Without either program nothing is run; `--no-ocr` turns it off. Every act gets a `verdict` (also at the start of its note): `excluded` (published before the birth, other parents, or a longer name), `consistent` (same parents as the tree) or `open`; the search prints the three counts. No act is dropped and no verdict is proof. With `--pdf-context` a name that stands inside a longer one ("Juan Ana Zorvalo" holds "Ana Zorvalo") is marked with the word before it. The BOE prints in two or three columns, so the words around a name in a PDF can mix lines of the next column; read them as a pointer to the page, never as the sentence. A row whose title holds the whole name is marked `[name in title]`; the others matched in the act's text only. One request every 6 s at best, one per page.
+
+```bash
+gwt read boe sweep --names dead.txt --variants --from 1900 --to 1959 --out runs/
+```
+
+`sweep` searches one name per line of a file, optionally followed by `| birth year` (`#` starts a comment), once each, and lists every act once. The file must hold only people who are dead: nothing about a living person is sent to the site. `--variants` also searches the b/v spelling of each word, one word at a time (Zorvalo, Zorbalo), a crude rule that can make a name nobody wrote. The output has a line per search with the rows the site found, the rows read, the rows new to the list and how many hold the whole name in the title.
+
+A page that is not a results page (the search form, a captcha) is a STOP: nothing written, nothing cached.
+
 ## Tests
 
 ```bash
-cd read && python3 -m unittest -v test_gwt_read test_gwt_pares test_gwt_genae
+cd read && python3 -m unittest -v test_gwt_read test_gwt_pares test_gwt_genae test_gwt_boe
 ```
 
 Invented people, descriptions and ids (the PARES pages in `read/fixtures/` keep the site's markup with invented content), a fake transport and a fake gate: the tests make no request to any site. They check that a search writes an envelope and candidates `gwt-rank` ranks, that a repeated search is served from the cache with no network call, that the gate is asked before every request, that a 403, 429, captcha, sign-in page or empty frame stops the run with nothing written or cached, and that the token never appears in a written file or a log line.

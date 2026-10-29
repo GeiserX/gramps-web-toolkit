@@ -5,13 +5,16 @@
   gwt-read pares record ID --out DIR                  ID: a PARES description id or its URL
   gwt-read genae search [--given G] [--surname S [--surname S2]] [--province mu] [--locality L] [--from Y] [--to Y]
                         --out DIR
+  gwt-read boe search --name "Given Surname1 [Surname2]" [--from Y] [--to Y] [--near W] [--pages N] --out DIR
+  gwt-read boe sweep --names FILE [--variants] [--inverted] [--from Y] [--to Y] [--near W] --out DIR
   gwt-read familysearch search [--given G] [--surname S [--surname S2]] [--by Y] [--dy Y] [--years N]
                                [--place P] [--father "G S"] [--mother "G S"] [--collection ID]
                                [--count N] --out DIR
   gwt-read familysearch record ARK --out DIR          ARK: 1:1:XXXX-XXX or its https://.../ark:/61903/ URL
 
-PARES (the Spanish state archives' catalogue) and Genae (a volunteer index of parish baptisms, marriages and
-burials) are public: no account and no token. Genae rows are an index, never the record.
+PARES (the Spanish state archives' catalogue), Genae (a volunteer index of parish baptisms, marriages and
+burials) and the BOE and Gaceta de Madrid search are public: no account and no token. Genae rows are an index, never
+the record; a BOE hit is a mention of a name in an official act, never a record of a person.
 
 The FamilySearch session token is the one the signed-in browser already holds (its `fssessionid` cookie), read from
 $GWT_FS_TOKEN or the file named in $GWT_FS_TOKEN_FILE. The tool never asks for a password and never logs in.
@@ -29,14 +32,15 @@ work), 4 signed out or the token
 expired (get a fresh token; never retry in a loop), 6 the account's gate is paused (nothing was requested),
 64 usage (no token).
 """
-import argparse, json, os, re, sys, urllib.error, urllib.parse, urllib.request
+import argparse, json, os, re, shutil, sys, urllib.error, urllib.parse, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 try:                     # installed: the other tools are modules beside this one
     import gwt_reader
     import gwt_pares
     import gwt_genae
-    from gwt_fscache import FSCache, FAMILYSEARCH_RULES, PARES_RULES, GENAE_RULES
+    import gwt_boe
+    from gwt_fscache import FSCache, FAMILYSEARCH_RULES, PARES_RULES, GENAE_RULES, BOE_RULES
     from gwt_gate import Gate, Paused
     import gwt_rank
 except ImportError:      # a clone: they live in ../gate, ../fscache, ../rank
@@ -47,7 +51,8 @@ except ImportError:      # a clone: they live in ../gate, ../fscache, ../rank
     import gwt_reader
     import gwt_pares
     import gwt_genae
-    from gwt_fscache import FSCache, FAMILYSEARCH_RULES, PARES_RULES, GENAE_RULES
+    import gwt_boe
+    from gwt_fscache import FSCache, FAMILYSEARCH_RULES, PARES_RULES, GENAE_RULES, BOE_RULES
     from gwt_gate import Gate, Paused
     import gwt_rank
 
@@ -260,6 +265,132 @@ def cmd_genae_search(a, R):
     return EXIT_OK if cands else EXIT_EMPTY
 
 
+def _boe_phrase(name):
+    return ' '.join((name or '').split())
+
+
+def _boe_read(a, R, phrase, pages, born=None):
+    """The candidates of one phrase over up to `pages` pages of results, and how many rows the site found."""
+    h = {'accept': gwt_boe.ACCEPT, 'accept-language': gwt_boe.LANGUAGE}
+    url = gwt_boe.search_url(phrase, a.year_from, a.year_to)
+    cands, found, first = [], 0, url
+    for n in range(pages):
+        status, rh, body, cached = R.get(url, h, refresh=a.refresh, page=gwt_boe.is_results)
+        page = body.decode('utf-8', 'replace')
+        if n == 0:
+            found = gwt_boe.total(page)
+        cands += gwt_boe.candidates(page, phrase, a.near, born)
+        url = gwt_boe.next_url(page)
+        if not url or len(cands) >= found:
+            break
+    return first, cands, found, page
+
+
+def _boe_pdf_context(a, R, cands, phrase):
+    """The words around the name in the PDF of the first `--pdf-context` acts, one request each at the gate's pace.
+    Without `pdftotext` nothing is fetched."""
+    n = max(0, min(getattr(a, 'pdf_context', 0), 10))
+    if not n:
+        return
+    if not shutil.which('pdftotext'):
+        err('--pdf-context needs pdftotext (poppler-utils); nothing was fetched')
+        return
+    h = {'accept': 'application/pdf', 'accept-language': gwt_boe.LANGUAGE}
+    for c in [c for c in cands if c['url'].endswith('.pdf')][:n]:
+        status, rh, body, cached = R.get(c['url'], h, refresh=a.refresh, page=lambda p: bool(p))
+        txt = gwt_boe.pdf_text(body)
+        ctx = gwt_boe.context(txt, phrase)
+        name = phrase
+        if not ctx and not getattr(a, 'no_ocr', False):
+            ocr = gwt_boe.ocr_text(body)
+            hit = gwt_boe.fuzzy_find(ocr, phrase) if ocr else None
+            if hit:
+                name, ctx = hit[0], hit[1]
+                txt = ocr
+                c['ocr'] = True
+                c['note'] += ' [read by OCR as "%s": open the PDF image and check]' % name
+        c['context'] = ctx
+        if ctx:
+            c['note'] += ' | in the act: ...%s...' % ctx
+        par = gwt_boe.parents_after(txt, name)
+        if par:
+            c['parents_in_act'] = list(par)
+            same = gwt_boe.same_parents(par, getattr(a, 'parents', None))
+            c['same_parents'] = same
+            c['note'] = '[parents in the act: %s y %s%s] ' % (par[0], par[1], '' if same is None else
+                                                              ', as in the tree' if same else ', NOT the tree\'s: another person?') + c['note']
+        pre = gwt_boe.preceded_by(txt, name)
+        c['preceded_by'] = pre
+        if pre:
+            c['note'] = '[preceded by "%s": a longer name, probably another person] ' % pre + c['note']
+
+
+def _boe_verdicts(cands):
+    for c in cands:
+        c['verdict'] = gwt_boe.verdict(c)
+        c['note'] = '[%s] %s' % (c['verdict'], c['note'])
+
+
+def cmd_boe_search(a, R):
+    phrase = _boe_phrase(a.name)
+    if len(phrase.split()) < 2:
+        err('give --name with at least a given name and a surname')
+        return EXIT_USAGE
+    first, cands, found, page = _boe_read(a, R, phrase, max(1, min(a.pages, 5)), a.born)
+    _boe_pdf_context(a, R, cands, phrase)
+    _boe_verdicts(cands)
+    key = gwt_reader.search_key(first, ['boe', phrase, str(a.pages), str(a.pdf_context)])
+    env = gwt_reader.envelope(first, None, text=gwt_boe.text(page), total=found)
+    base = gwt_reader.write_search(a.out, key, env, cands)
+    gwt_reader.print_paths(gwt_boe.SOURCE, base, out)
+    out('results\t%d of %d' % (len(cands), found))
+    for v in ('consistent', 'open', 'excluded'):
+        out('%s\t%d' % (v, sum(1 for c in cands if c['verdict'] == v)))
+    return EXIT_OK if cands else EXIT_EMPTY
+
+
+def cmd_boe_sweep(a, R):
+    """One search per line of a file of names of people who are dead, the b/v spellings optional, one list of
+    candidates with each act once, and a line per name that says how many rows the site found."""
+    try:
+        lines = [l for l in open(os.path.expanduser(a.names), encoding='utf-8') if l.strip() and not l.lstrip().startswith('#')]
+    except OSError as e:
+        err('cannot read %s: %s' % (a.names, e))
+        return EXIT_USAGE
+    names = []
+    for l in lines:
+        n, _, b = l.partition('|')
+        n = _boe_phrase(n)
+        if len(n.split()) >= 2:
+            names.append((n, int(b) if b.strip().isdigit() else None))
+    if not names:
+        err('the file has no line with a given name and a surname')
+        return EXIT_USAGE
+    asked = []
+    for n, b in names:
+        vs = gwt_boe.variants(n) if a.variants else [n]
+        if getattr(a, 'inverted', False):
+            vs += [gwt_boe.inverted(v) for v in vs]
+        asked += [(v, b) for v in vs]
+    seen, cands, rows = set(), [], []
+    for phrase, born in asked:
+        first, got, found, page = _boe_read(a, R, phrase, 1, born)
+        new = [c for c in got if c['id'] not in seen]
+        _boe_pdf_context(a, R, new, phrase)
+        _boe_verdicts(new)
+        seen.update(c['id'] for c in new)
+        cands += new
+        rows.append('%s\t%d\t%d\t%d\t%d' % (phrase, found, len(got), len(new), sum(1 for c in got if c.get('in_title'))))
+    key = gwt_reader.search_key(gwt_boe.HOST + '/buscar/gazeta.php', ['boe-sweep'] + [p for p, b in asked])
+    env = gwt_reader.envelope(gwt_boe.HOST + '/buscar/gazeta.php', None, text='\n'.join(rows), names=[p for p, b in asked])
+    base = gwt_reader.write_search(a.out, key, env, cands)
+    gwt_reader.print_paths(gwt_boe.SOURCE, base, out)
+    out('names\t%d searches, %d acts' % (len(asked), len(cands)))
+    for r in rows:
+        out('found\t' + r)
+    return EXIT_OK if cands else EXIT_EMPTY
+
+
 def _save_page(a, R, url, h, page_ok, key, to_cands, total_of):
     status, rh, body, cached = R.get(url, h, refresh=a.refresh, page=page_ok)
     page = body.decode('utf-8', 'replace')
@@ -278,6 +409,16 @@ def _common(sp, ua_env):
     sp.add_argument('--cache-dir', default=os.environ.get('GWT_FSCACHE_DIR', '~/.cache/gwt-fscache'))
     sp.add_argument('--user-agent', default=os.environ.get(ua_env, 'gramps-web-toolkit (+https://github.com/GeiserX/gramps-web-toolkit)'))
     sp.add_argument('--refresh', action='store_true', help='skip the cache (the request still waits for the gate)')
+
+
+def _boe_filters(sp):
+    sp.add_argument('--from', dest='year_from', help='first publication year or yyyy-mm-dd (the historical search starts in 1661)')
+    sp.add_argument('--to', dest='year_to', help='last publication year or yyyy-mm-dd (it ends in 1959)')
+    sp.add_argument('--no-ocr', action='store_true', help='with --pdf-context, do not read as an image (tesseract) an act whose text layer lacks the name')
+    sp.add_argument('--pdf-context', type=int, default=0, help='read the PDF of the first N acts (0 to 10, default 0) and add the words '
+                    'around the name to the note; one request each, needs pdftotext')
+    sp.add_argument('--near', action='append', default=[], help='a word to look for in the title and department, '
+                    'marked on the row, never a filter (a place, a trade); repeat for more')
 
 
 def parser():
@@ -309,6 +450,23 @@ def parser():
     s.add_argument('--from', dest='year_from', type=int, default=1503)
     s.add_argument('--to', dest='year_to', type=int, default=1986)
     s.add_argument('--out', required=True)
+    bo = sites.add_parser('boe', help='BOE and Gaceta de Madrid, a name in the text of official acts; public')
+    _common(bo, 'GWT_BOE_USER_AGENT')
+    bo.add_argument('--gate-dir', help='default ~/.cache/gwt-gate-boe')
+    bsub = bo.add_subparsers(dest='cmd', required=True)
+    s = bsub.add_parser('search', help='one phrase in quotes, the first page of results')
+    s.add_argument('--name', required=True, help='given name and surname(s), read as one phrase')
+    s.add_argument('--parents', help='the parents\' first names the tree holds, "Father y Mother": with --pdf-context, an act that writes other parents is marked')
+    s.add_argument('--born', type=int, help='birth year of the person: an act published before they were 14 is marked IMPLAUSIBLE, never hidden')
+    s.add_argument('--pages', type=int, default=1, help='pages of 50 results to read, 1 to 5 (default 1)')
+    _boe_filters(s)
+    s.add_argument('--out', required=True)
+    w = bsub.add_parser('sweep', help='one search per name of a file of people who are dead')
+    w.add_argument('--names', required=True, help='a file with one "Given Surname1 Surname2 [| birth year]" per line; # starts a comment')
+    w.add_argument('--inverted', action='store_true', help='also search each name with the surnames first ("Zorvalo Quemada Ana"), as lists write it')
+    w.add_argument('--variants', action='store_true', help='also search the b/v spelling of each word, one word at a time')
+    _boe_filters(w)
+    w.add_argument('--out', required=True)
     fs = sites.add_parser('familysearch', help='FamilySearch historical records, with your own session token')
     fs.add_argument('--account', default=os.environ.get('GWT_FS_ACCOUNT', 'default'),
                     help='names the account; each account gets its own gate (pace)')
@@ -348,6 +506,12 @@ def main(argv=None, urlopen=None, gate=None):
         R = gwt_reader.Reader(FSCache(a.cache_dir, rules=GENAE_RULES), gate, a.lane,
                               urllib_fetcher(None, a.user_agent, urlopen), log=err)
         return _run(R, cmd_genae_search, a)
+    if a.site == 'boe':
+        urlopen = urlopen or urllib.request.urlopen
+        gate = gate or Gate(a.gate_dir or '~/.cache/gwt-gate-boe', **gwt_boe.PACE)
+        R = gwt_reader.Reader(FSCache(a.cache_dir, rules=BOE_RULES), gate, a.lane,
+                              urllib_fetcher(None, a.user_agent, urlopen), log=err)
+        return _run(R, {'search': cmd_boe_search, 'sweep': cmd_boe_sweep}[a.cmd], a)
     urlopen = urlopen or urllib.request.urlopen
     token = token_from_env()
     if not token:
