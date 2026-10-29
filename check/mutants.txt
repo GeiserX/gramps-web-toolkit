@@ -69,3 +69,9 @@ gwt_check/checks.py | "vezina", "residente", | "vezina", | «residente en» name
 gwt_check/checks.py | "vecina", "vezino", "vezina", | "vecina", | the old spelling «vezino» names where someone lives
 gwt_check/checks.py | "vecino", "vecina", "vezino", | "vecin", "vezino", | «en la vecindad de X» is not where someone lives
 gwt_check/checks.py | "domicilie", "domiciliad", | "domicili", | «en su domicilio de X» is not where someone lives
+gwt_check/checks.py | "vecino", "vecina", | "vecino", | «vecina de X» names where someone lives
+gwt_check/checks.py | "vezino", "vezina", | "vezino", | the old spelling «vezina» names where someone lives
+gwt_check/checks.py | "domicilie", "domiciliad", | "domicilie", | «domiciliado en X» names where someone lives
+gwt_check/checks.py | {",", ";", ":", | {",", ":", | a «de» after a semicolon opens a clause
+gwt_check/checks.py | ";", ":", "(", | ";", "(", | a «de» after a colon opens a clause
+gwt_check/checks.py | [w for w, _ in words[j:j + len(ns)]] == ns | words[j][0] == ns[0] | a place of several words matches only as a whole

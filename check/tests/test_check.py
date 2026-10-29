@@ -1693,8 +1693,20 @@ def test_place_vs_description_skips_a_place_named_as_where_someone_is_from_or_li
                  "le père, demeurant au Otropueblo",
                  "De Otropueblo, Mateo, labrador",
                  "Mateo, del Otropueblo",
-                 "Mateo, d'Otropueblo"):
+                 "Mateo, d'Otropueblo",
+                 "Clara, vecina de Otropueblo",
+                 "Clara, vezina de Otropueblo",
+                 "Mateo, domiciliado en Otropueblo",
+                 "viudo; de Otropueblo",
+                 "padre: de Otropueblo"):
         assert _place_desc_keys(d, "E0001", desc) == [], desc
+
+
+def test_place_vs_description_reads_an_origin_on_the_whole_name_of_a_place_of_several_words():
+    # «Santa Cruz» is named as where the father is from; the «Santa» of «Santa María» is not that place
+    d = selftest.clean_tree()
+    _place_named(d, "P0003", "Santa Cruz")
+    assert _place_desc_keys(d, "E0001", "Mateo, natural de Santa Cruz, bautizado en Santa María") == []
 
 
 def test_place_vs_description_still_flags_a_place_where_the_event_happened():
