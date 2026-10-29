@@ -101,6 +101,24 @@ class Search(Boe):
             paths.add(lines['candidates'])
         self.assertEqual(len(paths), 4)
 
+    def test_a_long_name_with_other_parents_is_another_file(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, RESULTS))
+        paths = set()
+        for parents in ('Juan y Antonia', 'Juan y Ana'):    # the readable part of the name is cut at 60 characters
+            code, lines, text = self.run_boe(['--name', 'Maria de la Concepcion Zorvalo de la Quemada', '--born', '1880',
+                                              '--parents', parents], net, gate)
+            self.assertEqual(code, 0, text)
+            paths.add(lines['candidates'])
+        self.assertEqual(len(paths), 2)
+
+    def test_pages_never_go_past_5(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, PAGE1), (200, PAGE1))
+        code, lines, text = self.search(net, gate, ['--pages', '9'])
+        self.assertEqual(code, 0, text)
+        self.assertEqual(lines['results'], '10 of 1003')    # 5 pages of 2 rows, the next pages from the cache
+
     def test_no_documents_is_exit_2(self):
         gate = FakeGate()
         code, lines, text = self.search(FakeNet(gate, (200, EMPTY)), gate)
@@ -226,6 +244,35 @@ class Search(Boe):
             gwt_boe.shutil.which = real
         self.assertEqual(len(net.requests), 1)
         self.assertIn('needs pdftotext', text)
+
+    def test_pdf_context_never_fetches_more_than_10_pdfs(self):
+        got = []
+
+        class R:
+            def get(self, url, h, refresh=False, page=None):
+                got.append(url)
+                return 200, {}, b'%PDF-1.4 x', False
+        cands = [{'url': 'https://www.boe.es/gazeta/dias/1902/04/30/pdfs/A%05d.pdf' % i, 'note': ''} for i in range(12)]
+        a = gwt_read.argparse.Namespace(pdf_context=50, refresh=False, parents=None)
+        real = (gwt_boe.pdf_text, gwt_boe.shutil.which)
+        gwt_boe.pdf_text = lambda data: 'Ana Zorvalo Quemada.'
+        gwt_boe.shutil.which = lambda n: '/usr/bin/pdftotext'
+        try:
+            gwt_read._boe_pdf_context(a, R(), cands, 'Ana Zorvalo Quemada')
+        finally:
+            gwt_boe.pdf_text, gwt_boe.shutil.which = real
+        self.assertEqual(len(got), 10)
+
+    def test_pdf_text_runs_nothing_without_pdftotext(self):
+        real = (gwt_boe.shutil.which, gwt_boe.subprocess.run)
+        ran = []
+        gwt_boe.shutil.which = lambda n: None
+        gwt_boe.subprocess.run = lambda *x, **k: ran.append(x)
+        try:
+            self.assertIsNone(gwt_boe.pdf_text(b'%PDF-1.4 x'))
+        finally:
+            gwt_boe.shutil.which, gwt_boe.subprocess.run = real
+        self.assertEqual(ran, [])
 
     def test_born_marks_an_act_before_the_birth_and_hides_nothing(self):
         gate = FakeGate()

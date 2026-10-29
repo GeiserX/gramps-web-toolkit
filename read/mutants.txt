@@ -15,3 +15,6 @@ gwt_boe.py | if c.get('implausible') or c.get('same_parents') is False: | if c.g
 gwt_boe.py | (r['year'] < born or r['year'] > born + 100) | (r['year'] < born + 14 or r['year'] > born + 100) | --born keeps an act that names a child (orphans in pension lists)
 gwt_boe.py | (r['year'] < born or r['year'] > born + 100) | (r['year'] < born) | --born rules out an act over 100 years after the birth
 gwt_read.py | str(a.pdf_context), str(a.born), str(a.parents)] | str(a.pdf_context)] | a rerun with other --born or --parents is written to its own file
+gwt_read.py | gwt_reader.search_key('\n'.join([first] + words), words) | gwt_reader.search_key(first, words) | a long name rerun with other --parents still gets its own file
+gwt_read.py | max(1, min(a.pages, 5)) | max(1, a.pages) | --pages never reads more than 5 pages
+gwt_read.py | n = max(0, min(getattr(a, 'pdf_context', 0), 10)) | n = max(0, getattr(a, 'pdf_context', 0)) | --pdf-context never fetches more than 10 PDFs
