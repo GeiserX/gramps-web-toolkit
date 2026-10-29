@@ -242,3 +242,36 @@ def test_a_gramps_backup_is_refused_and_limit_cuts_the_list(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "more (--limit 0 for all)" in out
     assert len([ln for ln in out.splitlines() if ln.startswith("  private-")]) == 1
+
+
+@pytest.mark.parametrize("kind", ["private-reference", "private-name"])
+def test_each_leak_kind_alone_sets_the_exit_code(tmp_path, capsys, kind):
+    owner, guest = _pair()
+    if kind == "private-reference":
+        guest["families"][0]["child_ref_list"].append({"ref": "hI0002", "private": False})
+    else:
+        pn = owner["people"][1]["primary_name"]
+        guest["notes"][0]["text"]["string"] = " ".join([pn["first_name"]] + [s["surname"] for s in pn["surname_list"]])
+    o, g = _write(tmp_path, "o.json", owner), _write(tmp_path, "g.json", guest)
+    rc = main(["public", o, g, "--json"])
+    rep = json.loads(capsys.readouterr().out)
+    assert set(rep["counts"]) - {"living-visible"} == {kind}
+    assert rc == 1
+
+
+def test_a_visible_private_object_is_one_row_with_no_path():
+    rows = [r for r in _rep(*_pair(keep=True))["rows"] if r["check"] == "private-visible"]
+    assert rows == [{"check": "private-visible", "object": "I0002", "type": "people"}]
+
+
+def test_a_recent_baptism_alone_makes_a_person_possibly_living():
+    owner, guest = _pair()
+    for d in (owner, guest):
+        _set_own(d, "I0001", [("Baptism", 1990)])
+    assert "I0001" in _living(_rep(owner, guest))
+
+
+def test_a_clean_comparison_says_nothing_found(tmp_path, capsys):
+    owner, guest = _pair()
+    assert main(["public", _write(tmp_path, "o.json", owner), _write(tmp_path, "g.json", guest)]) == 0
+    assert "nothing found" in capsys.readouterr().out

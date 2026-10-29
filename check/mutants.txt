@@ -95,3 +95,8 @@ gwt_check/cli.py | if owner.partial or guest.partial: | if False: | public refus
 gwt_check/cli.py | return 1 if rep["leaks"] else 0 | return 0 | public exits 1 on a leak
 gwt_check/cli.py | print_public(rep, args.limit or len(rep["rows"])) | print_public(rep, len(rep["rows"])) | public prints only --limit findings
 gwt_check/public.py | for r in rep["rows"][:limit]: | for r in rep["rows"]: | print_public stops at the limit
+gwt_check/public.py | LEAKS = ("private-visible", "private-reference", "private-name") | LEAKS = ("private-visible", "private-reference") | a private name alone sets the exit code of public
+gwt_check/public.py | LEAKS = ("private-visible", "private-reference", "private-name") | LEAKS = ("private-visible", "private-name") | a private reference alone sets the exit code of public
+gwt_check/public.py | if path and x.get("private") is True: | if x.get("private") is True: | a visible private object is one row, not also a sub-object row with no path
+gwt_check/checks.py | if e and e.get("type") in ("Birth", "Baptism")] | if e and e.get("type") in ("Birth",)] | a recent baptism alone makes a person possibly living
+gwt_check/public.py | if not rep["rows"]: | if False: | a clean comparison says nothing found
