@@ -222,20 +222,6 @@ class Search(Boe):
         self.assertIn('IMPLAUSIBLE', c[0]['note'])
         self.assertNotIn('IMPLAUSIBLE', c[1]['note'])
 
-    def test_pdf_context_says_when_the_name_sits_inside_a_longer_one(self):
-        gate = FakeGate()
-        net = FakeNet(gate, (200, RESULTS), (200, b'%PDF x'))
-        real = (gwt_boe.pdf_text, gwt_boe.shutil.which)
-        gwt_boe.pdf_text = lambda data: '1905 Juan Ana Zorvalo Quemada.... 1905 Jenaro'
-        gwt_boe.shutil.which = lambda n: '/usr/bin/pdftotext'
-        try:
-            code, lines, text = self.search(net, gate, ['--pdf-context', '1'])
-        finally:
-            gwt_boe.pdf_text, gwt_boe.shutil.which = real
-        c = json.load(open(lines['candidates'], encoding='utf-8'))['candidates']
-        self.assertEqual(c[0]['preceded_by'], 'Juan')
-        self.assertIn('a longer name', c[0]['note'])
-
     def test_parents_in_the_act_are_compared_with_the_trees(self):
         for wanted, expect, word in (('Juan y Antonia', True, 'as in the tree'), ('José y Josefa', False, 'NOT the tree')):
             gate = FakeGate()
@@ -248,7 +234,7 @@ class Search(Boe):
             finally:
                 gwt_boe.pdf_text, gwt_boe.shutil.which = real
             c = json.load(open(lines['candidates'], encoding='utf-8'))['candidates']
-            self.assertEqual(c[0]['parents_in_act'], ['Juan', 'Antonia'])
+            self.assertEqual(c[0]['parents_in_act'], [['Juan', 'Antonia']])
             self.assertIs(c[0]['same_parents'], expect)
             self.assertIn(word, c[0]['note'])
 
@@ -270,11 +256,57 @@ class Pace(unittest.TestCase):
         self.assertGreaterEqual(gwt_boe.PACE['start'], gwt_boe.PACE['floor'])
 
 
+class WholeName(unittest.TestCase):
+    def test_a_longer_given_name_is_not_the_name(self):
+        self.assertIsNone(gwt_boe.context('Juana Zorvalo cobra la pensión', 'Ana Zorvalo'))
+        self.assertEqual(gwt_boe.context('a Ana Zorvalo, cobra', 'Ana Zorvalo', 5), 'a Ana Zorvalo, cob')
+        page = RESULTS.decode().replace('doña Ana Zorvalo', 'doña Juana Zorvalo')
+        self.assertFalse(gwt_boe.candidates(page, 'Ana Zorvalo Quemada')[0]['in_title'])
+
+    def test_parents_are_compared_by_first_given_name(self):
+        self.assertTrue(gwt_boe.same_parents(('José', 'Josefa'), 'José María y Josefa'))
+        self.assertFalse(gwt_boe.same_parents(('Pedro', 'Josefa'), 'José María y Josefa'))
+
+
+class ActVerdict(Boe):
+    def _act(self, txt, parents):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, RESULTS), (200, b'%PDF-1.4 x'))
+        real = (gwt_boe.pdf_text, gwt_boe.shutil.which)
+        gwt_boe.pdf_text = lambda data: txt
+        gwt_boe.shutil.which = lambda n: '/usr/bin/pdftotext'
+        try:
+            code, lines, text = self.search(net, gate, ['--pdf-context', '1', '--parents', parents])
+        finally:
+            gwt_boe.pdf_text, gwt_boe.shutil.which = real
+        self.assertEqual(code, 0, text)
+        return json.load(open(lines['candidates'], encoding='utf-8'))['candidates'][0]
+
+    def test_a_rank_before_the_name_does_not_exclude_the_act(self):
+        c = self._act('Se declara retirado al Cabo Ana Zorvalo Quemada, de Juan y Antonia.', 'Juan y Antonia')
+        self.assertEqual(c['verdict'], 'consistent')
+
+    def test_the_last_surname_of_the_line_above_does_not_exclude_the_act(self):
+        c = self._act('Luis Gil Pérez\nAna Zorvalo Quemada, de Juan y Antonia.\n', 'Juan y Antonia')
+        self.assertEqual(c['verdict'], 'consistent')
+
+    def test_every_occurrence_is_read_and_one_match_is_enough(self):
+        c = self._act('Rosa Ana Zorvalo Quemada, de Pedro y Rosa. Más abajo: Ana Zorvalo Quemada, de Juan y Antonia.',
+                      'Juan y Antonia')
+        self.assertEqual(c['verdict'], 'consistent')
+
+    def test_excluded_only_when_every_occurrence_names_other_parents(self):
+        c = self._act('Ana Zorvalo Quemada, de Pedro y Rosa. Ana Zorvalo Quemada, de Pedro y Rosa.', 'Juan y Antonia')
+        self.assertEqual(c['verdict'], 'excluded')
+        c = self._act('Ana Zorvalo Quemada, de Pedro y Rosa. Ana Zorvalo Quemada, vecina de Roda.', 'Juan y Antonia')
+        self.assertEqual(c['verdict'], 'open')
+
+
 class Verdict(unittest.TestCase):
     def test_excluded_consistent_open(self):
         self.assertEqual(gwt_boe.verdict({'implausible': True}), 'excluded')
         self.assertEqual(gwt_boe.verdict({'same_parents': False}), 'excluded')
-        self.assertEqual(gwt_boe.verdict({'preceded_by': 'Juan'}), 'excluded')
+        self.assertEqual(gwt_boe.verdict({'preceded_by': 'Cabo', 'same_parents': True}), 'consistent')
         self.assertEqual(gwt_boe.verdict({'same_parents': True}), 'consistent')
         self.assertEqual(gwt_boe.verdict({'same_parents': True, 'implausible': True}), 'excluded')
         self.assertEqual(gwt_boe.verdict({'same_parents': None}), 'open')
@@ -294,14 +326,10 @@ class Units(unittest.TestCase):
         self.assertEqual(gwt_boe.context(txt, 'ana zorvalo quemada', 10), 's Gil y a Ana Zorvalo Quemada la gracia')
         self.assertIsNone(gwt_boe.context('Ana Zorvalo y otros. Quemada.', 'Ana Zorvalo Quemada'))
 
-    def test_preceded_by_ignores_a_title_and_a_start_of_text(self):
-        self.assertEqual(gwt_boe.preceded_by('de Juan Ana Zorvalo Quemada y', 'Ana Zorvalo Quemada'), 'Juan')
-        self.assertIsNone(gwt_boe.preceded_by('a don Ana Zorvalo Quemada y', 'Ana Zorvalo Quemada'))
-        self.assertIsNone(gwt_boe.preceded_by('Ana Zorvalo Quemada', 'Ana Zorvalo Quemada'))
-
     def test_parents_after_reads_de_x_y_y_and_the_comparison_ignores_accents(self):
-        self.assertEqual(gwt_boe.parents_after('Ana Zorvalo, de José y Josefa. Luis', 'Ana Zorvalo'), ('José', 'Josefa'))
-        self.assertIsNone(gwt_boe.parents_after('Ana Zorvalo Quemada.... 1905', 'Ana Zorvalo'))
+        self.assertEqual(gwt_boe.parents_after('Ana Zorvalo, de José y Josefa. Luis', 'Ana Zorvalo'), [('José', 'Josefa')])
+        self.assertEqual(gwt_boe.parents_after('Ana Zorvalo Quemada.... 1905', 'Ana Zorvalo'), [None])
+        self.assertEqual(gwt_boe.parents_after('nadie', 'Ana Zorvalo'), [])
         self.assertTrue(gwt_boe.same_parents(('José', 'Josefa'), 'jose y JOSEFA'))
         self.assertFalse(gwt_boe.same_parents(('Juan', 'Antonia'), 'José y Josefa'))
         self.assertIsNone(gwt_boe.same_parents(None, 'José y Josefa'))

@@ -108,7 +108,7 @@ def candidates(page, phrase, near=(), born=None):
     out = []
     for r in rows(page):
         ev = {'mention': {'year': r['year'], 'year_to': r['year'], 'place': ''}} if r['year'] else {}
-        titled = _fold(phrase) in _fold(r['title'])
+        titled = bool(_whole(phrase).search(_fold(r['title'])))
         young = bool(born and r['year'] and (r['year'] < born + 14 or r['year'] > born + 100))
         hits = [w for w in near if _fold(w) in _fold(r['title'] + ' ' + r['dept'])]
         out.append({'source': SOURCE, 'id': r['ref'] or r['title'][:40], 'role': 'mention', 'principal': False,
@@ -124,9 +124,9 @@ def candidates(page, phrase, near=(), born=None):
 
 def verdict(c):
     """One word per act, so a long list reads at a glance. `excluded` when the act cannot be the person (published
-    before the birth, other parents, a longer name), `consistent` when the parents match the tree's, `open` otherwise.
-    An act is never dropped and no word is proof: a document still decides."""
-    if c.get('implausible') or c.get('same_parents') is False or c.get('preceded_by'):
+    before the birth or over 100 years after it, other parents at every occurrence of the name), `consistent` when the
+    parents match the tree's, `open` otherwise. An act is never dropped and no word is proof: a document still decides."""
+    if c.get('implausible') or c.get('same_parents') is False:
         return 'excluded'
     if c.get('same_parents'):
         return 'consistent'
@@ -145,51 +145,64 @@ def pdf_text(data):
     return r.stdout.decode('utf-8', 'replace') if r.returncode == 0 else None
 
 
+def _flat(text):
+    """The text on one line: a hyphen at a line end joined, every run of spaces and newlines one space."""
+    flat = re.sub(r'-\s*\n\s*|\xad\s*', '', text or '')
+    return re.sub(r'\s+', ' ', unicodedata.normalize('NFC', flat))
+
+
+def _whole(phrase):
+    """The folded phrase as a pattern that matches whole words only: "Ana Zorvalo" is not inside "Juana Zorvalo"."""
+    return re.compile(r'(?<!\w)%s(?!\w)' % re.escape(_fold(phrase)))
+
+
+def _hits(flat, phrase):
+    """(start, end) of every whole-word occurrence of the phrase in a flat text, accents and case ignored."""
+    f = ''.join(c for c in unicodedata.normalize('NFD', flat) if unicodedata.category(c) != 'Mn').lower()
+    if len(f) != len(flat):
+        return []
+    return [m.span() for m in _whole(phrase).finditer(f)]
+
+
 def context(text, phrase, width=140):
     """The words around the first place the whole name stands in the text of an act, accents and case ignored,
     a hyphen at a line end joined; None when the name is not there whole (a column break can split it)."""
-    flat = re.sub(r'-\s*\n\s*|\xad\s*', '', text or '')
-    flat = re.sub(r'\s+', ' ', unicodedata.normalize('NFC', flat))
-    f = ''.join(c for c in unicodedata.normalize('NFD', flat) if unicodedata.category(c) != 'Mn')
-    i = f.lower().find(_fold(phrase))
-    if i < 0 or len(f) != len(flat):
+    flat = _flat(text)
+    hits = _hits(flat, phrase)
+    if not hits:
         return None
-    return flat[max(0, i - width):i + len(phrase) + width].strip()
-
-
-def preceded_by(text, phrase):
-    """The word that stands right before the first whole-name hit when it starts with a capital letter, else None.
-    "Juan Ana Zorvalo" holds "Ana Zorvalo" and is another man."""
-    flat = re.sub(r'-\s*\n\s*|\xad\s*', '', text or '')
-    flat = re.sub(r'\s+', ' ', unicodedata.normalize('NFC', flat))
-    f = ''.join(c for c in unicodedata.normalize('NFD', flat) if unicodedata.category(c) != 'Mn')
-    i = f.lower().find(_fold(phrase))
-    if i < 0 or len(f) != len(flat):
-        return None
-    m = re.search(r'([A-ZÁÉÍÓÚÑ][\wáéíóúñ]+) $', flat[max(0, i - 40):i])
-    return m.group(1) if m and m.group(1).lower() not in ('don', 'doña', 'dona', 'de', 'del') else None
+    i, j = hits[0]
+    return flat[max(0, i - width):j + width].strip()
 
 
 _PARENTS = re.compile(r'^[.,;]?\s*(?:hij[oa]\s+)?de\s+([A-ZÁÉÍÓÚÑ][\wáéíóúñ]+)\s+(?:y|é|e)\s+([A-ZÁÉÍÓÚÑ][\wáéíóúñ]+)')
 
 
 def parents_after(text, phrase):
-    """The parents' first names when the act writes them right after the name ("Ana Zorvalo Quemada, de Juan y
-    Antonia", as the lists of the draft do), as (father, mother), else None."""
-    flat = re.sub(r'-\s*\n\s*|\xad\s*', '', text or '')
-    flat = re.sub(r'\s+', ' ', unicodedata.normalize('NFC', flat))
-    f = ''.join(c for c in unicodedata.normalize('NFD', flat) if unicodedata.category(c) != 'Mn')
-    i = f.lower().find(_fold(phrase))
-    if i < 0 or len(f) != len(flat):
-        return None
-    m = _PARENTS.match(flat[i + len(phrase):i + len(phrase) + 60])
-    return (m.group(1), m.group(2)) if m else None
+    """The parents' first names the act writes right after each occurrence of the name ("Ana Zorvalo Quemada, de
+    Juan y Antonia", as the lists of the draft do): one (father, mother) or None per occurrence, in order."""
+    flat = _flat(text)
+    out = []
+    for i, j in _hits(flat, phrase):
+        m = _PARENTS.match(flat[j:j + 60])
+        out.append((m.group(1), m.group(2)) if m else None)
+    return out
 
 
 def same_parents(found, wanted):
-    """True when the parents' first names the act gives are the ones the tree holds ("José y Josefa"), accents and case
-    ignored; False when they differ; None when either side is missing."""
+    """True when the parents' first names the act gives are the ones the tree holds ("José y Josefa"), each compared
+    by its first given name ("José María" is "José"), accents and case ignored; False when they differ; None when
+    either side is missing."""
     if not found or not wanted:
         return None
     w = [x.strip() for x in re.split(r'\s+(?:y|e|é|and)\s+|/', wanted) if x.strip()]
-    return len(w) == 2 and [_fold(x) for x in w] == [_fold(x) for x in found]
+    return len(w) == 2 and [_fold(x).split()[0] for x in w] == [_fold(x).split()[0] for x in found]
+
+
+def act_parents(found, wanted):
+    """One answer for the act from every occurrence: True when one occurrence has the tree's parents, False only when
+    every occurrence writes other parents, else None (an occurrence without parents can still be the person)."""
+    said = [same_parents(f, wanted) for f in found]
+    if True in said:
+        return True
+    return False if said and all(x is False for x in said) else None

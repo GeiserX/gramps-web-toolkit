@@ -300,23 +300,19 @@ def _boe_pdf_context(a, R, cands, phrase):
         status, rh, body, cached = R.get(c['url'], h, refresh=a.refresh, page=lambda p: p.startswith('%PDF'))
         txt = gwt_boe.pdf_text(body)
         ctx = gwt_boe.context(txt, phrase)
-        name = phrase
         c['context'] = ctx
         if ctx:
             c['note'] += ' | in the act: ...%s...' % ctx
         else:
             c['note'] += ' [name not whole in the text layer: open the PDF]'
-        par = gwt_boe.parents_after(txt, name)
-        if par:
-            c['parents_in_act'] = list(par)
-            same = gwt_boe.same_parents(par, getattr(a, 'parents', None))
+        every = gwt_boe.parents_after(txt, phrase)    # one (father, mother) or None per occurrence of the name
+        found = [p for p in every if p]
+        if found:
+            c['parents_in_act'] = [list(p) for p in found]
+            same = gwt_boe.act_parents(every, getattr(a, 'parents', None))
             c['same_parents'] = same
-            c['note'] = '[parents in the act: %s y %s%s] ' % (par[0], par[1], '' if same is None else
-                                                              ', as in the tree' if same else ', NOT the tree\'s: another person?') + c['note']
-        pre = gwt_boe.preceded_by(txt, name)
-        c['preceded_by'] = pre
-        if pre:
-            c['note'] = '[preceded by "%s": a longer name, probably another person] ' % pre + c['note']
+            c['note'] = '[parents in the act: %s%s] ' % ('; '.join('%s y %s' % p for p in found), '' if same is None else
+                                                        ', as in the tree' if same else ', NOT the tree\'s: another person?') + c['note']
 
 
 def _boe_verdicts(cands):
