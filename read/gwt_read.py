@@ -329,7 +329,8 @@ def cmd_boe_search(a, R):
     first, cands, found, page = _boe_read(a, R, phrase, max(1, min(a.pages, 5)), a.born)
     _boe_pdf_context(a, R, cands, phrase)
     _boe_verdicts(cands)
-    key = gwt_reader.search_key(first, ['boe', phrase, str(a.pages), str(a.pdf_context)])
+    key = gwt_reader.search_key(first, ['boe', phrase, str(a.pages), str(a.pdf_context), str(a.born), str(a.parents)]
+                                + sorted(a.near))
     env = gwt_reader.envelope(first, None, text=gwt_boe.text(page), total=found)
     base = gwt_reader.write_search(a.out, key, env, cands)
     gwt_reader.print_paths(gwt_boe.SOURCE, base, out)

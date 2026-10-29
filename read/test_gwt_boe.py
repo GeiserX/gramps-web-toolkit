@@ -86,6 +86,16 @@ class Search(Boe):
         self.assertEqual(code, 0, text)
         self.assertEqual(net2.requests, [])
 
+    def test_another_birth_year_parents_or_near_word_is_another_file(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, RESULTS))
+        paths = set()
+        for extra in ([], ['--born', '1903'], ['--parents', 'Juan y Antonia'], ['--near', 'Guerra']):
+            code, lines, text = self.search(net, gate, extra)
+            self.assertEqual(code, 0, text)
+            paths.add(lines['candidates'])
+        self.assertEqual(len(paths), 4)
+
     def test_no_documents_is_exit_2(self):
         gate = FakeGate()
         code, lines, text = self.search(FakeNet(gate, (200, EMPTY)), gate)
