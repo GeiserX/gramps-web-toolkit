@@ -87,6 +87,10 @@ class Parse(unittest.TestCase):
         self.assertFalse(gwt_genae.is_block(PAGE['casados'].decode(), 'defunciones'))   # another block
         self.assertFalse(gwt_genae.is_block(EMPTY_FRAME.decode(), 'bautismos'))         # an empty frame
         self.assertFalse(gwt_genae.is_block(SEARCH_FORM.decode(), 'bautismos'))         # the search form
+        # the table must be inside the section asked for, and an empty notice is no answer
+        self.assertFalse(gwt_genae.is_block('<section id="bloque-casadas" data-aviso-cobertura=""></section>'
+                                            '<section id="bloque-casados"><table></table></section>', 'casadas'))
+        self.assertFalse(gwt_genae.is_block('<form><table><tbody id="filas-bautismos"></tbody></table></form>', 'bautismos'))
 
 
 class Search(Genae):

@@ -55,12 +55,17 @@ def block_url(block, query):
 
 
 def is_block(page, block):
-    """True only for the fragment that holds the block asked for, with its table, or with the site's notice that
-    it has no indexed books there (`data-aviso-cobertura`): an empty frame, another block or the site's search form
-    is not an answer."""
-    m = _SECTION.search(page or '')
-    return bool(m and m.group(1) == block and ('<table' in page or 'data-aviso-cobertura=' in m.group(2))) or (
-        block == 'bautismos' and 'id="filas-bautismos"' in (page or ''))
+    """True only for the section of the block asked for, holding its own table, or the site's notice that it has no
+    indexed books there (a non-empty `data-aviso-cobertura`; a covered block carries it empty). An empty frame,
+    another block, an empty section or the site's search form is not an answer."""
+    for m in _SECTION.finditer(page or ''):
+        if m.group(1) != block:
+            continue
+        end = page.find('</section>', m.end())
+        inside = page[m.end():end if end >= 0 else len(page)]
+        notice = re.search(r'data-aviso-cobertura="([^"]*)"', m.group(2))
+        return '<table' in inside or bool(notice and notice.group(1).strip())
+    return False
 
 
 def is_cut(n):

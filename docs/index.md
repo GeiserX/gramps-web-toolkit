@@ -68,7 +68,7 @@ The toolkit works for genealogy in any country. `gwt-spanish-poller` and some `g
 - [gwt-rank](rank.md): orders record-search results by how well they fit a person, and never hides a row.
 - [gwt-fetch](fetch.md): archive images and text without a browser: IIIF, Europeana, and Spanish sources.
 - [gwt-mh](myheritage.md): MyHeritage records through a signed-in browser, on a free or a paid account.
-- [gwt-read](read.md): record search and records on FamilySearch (with your own session token), PARES and Genae, slow and cached by default.
+- [gwt-read](read.md): record search and records on FamilySearch (with your own session token) and PARES, and index search on Genae, slow and cached by default.
 - [gwt-rawstore](rawstore.md): source images in an S3-compatible bucket, a small manifest in git.
 - [ocr-bench](ocr-bench.md): scores OCR, HTR and LLM readings of the same pages on the names they recover.
 - [gwt-spanish-poller](spanish-poller.md): watches Spanish civil-registry requests and the DEHú inbox, read-only.

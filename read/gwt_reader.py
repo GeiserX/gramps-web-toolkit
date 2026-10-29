@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """gwt_reader: the shape every record-site reader in the toolkit writes, and the one path its requests take.
 
-A reader (gwt-mh for MyHeritage, gwt-read for FamilySearch, PARES and Genae) turns one search or one record into files a
+A reader (gwt-mh for MyHeritage, gwt-read for FamilySearch, PARES and the Genae index) turns one search or one record into files a
 lane and the other tools can read without knowing the site:
 
     <out>/<key>.json             the envelope: what was asked and what came back

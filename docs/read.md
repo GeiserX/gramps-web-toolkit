@@ -10,7 +10,7 @@ gwt read pares record 9000001 --out runs/
 gwt read genae search --given Ana --surname Zorvalo --out runs/    # public, no account
 ```
 
-`gwt-read` runs a record search, or reads one record, on a record site, and writes the answer in the shape every record-site reader in the toolkit shares. It reads three sites: [FamilySearch](#familysearch) historical records, [PARES](#pares), the catalogue of the Spanish state archives, and [Genae](#genae), a volunteer index of parish records. It is slow on purpose and cached, because FamilySearch suspends accounts for volume: one of ours was suspended in 2026 after about 15 parallel lanes called the API through one night ([hard-won lesson 1](hard-won.md#1-volume-got-a-familysearch-account-suspended-and-an-ip-blocked)).
+`gwt-read` runs a record search, or reads one record, on a record site, and writes the answer in the shape every record-site reader in the toolkit shares. It reads three sites: [FamilySearch](#familysearch) historical records, [PARES](#pares), the catalogue of the Spanish state archives, and [Genae](#genae), a volunteer index of parish records that `gwt-read` only searches: its rows are leads, not records. It is slow on purpose and cached, because FamilySearch suspends accounts for volume: one of ours was suspended in 2026 after about 15 parallel lanes called the API through one night ([hard-won lesson 1](hard-won.md#1-volume-got-a-familysearch-account-suspended-and-an-ip-blocked)).
 
 It never logs in and never asks for a password. PARES and Genae need no account. For FamilySearch you sign in in your own browser, and the tool uses that session's token. Standard library only.
 
