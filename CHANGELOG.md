@@ -6,9 +6,11 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+## [0.2.9] - 2026-10-29
+
 ### Change lists
 
-No change to how existing commands behave.
+None.
 
 ### Added
 
