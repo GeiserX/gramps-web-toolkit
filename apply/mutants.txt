@@ -84,3 +84,26 @@ gwt_apply/ops.py | if handle in (target.get("tag_list") or []): | if False: | a 
 gwt_apply/ops.py | target["tag_list"] = [*(target.get("tag_list") or []), handle] | target["tag_list"] = [handle] | add_tag keeps the tags the object already has
 gwt_apply/ops.py | if cls in ("ChildRef", "PersonRef"): | if False: | validate refuses an add_tag on a child_ref or an association, which have no tags
 gwt_apply/ops.py | if not isinstance(spec["note"], str) or not spec["note"]: | if False: | validate refuses an add_tag note target that is null
+gwt_apply/ops.py | keep = [h for h in tags if h not in handles] | keep = [] | remove_tag keeps the other tags of the object
+gwt_apply/ops.py | if len(keep) == len(tags): | if False: | a remove_tag whose tag is already off is a skip, so a rerun writes nothing
+gwt_apply/ops.py | if not handles: | if False: | remove_tag with a name the tree has no tag for is a conflict, not a skip
+gwt_apply/ops.py | new = next((n for n, r in enumerate(refs) if r.get("ref") == h), -1) if h else -1 | new = i | move_event recomputes birth_ref_index and death_ref_index when the list shifts
+gwt_apply/ops.py | self._reindex(src, old) | pass | move_event recomputes the old owner's birth and death indexes
+gwt_apply/ops.py | if dst.get(index_key, -1) == -1:  # appended last | if False:  # | a moved Primary birth or death becomes the new owner's birth or death when it had none
+gwt_apply/ops.py | if [{k: v for k, v in r.items() if k != "_class"} for r in theirs] != [ref]: | if False: | move_event onto an owner that lists the event with another reference is a conflict
+gwt_apply/ops.py | if len(mine) > 1: | if False: | move_event refuses an event the old owner lists twice
+gwt_apply/ops.py | if (scls, src["handle"]) == (dcls, dst["handle"]): | if False: | move_event from an owner to itself under another name is a conflict, never an orphaned event
+gwt_apply/ops.py | if name == "move_event" and _event_owner(op.get("from")) == _event_owner(op.get("to")): | if False: | validate refuses a move_event whose from and to are the same
+gwt_apply/ops.py | if cls not in ("Person", "Family"): | if False: | validate refuses a move_event owner that is not a person or a family
+gwt_apply/ops.py | refs += [op.get("event"), *_target_refs(op.get("from")), *_target_refs(op.get("to"))] | refs += [*_target_refs(op.get("from")), *_target_refs(op.get("to"))] | validate refuses a move_event event that is a handle
+gwt_apply/ops.py | self.actions.append(f"warning: {what} is now on both | self.actions.append(f"note: {what} is now on both | a move_event stopped between its two writes says the event is on both owners, on every try
+gwt_apply/ops.py | ref["role"] = {"Primary": "Family", "Family": "Primary"}.get(ref.get("role"), ref.get("role")) | pass | move_event between a person and a family swaps Primary and Family
+gwt_apply/ops.py | ref["role"] = op["role"] | pass | move_event takes the role the op gives
+gwt_apply/ops.py | if str(ev.get("type")) == etype:  # the same rule as add_event | if False:  # | move_event refuses a second Primary birth or death on the new person
+gwt_apply/ops.py | new = next((n for n, rh in prim if types.get(rh) == etype), -1) | new = -1 | when the indexed birth or death leaves, the index moves to the other Primary one left
+gwt_apply/ops.py | self.c.get("Tag", h)  # read, so a snapshot apply | pass  # | remove_tag reads the tag it takes off, so a snapshot apply sees a rename
+gwt_apply/ops.py | self._reread_found = True  # the new owner's write | pass  # | a move_event whose first answer was lost says the re-read found the write
+gwt_apply/ops.py | if dcls == "Person" and index_key and ref.get("role") == "Primary": | if dcls == "Person" and index_key: | a birth only witnessed never blocks a move_event onto a person who has a birth
+gwt_apply/ops.py | prim = [r["ref"] for r in old if r.get("role") == "Primary" and r.get("ref")] | prim = [r["ref"] for r in old if r.get("ref")] | a birth the new person only witnessed does not block a moved Primary birth
+gwt_apply/ops.py | prim = [(n, r["ref"]) for n, r in enumerate(refs) if r.get("role") == "Primary" and r.get("ref")] | prim = [(n, r["ref"]) for n, r in enumerate(refs) if r.get("ref")] | when the indexed birth leaves, a birth the person only witnessed never becomes their birth
+gwt_apply/ops.py | self._reread_found = False  # every try | pass  # every try | the re-read flag of one op never labels the next op's lost answer
