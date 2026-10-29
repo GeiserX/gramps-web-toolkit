@@ -114,7 +114,9 @@ NOTE_DISCARDED_BEFORE = re.compile(rf"\b{_DISCARD}{_SEP}{_GAP}$")
 
 # place-vs-description: a place named as where a person comes from or lives, not where the event happened.
 # Words that open such a phrase («natural de», «vecino del lugar de», «domicilié à»), compared by their start
-ORIGIN_WORDS = ("natural", "vecin", "vezin", "residente", "domicili", "demeurant", "originaire", "habitant")
+# («vecino», «domiciliado»; never «vecindad» or «domicilio», as in «murió en su domicilio de X»)
+ORIGIN_WORDS = ("natural", "vecino", "vecina", "vezino", "vezina", "residente", "domicilie", "domiciliad",
+                "demeurant", "originaire", "habitant")
 # words that may stand between such a word, or a «de» that opens the clause, and the place name
 ORIGIN_FILLER = {"de", "del", "d", "la", "el", "l", "lugar", "villa", "ciudad", "commune", "en", "a", "au"}
 # marks after which a «de» opens a clause («Juan, de Otropueblo»); a dot is not one, it may end «parr.» or «Sra.»

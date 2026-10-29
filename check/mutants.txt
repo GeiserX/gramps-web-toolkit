@@ -63,6 +63,9 @@ gwt_check/checks.py | return ((k == 0 and before[0] in ("de", "del", "d") and | 
 gwt_check/checks.py | if t in ("'", "’"): | if False: | an elided «d'» before a place still reads as «de»
 gwt_check/checks.py | if k == len(before): | if False: | a place right after punctuation, or with no filler word before it, is not an origin
 gwt_check/checks.py | and (stop is None or stop in ORIGIN_CLAUSE_BREAK)) | and True) | a «de» after an abbreviation dot («parr. de X») does not open a clause
+gwt_check/checks.py | (stop is None or stop in ORIGIN_CLAUSE_BREAK) | (stop in ORIGIN_CLAUSE_BREAK) | a description that opens with «De X» names an origin
 gwt_check/checks.py | residence = e.get("type") == "Residence" | residence = False | on a residence, where someone lives is the event's own place
-gwt_check/checks.py | ORIGIN_WORDS = ("natural", "vecin", "vezin", "residente", | ORIGIN_WORDS = ("natural", "vecin", "vezin", | «residente en» names where someone lives
-gwt_check/checks.py | ORIGIN_WORDS = ("natural", "vecin", "vezin", | ORIGIN_WORDS = ("natural", "vecin", | the old spelling «vezino» names where someone lives
+gwt_check/checks.py | "vezina", "residente", | "vezina", | «residente en» names where someone lives
+gwt_check/checks.py | "vecina", "vezino", "vezina", | "vecina", | the old spelling «vezino» names where someone lives
+gwt_check/checks.py | "vecino", "vecina", "vezino", | "vecin", "vezino", | «en la vecindad de X» is not where someone lives
+gwt_check/checks.py | "domicilie", "domiciliad", | "domicili", | «en su domicilio de X» is not where someone lives

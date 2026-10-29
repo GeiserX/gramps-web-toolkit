@@ -8,7 +8,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Fixed
 
-- `gwt-check check` `place-vs-description` no longer counts a place name that is a given name or surname of someone on the event, or that follows words saying where someone is from or lives («natural de», «vecino de», «domicilié à», «de la commune de», a clause opening with «de» after a comma or quote mark, not after an abbreviation dot such as «parr.»). On a residence those words still count, because there they name the event's place. On one real tree this halved the findings; none of the dropped events that were read had happened elsewhere. «Parroquia de Otropueblo» and «en la casa de Otropueblo» still count.
+- `gwt-check check` `place-vs-description` no longer counts a place name that is a given name or surname of someone on the event, or that follows words saying where someone is from or lives («natural de», «vecino de», «domicilié à», «de la commune de», a clause opening with «de» after a comma or quote mark, not after an abbreviation dot such as «parr.»). On a residence those words still count, because there they name the event's place. On one real tree this halved the findings; none of the dropped events that were read had happened elsewhere. «Parroquia de Otropueblo», «en la casa de Otropueblo» and «murió en su domicilio de Otropueblo» still count.
 
 ## [0.2.7] - 2026-10-28
 

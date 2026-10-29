@@ -1687,7 +1687,13 @@ def test_place_vs_description_skips_a_place_named_as_where_someone_is_from_or_li
                  "Mateo, originaire d’Otropueblo",
                  "Clara, habitante de Otropueblo",
                  "Mateo, vezino de Otropueblo",
-                 "Mateo (de Otropueblo), labrador"):
+                 "Mateo (de Otropueblo), labrador",
+                 "Mateo, natural de la villa de Otropueblo",
+                 "Mateo, vecino de la ciudad de Otropueblo",
+                 "le père, demeurant au Otropueblo",
+                 "De Otropueblo, Mateo, labrador",
+                 "Mateo, del Otropueblo",
+                 "Mateo, d'Otropueblo"):
         assert _place_desc_keys(d, "E0001", desc) == [], desc
 
 
@@ -1702,7 +1708,9 @@ def test_place_vs_description_still_flags_a_place_where_the_event_happened():
                  "bautizado en casa; «Otropueblo» al margen",
                  "bautizado en la parr. de Otropueblo",
                  "bautizado en Ntra. Sra. de Otropueblo",
-                 "murió en el hospital. De Otropueblo"):
+                 "murió en el hospital. De Otropueblo",
+                 "murió en su domicilio de Otropueblo",
+                 "murió en la vecindad de Otropueblo"):
         assert _place_desc_keys(d, "E0001", desc) == ["E0001"], desc
 
 
