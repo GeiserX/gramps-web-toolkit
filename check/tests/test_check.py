@@ -1638,3 +1638,60 @@ def test_place_vs_description_names_a_place_once_by_its_longest_match():
     findings, _ = checks.run_checks(Tree(d))
     assert [f["detail"] for f in findings if f["check"] == "place-vs-description"] == [
         "place Villaejemplo (P0001), description names Parroquia de Otropueblo (P0004)"]
+
+
+def _place_named(d, gid, name):
+    from gwt_check import selftest as st
+
+    d["places"].append({**copy.deepcopy(st._get(d, "places", "P0001")), "handle": "h" + gid, "gramps_id": gid,
+                        "name": {"value": name}, "placeref_list": []})
+
+
+def _place_desc_keys(d, gid, description):
+    from gwt_check import selftest as st
+
+    st._get(d, "events", gid)["description"] = description
+    return [f["key"] for f in checks.run_checks(Tree(d))[0] if f["check"] == "place-vs-description"]
+
+
+def test_place_vs_description_skips_a_surname_or_given_name_of_someone_on_the_event():
+    # E0001 is the birth of Lucía Ortega Sanz; a town of the tree called Ortega is her surname, not a place
+    d = selftest.clean_tree()
+    _place_named(d, "P0003", "Ortega")
+    _place_named(d, "P0004", "Lucía")
+    assert _place_desc_keys(d, "E0001", "Lucía, hija de Mateo Ortega y Clara Sanz") == []
+    # a person who is not on the event is still a place: E0004 is the birth of Gil Ortega Peña
+    _place_named(d, "P0005", "Sanz")
+    assert _place_desc_keys(d, "E0004", "Gil, padrino Blas Sanz") == ["E0004"]
+
+
+def test_place_vs_description_skips_a_surname_of_a_spouse_on_a_family_event():
+    # E0201 is the marriage of F0001, Mateo Ortega Ruiz and Clara Sanz Vidal; the event has no person refs
+    d = selftest.clean_tree()
+    _place_named(d, "P0003", "Vidal")
+    assert _place_desc_keys(d, "E0201", "boda de Mateo Ortega Ruiz y Clara Sanz Vidal") == []
+
+
+def test_place_vs_description_skips_a_place_named_as_where_someone_is_from_or_lives():
+    d = selftest.clean_tree()
+    selftest._other_place(d)
+    for desc in ("declarado por su padre, Mateo Ortega, natural de Otropueblo, unos 32 años",
+                 "Mateo Ortega, de Otropueblo, 30 años, labrador",
+                 "«de Otropueblo»; viudo",
+                 "Mateo, vecino del lugar de Otropueblo",
+                 "naturales y vecinos de Otropueblo",
+                 "le père, domicilié à Otropueblo",
+                 "Mateo, de la commune d'Otropueblo"):
+        assert _place_desc_keys(d, "E0001", desc) == [], desc
+
+
+def test_place_vs_description_still_flags_a_place_where_the_event_happened():
+    d = selftest.clean_tree()
+    selftest._other_place(d)
+    for desc in ("bautizado en Santa María de Otropueblo",
+                 "hijo natural de Mateo, nacido en Otropueblo",
+                 "Mateo, natural de Otropueblo, bautizado en Otropueblo",
+                 "en la casa de Otropueblo",
+                 "Mateo, vecino de aquí; parroquia de Otropueblo",
+                 "bautizado en casa; «Otropueblo» al margen"):
+        assert _place_desc_keys(d, "E0001", desc) == ["E0001"], desc
