@@ -300,17 +300,11 @@ def _boe_pdf_context(a, R, cands, phrase):
         txt = gwt_boe.pdf_text(body)
         ctx = gwt_boe.context(txt, phrase)
         name = phrase
-        if not ctx and not getattr(a, 'no_ocr', False):
-            ocr = gwt_boe.ocr_text(body)
-            hit = gwt_boe.fuzzy_find(ocr, phrase) if ocr else None
-            if hit:
-                name, ctx = hit[0], hit[1]
-                txt = ocr
-                c['ocr'] = True
-                c['note'] += ' [read by OCR as "%s": open the PDF image and check]' % name
         c['context'] = ctx
         if ctx:
             c['note'] += ' | in the act: ...%s...' % ctx
+        else:
+            c['note'] += ' [name not whole in the text layer: open the PDF]'
         par = gwt_boe.parents_after(txt, name)
         if par:
             c['parents_in_act'] = list(par)
@@ -371,7 +365,6 @@ def _common(sp, ua_env):
 def _boe_filters(sp):
     sp.add_argument('--from', dest='year_from', help='first publication year or yyyy-mm-dd (the historical search starts in 1661)')
     sp.add_argument('--to', dest='year_to', help='last publication year or yyyy-mm-dd (it ends in 1959)')
-    sp.add_argument('--no-ocr', action='store_true', help='with --pdf-context, do not read as an image (tesseract) an act whose text layer lacks the name')
     sp.add_argument('--pdf-context', type=int, default=0, help='read the PDF of the first N acts (0 to 10, default 0) and add the words '
                     'around the name to the note; one request each, needs pdftotext')
     sp.add_argument('--near', action='append', default=[], help='a word to look for in the title and department, '

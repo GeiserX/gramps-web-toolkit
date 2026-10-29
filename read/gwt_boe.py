@@ -11,7 +11,7 @@ nothing about which person it is: a common name hits many namesakes. Each row be
 `mention` with the act's title in the note, never a principal, so gwt-rank can weigh it and nobody takes it for a
 record. Only the first page is read; `total` says how many rows the site found. Standard library only.
 """
-import difflib, html, os, re, shutil, subprocess, tempfile, unicodedata, urllib.parse
+import html, re, shutil, subprocess, unicodedata, urllib.parse
 
 HOST = 'https://www.boe.es'
 SOURCE = 'boe'
@@ -133,51 +133,6 @@ def pdf_text(data):
     except (OSError, subprocess.SubprocessError):
         return None
     return r.stdout.decode('utf-8', 'replace') if r.returncode == 0 else None
-
-
-def ocr_text(data, pages=8, run=subprocess.run):
-    """The text of the first `pages` pages of a PDF read as an image: `pdftoppm` then `tesseract --psm 3`, which
-    finds the columns of the page itself, in Spanish when its language data is installed (TESSDATA_PREFIX
-    may point at a folder that has spa.traineddata), else English. Used when the text layer does not hold the name (the BOE's edicts split
-    it across columns). None when either program is missing; nothing is installed. One page takes about 6 s."""
-    ppm, tes = shutil.which('pdftoppm'), shutil.which('tesseract')
-    if not ppm or not tes or not data:
-        return None
-    out = []
-    lang = 'eng'
-    try:
-        have = run([tes, '--list-langs'], capture_output=True, timeout=30).stdout.decode('utf-8', 'replace').split()
-        lang = 'spa' if 'spa' in have else 'eng'
-    except (OSError, subprocess.SubprocessError):
-        pass
-    with tempfile.TemporaryDirectory() as d:
-        pdf = os.path.join(d, 'a.pdf')
-        with open(pdf, 'wb') as f:
-            f.write(data)
-        try:
-            run([ppm, '-r', '250', '-gray', '-l', str(max(1, pages)), '-png', pdf, os.path.join(d, 'p')], capture_output=True, timeout=120)
-            for name in sorted(x for x in os.listdir(d) if x.endswith('.png')):
-                r = run([tes, os.path.join(d, name), '-', '-l', lang, '--psm', '3'], capture_output=True, timeout=120,
-                        env=dict(os.environ, OMP_THREAD_LIMIT='2'))
-                out.append(r.stdout.decode('utf-8', 'replace'))
-        except (OSError, subprocess.SubprocessError):
-            return None
-    return '\n'.join(out)
-
-
-def fuzzy_find(text, phrase, ratio=0.85, width=140):
-    """(the words as the OCR wrote them, the words around) for the first run of words that looks like the name
-    (accents and case ignored, a hyphen at a line end joined, a letter or two wrong allowed), else None. An OCR
-    hit is a pointer to the image, never a reading."""
-    flat = re.sub(r'-\s*\n\s*|\xad\s*', '', text or '')
-    words = flat.split()
-    n = len(phrase.split())
-    want = _fold(phrase)
-    for i in range(0, max(0, len(words) - n + 1)):
-        w = ' '.join(words[i:i + n])
-        if difflib.SequenceMatcher(None, _fold(w.strip(',.;:')), want).ratio() >= ratio:
-            return w, ' '.join(words[max(0, i - 20):i + n + 20])[:2 * width + len(w)]
-    return None
 
 
 def context(text, phrase, width=140):

@@ -151,6 +151,20 @@ class Search(Boe):
         self.assertIn('Ana Zorvalo Quemada. Eugenio Roa', c[0]['context'])
         self.assertIsNone(c[1].get('context'))
 
+    def test_a_name_split_in_the_text_layer_points_to_the_pdf(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, RESULTS), (200, b'%PDF fake one'))
+        real = (gwt_boe.pdf_text, gwt_boe.shutil.which)
+        gwt_boe.pdf_text = lambda data: 'Luis Gil, Ana Zorvalo y otros. Quemada.'
+        gwt_boe.shutil.which = lambda n: '/usr/bin/pdftotext'
+        try:
+            code, lines, text = self.search(net, gate, ['--pdf-context', '1'])
+        finally:
+            gwt_boe.pdf_text, gwt_boe.shutil.which = real
+        c = json.load(open(lines['candidates'], encoding='utf-8'))['candidates']
+        self.assertIsNone(c[0]['context'])
+        self.assertIn('name not whole in the text layer: open the PDF', c[0]['note'])
+
     def test_pdf_context_without_pdftotext_fetches_nothing(self):
         gate = FakeGate()
         net = FakeNet(gate, (200, RESULTS))
@@ -202,56 +216,6 @@ class Search(Boe):
             self.assertEqual(c[0]['parents_in_act'], ['Juan', 'Antonia'])
             self.assertIs(c[0]['same_parents'], expect)
             self.assertIn(word, c[0]['note'])
-
-
-class Ocr(unittest.TestCase):
-    def test_fuzzy_finds_a_name_the_ocr_misread_and_a_hyphen(self):
-        t = '306, contra Ana Zorvalo Quemda, vecino\n 307, contra Luis Marti-\nnez'
-        w, c = gwt_boe.fuzzy_find(t, 'Ana Zorvalo Quemada')
-        self.assertEqual(w, 'Ana Zorvalo Quemda,')
-        self.assertIn('vecino', c)
-        self.assertEqual(gwt_boe.fuzzy_find(t, 'Luis Martinez')[0], 'Luis Martinez')
-
-    def test_fuzzy_does_not_find_a_different_name(self):
-        self.assertIsNone(gwt_boe.fuzzy_find('contra Pedro Gil Ortega, vecino de Roda', 'Ana Zorvalo Quemada'))
-
-    def test_ocr_needs_both_programs_and_runs_nothing_without_them(self):
-        calls = []
-        orig = gwt_boe.shutil.which
-        gwt_boe.shutil.which = lambda n: None
-        try:
-            self.assertIsNone(gwt_boe.ocr_text(b'%PDF', run=lambda *a, **k: calls.append(a)))
-        finally:
-            gwt_boe.shutil.which = orig
-        self.assertEqual(calls, [])
-
-
-class OcrLanguage(unittest.TestCase):
-    def _run(self, langs):
-        seen = []
-
-        def run(cmd, **k):
-            seen.append(cmd)
-
-            class R:
-                returncode = 0
-                stdout = (langs if '--list-langs' in cmd else 'text').encode()
-            if cmd[0].endswith('pdftoppm'):
-                open(cmd[-1] + '-1.png', 'wb').close()
-            return R()
-        orig = gwt_boe.shutil.which
-        gwt_boe.shutil.which = lambda n: '/usr/bin/' + n
-        try:
-            gwt_boe.ocr_text(b'%PDF', run=run)
-        finally:
-            gwt_boe.shutil.which = orig
-        return [c for c in seen if '--psm' in c][0]
-
-    def test_spanish_when_installed_else_english(self):
-        c = self._run('List of available languages (2):\neng\nspa\n')
-        self.assertEqual(c[c.index('-l') + 1], 'spa')
-        c = self._run('List of available languages (1):\neng\n')
-        self.assertEqual(c[c.index('-l') + 1], 'eng')
 
 
 class Old(unittest.TestCase):
