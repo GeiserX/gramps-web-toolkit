@@ -6,6 +6,15 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+None.
+
+### Added
+
+- `gwt-apply` `remove_tag` takes one tag off an object the tree already has, for example a weak mark once a document proves the fact. The tag stays in the tree; a name the tree has no tag for is a conflict.
+- `gwt-apply` `move_event` moves an event reference, with its role, from one person or family to another. It writes the new owner first, so a stop in between leaves the event on both and a rerun finishes the move, and it keeps each person's birth and death indexes on the right events.
+
 ## [0.2.7] - 2026-10-28
 
 ### Change lists

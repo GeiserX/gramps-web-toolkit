@@ -58,6 +58,8 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "add_transcription": ({"text", "margin_reading", "attach"}, {"gramps_id"}),
     "attach_existing": ({"object", "attach"}, set()),
     "add_tag": ({"target", "name"}, set()),
+    "remove_tag": ({"target", "name"}, set()),
+    "move_event": ({"event", "from", "to"}, set()),
     "dedupe_list": ({"target", "list"}, set()),
     "set_attribute": ({"target", "type", "value"}, set()),
     "merge_person": ({"winner", "loser"}, {"use_loser", "reason"}),
@@ -79,7 +81,7 @@ REF_OWN_LISTS = ("note_list", "citation_list", "attribute_list")  # what a Media
 # by hand further down.
 NOT_TEXT = {"set", "target", "object", "attach", "children", "namesake_of", "use_loser", "address",
             "allow_namesake", "new_couple_of", "allow_new_couple", "probable", "confidence", "lat", "long", "expect",
-            "drop_link_sources"}
+            "drop_link_sources", "from", "to"}
 TEXT_CHECKED_BELOW = {("add_repository", "name"), ("add_repository", "type"), ("link_repository", "media_type"),
                       ("add_association", "relation"), ("add_transcription", "margin_reading"),
                       ("update_child_ref", "confirm_probable"), ("add_person", "gender"),
@@ -190,6 +192,14 @@ def _tag_target(spec) -> tuple[str, str]:
     cls, ref = _parse_target(spec)
     if cls in ("ChildRef", "PersonRef"):
         raise ValueError("a child_ref or an association has no tags")
+    return cls, ref
+
+
+def _event_owner(spec) -> tuple[str, str]:
+    """move_event's from and to: {"person": "I0001"} or {"family": "F0001"}, the two kinds that list events."""
+    cls, ref = _parse_target(spec)
+    if cls not in ("Person", "Family"):
+        raise ValueError(f"an event belongs to a person or a family, got {spec!r}")
     return cls, ref
 
 
@@ -313,6 +323,8 @@ def validate(ops: list[dict]) -> list[str]:
             refs += _target_refs(t)
         if name == "detach":
             refs += _target_refs(op.get("object"))
+        if name == "move_event":
+            refs += [op.get("event"), *_target_refs(op.get("from")), *_target_refs(op.get("to"))]
         for ref in refs:
             if ref is not None and not (isinstance(ref, str) and (ref.startswith("key:") or _GRAMPS_ID.match(ref))):
                 errors.append(f"{where}: {ref!r} is neither key:<key> nor a Gramps ID (never a handle)")
@@ -448,8 +460,10 @@ def validate(ops: list[dict]) -> list[str]:
                 ocls, _, lst = _parse_object(op.get("object"))
                 if cls not in CARRIES[lst]:
                     raise ValueError(f"a {cls} cannot carry a {lst[:-5]}")
-            if name == "add_tag":
+            if name in ("add_tag", "remove_tag"):
                 _tag_target(op.get("target"))
+            if name == "move_event" and _event_owner(op.get("from")) == _event_owner(op.get("to")):
+                raise ValueError("from and to are the same")
             if name == "set_attribute" and _parse_target(op.get("target"))[0] in ("ChildRef", "PersonRef"):
                 raise ValueError("a child_ref or an association has no attributes")
             if name in ("add_repository", "update_repository"):
@@ -1710,6 +1724,90 @@ class Applier:
         before = copy.deepcopy(target)
         target["tag_list"] = [*(target.get("tag_list") or []), handle]
         self.save(before, target)
+
+    def remove_tag(self, op):
+        """Take one tag off an object the tree already has: a weak mark once the fact is proven. The tag itself
+        stays in the tree, and so does everything else on the object. A name the tree has no tag for is a conflict
+        (a typo would otherwise pass as a skip); an object without the tag is a skip."""
+        cls, ref = _tag_target(op["target"])
+        target = self.obj(cls, ref)
+        target.setdefault("_class", cls)
+        name = op["name"].strip()
+        handles = {t["handle"] for t in self.c.list_all("Tag", ["name"]) if t.get("name") == name}
+        if not handles:
+            if self.verify:  # a tag deleted since the apply is on nothing: what the op asked for holds
+                self.actions.append(f"skip: the tree has no tag {name!r}, so {cls} {self.label(target)} does not carry it")
+                return
+            raise Conflict(f"the tree has no tag {name!r}; check the name")
+        tags = target.get("tag_list") or []
+        keep = [h for h in tags if h not in handles]
+        if len(keep) == len(tags):
+            self.actions.append(f"skip: {cls} {self.label(target)} does not have the tag {name!r}")
+            return
+        before = copy.deepcopy(target)
+        target["tag_list"] = keep
+        self.save(before, target)
+
+    @staticmethod
+    def _reindex(person: dict, old_refs: list) -> None:
+        """birth_ref_index and death_ref_index point at the same event after event_ref_list changed; -1 when it
+        left the list."""
+        refs = person.get("event_ref_list") or []
+        for key in USE_LOSER.values():
+            i = person.get(key, -1)
+            h = old_refs[i].get("ref") if isinstance(i, int) and 0 <= i < len(old_refs) else None
+            new = next((n for n, r in enumerate(refs) if r.get("ref") == h), -1) if h else -1
+            if key in person or new != -1:
+                person[key] = new
+
+    def move_event(self, op):
+        """Move an event reference, role and all, from one person or family to another. Two writes: the new owner
+        gets it first, then the old one loses it, so a failure in between leaves the event on both, never on
+        neither. A rerun that finds that state, with the same reference on both, finishes the move."""
+        handle = self.resolve("Event", op["event"])
+        (scls, sref), (dcls, dref) = _event_owner(op["from"]), _event_owner(op["to"])
+        src, dst = self.obj(scls, sref), self.obj(dcls, dref)
+        src.setdefault("_class", scls)
+        dst.setdefault("_class", dcls)
+        if (scls, src["handle"]) == (dcls, dst["handle"]):
+            raise Conflict(f"from and to are both {scls} {self.label(src)}")
+        what = f"Event {op['event']}"
+        mine = [r for r in src.get("event_ref_list") or [] if r.get("ref") == handle]
+        theirs = [r for r in dst.get("event_ref_list") or [] if r.get("ref") == handle]
+        if not mine:
+            if theirs:
+                self.actions.append(f"skip: {what} is already on {dcls} {self.label(dst)} and not on {scls} {self.label(src)}")
+                return
+            raise Conflict(f"{scls} {self.label(src)} does not list {what}")
+        if len(mine) > 1:
+            raise Conflict(f"{scls} {self.label(src)} lists {what} {len(mine)} times; dedupe it first")
+        ref = {k: v for k, v in mine[0].items() if k != "_class"}
+        if theirs:
+            if [{k: v for k, v in r.items() if k != "_class"} for r in theirs] != [ref]:
+                raise Conflict(f"{dcls} {self.label(dst)} already lists {what} with another reference (role "
+                               f"{theirs[0].get('role')!r}); not moved")
+            self.actions.append(f"{what} is on both {scls} {self.label(src)} and {dcls} {self.label(dst)}: an earlier "
+                                "try stopped between the two writes; finishing the move")
+        else:
+            before, old = copy.deepcopy(dst), list(dst.get("event_ref_list") or [])
+            dst["event_ref_list"] = [*old, {"_class": "EventRef", **ref}]
+            if dcls == "Person":  # appended last, so the indexes it has keep pointing at the same events
+                index_key = SINGLE_VITAL.get(str((self.c.get("Event", handle) or {}).get("type")))
+                if index_key and ref.get("role") == "Primary" and dst.get(index_key, -1) == -1:
+                    dst[index_key] = len(old)
+            self.save(before, dst)
+        before, old = copy.deepcopy(src), list(src.get("event_ref_list") or [])
+        src["event_ref_list"] = [r for r in old if r.get("ref") != handle]
+        if scls == "Person":
+            self._reindex(src, old)
+        try:
+            self.save(before, src)
+        except Exception:
+            if not theirs:
+                self.actions.append(f"warning: {what} is now on both {scls} {self.label(src)} and {dcls} "
+                                    f"{self.label(dst)}: taking it off {scls} {self.label(src)} failed; a rerun "
+                                    "finishes the move")
+            raise
 
     def dedupe_list(self, op):
         """Keep the first of each repeated reference in one list: the same citation twice on a person."""
