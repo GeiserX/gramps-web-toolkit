@@ -234,7 +234,8 @@ def test_a_gramps_backup_is_refused_and_limit_cuts_the_list(tmp_path, capsys):
     owner, guest = _pair(keep=True)
     b = tmp_path / "t.gramps"
     b.write_bytes(_to_xml(owner))
-    assert main(["public", str(b), _write(tmp_path, "g.json", guest)]) == 2
+    assert main(["public", _write(tmp_path, "o0.json", owner), str(b)]) == 2  # as the guest side
+    assert "a .gramps backup has no private marks" in capsys.readouterr().err
     for d in (owner, guest):
         d["people"][0]["primary_name"]["private"] = True
     assert main(["public", _write(tmp_path, "o.json", owner), _write(tmp_path, "g2.json", guest), "--limit", "1"]) == 1
