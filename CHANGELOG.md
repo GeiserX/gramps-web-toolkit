@@ -6,6 +6,14 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+No change to how existing commands behave.
+
+### Added
+
+- `gwt-check public OWNER GUEST`: compares a dump read with an owner login and one read with a guest login, and reports what a guest still sees: a private object, a visible object that points at a private one, a private person's name in a visible text, a possibly living person. IDs and kinds only. Exits 1 on any finding. Read-only.
+
 ## [0.2.8] - 2026-10-29
 
 ### Change lists

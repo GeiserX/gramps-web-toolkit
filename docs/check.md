@@ -274,3 +274,25 @@ gwt-check cites dump.json.gz --json   # the same rows as JSON
 - Only the page is read, never the citation's notes, so the rules work on any tree whatever its note style.
 - The words that name a kind of act are in one table, `ACT_WORDS`, at the top of `gwt_check/cites.py`, and the words of a marginal mention in `MARGINAL` beside it. A language that is not in them is not read. A word matches as a whole word, singular or plural (`nacimiento`, `nacimientos`), never inside a longer word (`birthplace` is not a birth act).
 - `fill-places` holds back every row `cites` lists: a place that only such a citation names is listed under `held_back`, not proposed.
+
+## What a guest still sees (`public`)
+
+```bash
+gwt-check dump owner.json.gz     # read with an owner login
+gwt-check dump guest.json.gz     # the same tree, read with a guest login (the role that cannot see private records)
+gwt-check public owner.json.gz guest.json.gz
+```
+
+`public` compares the two dumps and never touches the tree. It reports, by Gramps ID and kind and never by the text that leaked:
+
+| Finding | Meaning |
+| --- | --- |
+| `private-visible` | an object the owner marked private is in the guest dump |
+| `private-reference` | a visible object still holds the handle of a private one (a family listing a private child, say) |
+| `private-name` | a private person's full name is written in a visible note, citation page, event description, media description or source title; a name a visible person also bears is not reported, and neither is a name of fewer than 8 characters or one word |
+| `living-visible` | a visible person has no death or burial of their own and a birth or baptism less than 110 years ago, or none dated (the rule of `living-media-sensitive`) |
+
+It exits 1 when there is any finding. A guest dump with objects the owner dump lacks is refused, because it is not the same tree. Dump the owner and the guest one after the other: a tree edited between the two reads shows as differences that are not leaks.
+
+Gramps Web API 3.25 replaced the privacy filter that guests go through with a new access layer, stricter in a few corner cases ([release notes](https://github.com/gramps-project/gramps-web-api/releases/tag/v3.25.0)). This command is the check that a given server, after an upgrade or a settings change, still hides what the owner marked private. It cannot see what a guest never gets from the API but could infer, and it does not run a search.
+
