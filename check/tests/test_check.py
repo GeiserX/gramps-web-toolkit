@@ -1681,7 +1681,13 @@ def test_place_vs_description_skips_a_place_named_as_where_someone_is_from_or_li
                  "Mateo, vecino del lugar de Otropueblo",
                  "naturales y vecinos de Otropueblo",
                  "le père, domicilié à Otropueblo",
-                 "Mateo, de la commune d'Otropueblo"):
+                 "Mateo, de la commune d'Otropueblo",
+                 "Mateo, residente en Otropueblo",
+                 "le père, demeurant à Otropueblo",
+                 "Mateo, originaire d’Otropueblo",
+                 "Clara, habitante de Otropueblo",
+                 "Mateo, vezino de Otropueblo",
+                 "Mateo (de Otropueblo), labrador"):
         assert _place_desc_keys(d, "E0001", desc) == [], desc
 
 
@@ -1693,5 +1699,16 @@ def test_place_vs_description_still_flags_a_place_where_the_event_happened():
                  "Mateo, natural de Otropueblo, bautizado en Otropueblo",
                  "en la casa de Otropueblo",
                  "Mateo, vecino de aquí; parroquia de Otropueblo",
-                 "bautizado en casa; «Otropueblo» al margen"):
+                 "bautizado en casa; «Otropueblo» al margen",
+                 "bautizado en la parr. de Otropueblo",
+                 "bautizado en Ntra. Sra. de Otropueblo",
+                 "murió en el hospital. De Otropueblo"):
+        assert _place_desc_keys(d, "E0001", desc) == ["E0001"], desc
+
+
+def test_place_vs_description_on_a_residence_where_someone_lives_is_the_event_place():
+    d = selftest.clean_tree()
+    selftest._other_place(d)
+    selftest._get(d, "events", "E0001")["type"] = "Residence"
+    for desc in ("Mateo, vecino de Otropueblo", "Mateo, residente en Otropueblo", "domicilié à Otropueblo"):
         assert _place_desc_keys(d, "E0001", desc) == ["E0001"], desc

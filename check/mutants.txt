@@ -58,7 +58,11 @@ gwt_check/checks.py | hits = {oh: n for oh, n in hits.items() if not any(f" {n} 
 gwt_check/checks.py | if n not in own and n not in people and | if n not in own and | place-vs-description skips a given name or surname of someone on the event
 gwt_check/checks.py | on_event[r.get("ref")] += [T["people"][x] for x in | on_event[r.get("ref")] += [] and [T["people"][x] for x in | both spouses of a family are on the family's event
 gwt_check/checks.py | for part in [n.get("first_name") or ""] + [ | for part in [ | a given name of someone on the event is not a place
-gwt_check/checks.py | and not origin(raw, words[j][1]) | and True | a place named as where someone is from or lives is not the event's place
-gwt_check/checks.py | return (k == 0 and before[0] in ("de", "del", "d")) or | return False or | a clause that opens with «de» («Juan, de Otropueblo») names an origin
+gwt_check/checks.py | (residence or not origin(raw, words[j][1])) | (residence or True) | a place named as where someone is from or lives is not the event's place
+gwt_check/checks.py | return ((k == 0 and before[0] in ("de", "del", "d") and | return ((False and | a clause that opens with «de» («Juan, de Otropueblo») names an origin
 gwt_check/checks.py | if t in ("'", "’"): | if False: | an elided «d'» before a place still reads as «de»
 gwt_check/checks.py | if k == len(before): | if False: | a place right after punctuation, or with no filler word before it, is not an origin
+gwt_check/checks.py | and (stop is None or stop in ORIGIN_CLAUSE_BREAK)) | and True) | a «de» after an abbreviation dot («parr. de X») does not open a clause
+gwt_check/checks.py | residence = e.get("type") == "Residence" | residence = False | on a residence, where someone lives is the event's own place
+gwt_check/checks.py | ORIGIN_WORDS = ("natural", "vecin", "vezin", "residente", | ORIGIN_WORDS = ("natural", "vecin", "vezin", | «residente en» names where someone lives
+gwt_check/checks.py | ORIGIN_WORDS = ("natural", "vecin", "vezin", | ORIGIN_WORDS = ("natural", "vecin", | the old spelling «vezino» names where someone lives

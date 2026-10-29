@@ -114,9 +114,11 @@ NOTE_DISCARDED_BEFORE = re.compile(rf"\b{_DISCARD}{_SEP}{_GAP}$")
 
 # place-vs-description: a place named as where a person comes from or lives, not where the event happened.
 # Words that open such a phrase («natural de», «vecino del lugar de», «domicilié à»), compared by their start
-ORIGIN_WORDS = ("natural", "vecin", "residente", "domicili", "demeurant", "originaire", "habitant")
+ORIGIN_WORDS = ("natural", "vecin", "vezin", "residente", "domicili", "demeurant", "originaire", "habitant")
 # words that may stand between such a word, or a «de» that opens the clause, and the place name
 ORIGIN_FILLER = {"de", "del", "d", "la", "el", "l", "lugar", "villa", "ciudad", "commune", "en", "a", "au"}
+# marks after which a «de» opens a clause («Juan, de Otropueblo»); a dot is not one, it may end «parr.» or «Sra.»
+ORIGIN_CLAUSE_BREAK = {",", ";", ":", "(", "«", "»", '"', "“", "”"}
 
 # limits of the dated checks
 POSTHUMOUS_DAYS = 300                       # a child can be born this long after the father's death
@@ -592,11 +594,12 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
     def origin(raw: list[str], i: int) -> bool:
         """The words before raw[i], back to the last punctuation, name a person's origin or home: «natural de»,
         «vecino del lugar de», «domicilié à», or a clause that opens with «de» («Juan, de Otropueblo»)."""
-        before = []
+        before, stop = [], None
         for t in reversed(raw[:i]):
             if t in ("'", "’"):
                 continue
             if not t[0].isalnum():
+                stop = t
                 break
             before.insert(0, t)
         k = len(before)
@@ -604,7 +607,8 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
             k -= 1
         if k == len(before):
             return False
-        return (k == 0 and before[0] in ("de", "del", "d")) or (k > 0 and before[k - 1].startswith(ORIGIN_WORDS))
+        return ((k == 0 and before[0] in ("de", "del", "d") and (stop is None or stop in ORIGIN_CLAUSE_BREAK))
+                or (k > 0 and before[k - 1].startswith(ORIGIN_WORDS)))
 
     for e in E.values():
         h = e.get("place")
@@ -621,11 +625,13 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
         if any(f" {n} " in padded for n in own):
             continue
         people = own_names(e["handle"])
+        # on a residence, where someone lives («vecino de X») is the event's own place
+        residence = e.get("type") == "Residence"
 
         def as_event_place(n: str) -> bool:
             """Some match of n is not a person's origin or home."""
             ns = n.split()
-            return any([w for w, _ in words[j:j + len(ns)]] == ns and not origin(raw, words[j][1])
+            return any([w for w, _ in words[j:j + len(ns)]] == ns and (residence or not origin(raw, words[j][1]))
                        for j in range(len(words)))
 
         # a name that is a given name or surname of someone on the event is that person, not a place
