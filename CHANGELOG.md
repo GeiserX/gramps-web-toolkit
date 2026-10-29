@@ -6,6 +6,15 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+None.
+
+### Added
+
+- `gwt-apply` `remove_tag` takes one tag off an object the tree already has, for example a weak mark once a document proves the fact. The tag stays in the tree; a name the tree has no tag for is a conflict.
+- `gwt-apply` `move_event` moves an event reference, with its citations and notes, from one person or family to another; a move between a person and a family swaps the roles `Primary` and `Family`, and `role` sets another one. It writes the new owner first, so a stop in between leaves the event on both and a rerun finishes the move, and it keeps each person's birth and death indexes on the right events.
+
 ### Fixed
 
 - `gwt-check check` `place-vs-description` no longer counts a place name that is a given name or surname of someone on the event, or that follows words saying where someone is from or lives («natural de», «vecino de», «domicilié à», «de la commune de», a clause opening with «de» after a comma or quote mark, not after an abbreviation dot such as «parr.»). On a residence those words still count, because there they name the event's place. On one real tree this halved the findings; none of the dropped events that were read had happened elsewhere. «Parroquia de Otropueblo», «en la casa de Otropueblo» and «murió en su domicilio de Otropueblo» still count.
