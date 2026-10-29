@@ -274,3 +274,25 @@ gwt-check cites dump.json.gz --json   # the same rows as JSON
 - Only the page is read, never the citation's notes, so the rules work on any tree whatever its note style.
 - The words that name a kind of act are in one table, `ACT_WORDS`, at the top of `gwt_check/cites.py`, and the words of a marginal mention in `MARGINAL` beside it. A language that is not in them is not read. A word matches as a whole word, singular or plural (`nacimiento`, `nacimientos`), never inside a longer word (`birthplace` is not a birth act).
 - `fill-places` holds back every row `cites` lists: a place that only such a citation names is listed under `held_back`, not proposed.
+
+## What a guest still sees (`public`)
+
+```bash
+gwt-check dump owner.json.gz     # read with an owner login
+gwt-check dump guest.json.gz     # the same tree, read with a guest login (the role that cannot see private records)
+gwt-check public owner.json.gz guest.json.gz
+```
+
+`public` compares the two dumps and never touches the tree. It reports, by Gramps ID and kind and never by the text that leaked:
+
+| Finding | Meaning |
+| --- | --- |
+| `private-visible` | an object the owner marked private is in the guest dump, or a guest object still carries a sub-object marked private (a name, an event or child reference, an attribute); the row names the path |
+| `private-reference` | a visible object still holds the handle of a private one (a family listing a private child, say) |
+| `private-name` | a private person's full name is written in a visible note, citation page, event description, media description or path, or source title, author or publication info; punctuation counts as a word break; a name a visible person also bears is not reported, and neither is a name of fewer than 8 characters or one word |
+| `living-visible` | a visible person has no death or burial of their own and a birth or baptism of their own less than 110 years ago, read from the owner dump so a hidden burial still counts (the rule of `living-media-sensitive`, which also counts people with no dated birth; here they are left out) |
+
+It exits 1 when there is a finding of the first three kinds: those mean the server shows a guest what the owner hid. `living-visible` is listed but does not set the exit code, because Gramps Web never hides a person for being alive: a guest sees a living person unless the owner marks the person, or their events, private. A guest dump with objects the owner dump lacks, one read from another tree, or an empty one is refused. Dump the owner and the guest one after the other: a tree edited between the two reads shows as differences that are not leaks.
+
+Gramps Web API 3.25 replaced the privacy filter that guests go through with a new access layer, stricter in a few corner cases ([release notes](https://github.com/gramps-project/gramps-web-api/releases/tag/v3.25.0)). The first three kinds are the check that a given server, after an upgrade or a settings change, still hides what the owner marked private; `living-visible` is a list for the owner to review. It cannot see what a guest never gets from the API but could infer, and it does not run a search.
+
