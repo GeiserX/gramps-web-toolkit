@@ -212,10 +212,10 @@ class Search(Boe):
         self.assertEqual(len(net.requests), 1)
         self.assertIn('needs pdftotext', text)
 
-    def test_born_marks_an_act_before_the_persons_fourteenth_year_and_hides_nothing(self):
+    def test_born_marks_an_act_before_the_birth_and_hides_nothing(self):
         gate = FakeGate()
         net = FakeNet(gate, (200, RESULTS))
-        code, lines, text = self.search(net, gate, ['--born', '1895'])
+        code, lines, text = self.search(net, gate, ['--born', '1903'])
         c = json.load(open(lines['candidates'], encoding='utf-8'))['candidates']
         self.assertEqual(len(c), 2)
         self.assertEqual([x['implausible'] for x in c], [True, False])
@@ -240,6 +240,12 @@ class Search(Boe):
 
 
 class Old(unittest.TestCase):
+    def test_a_child_is_not_implausible_orphans_are_named_in_pension_lists(self):
+        page = RESULTS.decode()
+        self.assertFalse(gwt_boe.candidates(page, 'x y', born=1895)[0]['implausible'])   # 1902, aged 7
+        self.assertTrue(gwt_boe.candidates(page, 'x y', born=1903)[0]['implausible'])    # 1902, not yet born
+        self.assertFalse(gwt_boe.candidates(page, 'x y', born=1902)[0]['implausible'])   # the year of the birth
+
     def test_over_100_is_implausible(self):
         page = open(os.path.join(os.path.dirname(__file__), 'fixtures', 'boe-results.html'), encoding='utf-8').read()
         rs = gwt_boe.rows(page)

@@ -109,14 +109,15 @@ def candidates(page, phrase, near=(), born=None):
     for r in rows(page):
         ev = {'mention': {'year': r['year'], 'year_to': r['year'], 'place': ''}} if r['year'] else {}
         titled = bool(_whole(phrase).search(_fold(r['title'])))
-        young = bool(born and r['year'] and (r['year'] < born + 14 or r['year'] > born + 100))
+        # before the birth or over 100 years after it; a child is not ruled out (pension lists name orphans)
+        young = bool(born and r['year'] and (r['year'] < born or r['year'] > born + 100))
         hits = [w for w in near if _fold(w) in _fold(r['title'] + ' ' + r['dept'])]
         out.append({'source': SOURCE, 'id': r['ref'] or r['title'][:40], 'role': 'mention', 'principal': False,
                     'phonetic': False, 'url': r['pdf'] or HOST + '/buscar/gazeta.php', 'date': r['date'],
                     'in_title': titled, 'near': hits, 'implausible': young,
                     'note': '%s (%s, %s)%s%s: %s' % (r['paper'], r['dept'], r['date'], ' [name in title]' if titled else '',
                                                     ' [near: %s]' % ', '.join(hits) if hits else '', r['title']) if not young else
-                    '%s (%s, %s) [IMPLAUSIBLE: published %d, a person born %d was under 14 or over 100]: %s' % (
+                    '%s (%s, %s) [IMPLAUSIBLE: published %d, a person born %d was not yet born or over 100]: %s' % (
                         r['paper'], r['dept'], r['date'], r['year'], born, r['title']),
                     'locality': '', 'name': phrase, 'given': None, 'surnames': None, 'events': ev, 'relatives': []})
     return out

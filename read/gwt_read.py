@@ -404,7 +404,7 @@ def parser():
     s = bsub.add_parser('search', help='one phrase in quotes, the first page of results')
     s.add_argument('--name', required=True, help='given name and surname(s), read as one phrase')
     s.add_argument('--parents', help='the parents\' first names the tree holds, "Father y Mother": with --pdf-context, an act that writes other parents is marked')
-    s.add_argument('--born', type=int, help='birth year of the person: an act published before they were 14 is marked IMPLAUSIBLE, never hidden')
+    s.add_argument('--born', type=int, help='birth year of the person: an act published before it or over 100 years after it is marked IMPLAUSIBLE, never hidden')
     s.add_argument('--pages', type=int, default=1, help='pages of 50 results to read, 1 to 5 (default 1)')
     _boe_filters(s)
     s.add_argument('--out', required=True)
