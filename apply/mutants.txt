@@ -103,3 +103,7 @@ gwt_apply/ops.py | if str(ev.get("type")) == etype:  # the same rule as add_even
 gwt_apply/ops.py | new = next((n for n, rh in prim if types.get(rh) == etype), -1) | new = -1 | when the indexed birth or death leaves, the index moves to the other Primary one left
 gwt_apply/ops.py | self.c.get("Tag", h)  # read, so a snapshot apply | pass  # | remove_tag reads the tag it takes off, so a snapshot apply sees a rename
 gwt_apply/ops.py | self._reread_found = True  # the new owner's write | pass  # | a move_event whose first answer was lost says the re-read found the write
+gwt_apply/ops.py | if dcls == "Person" and index_key and ref.get("role") == "Primary": | if dcls == "Person" and index_key: | a birth only witnessed never blocks a move_event onto a person who has a birth
+gwt_apply/ops.py | prim = [r["ref"] for r in old if r.get("role") == "Primary" and r.get("ref")] | prim = [r["ref"] for r in old if r.get("ref")] | a birth the new person only witnessed does not block a moved Primary birth
+gwt_apply/ops.py | prim = [(n, r["ref"]) for n, r in enumerate(refs) if r.get("role") == "Primary" and r.get("ref")] | prim = [(n, r["ref"]) for n, r in enumerate(refs) if r.get("ref")] | when the indexed birth leaves, a birth the person only witnessed never becomes their birth
+gwt_apply/ops.py | self._reread_found = False  # every try | pass  # every try | the re-read flag of one op never labels the next op's lost answer

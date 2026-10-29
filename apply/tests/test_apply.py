@@ -910,6 +910,39 @@ def test_verify_sees_a_moved_event_moved_back(fake, tmp_path, env, capsys):
     assert "differs: Person I0003 event_ref_list" in capsys.readouterr().out
 
 
+def test_move_event_counts_only_primary_births_and_deaths(fake):
+    """A birth someone only witnessed is not their birth: it never blocks a move, never becomes their index."""
+    bob, carl = _two_people_and_events(fake)
+    fake.add("events", {"handle": "ev-bw", "gramps_id": "E0005", "type": "Birth"})
+    bob["event_ref_list"].append({"ref": "ev-bw", "role": "Witness"})  # Bob witnessed this birth
+    carl["event_ref_list"] = [{"ref": "ev-bw", "role": "Witness"}]  # and so did Carl, who has no birth of his own
+    carl["birth_ref_index"] = -1
+    res = run(fake, _move("E0002", {"person": "I0002"}, {"person": "I0003"}))[0]  # Bob's own birth, onto Carl
+    assert res.status == "done", res.actions
+    bob, carl = fake.store["people"]["bob"], fake.store["people"]["carl"]
+    assert bob["birth_ref_index"] == -1  # the witnessed birth left behind is not Bob's birth
+    assert carl["birth_ref_index"] == 1  # the moved birth is Carl's, the witnessed one did not block it
+    fake.add("people", {"handle": "dora", "gramps_id": "I0004", "gender": 0, "primary_name": {"first_name": "Dora"},
+                        "event_ref_list": [{"ref": "ev-b3", "role": "Primary"}], "birth_ref_index": 0})
+    res = run(fake, _move("E0005", {"person": "I0002"}, {"person": "I0004"}, key="mv2"))[0]  # a witness, not a birth
+    assert res.status == "done", res.actions
+    assert fake.store["people"]["dora"]["birth_ref_index"] == 0
+
+
+def test_a_move_event_finishing_a_move_does_not_label_the_next_ops_lost_answer(fake):
+    """The re-read flag is per op: the next op whose lost write did not land still says this try wrote it."""
+    bob, carl = _two_people_and_events(fake)
+    carl["event_ref_list"].append(dict(bob["event_ref_list"][0]))  # a half-done move of the residence
+    _note(fake, "n1", "Father read as Denis (?)")
+    _script(fake, ("PUT", "/api/notes/", _refused))
+    res = run(fake, [_move("E0001", {"person": "I0002"}, {"person": "I0003"})[0], NOTE_OP])
+    assert [r.status for r in res] == ["done", "done"], [r.actions for r in res]
+    assert any("finishing the move" in a for a in res[0].actions), res[0].actions
+    assert not res[1].answer_lost, res[1].actions
+    assert _lost_lines(res[1]) == [
+        "answer lost on try 1: PUT /notes/n1; the re-read did not find it, so this try wrote it"], res[1].actions
+
+
 def test_coordinates_that_are_not_numbers_are_a_validation_error():
     # float(None) is a TypeError: it must come out as a line in the error list, not a crash
     for bad in (None, "north", [1]):

@@ -710,7 +710,7 @@ class Applier:
                 if self.lock is not None:  # every try: a slow server can make one op outlast the lock
                     self.lock.refresh()
                 self.actions, self.reasons, self.wrote, self._holding = [], [], False, None
-                self._reread_found = False
+                self._reread_found = False  # every try: one op's flag never labels the next op's lost answer
                 self.c.unknown_write = []
                 # a dry run's plan of this try: dropped on a retry, or the next try reads it as already done
                 planned = (dict(self.c.pending), set(self.c.deleted)) if self.c.dry_run else None
