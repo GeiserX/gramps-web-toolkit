@@ -399,7 +399,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps(rep, ensure_ascii=False, indent=1))
             else:
                 print_public(rep, args.limit or len(rep["rows"]))
-            return 1 if rep["rows"] else 0
+            return 1 if rep["leaks"] else 0
         if args.cmd == "cites":
             from .cites import cites_report, print_cites
             tree = load(args.tree) if args.tree else Tree(live_dump(args)["objects"], source="live tree")

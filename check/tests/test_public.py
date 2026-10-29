@@ -88,11 +88,12 @@ def test_a_name_a_visible_person_also_has_is_not_reported():
 
 def test_a_person_with_no_death_and_a_recent_birth_is_reported_as_possibly_living():
     owner, guest = _pair()
-    p = guest["people"][0]
-    ev = {e["handle"]: e for e in guest["events"]}
-    for r in p["event_ref_list"]:
-        ev[r["ref"]]["type"] = "Birth"
-        ev[r["ref"]]["date"]["dateval"] = [1, 1, 1990, False]
+    for d in (owner, guest):
+        p = d["people"][0]
+        ev = {e["handle"]: e for e in d["events"]}
+        for r in p["event_ref_list"]:
+            ev[r["ref"]]["type"] = "Birth"
+            ev[r["ref"]]["date"]["dateval"] = [1, 1, 1990, False]
     rep = _rep(owner, guest)
     assert any(r["check"] == "living-visible" and r["object"] == p["gramps_id"] for r in rep["rows"])
 
@@ -121,5 +122,122 @@ def test_the_command_exits_1_on_a_leak_and_0_on_none(tmp_path, capsys):
     clean_o, clean_g = _write(tmp_path, "o2.json", owner), _write(tmp_path, "g2.json", guest)
     rc = main(["public", clean_o, clean_g, "--json"])
     rows = json.loads(capsys.readouterr().out)["rows"]
-    assert rc == (1 if rows else 0)
+    assert rc == 0
     assert not [r for r in rows if r["check"] != "living-visible"]
+
+
+def _set_own(d, gid, kinds):
+    """Give person `gid` own events of these (type, year) kinds, replacing theirs."""
+    p = next(o for o in d["people"] if o["gramps_id"] == gid)
+    tpl = copy.deepcopy(d["events"][0])
+    p["event_ref_list"] = []
+    for i, (typ, year) in enumerate(kinds):
+        ev = copy.deepcopy(tpl)
+        ev.update(handle=f"hX{gid}{i}", gramps_id=f"EX{gid}{i}", type=typ, private=False)
+        ev["date"] = {"dateval": [1, 1, year, False]} if year else {"dateval": [0, 0, 0, False]}
+        d["events"].append(ev)
+        p["event_ref_list"].append({"ref": ev["handle"], "role": "Primary", "private": False})
+    return p
+
+
+def _living(rep):
+    return {r["object"] for r in rep["rows"] if r["check"] == "living-visible"}
+
+
+def test_a_person_with_no_dated_birth_is_not_reported_as_living():
+    owner, guest = _pair()
+    for d in (owner, guest):
+        _set_own(d, "I0001", [("Birth", 0)])
+    assert "I0001" not in _living(_rep(owner, guest))
+
+
+def test_living_is_judged_from_the_owners_events_a_private_burial_still_counts():
+    owner, guest = _pair()
+    _set_own(owner, "I0001", [("Birth", 1990), ("Burial", 1991)])
+    _set_own(guest, "I0001", [("Birth", 1990)])  # the burial is private, the guest does not get it
+    assert "I0001" not in _living(_rep(owner, guest))
+
+
+def test_possibly_living_alone_does_not_set_the_exit_code(tmp_path, capsys):
+    owner, guest = _pair()
+    for d in (owner, guest):
+        _set_own(d, "I0001", [("Birth", 1990)])
+    rep = _rep(owner, guest)
+    assert "I0001" in _living(rep) and rep["leaks"] == 0
+    o, g = _write(tmp_path, "o.json", owner), _write(tmp_path, "g.json", guest)
+    assert main(["public", o, g]) == 0
+    assert "living-visible" in capsys.readouterr().out
+
+
+def test_a_private_sub_object_the_guest_still_gets_is_reported():
+    owner, guest = _pair()
+    for d in (owner, guest):
+        d["people"][0]["primary_name"]["private"] = True
+        d["people"][0]["event_ref_list"][0]["private"] = True
+    rows = [r for r in _rep(owner, guest)["rows"] if r["check"] == "private-visible"]
+    assert {(r["object"], r.get("path")) for r in rows} == {("I0001", "primary_name"), ("I0001", "event_ref_list")}
+
+
+def test_a_visible_private_object_is_not_also_a_reference_to_itself():
+    rep = _rep(*_pair(keep=True))
+    assert not [r for r in rep["rows"] if r["check"] == "private-reference" and r["object"] == r["points_at"]]
+
+
+def test_a_private_name_before_punctuation_is_reported_and_its_first_word_alone_is_not():
+    owner, guest = _pair()
+    pn = owner["people"][1]["primary_name"]
+    name = " ".join([pn["first_name"]] + [s["surname"] for s in pn["surname_list"]])
+    guest["notes"][0]["text"]["string"] = f"Visita de {name}."
+    guest["notes"][1]["text"]["string"] = f"{name}, hijo"
+    guest["citations"][0]["page"] = f"({name})"
+    guest["events"][0]["description"] = f"{name}:"
+    guest["sources"][0]["title"] = f"Libro de {pn['first_name']} el viejo"
+    hits = {(r["type"], r["object"]) for r in _rep(owner, guest)["rows"] if r["check"] == "private-name"}
+    assert hits == {("notes", guest["notes"][0]["gramps_id"]), ("notes", guest["notes"][1]["gramps_id"]),
+                    ("citations", guest["citations"][0]["gramps_id"]), ("events", guest["events"][0]["gramps_id"])}
+
+
+@pytest.mark.parametrize("first, surnames", [("Ana", ["Gil"]), ("Bartolomeo", [])])
+def test_a_short_or_one_word_private_name_is_not_reported(first, surnames):
+    owner, guest = _pair()
+    p = owner["people"][1]["primary_name"]
+    p["first_name"], p["surname_list"] = first, [{"surname": s} for s in surnames]
+    for n in guest["notes"]:
+        n["text"]["string"] = f"{first} {' '.join(surnames)} y {first}"
+    assert not [r for r in _rep(owner, guest)["rows"] if r["check"] == "private-name"]
+
+
+def test_a_guest_dump_of_another_tree_or_an_empty_one_is_refused():
+    owner, guest = _pair()
+    o, g = Tree(owner, source="owner"), Tree(guest, source="guest")
+    o.tree_id, g.tree_id = "tree-a", "tree-b"
+    with pytest.raises(BadInput):
+        public_report(o, g, this_year=YEAR)
+    with pytest.raises(BadInput):
+        _rep(owner, {t: [] for t in guest})
+
+
+def test_rows_follow_numeric_gramps_id_order():
+    owner, guest = _pair()
+    for i, gid in enumerate(("I10000", "I9001")):
+        extra = copy.deepcopy(owner["people"][0])
+        extra.update(handle=f"hP{i}", gramps_id=gid, private=True)
+        owner["people"].append(extra)
+        guest["people"].append(copy.deepcopy(extra))
+    rows = [r["object"] for r in _rep(owner, guest)["rows"] if r["check"] == "private-visible"]
+    assert rows.index("I9001") < rows.index("I10000")
+
+
+def test_a_gramps_backup_is_refused_and_limit_cuts_the_list(tmp_path, capsys):
+    from test_check import _to_xml
+
+    owner, guest = _pair(keep=True)
+    b = tmp_path / "t.gramps"
+    b.write_bytes(_to_xml(owner))
+    assert main(["public", str(b), _write(tmp_path, "g.json", guest)]) == 2
+    for d in (owner, guest):
+        d["people"][0]["primary_name"]["private"] = True
+    assert main(["public", _write(tmp_path, "o.json", owner), _write(tmp_path, "g2.json", guest), "--limit", "1"]) == 1
+    out = capsys.readouterr().out
+    assert "more (--limit 0 for all)" in out
+    assert len([ln for ln in out.splitlines() if ln.startswith("  private-")]) == 1

@@ -174,6 +174,21 @@ def norm(s: str) -> str:
     return " ".join(s.split())
 
 
+def possibly_living(p: dict, events: dict, this_year: int, *, undated: bool = True) -> bool:
+    """No death or burial of their own, and a birth or baptism of their own less than LIVING_YEARS ago. A person
+    with no dated birth or baptism counts only when `undated` is true. Their own events only: a godparent at a
+    2001 baptism was not born in 2001."""
+    own = [events.get(r.get("ref")) for r in p.get("event_ref_list", []) if r.get("role") == "Primary"]
+    if any(e and e.get("type") in ("Death", "Burial") for e in own):
+        return False
+    years = [((e.get("date") or {}).get("dateval") or [0, 0, 0])[2] for e in own
+             if e and e.get("type") in ("Birth", "Baptism")]
+    years = [y for y in years if y]
+    if not years:
+        return undated
+    return min(years) >= this_year - LIVING_YEARS
+
+
 def person_name(p: dict) -> str:
     n = p.get("primary_name") or {}
     return norm(" ".join([n.get("first_name", "")] + [s.get("surname", "") for s in n.get("surname_list", [])]))
@@ -655,14 +670,7 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
     for p in P.values():
         if not p.get("media_list") or p.get("private"):
             continue
-        # their own events only: a godparent at a 2001 baptism was not born in 2001
-        events = [E.get(r.get("ref")) for r in p.get("event_ref_list", []) if r.get("role") == "Primary"]
-        if any(e and e.get("type") in ("Death", "Burial") for e in events):
-            continue
-        years = [((e.get("date") or {}).get("dateval") or [0, 0, 0])[2] for e in events
-                 if e and e.get("type") in ("Birth", "Baptism")]
-        years = [y for y in years if y]
-        if years and min(years) < this_year - LIVING_YEARS:
+        if not possibly_living(p, E, this_year):
             continue
         for r in p["media_list"]:
             m = T["media"].get(r.get("ref"))
