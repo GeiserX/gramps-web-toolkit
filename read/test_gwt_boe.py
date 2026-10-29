@@ -1,4 +1,3 @@
-import os
 """Tests for `gwt-read boe`. Invented acts in fixtures/, a fake transport, a fake gate: no request ever leaves
 this machine. Run: cd read && python3 -m unittest -v test_gwt_boe"""
 import contextlib, io, json, os, unittest
@@ -6,6 +5,7 @@ import contextlib, io, json, os, unittest
 from test_gwt_read import Base, FakeGate, FakeNet, CAPTCHA
 import gwt_boe  # noqa: E402
 import gwt_read  # noqa: E402
+import gwt_rank  # noqa: E402
 
 FIX = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fixtures')
 RESULTS = open(os.path.join(FIX, 'boe-results.html'), 'rb').read()
@@ -76,6 +76,11 @@ class Search(Boe):
         self.assertEqual(lines['source'], 'boe')
         self.assertEqual(lines['results'], '2 of 2')
         self.assertEqual(len(json.load(open(lines['candidates'], encoding='utf-8'))['candidates']), 2)
+        with contextlib.redirect_stdout(io.StringIO()) as ranked, contextlib.redirect_stderr(io.StringIO()) as said:
+            rc = gwt_rank.main([lines['candidates'], '--given', 'Ana', '--surname', 'Zorvalo', '--surname', 'Quemada',
+                                '--facts', 'by=1880'])
+        self.assertEqual(rc, 1, ranked.getvalue() + said.getvalue())   # gwt-rank reads the file: rows, none strong
+        self.assertIn('2 rows, 0 strong, 0 possible, 2 weak', ranked.getvalue() + said.getvalue())  # a mention stays weak
 
     def test_a_repeat_costs_no_request(self):
         gate = FakeGate()
