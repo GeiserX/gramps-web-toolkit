@@ -8,15 +8,16 @@ gwt read familysearch record 1:1:QZZ1-AAA --out runs/
 gwt read pares search --given Ana --surname Zorvalo --out runs/     # public, no account
 gwt read pares record 9000001 --out runs/
 gwt read genae search --given Ana --surname Zorvalo --out runs/    # public, no account
+gwt read boe search --name "Ana Zorvalo Quemada" --out runs/      # public, no account
 ```
 
-`gwt-read` runs a record search, or reads one record, on a record site, and writes the answer in the shape every record-site reader in the toolkit shares. It reads three sites: [FamilySearch](#familysearch) historical records, [PARES](#pares), the catalogue of the Spanish state archives, and [Genae](#genae), a volunteer index of parish records that `gwt-read` only searches: its rows are leads, not records. It is slow on purpose and cached, because FamilySearch suspends accounts for volume: one of ours was suspended in 2026 after about 15 parallel lanes called the API through one night ([hard-won lesson 1](hard-won.md#1-volume-got-a-familysearch-account-suspended-and-an-ip-blocked)).
+`gwt-read` runs a record search, or reads one record, on a record site, and writes the answer in the shape every record-site reader in the toolkit shares. It reads four sites: [FamilySearch](#familysearch) historical records, [PARES](#pares), the catalogue of the Spanish state archives, [Genae](#genae), a volunteer index of parish records that `gwt-read` only searches: its rows are leads, not records, and the [BOE and Gaceta de Madrid](#boe-and-gaceta-de-madrid) text search, whose hits are mentions of a name in an official act. It is slow on purpose and cached, because FamilySearch suspends accounts for volume: one of ours was suspended in 2026 after about 15 parallel lanes called the API through one night ([hard-won lesson 1](hard-won.md#1-volume-got-a-familysearch-account-suspended-and-an-ip-blocked)).
 
-It never logs in and never asks for a password. PARES and Genae need no account. For FamilySearch you sign in in your own browser, and the tool uses that session's token. Standard library only.
+It never logs in and never asks for a password. PARES, Genae and the BOE need no account. For FamilySearch you sign in in your own browser, and the tool uses that session's token. Standard library only.
 
 ## The reader shape
 
-[gwt-mh](myheritage.md) (MyHeritage) and `gwt-read` (FamilySearch, PARES, Genae) write the same files, from `read/gwt_reader.py`:
+[gwt-mh](myheritage.md) (MyHeritage) and `gwt-read` (FamilySearch, PARES, Genae, BOE) write the same files, from `read/gwt_reader.py`:
 
 | File | What it holds |
 |---|---|
@@ -178,30 +179,39 @@ Genae publishes no terms for scripted use, and its robots.txt disallows `/buscar
 
 ## BOE and Gaceta de Madrid
 
-The BOE's open-data API (https://boe.es/datosabiertos/api/api.php) answers by date and by law, never by a person's name, and its daily summaries start in 1961. The site's own search (https://www.boe.es/buscar/gazeta.php) covers the Gaceta de Madrid and the BOE from 1661 to 1959 and takes a phrase in the text of the acts. It is public: no account, no token. `boe search` asks it for one phrase and reads the first page.
+The BOE's open-data API (https://boe.es/datosabiertos/api/api.php) answers by date and by law, never by a person's name, and its daily summaries start in 1961. The site's own search (https://www.boe.es/buscar/gazeta.php) takes a phrase in the text of the acts of the Gaceta de Madrid and the BOE. The collection starts in 1661, but the site says its text search works only from 1836 to 1959, and gives approximate results. It is public: no account, no token. `boe search` asks it for one phrase and reads the first page.
 
 ```bash
-gwt read boe search --name "Ana Zorvalo Quemada" --out runs/
+gwt read boe search --name "Ana Zorvalo Quemada" --born 1880 --out runs/
+gwt read boe search --name "Ana Zorvalo Quemada" --born 1880 --parents "Juan y Antonia" --pdf-context 2 --out runs/
 ```
 
-The phrase is always sent in quotes, so the site reads it as one name; it ignores accents. Each result becomes a candidate of role `mention`, never a principal, with the act's title in the note. A mention in an official act (a pardon, a pension, a call for places, an appointment) says a name was printed there. It does not say which person it is, and a common name hits many namesakes, so `gwt-rank` never ranks a mention above `weak`. | Option | Meaning |
+The phrase is always sent in quotes, so the site reads it as one name; it ignores accents. Each result becomes a candidate of role `mention`, never a principal, with the act's title in the note. A mention in an official act (a pardon, a pension, a call for places, an appointment) says a name was printed there. It does not say which person it is, and a common name hits many namesakes, so `gwt-rank` never ranks a mention above `weak`. A row whose title holds the whole name is marked `[name in title]`; the others matched in the act's text only.
+
+| Option | Meaning |
 | --- | --- |
-| `--from`, `--to` | first and last publication, a year or `yyyy-mm-dd`; the site's historical search ends in 1959 |
+| `--name` | given name and surname(s), sent as one phrase; at least two words |
+| `--from`, `--to` | first and last publication, a year or `yyyy-mm-dd`; text search covers 1836 to 1959 |
 | `--pages N` | read up to N pages of 50 results (1 to 5, default 1); `results` prints how many rows were read and how many the site found |
-| `--pdf-context N` | read the PDF of the first N hits (0 to 10, default 0), one request each, and add the words around the name to the note; needs `pdftotext` (poppler-utils), and without it nothing is fetched |
-| `--born YEAR` | the person's birth year: a row published before they were 14 or after they would be 100 is marked `IMPLAUSIBLE`, never hidden |
-| `--parents "Father y Mother"` | the parents' first names the tree holds; with `--pdf-context`, an act that writes the parents after the name (the draft lists do: "Ana Zorvalo, de Juan y Antonia") is marked as the tree's parents or as other ones |
+| `--born YEAR` | the person's birth year: a row published before that year or more than 100 years after it is marked `IMPLAUSIBLE`, never hidden. A child is not ruled out: pension lists name orphans |
+| `--parents "Father y Mother"` | the parents' first names the tree holds; with `--pdf-context`, an act that writes the parents after the name (the draft lists do: "Ana Zorvalo, de Juan y Antonia") is marked as the tree's parents or as other ones. Each parent is compared by first given name, so "José María" matches "José" |
+| `--pdf-context N` | read the PDF of the first N rows `--born` has not ruled out (0 to 10, default 0), one request each, and add the words around the name to the note; needs `pdftotext` (poppler-utils), and without it nothing is fetched |
 | `--near WORD` | mark a row whose title or department holds the word (a place, a trade); it marks, never hides. Repeat for more |
+| `--out DIR` | where the envelope and candidates files go; another `--born`, `--parents` or `--near` writes another file |
 
-`sweep --inverted` also searches each name with the surnames first ("Zorvalo Quemada Ana"), the way lists write it; the site ignores the comma. When the text layer of a PDF does not hold the name (edicts split it across columns), `--pdf-context` reads the pages as an image, `pdftoppm` then `tesseract --psm 3` (in Spanish when `spa.traineddata` is installed, set `TESSDATA_PREFIX` to a folder that has it; else English), which finds the columns itself, about 6 s a page and the first 8 pages, and looks for a name that is nearly the same (a letter or two wrong, a hyphen at a line end). The row says `[read by OCR as "...": open the PDF image and check]`: a pointer to the image, never a reading. Without either program nothing is run; `--no-ocr` turns it off. Every act gets a `verdict` (also at the start of its note): `excluded` (published before the birth, other parents, or a longer name), `consistent` (same parents as the tree) or `open`; the search prints the three counts. No act is dropped and no verdict is proof. With `--pdf-context` a name that stands inside a longer one ("Juan Ana Zorvalo" holds "Ana Zorvalo") is marked with the word before it. The BOE prints in two or three columns, so the words around a name in a PDF can mix lines of the next column; read them as a pointer to the page, never as the sentence. A row whose title holds the whole name is marked `[name in title]`; the others matched in the act's text only. One request every 6 s at best, one per page.
+Every act gets a `verdict` (also at the start of its note), and the search prints the three counts:
 
-```bash
-gwt read boe sweep --names dead.txt --variants --from 1900 --to 1959 --out runs/
-```
+- `excluded`: published before the birth or over 100 years after it, or the act writes other parents at every place the name stands.
+- `consistent`: the act writes the tree's parents after the name at least once.
+- `open`: anything else.
 
-`sweep` searches one name per line of a file, optionally followed by `| birth year` (`#` starts a comment), once each, and lists every act once. The file must hold only people who are dead: nothing about a living person is sent to the site. `--variants` also searches the b/v spelling of each word, one word at a time (Zorvalo, Zorbalo), a crude rule that can make a name nobody wrote. The output has a line per search with the rows the site found, the rows read, the rows new to the list and how many hold the whole name in the title.
+No act is dropped and no verdict is proof. The name must stand as whole words ("Ana Zorvalo" is not inside "Juana Zorvalo"); a rank or title before it ("al Cabo Ana Zorvalo") changes nothing. When the text layer of the PDF does not hold the whole name (edicts and lists split names across columns), the note says `[name not whole in the text layer: open the PDF]`. The BOE prints in two or three columns, so the words around a name can mix lines of the next column; read them as a pointer to the page, never as the sentence.
 
-A page that is not a results page (the search form, a captcha) is a STOP: nothing written, nothing cached.
+The search does not index the annexes «Anuncios, avisos y Administración de Justicia» of many years, where edicts and requisitorias sit. Zero hits does not mean the person was never printed: [`gwt-fetch gazeta`](fetch.md#gazeta-the-historical-gaceta-de-madrid) downloads whole issues to search their text. `gwt-read boe` ranks a person's mentions; `gwt-fetch gazeta` lists and downloads acts and issues.
+
+The BOE's robots.txt disallows `/buscar/gazeta.php?` and `/datos/pdfs/` for crawlers. The reader keeps to a person's pace: one search typed by a person at a time, one request every 6 s at best and never faster (`PACE` in `read/gwt_boe.py`), searches cached 7 days and PDFs 90 days (`BOE_RULES`), no parallel requests and no batch mode. The results link each act's PDF under `/datos/pdfs/`; the reader fetches the same file from `/gazeta/dias/yyyy/mm/dd/pdfs/`, which robots.txt allows, and uses the site's link only for a row without a date. To search several names, loop over `search` and rank the files together: `gwt rank runs/*.candidates.json`.
+
+A page that is not a results page (the search form, a captcha) is a STOP: nothing written, nothing cached. So is an HTML page served at a PDF URL.
 
 ## Tests
 

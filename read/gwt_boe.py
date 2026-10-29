@@ -2,14 +2,15 @@
 """gwt_boe: the BOE and Gaceta de Madrid search (boe.es/buscar/gazeta.php), for gwt-read.
 
 The official open-data API (boe.es/datosabiertos) answers by date and by law, never by a person's name, and its
-daily summaries start in 1961. The site's own search covers the Gaceta de Madrid and the BOE back to 1661 and takes
-a phrase in the text of the acts. A phrase in quotes is read as one name; without quotes the site matches the
-words anywhere, so the reader always quotes it.
+daily summaries start in 1961. The site's own search takes a phrase in the text of the acts of the Gaceta de Madrid
+and the BOE; the collection starts in 1661, but text search works only from 1836 to 1959. A phrase in quotes is read
+as one name; without quotes the site matches the words anywhere, so the reader always quotes it.
 
 A hit is a mention of a name in an official act (a pardon, an appointment, a pension, a call for places). It says
 nothing about which person it is: a common name hits many namesakes. Each row becomes a candidate of role
 `mention` with the act's title in the note, never a principal, so gwt-rank can weigh it and nobody takes it for a
-record. Only the first page is read; `total` says how many rows the site found. Standard library only.
+record. The first page is read unless --pages asks for up to 5; `total` says how many rows the site found.
+Standard library, plus `pdftotext` for --pdf-context when it is installed.
 """
 import html, re, shutil, subprocess, unicodedata, urllib.parse
 
@@ -43,12 +44,12 @@ def _iso(d, end):
 
 def search_url(phrase, date_from=None, date_to=None):
     """The URL of one search: the phrase in quotes, in the text of the acts, optionally between two publication
-    dates (a year or yyyy-mm-dd; the site's historical search ends in 1959)."""
+    dates (a year or yyyy-mm-dd; text search covers 1836 to 1959)."""
     q = [('campo[4]', 'DOC'), ('dato[4]', '"%s"' % phrase.replace('"', '')), ('operador[4]', 'and'),
          ('page_hits', str(PAGE_HITS)), ('accion', 'Buscar')]
     lo, hi = _iso(date_from, False), _iso(date_to, True)
     if lo or hi:
-        q += [('campo[8]', 'FPU'), ('dato[8][0]', lo or '1661-01-01'), ('dato[8][1]', hi or '1959-12-31')]
+        q += [('campo[8]', 'FPU'), ('dato[8][0]', lo or '1836-01-01'), ('dato[8][1]', hi or '1959-12-31')]
     return '%s/buscar/gazeta.php?%s' % (HOST, urllib.parse.urlencode(q, quote_via=urllib.parse.quote))
 
 

@@ -6,6 +6,14 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+None.
+
+### Added
+
+- `gwt-read boe search`: a name in the text of the Gaceta de Madrid and the BOE (https://www.boe.es/buscar/gazeta.php, text search 1836-1959), over plain HTTP. Each hit becomes a candidate of role `mention`, never a principal, so `gwt-rank` keeps it at `weak`. The phrase is sent in quotes; own gate (one request every 6 s, never faster), 7-day cache for searches and 90-day for PDFs (`BOE_RULES`); a page that is not a results page (search form, captcha) is a STOP. `--from`/`--to` narrow the dates, `--pages` reads up to 5 pages, `--near` marks rows without hiding any. `--born` marks an act published before the birth or over 100 years after it; `--pdf-context N` reads the PDF of the first N plausible hits with `pdftotext`, from the `/gazeta/dias/` path robots.txt allows, adds the words around the whole name and, with `--parents`, compares the parents the act writes with the tree's. Every act gets a verdict (`excluded`, `consistent`, `open`).
+
 ## [0.2.10] - 2026-10-29
 
 ### Change lists
@@ -15,7 +23,6 @@ None.
 ### Added
 
 - `gwt-read genae search`: name search on Genae (https://genae.org), the volunteer index of parish baptisms, marriages and burials of the Region of Murcia and nearby villages of Albacete, Alicante, Almería and Granada. It reads the baptism, groom, bride and burial blocks over plain HTTP and writes one candidates file `gwt-rank` ranks. Own gate (one request every 20 s at best), 7-day cache (`GENAE_RULES`), phonetic rows marked, a block cut at the site's page size flagged, and a page that is not the block asked for (empty frame, search form, captcha) is a STOP; a block the site says has no indexed books is zero rows.
-- `gwt-read boe search`: a name in the text of the Gaceta de Madrid and the BOE (https://www.boe.es/buscar/gazeta.php), over plain HTTP. Each hit becomes a candidate of role `mention`, never a principal, so `gwt-rank` keeps it at `weak` and nobody takes a printed name for a record. The phrase is sent in quotes, own gate (one request every 6 s at best), 7-day cache (`BOE_RULES`), a page that is not a results page (search form, captcha) is a STOP. `--from`/`--to` narrow the dates, `--pages` reads up to 5 pages, `--near` marks rows without hiding any, and `gwt-read boe sweep` searches a file of names of people who are dead, each act once, with the b/v spellings on request. `--pdf-context N` reads the PDF of the first N hits (needs `pdftotext`) and adds the words around the name, says when the name sits inside a longer one, and with `--parents` compares the parents the act writes with the tree's; every act gets a verdict (`excluded`, `consistent`, `open`); `--pdf-context` reads by OCR (tesseract) an act whose text layer lacks the name; `sweep --inverted` searches the surnames-first order; `--born` marks an act published before the person was 14 or after 100.
 
 ## [0.2.9] - 2026-10-29
 

@@ -5,7 +5,8 @@
   gwt-read pares record ID --out DIR                  ID: a PARES description id or its URL
   gwt-read genae search [--given G] [--surname S [--surname S2]] [--province mu] [--locality L] [--from Y] [--to Y]
                         --out DIR
-  gwt-read boe search --name "Given Surname1 [Surname2]" [--from Y] [--to Y] [--near W] [--pages N] --out DIR
+  gwt-read boe search --name "Given Surname1 [Surname2]" [--from Y] [--to Y] [--born Y] [--parents "F y M"]
+                      [--pdf-context N] [--near W] [--pages N] --out DIR
   gwt-read familysearch search [--given G] [--surname S [--surname S2]] [--by Y] [--dy Y] [--years N]
                                [--place P] [--father "G S"] [--mother "G S"] [--collection ID]
                                [--count N] --out DIR
@@ -361,8 +362,8 @@ def _common(sp, ua_env):
 
 
 def _boe_filters(sp):
-    sp.add_argument('--from', dest='year_from', help='first publication year or yyyy-mm-dd (the historical search starts in 1661)')
-    sp.add_argument('--to', dest='year_to', help='last publication year or yyyy-mm-dd (it ends in 1959)')
+    sp.add_argument('--from', dest='year_from', help='first publication year or yyyy-mm-dd (text search covers 1836 to 1959)')
+    sp.add_argument('--to', dest='year_to', help='last publication year or yyyy-mm-dd (text search ends in 1959)')
     sp.add_argument('--pdf-context', type=int, default=0, help='read the PDF of the first N acts (0 to 10, default 0) and add the words '
                     'around the name to the note; one request each, needs pdftotext')
     sp.add_argument('--near', action='append', default=[], help='a word to look for in the title and department, '
