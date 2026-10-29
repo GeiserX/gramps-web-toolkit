@@ -6,6 +6,14 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+No change to how existing commands behave.
+
+### Changed
+
+- Docs: `docs/apply.md` records what was checked against Gramps Web API 3.25.0 (the dump by list endpoints and `X-Total-Count`, a guest login, the `ETag` shape of a `GET`) and what was not (the `If-Match` answer on a `PUT`). Nothing in the code needed to change.
+
 ## [0.2.8] - 2026-10-29
 
 ### Change lists
