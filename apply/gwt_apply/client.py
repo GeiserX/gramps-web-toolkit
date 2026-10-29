@@ -415,9 +415,10 @@ class Client:
     def update(self, obj: dict) -> None:
         """PUT the whole object back, if it still is what the op read.
 
-        The ETag a GET returns cannot be used as If-Match: the server hashes the
-        request cache key for one and the object for the other, so If-Match always
-        answers 412. Instead the object is read again right before the PUT.
+        The ETag a GET returns cannot be used as If-Match: PUT compares it with a
+        hash of the stored object, while a GET's ETag hashes the response body (up
+        to Gramps Web API 3.23.x) or the request cache key (3.24.0 on), so If-Match
+        always answers 412. Instead the object is read again right before the PUT.
         """
         cls = obj["_class"]
         self._touched(cls, obj["handle"])
