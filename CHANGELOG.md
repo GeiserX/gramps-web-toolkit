@@ -6,6 +6,14 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+None.
+
+### Added
+
+- `gwt-read boe search`: a name in the text of the Gaceta de Madrid and the BOE (https://www.boe.es/buscar/gazeta.php, text search 1836-1959), over plain HTTP. Each hit becomes a candidate of role `mention`, never a principal, so `gwt-rank` keeps it at `weak`. The phrase is sent in quotes; own gate (one request every 6 s, never faster), 7-day cache for searches and 90-day for PDFs (`BOE_RULES`); a page that is not a results page (search form, captcha) is a STOP. `--from`/`--to` narrow the dates, `--pages` reads up to 5 pages, `--near` marks rows without hiding any. `--born` marks an act published before the birth or over 100 years after it; `--pdf-context N` reads the PDF of the first N plausible hits with `pdftotext`, from the `/gazeta/dias/` path robots.txt allows, adds the words around the whole name and, with `--parents`, compares the parents the act writes with the tree's. Every act gets a verdict (`excluded`, `consistent`, `open`).
+
 ## [0.2.10] - 2026-10-29
 
 ### Change lists

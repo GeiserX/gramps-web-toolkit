@@ -24,7 +24,7 @@ TTLs go by URL pattern, first match wins. `None` means the entry never expires. 
 | `/search/`, `/service/search/` | 7 days |
 | anything else | 7 days |
 
-Pass `rules=[(regex, seconds_or_None), ...]` and `default_ttl=` for another site. `GENAE_RULES` keeps a [gwt-read genae](read.md#genae) search for 7 days. `PARES_RULES` is the set [gwt-read pares](read.md#pares) uses:
+Pass `rules=[(regex, seconds_or_None), ...]` and `default_ttl=` for another site. `GENAE_RULES` keeps a [gwt-read genae](read.md#genae) search for 7 days. `BOE_RULES` keeps a [gwt-read boe](read.md#boe-and-gaceta-de-madrid) search for 7 days and an act PDF for 90 days. `PARES_RULES` is the set [gwt-read pares](read.md#pares) uses:
 
 | URL pattern | TTL |
 |---|---|

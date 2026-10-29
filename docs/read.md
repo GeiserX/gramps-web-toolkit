@@ -8,15 +8,16 @@ gwt read familysearch record 1:1:QZZ1-AAA --out runs/
 gwt read pares search --given Ana --surname Zorvalo --out runs/     # public, no account
 gwt read pares record 9000001 --out runs/
 gwt read genae search --given Ana --surname Zorvalo --out runs/    # public, no account
+gwt read boe search --name "Ana Zorvalo Quemada" --out runs/      # public, no account
 ```
 
-`gwt-read` runs a record search, or reads one record, on a record site, and writes the answer in the shape every record-site reader in the toolkit shares. It reads three sites: [FamilySearch](#familysearch) historical records, [PARES](#pares), the catalogue of the Spanish state archives, and [Genae](#genae), a volunteer index of parish records that `gwt-read` only searches: its rows are leads, not records. It is slow on purpose and cached, because FamilySearch suspends accounts for volume: one of ours was suspended in 2026 after about 15 parallel lanes called the API through one night ([hard-won lesson 1](hard-won.md#1-volume-got-a-familysearch-account-suspended-and-an-ip-blocked)).
+`gwt-read` runs a record search, or reads one record, on a record site, and writes the answer in the shape every record-site reader in the toolkit shares. It reads four sites: [FamilySearch](#familysearch) historical records, [PARES](#pares), the catalogue of the Spanish state archives, [Genae](#genae), a volunteer index of parish records that `gwt-read` only searches: its rows are leads, not records, and the [BOE and Gaceta de Madrid](#boe-and-gaceta-de-madrid) text search, whose hits are mentions of a name in an official act. It is slow on purpose and cached, because FamilySearch suspends accounts for volume: one of ours was suspended in 2026 after about 15 parallel lanes called the API through one night ([hard-won lesson 1](hard-won.md#1-volume-got-a-familysearch-account-suspended-and-an-ip-blocked)).
 
-It never logs in and never asks for a password. PARES and Genae need no account. For FamilySearch you sign in in your own browser, and the tool uses that session's token. Standard library only.
+It never logs in and never asks for a password. PARES, Genae and the BOE need no account. For FamilySearch you sign in in your own browser, and the tool uses that session's token. Standard library only.
 
 ## The reader shape
 
-[gwt-mh](myheritage.md) (MyHeritage) and `gwt-read` (FamilySearch, PARES, Genae) write the same files, from `read/gwt_reader.py`:
+[gwt-mh](myheritage.md) (MyHeritage) and `gwt-read` (FamilySearch, PARES, Genae, BOE) write the same files, from `read/gwt_reader.py`:
 
 | File | What it holds |
 |---|---|
@@ -176,10 +177,46 @@ A page that is not the block asked for (an empty frame, the search form, a captc
 
 Genae publishes no terms for scripted use, and its robots.txt disallows `/buscar/` for crawlers. The reader keeps to a person's pace: one search of four requests a minute at most, each answer cached for a week, and it never pages. Genae rows are an index made by volunteers: a hit is a lead, and the act or the image behind it is the evidence.
 
+## BOE and Gaceta de Madrid
+
+The BOE's open-data API (https://boe.es/datosabiertos/api/api.php) answers by date and by law, never by a person's name, and its daily summaries start in 1961. The site's own search (https://www.boe.es/buscar/gazeta.php) takes a phrase in the text of the acts of the Gaceta de Madrid and the BOE. The collection starts in 1661, but the site says its text search works only from 1836 to 1959, and gives approximate results. It is public: no account, no token. `boe search` asks it for one phrase and reads the first page.
+
+```bash
+gwt read boe search --name "Ana Zorvalo Quemada" --born 1880 --out runs/
+gwt read boe search --name "Ana Zorvalo Quemada" --born 1880 --parents "Juan y Antonia" --pdf-context 2 --out runs/
+```
+
+The phrase is always sent in quotes, so the site reads it as one name; it ignores accents. Each result becomes a candidate of role `mention`, never a principal, with the act's title in the note. A mention in an official act (a pardon, a pension, a call for places, an appointment) says a name was printed there. It does not say which person it is, and a common name hits many namesakes, so `gwt-rank` never ranks a mention above `weak`. A row whose title holds the whole name is marked `[name in title]`; the others matched in the act's text only.
+
+| Option | Meaning |
+| --- | --- |
+| `--name` | given name and surname(s), sent as one phrase; at least two words |
+| `--from`, `--to` | first and last publication, a year or `yyyy-mm-dd`; text search covers 1836 to 1959 |
+| `--pages N` | read up to N pages of 50 results (1 to 5, default 1); `results` prints how many rows were read and how many the site found |
+| `--born YEAR` | the person's birth year: a row published before that year or more than 100 years after it is marked `IMPLAUSIBLE`, never hidden. A child is not ruled out: pension lists name orphans |
+| `--parents "Father y Mother"` | the parents' first names the tree holds; with `--pdf-context`, an act that writes the parents after the name (the draft lists do: "Ana Zorvalo, de Juan y Antonia") is marked as the tree's parents or as other ones. Each parent is compared by first given name, so "José María" matches "José" |
+| `--pdf-context N` | read the PDF of the first N rows `--born` has not ruled out (0 to 10, default 0), one request each, and add the words around the name to the note; needs `pdftotext` (poppler-utils), and without it nothing is fetched |
+| `--near WORD` | mark a row whose title or department holds the word (a place, a trade); it marks, never hides. Repeat for more |
+| `--out DIR` | where the envelope and candidates files go; another `--born`, `--parents` or `--near` writes another file |
+
+Every act gets a `verdict` (also at the start of its note), and the search prints the three counts:
+
+- `excluded`: published before the birth or over 100 years after it, or the act writes other parents at every place the name stands.
+- `consistent`: the act writes the tree's parents after the name at least once.
+- `open`: anything else.
+
+No act is dropped and no verdict is proof. The name must stand as whole words ("Ana Zorvalo" is not inside "Juana Zorvalo"); a rank or title before it ("al Cabo Ana Zorvalo") changes nothing. When the text layer of the PDF does not hold the whole name (edicts and lists split names across columns), the note says `[name not whole in the text layer: open the PDF]`. The BOE prints in two or three columns, so the words around a name can mix lines of the next column; read them as a pointer to the page, never as the sentence.
+
+The search does not index the annexes «Anuncios, avisos y Administración de Justicia» of many years, where edicts and requisitorias sit. Zero hits does not mean the person was never printed: [`gwt-fetch gazeta`](fetch.md#gazeta-the-historical-gaceta-de-madrid) downloads whole issues to search their text. `gwt-read boe` ranks a person's mentions; `gwt-fetch gazeta` lists and downloads acts and issues.
+
+The BOE's robots.txt disallows `/buscar/gazeta.php?` and `/datos/pdfs/` for crawlers. The reader keeps to a person's pace: one search typed by a person at a time, one request every 6 s at best and never faster (`PACE` in `read/gwt_boe.py`), searches cached 7 days and PDFs 90 days (`BOE_RULES`), no parallel requests and no batch mode. The results link each act's PDF under `/datos/pdfs/`; the reader fetches the same file from `/gazeta/dias/yyyy/mm/dd/pdfs/`, which robots.txt allows, and uses the site's link only for a row without a date. To search several names, loop over `search` and rank the files together: `gwt rank runs/*.candidates.json`.
+
+A page that is not a results page (the search form, a captcha) is a STOP: nothing written, nothing cached. So is an HTML page served at a PDF URL.
+
 ## Tests
 
 ```bash
-cd read && python3 -m unittest -v test_gwt_read test_gwt_pares test_gwt_genae
+cd read && python3 -m unittest -v test_gwt_read test_gwt_pares test_gwt_genae test_gwt_boe
 ```
 
 Invented people, descriptions and ids (the PARES pages in `read/fixtures/` keep the site's markup with invented content), a fake transport and a fake gate: the tests make no request to any site. They check that a search writes an envelope and candidates `gwt-rank` ranks, that a repeated search is served from the cache with no network call, that the gate is asked before every request, that a 403, 429, captcha, sign-in page or empty frame stops the run with nothing written or cached, and that the token never appears in a written file or a log line.

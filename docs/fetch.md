@@ -85,6 +85,8 @@ Traps we hit with real searches:
 - An item's title can hide what matters. `BOE-A-1864-10018` is titled «Gobierno de la provincia de Zaragoza. Registro de la Propiedad de Yeste.», yet its two pages are a long list of farms in Moratalla and Nerpio with every owner's name. The full-text search finds such names; the title never would. Read the PDF before you call a hit a homonym.
 - The search does not index the annexes «Anuncios, avisos y Administración de Justicia» of many years. For those, download the whole issue (`issue_pdf`) and search its text.
 
+To rank the acts that name one person as `gwt-rank` mentions, with a verdict from the birth year and the parents, use [`gwt-read boe search`](read.md#boe-and-gaceta-de-madrid).
+
 `gazeta fetch REF` saves `REF.pdf` and `REF_text.txt`. The text is the HTML text when the BOE has transcribed it. Otherwise it is the PDF's own OCR layer through `pdftotext` (poppler), when that is installed. That OCR is rough on 19th-century type but good enough to search.
 
 ```

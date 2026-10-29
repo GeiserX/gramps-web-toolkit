@@ -1,0 +1,20 @@
+# Mutations the read tests must catch. One row each: file | exact text | replacement | why
+# `python3 .github/scripts/run_tests.py --mutants --only read` applies each row to a scratch copy
+# of read/ and fails when the tests still pass. The text must occur exactly once in the file.
+gwt_boe.py | PACE = {'start': 6.0, 'floor': 6.0, 'ceil': 120.0} | PACE = {'start': 6.0, 'floor': 3.0, 'ceil': 120.0} | the BOE gate never goes faster than one request every 6 s, even after quiet hours
+gwt_boe.py | ('dato[4]', '"%s"' % phrase.replace('"', '')) | ('dato[4]', phrase) | the BOE phrase is always sent in quotes, so the site reads it as one name
+gwt_boe.py | return bool(_TOTAL.search(p) or 'No se han encontrado' in p or 'no ha encontrado' in p) | return True | a BOE page that is not a results page (form, captcha) is a STOP, never zero results
+gwt_boe.py | return '%s/gazeta/dias/%s/pdfs/%s' % (HOST, date.replace('-', '/'), href.rsplit('/', 1)[-1]) | return HOST + href | BOE act PDFs come from /gazeta/dias/, never the /datos/pdfs/ robots.txt disallows
+gwt_read.py | page=lambda p: p.startswith('%PDF')) | page=lambda p: bool(p)) | an HTML page at a BOE PDF URL is a STOP and is never cached
+gwt_read.py | and not c.get('implausible')][:n]: | ][:n]: | --pdf-context skips acts --born already ruled out
+gwt_boe.py | return re.compile(r'(?<!\w)%s(?!\w)' % re.escape(_fold(phrase))) | return re.compile(re.escape(_fold(phrase))) | "Ana Zorvalo" is not found inside "Juana Zorvalo"
+gwt_boe.py | if True in said: | if said[:1] == [True]: | one occurrence with the tree's parents makes the act consistent
+gwt_boe.py | return False if said and all(x is False for x in said) else None | return False if False in said else None | other parents exclude an act only when every occurrence writes other parents
+gwt_boe.py | [_fold(x).split()[0] for x in w] == [_fold(x).split()[0] for x in found] | [_fold(x) for x in w] == [_fold(x) for x in found] | a tree's "José María" matches an act's "José"
+gwt_boe.py | if c.get('implausible') or c.get('same_parents') is False: | if c.get('implausible'): | other parents mark an act excluded
+gwt_boe.py | (r['year'] < born or r['year'] > born + 100) | (r['year'] < born + 14 or r['year'] > born + 100) | --born keeps an act that names a child (orphans in pension lists)
+gwt_boe.py | (r['year'] < born or r['year'] > born + 100) | (r['year'] < born) | --born rules out an act over 100 years after the birth
+gwt_read.py | str(a.pdf_context), str(a.born), str(a.parents)] | str(a.pdf_context)] | a rerun with other --born or --parents is written to its own file
+gwt_read.py | gwt_reader.search_key('\n'.join([first] + words), words) | gwt_reader.search_key(first, words) | a long name rerun with other --parents still gets its own file
+gwt_read.py | max(1, min(a.pages, 5)) | max(1, a.pages) | --pages never reads more than 5 pages
+gwt_read.py | n = max(0, min(getattr(a, 'pdf_context', 0), 10)) | n = max(0, getattr(a, 'pdf_context', 0)) | --pdf-context never fetches more than 10 PDFs
