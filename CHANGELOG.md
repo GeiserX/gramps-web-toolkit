@@ -12,7 +12,7 @@ No change to how existing commands behave.
 
 ### Added
 
-- `gwt-check public OWNER GUEST`: compares a dump read with an owner login and one read with a guest login, and reports what a guest still sees: a private object, a visible object that points at a private one, a private person's name in a visible text, a possibly living person. IDs and kinds only. Exits 1 on any finding. Read-only.
+- `gwt-check public OWNER GUEST`: compares a dump read with an owner login and one read with a guest login, and reports what a guest still sees: a private object, a visible object that points at a private one, a private person's name in a visible text, a possibly living person with a recent dated birth or baptism. IDs and kinds only. Exits 1 when the server shows a guest something private; possibly living people are listed but do not set the exit code. Read-only.
 
 ## [0.2.8] - 2026-10-29
 
