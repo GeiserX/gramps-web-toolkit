@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""gwt_genae: Genae (genae.org), the volunteer index of parish baptisms, marriages and burials of south-east Spain,
-for gwt-read.
+"""gwt_genae: Genae (genae.org), the volunteer index of parish baptisms, marriages and burials of the Region of
+Murcia and nearby villages of Albacete, Alicante, Almería and Granada, for gwt-read.
 
 Genae is an index, not the record: a row says who was baptised, married or buried, when, where and the first
 names of the parents. A candidate is one row, so gwt-rank can weigh it; it proves nothing until the parish book
@@ -10,16 +10,18 @@ or the civil act is seen. The site's search answers three HTML fragments, read h
     buscar/bloque       one block, with categoria=casados|casadas|defunciones
 
 Rows the site adds as phonetic suggestions (class `fila-fonetica`) are kept but marked `phonetic`, so nobody takes
-a spelling variant for an exact hit. Only the first page of each block is read: a search that matches more rows
-than one page says so in `total`, and the lane narrows the search instead of paging. Standard library only.
+a spelling variant for an exact hit. Only the first page of each block is read (PAGE_SIZE rows): a block that fills
+it is flagged as cut, and the lane narrows the search instead of paging. A block the site answers with "no indexed
+records for these years in this place" is a real answer with no rows. Standard library only.
 """
 import html, re, urllib.parse
 
 HOST = 'https://genae.org'
 SOURCE = 'genae'
-# A volunteer project: one request every 20 s at best, never faster than one every 15 s, after a hit one every
-# 180 s. A search over the four blocks costs four requests.
-PACE = {'start': 20.0, 'floor': 15.0, 'ceil': 180.0}
+# A volunteer project: one request every 20 s at best, after a hit up to one every 180 s. A search over the four
+# blocks costs four requests.
+PACE = {'start': 20.0, 'floor': 20.0, 'ceil': 180.0}
+PAGE_SIZE = 15   # rows the site puts on the first page of a block
 ACCEPT = 'text/html'
 LANGUAGE = 'es-ES,es;q=0.9'
 BLOCKS = ('bautismos', 'casados', 'casadas', 'defunciones')
@@ -27,7 +29,7 @@ PROVINCES = ('mu', 'ab', 'al', 'am', 'gr')
 
 _ROW = re.compile(r'<tr class="([^"]*)" data-registro-tipo="([^"]*)" data-registro-id="(\d+)" data-registro-ano="(\d*)"[^>]*>(.*?)</tr>', re.S)
 _CELL = re.compile(r'<td data-col="([^"]+)"[^>]*>(.*?)</td>', re.S)
-_SECTION = re.compile(r'<section id="bloque-(\w+)"')
+_SECTION = re.compile(r'<section id="bloque-(\w+)"([^>]*)>')
 
 
 def text(fragment):
@@ -53,11 +55,17 @@ def block_url(block, query):
 
 
 def is_block(page, block):
-    """True only for the fragment that holds the block asked for, with its table: an empty frame, a block
-    page or the site's search form is not an answer."""
+    """True only for the fragment that holds the block asked for, with its table, or with the site's notice that
+    it has no indexed books there (`data-aviso-cobertura`): an empty frame, another block or the site's search form
+    is not an answer."""
     m = _SECTION.search(page or '')
-    return bool(m and m.group(1) == block and '<table' in page) or (
+    return bool(m and m.group(1) == block and ('<table' in page or 'data-aviso-cobertura=' in m.group(2))) or (
         block == 'bautismos' and 'id="filas-bautismos"' in (page or ''))
+
+
+def is_cut(n):
+    """True when a block filled its first page, so the site may hold more rows than were read."""
+    return n >= PAGE_SIZE
 
 
 def rows(page):
@@ -82,7 +90,7 @@ def _rel(role, value):
     return [{'role': role, 'name': v} for v in re.split(r'\s*/\s*', value or '') if v.strip()]
 
 
-def candidates(page, block):
+def candidates(page, block, url=HOST + '/buscar'):
     """Each row as a gwt-rank candidate. A baptism or a burial is about one person, who is the principal; a
     marriage names two, so both are principals of their own candidate, with the other as spouse."""
     out = []
@@ -90,7 +98,7 @@ def candidates(page, block):
         y = _year(c.get('Fecha')) or year
         place = c.get('Localidad', '')
         base = {'source': SOURCE, 'id': '%s-%s' % (kind, rid), 'role': kind, 'principal': True, 'phonetic': phonetic,
-                'url': HOST + '/buscar', 'date': c.get('Fecha', ''), 'note': c.get('Observaciones', ''),
+                'url': url, 'date': c.get('Fecha', ''), 'note': c.get('Observaciones', ''),
                 'locality': place}
         if block in ('bautismos', 'defunciones'):
             sur = [s for s in (c.get('1º Apellido'), c.get('2º Apellido')) if s]
@@ -101,7 +109,7 @@ def candidates(page, block):
             if c.get('Madre'):
                 rel.append({'role': 'mother', 'name': c['Madre']})
             out.append(dict(base, name=_name(c.get('Nombre'), *sur), given=c.get('Nombre') or None,
-                            surnames=' '.join(sur) or None, events={ev: {'year': y, 'year_to': y, 'place': place}},
+                            surnames=sur or None, events={ev: {'year': y, 'year_to': y, 'place': place}},
                             relatives=rel))
         else:
             for who, other, parents in (('Esposo', 'Esposa', 'Padres esposo'), ('Esposa', 'Esposo', 'Padres esposa')):

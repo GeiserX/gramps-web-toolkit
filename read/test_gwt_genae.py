@@ -11,6 +11,9 @@ FIX = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fixtures')
 PAGE = {b: open(os.path.join(FIX, 'genae-%s.html' % b), 'rb').read() for b in gwt_genae.BLOCKS}
 ANSWERS = [(200, PAGE[b]) for b in gwt_genae.BLOCKS]
 EMPTY_FRAME = b'<html><body><div id="resultados"></div></body></html>'
+NO_BOOKS = (b'<aside id="resultados-cobertura"><strong>Sin registros indexados disponibles</strong></aside>'
+            b'<section id="bloque-casadas" class="bloque-categoria" data-aviso-cobertura="No hay registros indexados '
+            b'de Casadas para los a\xc3\xb1os pedidos en esta localidad."></section>')
 SEARCH_FORM = b'<html><body><form id="form-busqueda" action="buscar"><section id="bloque-otro"><table></table></section></form></body></html>'
 
 
@@ -45,7 +48,7 @@ class Parse(unittest.TestCase):
     def test_baptism_row_is_a_principal_with_parents_by_first_name(self):
         c = gwt_genae.candidates(PAGE['bautismos'].decode(), 'bautismos')
         self.assertEqual(c[0]['id'], 'bautismos-9000101')
-        self.assertEqual((c[0]['given'], c[0]['surnames']), ('Ana', 'Zorvalo Quirell'))
+        self.assertEqual((c[0]['given'], c[0]['surnames']), ('Ana', ['Zorvalo', 'Quirell']))
         self.assertEqual(c[0]['events'], {'birth': {'year': 1851, 'year_to': 1851, 'place': 'Villazul'}})
         self.assertEqual(c[0]['relatives'], [{'role': 'father', 'name': 'Luis'}, {'role': 'mother', 'name': 'Rosa'}])
         self.assertTrue(c[0]['principal'])
@@ -66,6 +69,19 @@ class Parse(unittest.TestCase):
         c = gwt_genae.candidates(PAGE['defunciones'].decode(), 'defunciones')
         self.assertEqual(c[0]['events'], {'death': {'year': 1899, 'year_to': 1899, 'place': 'Villazul'}})
 
+    def test_a_candidate_points_at_the_search_that_found_it(self):
+        c = gwt_genae.candidates(PAGE['defunciones'].decode(), 'defunciones', 'https://genae.org/buscar/bloque?x=1')
+        self.assertEqual(c[0]['url'], 'https://genae.org/buscar/bloque?x=1')
+
+    def test_a_block_with_no_indexed_books_is_an_answer_with_no_rows(self):
+        self.assertTrue(gwt_genae.is_block(NO_BOOKS.decode(), 'casadas'))
+        self.assertEqual(gwt_genae.rows(NO_BOOKS.decode()), [])
+        self.assertFalse(gwt_genae.is_block(NO_BOOKS.decode(), 'casados'))
+
+    def test_a_full_page_is_flagged_as_cut(self):
+        self.assertFalse(gwt_genae.is_cut(14))
+        self.assertTrue(gwt_genae.is_cut(gwt_genae.PAGE_SIZE))
+
     def test_only_the_block_asked_for_is_an_answer(self):
         self.assertTrue(gwt_genae.is_block(PAGE['casados'].decode(), 'casados'))
         self.assertFalse(gwt_genae.is_block(PAGE['casados'].decode(), 'defunciones'))   # another block
@@ -84,10 +100,14 @@ class Search(Genae):
         self.assertEqual(net.requests[0].get_header('Hx-request'), 'true')
         self.assertIsNone(net.requests[0].get_header('Authorization'))
         self.assertEqual(lines['source'], 'genae')
-        self.assertEqual(lines['results'], 'bautismos 2, casados 2, casadas 0, defunciones 1')
+        self.assertEqual(lines['results'], 'bautismos 2, casados 1, casadas 0, defunciones 1')
         cands = json.load(open(lines['candidates']))['candidates']
         self.assertEqual(len(cands), 5)
-        self.assertIsNone(gwt_rank.validate_candidates(cands) if hasattr(gwt_rank, 'validate_candidates') else None)
+        with contextlib.redirect_stdout(io.StringIO()) as ranked, contextlib.redirect_stderr(io.StringIO()):
+            rc = gwt_rank.main([lines['candidates'], '--given', 'Ana', '--surname', 'Zorvalo', '--surname', 'Quirell',
+                                '--facts', 'by=1851 bp=Villazul'])
+        self.assertEqual(rc, 0, ranked.getvalue())   # gwt-rank reads the file and finds the exact baptism strong
+        self.assertIn('bautismos-9000101', ranked.getvalue())
 
     def test_a_repeat_costs_no_request(self):
         gate = FakeGate()
@@ -106,6 +126,21 @@ class Search(Genae):
                               for b in [b.encode()]])
         code, lines, text = self.search(net, gate)
         self.assertEqual(code, 2, text)
+
+    def test_a_block_with_no_indexed_books_does_not_stop_the_search(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, PAGE['bautismos']), (200, PAGE['casados']), (200, NO_BOOKS), (200, PAGE['defunciones']))
+        code, lines, text = self.search(net, gate)
+        self.assertEqual(code, 0, text)
+        self.assertEqual(lines['results'], 'bautismos 2, casados 1, casadas 0, defunciones 1')
+
+    def test_a_marriage_found_in_both_blocks_is_one_pair_of_candidates(self):
+        gate = FakeGate()
+        both = PAGE['casados'].replace(b'bloque-casados', b'bloque-casadas').replace(b'filas-casados', b'filas-casadas')
+        net = FakeNet(gate, (200, PAGE['bautismos']), (200, PAGE['casados']), (200, both), (200, PAGE['defunciones']))
+        code, lines, text = self.search(net, gate)
+        ids = [c['id'] for c in json.load(open(lines['candidates']))['candidates']]
+        self.assertEqual(len(ids), len(set(ids)), ids)
 
     def test_a_captcha_stops_the_run_and_saves_nothing(self):
         gate = FakeGate()
