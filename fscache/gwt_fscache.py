@@ -43,6 +43,10 @@ PARES_RULES = (
     (r'/catalogo/description/', 90 * DAY),     # one archival description
     (r'/catalogo/find\?', 7 * DAY),            # a search
 )
+# Genae (genae.org, a volunteer index of parish records): the index grows by transcription, so a search is kept a week.
+GENAE_RULES = (
+    (r'/buscar/(resultados|bloque)\?', 7 * DAY),
+)
 DEFAULT_TTL = 7 * DAY
 STORE_STATUSES = range(200, 300)
 PRIVATE_HEADERS = ('set-cookie', 'authorization', 'www-authenticate')  # never written to disk

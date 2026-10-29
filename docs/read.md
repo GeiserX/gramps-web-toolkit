@@ -7,15 +7,16 @@ gwt rank runs/<key>.candidates.json --given Ana --surname Zorvalo --facts "by=18
 gwt read familysearch record 1:1:QZZ1-AAA --out runs/
 gwt read pares search --given Ana --surname Zorvalo --out runs/     # public, no account
 gwt read pares record 9000001 --out runs/
+gwt read genae search --given Ana --surname Zorvalo --out runs/    # public, no account
 ```
 
-`gwt-read` runs a record search, or reads one record, on a record site, and writes the answer in the shape every record-site reader in the toolkit shares. It reads two sites: [FamilySearch](#familysearch) historical records and [PARES](#pares), the catalogue of the Spanish state archives. It is slow on purpose and cached, because FamilySearch suspends accounts for volume: one of ours was suspended in 2026 after about 15 parallel lanes called the API through one night ([hard-won lesson 1](hard-won.md#1-volume-got-a-familysearch-account-suspended-and-an-ip-blocked)).
+`gwt-read` runs a record search, or reads one record, on a record site, and writes the answer in the shape every record-site reader in the toolkit shares. It reads three sites: [FamilySearch](#familysearch) historical records, [PARES](#pares), the catalogue of the Spanish state archives, and [Genae](#genae), a volunteer index of parish records that `gwt-read` only searches: its rows are leads, not records. It is slow on purpose and cached, because FamilySearch suspends accounts for volume: one of ours was suspended in 2026 after about 15 parallel lanes called the API through one night ([hard-won lesson 1](hard-won.md#1-volume-got-a-familysearch-account-suspended-and-an-ip-blocked)).
 
-It never logs in and never asks for a password. PARES needs no account. For FamilySearch you sign in in your own browser, and the tool uses that session's token. Standard library only.
+It never logs in and never asks for a password. PARES and Genae need no account. For FamilySearch you sign in in your own browser, and the tool uses that session's token. Standard library only.
 
 ## The reader shape
 
-[gwt-mh](myheritage.md) (MyHeritage) and `gwt-read` (FamilySearch, PARES) write the same files, from `read/gwt_reader.py`:
+[gwt-mh](myheritage.md) (MyHeritage) and `gwt-read` (FamilySearch, PARES, Genae) write the same files, from `read/gwt_reader.py`:
 
 | File | What it holds |
 |---|---|
@@ -154,10 +155,31 @@ PARES has no paid tier.
 
 No advanced search (dates, archive, fonds, reference number) and no second page of results: a search reads the first page the site gives (25 rows). No image download; [gwt-fetch](fetch.md) downloads archive images.
 
+## Genae
+
+Genae (https://genae.org) is a free volunteer index of parish baptisms, marriages and burials of the Region of Murcia and nearby villages of Albacete, Alicante, Almería and Granada. It is public: no account, no token. `genae search` asks the site's own search for the four blocks it shows (baptisms, grooms, brides, burials) and merges them into one candidates file for [gwt-rank](rank.md).
+
+```bash
+gwt read genae search --given Ana --surname Zorvalo --province mu --out runs/
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--given`, `--surname` (twice for both surnames) | the name as the site's `n`, `a1`, `a2` fields; at least one is needed |
+| `--province` | `mu` (default), `ab`, `al`, `am`, `gr` |
+| `--locality` | the site's numeric locality id (its own `l=` field); with it the site leaves out the place column, so candidates carry no place |
+| `--from`, `--to` | year range |
+
+Each row becomes a candidate. A baptism gives the child with the parents' first names. A marriage gives two candidates, one per spouse, with the full name only (the site does not split it) and the other spouse as a relative. A burial gives a death event. A marriage both spouses match appears in the groom and the bride blocks; it is written once. Rows the site marks as phonetic suggestions carry `phonetic: true`. gwt-rank reads neither the marriage event nor the phonetic mark, so a groom or bride ranks on names and spouse only, and the lane reads `phonetic` itself. Only the first page of each block is read (15 rows); a block that fills it prints as `15+ (cut: narrow the search)`. The gate keeps one request every 20 seconds at best (`PACE` in `read/gwt_genae.py`), so one search costs about a minute. Searches stay in the cache for 7 days (`GENAE_RULES`).
+
+A page that is not the block asked for (an empty frame, the search form, a captcha) is a STOP: nothing written, nothing cached, every lane pauses. A block the site answers with its notice that no books are indexed for those years in that place is a real answer with no rows.
+
+Genae publishes no terms for scripted use, and its robots.txt disallows `/buscar/` for crawlers. The reader keeps to a person's pace: one search of four requests a minute at most, each answer cached for a week, and it never pages. Genae rows are an index made by volunteers: a hit is a lead, and the act or the image behind it is the evidence.
+
 ## Tests
 
 ```bash
-cd read && python3 -m unittest -v test_gwt_read test_gwt_pares
+cd read && python3 -m unittest -v test_gwt_read test_gwt_pares test_gwt_genae
 ```
 
 Invented people, descriptions and ids (the PARES pages in `read/fixtures/` keep the site's markup with invented content), a fake transport and a fake gate: the tests make no request to any site. They check that a search writes an envelope and candidates `gwt-rank` ranks, that a repeated search is served from the cache with no network call, that the gate is asked before every request, that a 403, 429, captcha, sign-in page or empty frame stops the run with nothing written or cached, and that the token never appears in a written file or a log line.

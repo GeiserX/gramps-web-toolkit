@@ -6,6 +6,14 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+None.
+
+### Added
+
+- `gwt-read genae search`: name search on Genae (https://genae.org), the volunteer index of parish baptisms, marriages and burials of the Region of Murcia and nearby villages of Albacete, Alicante, Almería and Granada. It reads the baptism, groom, bride and burial blocks over plain HTTP and writes one candidates file `gwt-rank` ranks. Own gate (one request every 20 s at best), 7-day cache (`GENAE_RULES`), phonetic rows marked, a block cut at the site's page size flagged, and a page that is not the block asked for (empty frame, search form, captcha) is a STOP; a block the site says has no indexed books is zero rows.
+
 ## [0.2.9] - 2026-10-29
 
 ### Change lists
