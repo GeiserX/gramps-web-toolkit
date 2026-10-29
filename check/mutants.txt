@@ -55,3 +55,23 @@ gwt_check/checks.py | if any(f" {n} " in padded for n in own): | if False: | a d
 gwt_check/checks.py | todo += [r.get("ref") for r in pl.get("placeref_list") or []] | todo += [] | a description naming a place that encloses the event's place is quiet
 gwt_check/checks.py | if h not in T["places"] or not desc or not in_scope("events", e["handle"]): | if h not in T["places"] or not desc: | place-vs-description reports only events in the run scope
 gwt_check/checks.py | hits = {oh: n for oh, n in hits.items() if not any(f" {n} " in f" {m} " and n != m for m in hits.values())} | hits = hits | place-vs-description names a place once, by its longest match
+gwt_check/checks.py | if n not in own and n not in people and | if n not in own and | place-vs-description skips a given name or surname of someone on the event
+gwt_check/checks.py | on_event[r.get("ref")] += [T["people"][x] for x in | on_event[r.get("ref")] += [] and [T["people"][x] for x in | both spouses of a family are on the family's event
+gwt_check/checks.py | for part in [n.get("first_name") or ""] + [ | for part in [ | a given name of someone on the event is not a place
+gwt_check/checks.py | (residence or not origin(raw, words[j][1])) | (residence or True) | a place named as where someone is from or lives is not the event's place
+gwt_check/checks.py | return ((k == 0 and before[0] in ("de", "del", "d") and | return ((False and | a clause that opens with «de» («Juan, de Otropueblo») names an origin
+gwt_check/checks.py | if t in ("'", "’"): | if False: | an elided «d'» before a place still reads as «de»
+gwt_check/checks.py | if k == len(before): | if False: | a place right after punctuation, or with no filler word before it, is not an origin
+gwt_check/checks.py | and (stop is None or stop in ORIGIN_CLAUSE_BREAK)) | and True) | a «de» after an abbreviation dot («parr. de X») does not open a clause
+gwt_check/checks.py | (stop is None or stop in ORIGIN_CLAUSE_BREAK) | (stop in ORIGIN_CLAUSE_BREAK) | a description that opens with «De X» names an origin
+gwt_check/checks.py | residence = e.get("type") == "Residence" | residence = False | on a residence, where someone lives is the event's own place
+gwt_check/checks.py | "vezina", "residente", | "vezina", | «residente en» names where someone lives
+gwt_check/checks.py | "vecina", "vezino", "vezina", | "vecina", | the old spelling «vezino» names where someone lives
+gwt_check/checks.py | "vecino", "vecina", "vezino", | "vecin", "vezino", | «en la vecindad de X» is not where someone lives
+gwt_check/checks.py | "domicilie", "domiciliad", | "domicili", | «en su domicilio de X» is not where someone lives
+gwt_check/checks.py | "vecino", "vecina", | "vecino", | «vecina de X» names where someone lives
+gwt_check/checks.py | "vezino", "vezina", | "vezino", | the old spelling «vezina» names where someone lives
+gwt_check/checks.py | "domicilie", "domiciliad", | "domicilie", | «domiciliado en X» names where someone lives
+gwt_check/checks.py | {",", ";", ":", | {",", ":", | a «de» after a semicolon opens a clause
+gwt_check/checks.py | ";", ":", "(", | ";", "(", | a «de» after a colon opens a clause
+gwt_check/checks.py | [w for w, _ in words[j:j + len(ns)]] == ns | words[j][0] == ns[0] | a place of several words matches only as a whole
