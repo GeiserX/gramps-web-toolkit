@@ -15,8 +15,9 @@ import html, re, shutil, subprocess, unicodedata, urllib.parse
 
 HOST = 'https://www.boe.es'
 SOURCE = 'boe'
-# A public service: one request every 6 s at best, never faster than one every 3 s, after a hit one every 120 s.
-PACE = {'start': 6.0, 'floor': 3.0, 'ceil': 120.0}
+# A public service whose robots.txt disallows the search: one request every 6 s at best, never faster, even after
+# hours without a hit (floor = start); after a hit one every 120 s.
+PACE = {'start': 6.0, 'floor': 6.0, 'ceil': 120.0}
 ACCEPT = 'text/html'
 LANGUAGE = 'es-ES,es;q=0.9'
 PAGE_HITS = 50

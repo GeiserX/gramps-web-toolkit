@@ -228,6 +228,13 @@ class Old(unittest.TestCase):
         self.assertFalse(gwt_boe.candidates(page, 'x y', born=y - 50)[i]['implausible'])
 
 
+class Pace(unittest.TestCase):
+    def test_the_gate_never_goes_faster_than_one_request_every_6_s(self):
+        # gwt_gate shortens the gap toward `floor` after every quiet hour: floor is the real pace of a long run
+        self.assertGreaterEqual(gwt_boe.PACE['floor'], 6.0)
+        self.assertGreaterEqual(gwt_boe.PACE['start'], gwt_boe.PACE['floor'])
+
+
 class Verdict(unittest.TestCase):
     def test_excluded_consistent_open(self):
         self.assertEqual(gwt_boe.verdict({'implausible': True}), 'excluded')
