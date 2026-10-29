@@ -43,8 +43,14 @@ class Parse(unittest.TestCase):
         self.assertEqual((r[0]['date'], r[0]['year']), ('1902-04-30', 1902))
         self.assertEqual(r[1]['paper'], 'Boletín Oficial del Estado')
         self.assertEqual(r[1]['dept'], 'Ministerio de Educación Nacional')
-        self.assertTrue(r[1]['pdf'].startswith('https://www.boe.es/datos/pdfs/'))
+        # the same file as the link's /datos/pdfs/ (disallowed in robots.txt), at the allowed /gazeta/dias/ path
+        self.assertEqual(r[0]['pdf'], 'https://www.boe.es/gazeta/dias/1902/04/30/pdfs/A00012-00012.pdf')
+        self.assertEqual(r[1]['pdf'], 'https://www.boe.es/gazeta/dias/1949/07/26/pdfs/A00012-00012.pdf')
         self.assertEqual(gwt_boe.total(RESULTS.decode()), 2)
+
+    def test_a_row_without_a_date_keeps_the_sites_own_pdf_link(self):
+        page = RESULTS.decode().replace('de 30/04/1902,', 'de ,')
+        self.assertEqual(gwt_boe.rows(page)[0]['pdf'], 'https://www.boe.es/datos/pdfs/BOE//1902/120/A00012-00012.pdf')
 
     def test_a_hit_is_a_mention_never_a_principal(self):
         c = gwt_boe.candidates(RESULTS.decode(), 'Ana Zorvalo Quemada')

@@ -50,7 +50,8 @@ GENAE_RULES = (
 # BOE and Gaceta de Madrid search (boe.es): the old Gaceta is closed, the BOE grows daily, so a search is kept a week.
 BOE_RULES = (
     (r'/buscar/gazeta\.php\?', 7 * DAY),
-    (r'/datos/pdfs/', 90 * DAY),               # a published act never changes
+    (r'/gazeta/dias/.+\.pdf$', 90 * DAY),     # a published act never changes
+    (r'/datos/pdfs/', 90 * DAY),               # the same file, used only for a row without a date
 )
 DEFAULT_TTL = 7 * DAY
 STORE_STATUSES = range(200, 300)

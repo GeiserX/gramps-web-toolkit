@@ -68,6 +68,15 @@ def _date(s):
     return ('%s-%s-%s' % (m.group(3), m.group(2), m.group(1)), int(m.group(3))) if m else ('', None)
 
 
+def pdf_url(href, date):
+    """The act's PDF at /gazeta/dias/yyyy/mm/dd/pdfs/<file>. The results link to the same file under /datos/pdfs/,
+    which robots.txt disallows ("No duplicar los pdfs"); both serve the same bytes. The link as given when the row
+    has no date."""
+    if re.fullmatch(r'\d{4}-\d{2}-\d{2}', date or ''):
+        return '%s/gazeta/dias/%s/pdfs/%s' % (HOST, date.replace('-', '/'), href.rsplit('/', 1)[-1])
+    return HOST + href
+
+
 def rows(page):
     """[{title, ref, date, year, paper, dept, pdf}] for every result of the page."""
     out = []
@@ -80,7 +89,7 @@ def rows(page):
         date, year = _date(dd[0] if dd else '')
         out.append({'title': text(title.group(1)) if title else '', 'ref': ref.group(1) if ref else '',
                     'date': date, 'year': year, 'paper': dt[0].rstrip(':') if dt else '',
-                    'dept': dd[1] if len(dd) > 1 else '', 'pdf': HOST + pdf.group(1) if pdf else ''})
+                    'dept': dd[1] if len(dd) > 1 else '', 'pdf': pdf_url(pdf.group(1), date) if pdf else ''})
     return out
 
 
