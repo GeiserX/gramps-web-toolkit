@@ -349,6 +349,12 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("selftest", help="plant every error kind in a synthetic tree and prove each check fires")
 
+    p = sub.add_parser("public", help="what a guest still sees: two dumps of one tree, owner and guest; exits 1 when something leaks")
+    p.add_argument("owner", help="dump read with an owner login")
+    p.add_argument("guest", help="dump read with a guest login (same tree)")
+    p.add_argument("--json", action="store_true", help="print the result as JSON")
+    p.add_argument("--limit", type=int, default=30, help="findings printed (default 30, 0 for all)")
+
     args = ap.parse_args(argv)
     try:
         if args.cmd == "selftest":
@@ -382,6 +388,18 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print_act(rep, args.limit)
             return 0
+
+        if args.cmd == "public":
+            from .public import print_public, public_report
+            owner, guest = load(args.owner), load(args.guest)
+            if owner.partial or guest.partial:
+                raise BadInput("a .gramps backup has no private marks or texts; use dumps")
+            rep = public_report(owner, guest)
+            if args.json:
+                print(json.dumps(rep, ensure_ascii=False, indent=1))
+            else:
+                print_public(rep, args.limit or len(rep["rows"]))
+            return 1 if rep["leaks"] else 0
         if args.cmd == "cites":
             from .cites import cites_report, print_cites
             tree = load(args.tree) if args.tree else Tree(live_dump(args)["objects"], source="live tree")

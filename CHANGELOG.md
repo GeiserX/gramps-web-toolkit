@@ -8,11 +8,21 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Change lists
 
-No change to how existing commands behave.
+None.
 
 ### Added
 
-- `gwt-read genae search`: name search on Genae, the free volunteer index of Spanish parish records, over plain HTTP. It reads the baptism, groom, bride and burial blocks and writes one candidates file `gwt-rank` can rank. Own gate (one request every 20 s at best), 7-day cache (`GENAE_RULES`), phonetic rows marked, and a page that is not the block asked for (empty frame, search form) is a STOP.
+- `gwt-read genae search`: name search on Genae (https://genae.org), the volunteer index of parish baptisms, marriages and burials of the Region of Murcia and nearby villages of Albacete, Alicante, Almería and Granada. It reads the baptism, groom, bride and burial blocks over plain HTTP and writes one candidates file `gwt-rank` ranks. Own gate (one request every 20 s at best), 7-day cache (`GENAE_RULES`), phonetic rows marked, a block cut at the site's page size flagged, and a page that is not the block asked for (empty frame, search form, captcha) is a STOP; a block the site says has no indexed books is zero rows.
+
+## [0.2.9] - 2026-10-29
+
+### Change lists
+
+None.
+
+### Added
+
+- `gwt-check public OWNER GUEST`: compares a dump read with an owner login and one read with a guest login, and reports what a guest still sees: a private object, a visible object that points at a private one, a private person's name in a visible text, a possibly living person with a recent dated birth or baptism. IDs and kinds only. Exits 1 when the server shows a guest something private; possibly living people are listed but do not set the exit code. Read-only.
 
 ## [0.2.8] - 2026-10-29
 

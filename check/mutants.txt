@@ -75,3 +75,28 @@ gwt_check/checks.py | "domicilie", "domiciliad", | "domicilie", | «domiciliado 
 gwt_check/checks.py | {",", ";", ":", | {",", ":", | a «de» after a semicolon opens a clause
 gwt_check/checks.py | ";", ":", "(", | ";", "(", | a «de» after a colon opens a clause
 gwt_check/checks.py | [w for w, _ in words[j:j + len(ns)]] == ns | words[j][0] == ns[0] | a place of several words matches only as a whole
+gwt_check/public.py | if owner.tree_id and guest.tree_id and owner.tree_id != guest.tree_id: | if False: | public refuses a guest dump read from another tree
+gwt_check/public.py | if not any(guest.objs[t] for t in TYPES): | if False: | public refuses an empty guest dump
+gwt_check/public.py | if extra: | if False: | public refuses a guest dump with objects the owner dump lacks
+gwt_check/public.py | if o.get("private") is True} for t in TYPES} | if False} for t in TYPES} | a private object the guest still gets is private-visible
+gwt_check/public.py | if path and x.get("private") is True: | if False: | a private sub-object the guest still gets is private-visible
+gwt_check/public.py | return id_order(owner.gid(t, h)) | return owner.gid(t, h) | public rows follow numeric Gramps ID order
+gwt_check/public.py | if k != "handle": | if True: | a visible private object is not also a reference to itself
+gwt_check/public.py | return norm(re.sub(r"[^\w]+", " ", s)) | return norm(s) | a private name before punctuation still matches
+gwt_check/public.py | if len(n) >= MIN_NAME_CHARS and " " in n | if " " in n | a short private name is not matched
+gwt_check/public.py | and " " in n and n not in visible_names: | and n not in visible_names: | a one-word private name is not matched
+gwt_check/public.py | if f" {n} " in padded} | } | the first word of a private name alone is not a match
+gwt_check/public.py | possibly_living(owner.objs["people"][h], owner.objs["events"] | possibly_living(guest.objs["people"][h], guest.objs["events"] | a death or burial hidden from the guest still means dead
+gwt_check/public.py | leaks = sum(r["check"] in LEAKS for r in rows) | leaks = len(rows) | living-visible alone does not set the exit code
+gwt_check/checks.py | return undated | return True | public does not count a person with no dated birth or baptism as living
+gwt_check/checks.py | if any(e and e.get("type") in ("Death", "Burial") for e in own): | if False: | a person buried or dead is not possibly living
+gwt_check/checks.py | own = [events.get(r.get("ref")) for r in p.get("event_ref_list", []) if r.get("role") == "Primary"] | own = [events.get(r.get("ref")) for r in p.get("event_ref_list", [])] | only a person's own events say when they were born
+gwt_check/cli.py | if owner.partial or guest.partial: | if False: | public refuses a .gramps backup
+gwt_check/cli.py | return 1 if rep["leaks"] else 0 | return 0 | public exits 1 on a leak
+gwt_check/cli.py | print_public(rep, args.limit or len(rep["rows"])) | print_public(rep, len(rep["rows"])) | public prints only --limit findings
+gwt_check/public.py | for r in rep["rows"][:limit]: | for r in rep["rows"]: | print_public stops at the limit
+gwt_check/public.py | LEAKS = ("private-visible", "private-reference", "private-name") | LEAKS = ("private-visible", "private-reference") | a private name alone sets the exit code of public
+gwt_check/public.py | LEAKS = ("private-visible", "private-reference", "private-name") | LEAKS = ("private-visible", "private-name") | a private reference alone sets the exit code of public
+gwt_check/public.py | if path and x.get("private") is True: | if x.get("private") is True: | a visible private object is one row, not also a sub-object row with no path
+gwt_check/checks.py | if e and e.get("type") in ("Birth", "Baptism")] | if e and e.get("type") in ("Birth",)] | a recent baptism alone makes a person possibly living
+gwt_check/public.py | if not rep["rows"]: | if False: | a clean comparison says nothing found
