@@ -29,17 +29,6 @@ class Boe(Base):
     def search(self, net, gate, extra=()):
         return self.run_boe(['--name', 'Ana Zorvalo Quemada'] + list(extra), net, gate)
 
-    def sweep(self, net, gate, names, extra=()):
-        path = os.path.join(self.cache, 'names.txt')
-        os.makedirs(self.cache, exist_ok=True)
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write(names)
-        o, e = io.StringIO(), io.StringIO()
-        argv = ['boe', '--cache-dir', self.cache, '--lane', 't', 'sweep', '--names', path] + list(extra) + ['--out', self.out]
-        with contextlib.redirect_stdout(o), contextlib.redirect_stderr(e):
-            code = gwt_read.main(argv, urlopen=net, gate=gate)
-        return code, o.getvalue(), o.getvalue() + e.getvalue()
-
 
 class Parse(unittest.TestCase):
     def test_the_phrase_is_always_quoted_in_the_text_of_the_acts(self):
@@ -145,29 +134,6 @@ class Search(Boe):
         self.assertEqual([x['near'] for x in c], [['Guerra'], []])
         self.assertIn('[near: Guerra]', c[0]['note'])
 
-    def test_sweep_lists_each_act_once_and_one_line_per_name(self):
-        gate = FakeGate()
-        net = FakeNet(gate, (200, RESULTS), (200, RESULTS))
-        code, out_, text = self.sweep(net, gate, '# dead only\nAna Zorvalo Quemada\n\nLuis Vorbelo Rey\n')
-        self.assertEqual(code, 0, text)
-        self.assertEqual(len(net.requests), 2)
-        self.assertIn('names\t2 searches, 2 acts', out_)
-        self.assertIn('found\tAna Zorvalo Quemada\t2\t2\t2', out_)
-        self.assertIn('found\tLuis Vorbelo Rey\t2\t2\t0', out_)
-
-    def test_sweep_variants_search_the_other_spelling(self):
-        gate = FakeGate()
-        net = FakeNet(gate, (200, RESULTS), (200, EMPTY))
-        code, out_, text = self.sweep(net, gate, 'Ana Zorvalo Quemada\n', ['--variants'])
-        self.assertEqual(len(net.requests), 2)
-        self.assertIn('dato%5B4%5D=%22Ana%20Zorvalo%20Quemada%22', net.requests[0].full_url)
-        self.assertIn('Ana%20Zorbalo%20Quemada', net.requests[1].full_url)
-
-    def test_sweep_needs_a_name_with_a_surname(self):
-        gate = FakeGate()
-        code, out_, text = self.sweep(FakeNet(gate), gate, 'Zorvalo\n')
-        self.assertEqual(code, 64)
-
     def test_pdf_context_reads_the_first_acts_and_adds_the_words_around_the_name(self):
         gate = FakeGate()
         net = FakeNet(gate, (200, RESULTS), (200, b'%PDF fake one'))
@@ -206,14 +172,6 @@ class Search(Boe):
         self.assertEqual([x['implausible'] for x in c], [True, False])
         self.assertIn('IMPLAUSIBLE', c[0]['note'])
         self.assertNotIn('IMPLAUSIBLE', c[1]['note'])
-
-    def test_sweep_takes_a_birth_year_after_a_bar(self):
-        gate = FakeGate()
-        net = FakeNet(gate, (200, RESULTS))
-        code, out_, text = self.sweep(net, gate, 'Ana Zorvalo Quemada | 1895\n')
-        self.assertEqual(code, 0, text)
-        c = json.load(open([l.split('\t')[1] for l in out_.splitlines() if l.startswith('candidates')][0], encoding='utf-8'))['candidates']
-        self.assertTrue(c[0]['implausible'])
 
     def test_pdf_context_says_when_the_name_sits_inside_a_longer_one(self):
         gate = FakeGate()
@@ -306,12 +264,6 @@ class Old(unittest.TestCase):
         self.assertFalse(gwt_boe.candidates(page, 'x y', born=y - 50)[i]['implausible'])
 
 
-class Inverted(unittest.TestCase):
-    def test_surnames_first(self):
-        self.assertEqual(gwt_boe.inverted('Ana Zorvalo Quemada'), 'Zorvalo Quemada Ana')
-        self.assertEqual(gwt_boe.inverted('Ana Zorvalo'), 'Zorvalo Ana')
-
-
 class Verdict(unittest.TestCase):
     def test_excluded_consistent_open(self):
         self.assertEqual(gwt_boe.verdict({'implausible': True}), 'excluded')
@@ -325,10 +277,6 @@ class Verdict(unittest.TestCase):
 class Units(unittest.TestCase):
     def test_a_total_with_a_thousands_dot(self):
         self.assertEqual(gwt_boe.total(PAGE1.decode()), 1003)
-
-    def test_variants_swap_b_and_v_one_word_at_a_time(self):
-        self.assertEqual(gwt_boe.variants('Ana Zorvalo Quemada'), ['Ana Zorvalo Quemada', 'Ana Zorbalo Quemada'])
-        self.assertEqual(gwt_boe.variants('Pérez Soriano'), ['Pérez Soriano'])
 
     def test_a_name_in_the_title_is_marked_and_the_accent_is_ignored(self):
         c = gwt_boe.candidates(RESULTS.decode(), 'ana zorvalo quemada')

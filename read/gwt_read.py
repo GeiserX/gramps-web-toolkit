@@ -6,7 +6,6 @@
   gwt-read genae search [--given G] [--surname S [--surname S2]] [--province mu] [--locality L] [--from Y] [--to Y]
                         --out DIR
   gwt-read boe search --name "Given Surname1 [Surname2]" [--from Y] [--to Y] [--near W] [--pages N] --out DIR
-  gwt-read boe sweep --names FILE [--variants] [--inverted] [--from Y] [--to Y] [--near W] --out DIR
   gwt-read familysearch search [--given G] [--surname S [--surname S2]] [--by Y] [--dy Y] [--years N]
                                [--place P] [--father "G S"] [--mother "G S"] [--collection ID]
                                [--count N] --out DIR
@@ -349,48 +348,6 @@ def cmd_boe_search(a, R):
     return EXIT_OK if cands else EXIT_EMPTY
 
 
-def cmd_boe_sweep(a, R):
-    """One search per line of a file of names of people who are dead, the b/v spellings optional, one list of
-    candidates with each act once, and a line per name that says how many rows the site found."""
-    try:
-        lines = [l for l in open(os.path.expanduser(a.names), encoding='utf-8') if l.strip() and not l.lstrip().startswith('#')]
-    except OSError as e:
-        err('cannot read %s: %s' % (a.names, e))
-        return EXIT_USAGE
-    names = []
-    for l in lines:
-        n, _, b = l.partition('|')
-        n = _boe_phrase(n)
-        if len(n.split()) >= 2:
-            names.append((n, int(b) if b.strip().isdigit() else None))
-    if not names:
-        err('the file has no line with a given name and a surname')
-        return EXIT_USAGE
-    asked = []
-    for n, b in names:
-        vs = gwt_boe.variants(n) if a.variants else [n]
-        if getattr(a, 'inverted', False):
-            vs += [gwt_boe.inverted(v) for v in vs]
-        asked += [(v, b) for v in vs]
-    seen, cands, rows = set(), [], []
-    for phrase, born in asked:
-        first, got, found, page = _boe_read(a, R, phrase, 1, born)
-        new = [c for c in got if c['id'] not in seen]
-        _boe_pdf_context(a, R, new, phrase)
-        _boe_verdicts(new)
-        seen.update(c['id'] for c in new)
-        cands += new
-        rows.append('%s\t%d\t%d\t%d\t%d' % (phrase, found, len(got), len(new), sum(1 for c in got if c.get('in_title'))))
-    key = gwt_reader.search_key(gwt_boe.HOST + '/buscar/gazeta.php', ['boe-sweep'] + [p for p, b in asked])
-    env = gwt_reader.envelope(gwt_boe.HOST + '/buscar/gazeta.php', None, text='\n'.join(rows), names=[p for p, b in asked])
-    base = gwt_reader.write_search(a.out, key, env, cands)
-    gwt_reader.print_paths(gwt_boe.SOURCE, base, out)
-    out('names\t%d searches, %d acts' % (len(asked), len(cands)))
-    for r in rows:
-        out('found\t' + r)
-    return EXIT_OK if cands else EXIT_EMPTY
-
-
 def _save_page(a, R, url, h, page_ok, key, to_cands, total_of):
     status, rh, body, cached = R.get(url, h, refresh=a.refresh, page=page_ok)
     page = body.decode('utf-8', 'replace')
@@ -461,12 +418,6 @@ def parser():
     s.add_argument('--pages', type=int, default=1, help='pages of 50 results to read, 1 to 5 (default 1)')
     _boe_filters(s)
     s.add_argument('--out', required=True)
-    w = bsub.add_parser('sweep', help='one search per name of a file of people who are dead')
-    w.add_argument('--names', required=True, help='a file with one "Given Surname1 Surname2 [| birth year]" per line; # starts a comment')
-    w.add_argument('--inverted', action='store_true', help='also search each name with the surnames first ("Zorvalo Quemada Ana"), as lists write it')
-    w.add_argument('--variants', action='store_true', help='also search the b/v spelling of each word, one word at a time')
-    _boe_filters(w)
-    w.add_argument('--out', required=True)
     fs = sites.add_parser('familysearch', help='FamilySearch historical records, with your own session token')
     fs.add_argument('--account', default=os.environ.get('GWT_FS_ACCOUNT', 'default'),
                     help='names the account; each account gets its own gate (pace)')
@@ -511,7 +462,7 @@ def main(argv=None, urlopen=None, gate=None):
         gate = gate or Gate(a.gate_dir or '~/.cache/gwt-gate-boe', **gwt_boe.PACE)
         R = gwt_reader.Reader(FSCache(a.cache_dir, rules=BOE_RULES), gate, a.lane,
                               urllib_fetcher(None, a.user_agent, urlopen), log=err)
-        return _run(R, {'search': cmd_boe_search, 'sweep': cmd_boe_sweep}[a.cmd], a)
+        return _run(R, cmd_boe_search, a)
     urlopen = urlopen or urllib.request.urlopen
     token = token_from_env()
     if not token:

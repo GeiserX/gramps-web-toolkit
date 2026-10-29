@@ -89,28 +89,6 @@ def next_url(page):
     return '%s/buscar/%s' % (HOST, html.unescape(m.group(1))) if m else None
 
 
-def variants(phrase):
-    """The phrase and, one word at a time, its b/v spellings (Zorvalo, Zorbalo), because a clerk or a copyist wrote
-    either. One word changes per variant, so a given name is never rewritten with its surname. The accent is already
-    ignored by the site."""
-    words = phrase.split()
-    out = [phrase]
-    for i, w in enumerate(words):
-        sw = w.translate(str.maketrans('bvBV', 'vbVB'))
-        if sw != w:
-            v = ' '.join(words[:i] + [sw] + words[i + 1:])
-            if v.lower() not in [x.lower() for x in out]:
-                out.append(v)
-    return out
-
-
-def inverted(phrase):
-    """The surnames first, as the draft lists and the registers write them ("Zorvalo Quemada, Ana"): the site
-    ignores the comma. The first word is taken as the only given name."""
-    w = phrase.split()
-    return ' '.join(w[1:] + w[:1]) if len(w) >= 2 else phrase
-
-
 def _fold(t):
     return re.sub(r'\s+', ' ', ''.join(c for c in unicodedata.normalize('NFD', t or '') if unicodedata.category(c) != 'Mn').lower())
 
