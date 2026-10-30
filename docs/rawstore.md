@@ -38,7 +38,7 @@ garage bucket allow --read --write my-raw --key <key id>
 ```sh
 gwt-rawstore put <files or dirs> [--remove] [--all] [-j 4]
 ```
-Uploads files and records them. A directory is walked for binary extensions (images, PDF, archives, audio, video); `--all` takes every file. `-j`/`--jobs` sets how many uploads run at once (default 4). An object already in the bucket with the right size is not uploaded again. `--remove` deletes each local file once the store confirms it.
+Uploads files and records them. A directory is walked for binary extensions (images, PDF, archives, audio, video); `--all` takes every file. `-j`/`--jobs` sets how many uploads run at once (default 4). An object already in the bucket with the right size is not uploaded again. `--remove` deletes each local file once the store confirms it. A transient error (network, 5xx, 429, a file that changed while it was read) is retried, three attempts per file. A file that still fails gets a `FAIL <path>: <error>` line, and the run ends with `put: N of M file(s) not stored: <paths>` on stderr and stdout and exit status 1; nothing about a failed file goes into the manifest.
 
 ```sh
 gwt-rawstore get <path|sha> [...] [-o TARGET]
