@@ -17,8 +17,8 @@ GWT_RAWSTORE_REGION (default us-east-1), GWT_RAWSTORE_PREFIX (default empty), GW
 GWT_RAWSTORE_SECRET_KEY, GWT_RAWSTORE_CACHE (default ~/.cache/gwt-rawstore). Requests are signed with
 AWS SigV4 and use path-style addressing, which Garage and MinIO need. Standard library only.
 """
-import argparse, concurrent.futures, datetime, fnmatch, hashlib, hmac, os, re, shutil, subprocess, sys, \
-    tempfile, urllib.error, urllib.parse, urllib.request, xml.etree.ElementTree as ET
+import argparse, concurrent.futures, datetime, fnmatch, hashlib, hmac, http.client, os, re, shutil, subprocess, \
+    sys, tempfile, time, urllib.error, urllib.parse, urllib.request, xml.etree.ElementTree as ET
 
 MANIFEST = 'rawstore.tsv'
 COLUMNS = ('sha256', 'size', 'key', 'path')
@@ -26,6 +26,7 @@ BINARY_EXT = {'.jpg', '.jpeg', '.png', '.gif', '.tif', '.tiff', '.webp', '.bmp',
               '.zip', '.tar', '.gz', '.tgz', '.7z', '.mp3', '.m4a', '.ogg', '.wav', '.mp4', '.mov', '.djvu'}
 EMPTY_SHA = hashlib.sha256(b'').hexdigest()
 CHUNK = 1 << 20
+TRIES, WAIT = 3, 2.0   # put: attempts per file, and seconds before the first retry (doubled each time)
 
 
 def sha256_file(path):
@@ -224,9 +225,27 @@ def expand(paths, everything=False):
 # ---------------------------------------------------------------- operations
 
 
+def transient(e):
+    """An upload error worth another try: the network, a busy or failing store (5xx, 429), a body that no longer
+    hashes to what was sent (the file changed while it was read), or a store that did not confirm the object."""
+    if isinstance(e, S3Error):
+        return e.status >= 500 or e.status == 429 or (e.status == 400 and 'XAmzContentSHA256Mismatch' in str(e))
+    if isinstance(e, (FileNotFoundError, PermissionError, IsADirectoryError)):
+        return False
+    return isinstance(e, (urllib.error.URLError, http.client.HTTPException, OSError, RuntimeError))
+
+
+def describe(e):
+    """An exception as one line that is never empty: a bare TimeoutError() prints as ''."""
+    return '%s: %s' % (type(e).__name__, e) if str(e) else type(e).__name__
+
+
 def put(store, files, prefix='', remove=False, jobs=4, log=print):
-    """Upload files and record them in their folder's manifest. Returns the number of failures."""
-    def one(path):
+    """Upload files and record them in their folder's manifest. Returns the number of failures. A transient
+    error is retried (TRIES attempts per file, the file hashed again each time); a file that still fails is named on
+    a FAIL line, and a last line on stderr and stdout counts and names every one of them: a run that stored 3,681 of
+    3,682 files exited 1 with no path, and a log of stdout alone showed nothing (30-10-2026)."""
+    def attempt(path):
         sha, size = sha256_file(path)
         key = object_key(sha, os.path.basename(path), prefix)
         have = store.head(key)
@@ -239,14 +258,25 @@ def put(store, files, prefix='', remove=False, jobs=4, log=print):
             raise RuntimeError('upload of %s not confirmed by the store (%r)' % (path, have))
         return path, sha, size, key, uploaded
 
-    by_folder, failures = {}, 0
+    def one(path):
+        for n in range(TRIES):
+            try:
+                return attempt(path)
+            except Exception as e:
+                if n + 1 == TRIES or not transient(e):
+                    raise
+                log('retry %s after %s' % (path, describe(e)), file=sys.stderr)
+                time.sleep(WAIT * 2 ** n)
+
+    by_folder, failed = {}, []
     with concurrent.futures.ThreadPoolExecutor(max(1, jobs)) as ex:
-        for fut in concurrent.futures.as_completed([ex.submit(one, f) for f in files]):
+        futs = {ex.submit(one, f): f for f in files}
+        for fut in concurrent.futures.as_completed(futs):
             try:
                 path, sha, size, key, uploaded = fut.result()
             except Exception as e:
-                failures += 1
-                log('FAIL %s' % e, file=sys.stderr)
+                failed.append(futs[fut])
+                log('FAIL %s: %s' % (futs[fut], describe(e)), file=sys.stderr)
                 continue
             folder = os.path.dirname(path) or '.'
             by_folder.setdefault(folder, []).append((os.path.basename(path), sha, size, key, path))
@@ -259,7 +289,11 @@ def put(store, files, prefix='', remove=False, jobs=4, log=print):
         if remove:
             for *_, path in items:
                 os.unlink(path)
-    return failures
+    if failed:
+        line = 'put: %d of %d file(s) not stored: %s' % (len(failed), len(files), ' '.join(sorted(failed)))
+        log(line, file=sys.stderr)
+        log(line)
+    return len(failed)
 
 
 def resolve(store, ref, prefix=''):

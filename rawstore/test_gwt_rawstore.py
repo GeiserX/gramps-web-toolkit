@@ -12,7 +12,7 @@ BUCKET = 'raw-test'
 class FakeS3(BaseHTTPRequestHandler):
     """Path-style S3 stub: PUT/GET/HEAD/ListObjectsV2. Like Garage, it rejects a PUT whose body does not
     hash to x-amz-content-sha256, and it records every request."""
-    objects, calls = {}, []
+    objects, calls, fail = {}, [], {}   # fail: key -> how many PUTs of it answer 503 first
 
     def log_message(self, *a):
         pass
@@ -43,6 +43,9 @@ class FakeS3(BaseHTTPRequestHandler):
         if not self._auth_ok(bucket):
             return
         body = self.rfile.read(int(self.headers['Content-Length']))
+        if self.fail.get(key):
+            self.fail[key] -= 1
+            return self._reply(503, b'<Error>SlowDown</Error>', {})
         if hashlib.sha256(body).hexdigest() != self.headers['x-amz-content-sha256']:
             return self._reply(400, b'<Error>XAmzContentSHA256Mismatch</Error>', {})
         self.objects[key] = (body, self.headers.get('x-amz-meta-sha256'))
@@ -86,12 +89,15 @@ class Base(unittest.TestCase):
     def setUp(self):
         FakeS3.objects.clear()
         FakeS3.calls.clear()
+        FakeS3.fail.clear()
+        self.wait, R.WAIT = getattr(R, 'WAIT', None), 0
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = self.tmp.name
         self.store = R.S3(self.endpoint, BUCKET, 'AK', 'SK')
         self.out = []
 
     def tearDown(self):
+        R.WAIT = self.wait
         self.tmp.cleanup()
 
     def log(self, *a, **k):
@@ -150,6 +156,39 @@ class PutGetTest(Base):
             self.assertEqual(R.put(bad, [img], remove=True, log=self.log), 1)
         self.assertTrue(os.path.exists(img))
         self.assertFalse(os.path.exists(os.path.join(self.dir, 'r1', R.MANIFEST)))
+
+    def test_transient_failure_is_retried(self):
+        img = self.write('r1/a.png', b'A')
+        sha = hashlib.sha256(b'A').hexdigest()
+        FakeS3.fail['%s/%s/a.png' % (sha[:2], sha)] = 2
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertEqual(R.put(self.store, [img], log=self.log), 0)
+        self.assertEqual(len([c for c in FakeS3.calls if c[0] == 'PUT']), 3)
+        self.assertIn('a.png', R.read_manifest(os.path.join(self.dir, 'r1')))
+        # a store that keeps failing: the file is named, and so is every failed file on the last line
+        FakeS3.fail['%s/%s/a.png' % (sha[:2], sha)] = 9
+        FakeS3.objects.clear()
+        with redirect_stderr(io.StringIO()):
+            self.assertEqual(R.put(self.store, [img], log=self.log), 1)
+        self.assertTrue(any(l.startswith('FAIL ' + img + ': S3Error') for l in self.out), self.out)
+        self.assertEqual(self.out[-1], 'put: 1 of 1 file(s) not stored: ' + img)
+
+    def test_failure_names_the_file_even_with_an_empty_error(self):
+        a, b = self.write('r1/a.png', b'A'), self.write('r1/b.png', b'B')
+
+        class Mute(R.S3):
+            def head(self, key):
+                raise TimeoutError()   # str() is '': the old FAIL line said nothing
+        with redirect_stderr(io.StringIO()):
+            self.assertEqual(R.put(Mute(self.endpoint, BUCKET, 'AK', 'SK'), [a, b], log=self.log), 2)
+        self.assertIn('FAIL %s: TimeoutError' % a, self.out)
+        self.assertEqual(self.out[-1], 'put: 2 of 2 file(s) not stored: %s %s' % (a, b))
+        # a permanent error (403) is not retried
+        FakeS3.calls.clear()
+        with redirect_stderr(io.StringIO()):
+            self.assertEqual(R.put(R.S3(self.endpoint, 'other-bucket', 'AK', 'SK'), [a], log=self.log), 1)
+        self.assertEqual(len(FakeS3.calls), 1)
 
     def test_get_by_path_and_by_sha_verifies(self):
         img = self.write('r1/a.tif', b'TIFF' * 1000)
