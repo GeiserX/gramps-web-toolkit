@@ -6,6 +6,8 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+## [0.2.12] - 2026-10-30
+
 ### Change lists
 
 None. The summary line keeps its form; a run with skips prints one more line after it.
