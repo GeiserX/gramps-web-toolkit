@@ -47,7 +47,7 @@ class FakeS3(BaseHTTPRequestHandler):
             self.fail[key] -= 1
             return self._reply(503, b'<Error>SlowDown</Error>', {})
         if hashlib.sha256(body).hexdigest() != self.headers['x-amz-content-sha256']:
-            return self._reply(400, b'<Error>XAmzContentSHA256Mismatch</Error>', {})
+            return self._reply(400, b'<Error><Code>XAmzContentSHA256Mismatch</Code></Error>', {})
         self.objects[key] = (body, self.headers.get('x-amz-meta-sha256'))
         self._reply(200, b'', {})
 
@@ -94,14 +94,16 @@ class Base(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = self.tmp.name
         self.store = R.S3(self.endpoint, BUCKET, 'AK', 'SK')
-        self.out = []
+        self.out, self.stdout, self.stderr = [], [], []
 
     def tearDown(self):
         R.WAIT = self.wait
         self.tmp.cleanup()
 
     def log(self, *a, **k):
-        self.out.append(' '.join(map(str, a)))
+        line = ' '.join(map(str, a))
+        self.out.append(line)
+        (self.stderr if k.get('file') is sys.stderr else self.stdout).append(line)
 
     def write(self, rel, data):
         p = os.path.join(self.dir, rel)
@@ -171,8 +173,21 @@ class PutGetTest(Base):
         FakeS3.objects.clear()
         with redirect_stderr(io.StringIO()):
             self.assertEqual(R.put(self.store, [img], log=self.log), 1)
-        self.assertTrue(any(l.startswith('FAIL ' + img + ': S3Error') for l in self.out), self.out)
-        self.assertEqual(self.out[-1], 'put: 1 of 1 file(s) not stored: ' + img)
+        self.assertTrue(any(l.startswith('FAIL ' + img + ': S3Error') for l in self.stderr), self.stderr)
+        # the summary goes to both streams: a log kept from stdout alone still names the file
+        self.assertEqual(self.stderr[-1], 'put: 1 of 1 file(s) not stored: ' + img)
+        self.assertEqual(self.stdout[-1], 'put: 1 of 1 file(s) not stored: ' + img)
+
+    def test_checksum_mismatch_is_transient_past_the_message_cut(self):
+        # the code sits after the 300 bytes the message keeps
+        body = b'<?xml version="1.0"?><Error>' + b' ' * 400 + b'<Code>XAmzContentSHA256Mismatch</Code></Error>'
+        self.assertTrue(R.transient(R.S3Error(400, body)))
+        self.assertFalse(R.transient(R.S3Error(400, b'<Error><Code>InvalidArgument</Code></Error>')))
+
+    def test_description_stays_on_one_line(self):
+        self.assertEqual(R.describe(R.S3Error(500, b'<Error>\r\n<Code>X</Code>\n</Error>')),
+                         'S3Error: S3 answered 500: <Error>\\r\\n<Code>X</Code>\\n</Error>')
+        self.assertEqual(R.describe(TimeoutError()), 'TimeoutError')
 
     def test_failure_names_the_file_even_with_an_empty_error(self):
         a, b = self.write('r1/a.png', b'A'), self.write('r1/b.png', b'B')

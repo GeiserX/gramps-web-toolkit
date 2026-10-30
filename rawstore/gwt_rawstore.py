@@ -79,6 +79,9 @@ class S3Error(Exception):
     def __init__(self, status, body=b''):
         super().__init__('S3 answered %s: %s' % (status, body[:300].decode('utf-8', 'replace')))
         self.status = status
+        # the error code from the whole body: the message above keeps only its first 300 bytes
+        m = re.search(rb'<Code>([^<]*)</Code>', body or b'')
+        self.code = m.group(1).decode('utf-8', 'replace') if m else ''
 
 
 class S3:
@@ -229,15 +232,17 @@ def transient(e):
     """An upload error worth another try: the network, a busy or failing store (5xx, 429), a body that no longer
     hashes to what was sent (the file changed while it was read), or a store that did not confirm the object."""
     if isinstance(e, S3Error):
-        return e.status >= 500 or e.status == 429 or (e.status == 400 and 'XAmzContentSHA256Mismatch' in str(e))
+        return e.status >= 500 or e.status == 429 or (e.status == 400 and e.code == 'XAmzContentSHA256Mismatch')
     if isinstance(e, (FileNotFoundError, PermissionError, IsADirectoryError)):
         return False
     return isinstance(e, (urllib.error.URLError, http.client.HTTPException, OSError, RuntimeError))
 
 
 def describe(e):
-    """An exception as one line that is never empty: a bare TimeoutError() prints as ''."""
-    return '%s: %s' % (type(e).__name__, e) if str(e) else type(e).__name__
+    """An exception as one line that is never empty: a bare TimeoutError() prints as '', and a store's error body
+    may hold line breaks."""
+    msg = str(e).replace('\r', '\\r').replace('\n', '\\n')
+    return f'{type(e).__name__}: {msg}' if msg else type(e).__name__
 
 
 def put(store, files, prefix='', remove=False, jobs=4, log=print):
