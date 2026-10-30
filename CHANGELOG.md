@@ -6,6 +6,14 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+None.
+
+### Added
+
+- `gwt-apply` `update_source` corrects a source's title. Like `update_citation`'s page, the new title needs `expect`, the title the source has now, so a source renamed since it was read is a conflict and is never overwritten; a title another source with the same author and publication info already has is a conflict too.
+
 ## [0.2.11] - 2026-10-29
 
 ### Change lists

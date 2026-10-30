@@ -107,3 +107,5 @@ gwt_apply/ops.py | if dcls == "Person" and index_key and ref.get("role") == "Pri
 gwt_apply/ops.py | prim = [r["ref"] for r in old if r.get("role") == "Primary" and r.get("ref")] | prim = [r["ref"] for r in old if r.get("ref")] | a birth the new person only witnessed does not block a moved Primary birth
 gwt_apply/ops.py | prim = [(n, r["ref"]) for n, r in enumerate(refs) if r.get("role") == "Primary" and r.get("ref")] | prim = [(n, r["ref"]) for n, r in enumerate(refs) if r.get("ref")] | when the indexed birth leaves, a birth the person only witnessed never becomes their birth
 gwt_apply/ops.py | self._reread_found = False  # every try | pass  # every try | the re-read flag of one op never labels the next op's lost answer
+gwt_apply/ops.py | if now != op["expect"].strip(): | if False: | update_source never overwrites a title someone changed since it was read
+gwt_apply/ops.py | if (row["handle"] != source["handle"] and (row.get("title") or "").strip() == new | if (False | update_source refuses a title another source with the same author already has

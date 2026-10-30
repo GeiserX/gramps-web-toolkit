@@ -37,6 +37,7 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
     "update_place": ({"place", "set"}, set()),
     "update_note": ({"note", "set"}, {"expect"}),
     "update_citation": ({"citation", "set"}, {"expect"}),
+    "update_source": ({"source", "set"}, {"expect"}),
     "update_family": ({"family", "set"}, set()),
     "update_child_ref": ({"family", "child"}, {"set", "confirm_probable", "expect"}),
     "detach": ({"target", "object"}, set()),
@@ -93,6 +94,7 @@ EVENT_FIELDS = {"type", "date", "place", "description"}
 PLACE_FIELDS = {"lat", "long", "enclosed_by", "name"}
 NOTE_FIELDS = {"text", "type"}
 CITATION_FIELDS = {"page", "confidence", "date"}
+SOURCE_FIELDS = {"title"}
 FAMILY_FIELDS = {"type"}
 CHILD_REF_FIELDS = {"frel", "mrel"}
 CONFIRMED = "[confirmed]"  # what a [probable] mark becomes once a document settles the link
@@ -436,6 +438,14 @@ def validate(ops: list[dict]) -> list[str]:
                     raise ValueError("confidence is 0-4")
                 if "date" in f:
                     parse_date(f["date"])
+            if name == "update_source":
+                f = op.get("set")
+                if not isinstance(f, dict) or set(f) != SOURCE_FIELDS:
+                    raise ValueError(f"set takes only {sorted(SOURCE_FIELDS)}")
+                if not (isinstance(f["title"], str) and f["title"].strip()):
+                    raise ValueError("title is a non-empty text")
+                if not isinstance(op.get("expect"), str):
+                    raise ValueError("changing the title needs expect: the title the source has now")
             if name == "update_family":
                 f = op.get("set")
                 if not isinstance(f, dict) or not f or set(f) - FAMILY_FIELDS:
@@ -1303,6 +1313,28 @@ class Applier:
             self.actions.append(f"skip: Citation {self.label(cit)} already has those values")
             return
         self.save(before, cit)
+
+    def update_source(self, op):
+        """Correct a source's title. `expect` is the title it has now: a source renamed since you read it is a
+        Conflict, never overwritten, and so is a title another source with the same author and publication info
+        already has. Everything else on the source, its citations included, stays."""
+        source = self.obj("Source", op["source"])
+        source.setdefault("_class", "Source")
+        before = copy.deepcopy(source)
+        new, now = op["set"]["title"].strip(), (source.get("title") or "").strip()
+        if now != new:
+            if now != op["expect"].strip():
+                raise Conflict(f"Source {self.label(source)} no longer has the title {op['expect']!r} (it has {now!r})")
+            for row in self.c.list_all("Source", ["title", "author", "pubinfo", "gramps_id"]):
+                if (row["handle"] != source["handle"] and (row.get("title") or "").strip() == new
+                        and all((row.get(f) or "").strip() == (source.get(f) or "").strip() for f in ("author", "pubinfo"))):
+                    raise Conflict(f"Source {row.get('gramps_id') or row['handle']} already has the title {new!r} with "
+                                   "the same author and publication info; they may be one source")
+            source["title"] = new
+        if source == before:
+            self.actions.append(f"skip: Source {self.label(source)} already has that title")
+            return
+        self.save(before, source)
 
     def update_family(self, op):
         family = self.obj("Family", op["family"])
