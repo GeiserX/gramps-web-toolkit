@@ -109,3 +109,5 @@ gwt_apply/ops.py | prim = [(n, r["ref"]) for n, r in enumerate(refs) if r.get("r
 gwt_apply/ops.py | self._reread_found = False  # every try | pass  # every try | the re-read flag of one op never labels the next op's lost answer
 gwt_apply/ops.py | if now != op["expect"].strip(): | if False: | update_source never overwrites a title someone changed since it was read
 gwt_apply/ops.py | if (row["handle"] != source["handle"] and (row.get("title") or "").strip() == new | if (False | update_source refuses a title another source with the same author already has
+gwt_apply/ops.py | res.noop = res.status == "skip" and self._noop | res.noop = res.status == "skip" | a skip of what this list made by key is never called a no-op
+gwt_apply/ops.py | self._noop = True | pass | an update or tag that found the tree as it asks is a no-op skip

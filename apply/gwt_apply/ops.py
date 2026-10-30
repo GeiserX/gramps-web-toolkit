@@ -536,6 +536,7 @@ class Result:
     actions: list[str] = field(default_factory=list)
     answer_lost: bool = False  # done because an earlier try's write landed, though its answer never came
     reasons: list[str] = field(default_factory=list)  # why a `done` op is not in the tree yet: missing / differs
+    noop: bool = False  # a skip because the object the tree has is already as the op asks (an update, a tag)
 
 
 
@@ -614,6 +615,13 @@ class Applier:
         return obj.get("gramps_id") or obj["handle"]
 
     # -- writes, each one recorded as an action ---------------------------
+
+    def skip_noop(self, line: str) -> None:
+        """Skip an op that found the object the tree already had exactly as it asks: an update with the same values,
+        a tag already on (or already off), an attribute already set. Nothing this list makes by key is involved, so
+        on a list's first dry run such a skip means the tree already held the change, not that the list ran before."""
+        self.actions.append(line)
+        self._noop = True
 
     def tag_handle(self, name: str) -> str:
         """The handle of the tag with this name, made if the tree has none."""
@@ -720,6 +728,7 @@ class Applier:
                 if self.lock is not None:  # every try: a slow server can make one op outlast the lock
                     self.lock.refresh()
                 self.actions, self.reasons, self.wrote, self._holding = [], [], False, None
+                self._noop = False
                 self._reread_found = False  # every try: one op's flag never labels the next op's lost answer
                 self.c.unknown_write = []
                 # a dry run's plan of this try: dropped on a retry, or the next try reads it as already done
@@ -727,6 +736,7 @@ class Applier:
                 try:
                     getattr(self, op["op"])(op)
                     res.status = "done" if self.wrote else "skip"
+                    res.noop = res.status == "skip" and self._noop
                     if lost and self.wrote and not self._reread_found:  # the re-read did not find the change, so this try wrote it
                         self.actions += [f"{line}; the re-read did not find it, so this try wrote it"
                                          for line in lost]
@@ -945,7 +955,7 @@ class Applier:
             primary["surname"] = s["surname"]
             name["surname_list"] = surnames
         if person == before:
-            self.actions.append(f"skip: Person {self.label(person)} already has those values")
+            self.skip_noop(f"skip: Person {self.label(person)} already has those values")
             return
         self.save(before, person)
 
@@ -963,7 +973,7 @@ class Applier:
         if "description" in s:
             event["description"] = s["description"]
         if event == before:
-            self.actions.append(f"skip: Event {self.label(event)} already has those values")
+            self.skip_noop(f"skip: Event {self.label(event)} already has those values")
             return
         self.save(before, event)
 
@@ -990,7 +1000,7 @@ class Applier:
                 self._refuse_place_namesake(place, name)
                 place["name"] = {**current, "_class": "PlaceName", "value": name}
         if place == before:
-            self.actions.append(f"skip: Place {self.label(place)} already has those values")
+            self.skip_noop(f"skip: Place {self.label(place)} already has those values")
             return
         self.save(before, place)
 
@@ -1292,7 +1302,7 @@ class Applier:
         if "type" in s:
             note["type"] = s["type"]
         if note == before:
-            self.actions.append(f"skip: Note {self.label(note)} already has those values")
+            self.skip_noop(f"skip: Note {self.label(note)} already has those values")
             return
         self.save(before, note)
 
@@ -1310,7 +1320,7 @@ class Applier:
         if "date" in s and date_key(cit.get("date")) != date_key(parse_date(s["date"])):
             cit["date"] = parse_date(s["date"])
         if cit == before:
-            self.actions.append(f"skip: Citation {self.label(cit)} already has those values")
+            self.skip_noop(f"skip: Citation {self.label(cit)} already has those values")
             return
         self.save(before, cit)
 
@@ -1332,7 +1342,7 @@ class Applier:
                                    "the same author and publication info; they may be one source")
             source["title"] = new
         if source == before:
-            self.actions.append(f"skip: Source {self.label(source)} already has that title")
+            self.skip_noop(f"skip: Source {self.label(source)} already has that title")
             return
         self.save(before, source)
 
@@ -1342,7 +1352,7 @@ class Applier:
         before = copy.deepcopy(family)
         family["type"] = op["set"]["type"]
         if family == before:
-            self.actions.append(f"skip: Family {self.label(family)} already has that type")
+            self.skip_noop(f"skip: Family {self.label(family)} already has that type")
             return
         self.save(before, family)
 
@@ -1372,7 +1382,7 @@ class Applier:
             self.save(before, family)
         elif not marked:
             if not reason:
-                self.actions.append(f"skip: {label} already has those relations")
+                self.skip_noop(f"skip: {label} already has those relations")
             return
         if marked:
             cur = marked[0]["text"]["string"]
@@ -1504,7 +1514,7 @@ class Applier:
             repo["type"] = s["type"]
         self._repo_fields(repo, s)
         if repo == before:
-            self.actions.append(f"skip: Repository {self.label(repo)} already has those values")
+            self.skip_noop(f"skip: Repository {self.label(repo)} already has those values")
             return
         self.save(before, repo)
 
@@ -1753,7 +1763,7 @@ class Applier:
         target.setdefault("_class", cls)
         handle = self.tag_handle(op["name"].strip())
         if handle in (target.get("tag_list") or []):
-            self.actions.append(f"skip: {cls} {self.label(target)} already has the tag {op['name'].strip()!r}")
+            self.skip_noop(f"skip: {cls} {self.label(target)} already has the tag {op['name'].strip()!r}")
             return
         before = copy.deepcopy(target)
         target["tag_list"] = [*(target.get("tag_list") or []), handle]
@@ -1775,7 +1785,7 @@ class Applier:
         tags = target.get("tag_list") or []
         keep = [h for h in tags if h not in handles]
         if len(keep) == len(tags):
-            self.actions.append(f"skip: {cls} {self.label(target)} does not have the tag {name!r}")
+            self.skip_noop(f"skip: {cls} {self.label(target)} does not have the tag {name!r}")
             return
         before = copy.deepcopy(target)
         target["tag_list"] = keep
@@ -1896,7 +1906,7 @@ class Applier:
         for a in attrs:
             if str(a.get("type")) == op["type"]:
                 if a.get("value") == op["value"]:
-                    self.actions.append(f"skip: {cls} {self.label(target)} already has {op['type']}={op['value']!r}")
+                    self.skip_noop(f"skip: {cls} {self.label(target)} already has {op['type']}={op['value']!r}")
                     return
                 a["value"] = op["value"]
                 break

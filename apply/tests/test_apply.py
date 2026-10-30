@@ -2081,7 +2081,8 @@ def test_update_source_title_needs_the_old_title(fake):
     got = fake.store["sources"]["s1"]
     assert got["title"] == "Parish books, baptisms (1792-1829) and marriages (1786-1849)"
     assert got["author"] == "Parish of Example"  # nothing else changes
-    assert run(fake, [op])[0].status == "skip"  # already the new title
+    again = run(fake, [op])[0]
+    assert (again.status, again.noop) == ("skip", True)  # already the new title: a no-op, not a rerun
     # renamed by someone since it was read: never overwritten
     res = run(fake, [dict(op, key="u2", set={"title": "Something else"}, expect="Parish books, baptisms")])
     assert res[0].status == "conflict" and got["title"].startswith("Parish books, baptisms (")
@@ -3659,6 +3660,30 @@ def test_json_rows_when_the_preflight_refuses_the_list(fake, tmp_path, env, caps
         {"key": k, "op": "add_person", "status": "not run", "reason": "not run: the list stopped on likely duplicates"}
         for k in ("d-1", "d-2")
     ]
+
+
+def test_noop_skips_are_told_apart_from_a_rerun(fake, tmp_path, env, capsys):
+    # a tag already on the place and a note type it already has are no-ops; the add_note made by this list's key,
+    # run a second time, is a rerun and never a no-op
+    fake.add("tags", {"handle": "tag-weak", "name": "Weak"})
+    fake.store["places"]["plc1"]["tag_list"] = ["tag-weak"]
+    note = fake.add("notes", {"handle": "n1", "type": "Research", "format": 0,
+                              "text": {"_class": "StyledText", "string": "x", "tags": []}})
+    ops = [{"op": "add_tag", "key": "t", "ruling": R, "target": {"place": "P0001"}, "name": "Weak"},
+           {"op": "update_note", "key": "u", "ruling": R, "note": note["gramps_id"], "set": {"type": "Research"}},
+           {"op": "add_note", "key": "n", "ruling": R, "text": "Maybe the same man.", "attach": [{"person": "I0001"}]}]
+    res = run(fake, ops)
+    assert [(r.status, r.noop) for r in res] == [("skip", True), ("skip", True), ("done", False)]
+    res = run(fake, ops)
+    assert [(r.status, r.noop) for r in res] == [("skip", True), ("skip", True), ("skip", False)]
+    report = tmp_path / "run.json"
+    assert main([str(_changes(tmp_path, ops)), "--json", str(report)]) == 0
+    out = capsys.readouterr().out
+    assert "3 skip, 0 conflict, 0 error" in out  # the summary line keeps its form
+    assert "NOOP: 2 of 3 skip(s) found the tree already as the op asks (t add_tag, u update_note)" in out
+    rows = json.loads(report.read_text())
+    assert [r.get("noop", False) for r in rows] == [True, True, False]
+    assert rows[0]["reason"] == "skip: Place P0001 already has the tag 'Weak'" and rows[2]["reason"] == ""
 
 
 def test_json_needs_a_change_list(tmp_path, capsys):
