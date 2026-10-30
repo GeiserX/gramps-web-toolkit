@@ -24,6 +24,8 @@ def test(tmp=None):
     assert n == 2 and rows[0]['person'] == 'I1', rows
     assert rows[0]['serie_ad'] == '6NUM2/149/ ; 6NUM8/149/', rows[0]['serie_ad']
     assert 'NO buscar' in rows[1]['buscar'], rows[1]['buscar']      # born 1990: possibly living
+    assert rows[0]['portal_archivo_verificado'].startswith('https://archives.touraine.fr/'), rows[0]['portal_archivo_verificado']
+    assert '{q}' in m.PORTAL[41] and 'Rech_commune=' in m.PORTAL[41]
     open(f'{d}/e.tsv', 'w').write('person_key\tx\ty\ni1\t\t\n')
     assert m.main(f'{d}/o.json', f'{d}/l.jsonl', f'{d}/o2.csv', f'{d}/o2.md', f'{d}/e.tsv')[0] == 1  # ledger skips I1
     print('ok')

@@ -13,7 +13,8 @@ PRIORITY = {x.strip().lower() for x in os.environ.get('GWT_FR_PRIORITY', '').spl
 # Portals seen live on 30/10/2026 (search results of each archive's own site). Others: not verified, left empty.
 PORTAL = {37: 'https://archives.touraine.fr/search/results?keyword={q}',
           59: 'https://archivesdepartementales.lenord.fr/search/results?keyword={q}',
-          41: 'http://archives.culture41.fr/archives/recherche/etatcivil/',
+          # AD41 results page, deep link checked live 30/10/2026 (commune + type of act; the viewer opens from the result rows)
+          41: 'https://www.archives41.fr/archive/resultats/etatcivil/n:19?Rech_commune={q}&RECH_acte%5B0%5D=naissance&type=etatcivil',
           61: 'https://archives.orne.fr/etat-civil',  # online to 1902, tables decennales to 1942 (portal text, 30/10/2026)
           72: 'https://archives.sarthe.fr/archives-en-ligne/registres-paroissiaux-etat-civil/chercher-dans-letat-civil',
           75: 'https://archives.paris.fr/archives-numerisees/etat-civil-de-paris/etat-civil-a-partir-de-1860/actes-detat-civil'}  # births 1860-1924, marriages 1860-1950, deaths 1860-1986
