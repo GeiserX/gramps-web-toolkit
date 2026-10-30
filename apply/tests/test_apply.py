@@ -2071,6 +2071,29 @@ def test_update_citation_page_confidence_and_date(fake):
     assert validate([dict(op, key="b", set={"source": "S0001"})])
 
 
+def test_update_source_title_needs_the_old_title(fake):
+    src = fake.add("sources", {"handle": "s1", "title": "Parish books, baptisms", "author": "Parish of Example"})
+    other = fake.add("sources", {"handle": "s2", "title": "Parish books, marriages", "author": "Parish of Example"})
+    op = {"op": "update_source", "key": "u", "ruling": R, "source": src["gramps_id"],
+          "set": {"title": "Parish books, baptisms (1792-1829) and marriages (1786-1849)"},
+          "expect": "Parish books, baptisms"}
+    assert run(fake, [op])[0].status == "done"
+    got = fake.store["sources"]["s1"]
+    assert got["title"] == "Parish books, baptisms (1792-1829) and marriages (1786-1849)"
+    assert got["author"] == "Parish of Example"  # nothing else changes
+    assert run(fake, [op])[0].status == "skip"  # already the new title
+    # renamed by someone since it was read: never overwritten
+    res = run(fake, [dict(op, key="u2", set={"title": "Something else"}, expect="Parish books, baptisms")])
+    assert res[0].status == "conflict" and got["title"].startswith("Parish books, baptisms (")
+    # the title another source with the same author already has
+    res = run(fake, [dict(op, key="u3", source=other["gramps_id"], set={"title": got["title"]},
+                          expect="Parish books, marriages")])
+    assert res[0].status == "conflict" and fake.store["sources"]["s2"]["title"] == "Parish books, marriages"
+    assert validate([{k: v for k, v in op.items() if k != "expect"}])  # a title change without expect
+    for bad in ({}, {"title": ""}, {"title": "x", "author": "y"}, {"author": "y"}):
+        assert validate([dict(op, key="b", set=bad)]), bad
+
+
 def test_update_family_type(fake):
     f = fake.add("families", {"handle": "fam", "mother_handle": "anna", "type": "Unknown"})
     op = {"op": "update_family", "key": "u", "ruling": R, "family": f["gramps_id"], "set": {"type": "Married"}}
