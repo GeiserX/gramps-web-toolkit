@@ -106,6 +106,9 @@ def main(dump, leads, out_csv, out_md, ledger=None):
                          hueco=l['what'], comuna=commune, depto=dept[1], archivo=dept[0], nacio_aprox=by or '',
                          buscar=what, serie_ad=serie, portal_archivo_verificado=url, ampliar=fam, enlace_busqueda_geneanet_patron_sin_verificar=link))
     rows.sort(key=lambda r: -r['score'])
+    if not rows:
+        open(out_csv, 'w').close(); open(out_md, 'w').write('# No gaps found for people with a place in France\n')
+        return 0, 0
     with open(out_csv, 'w', newline='') as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0])); w.writeheader(); w.writerows(rows)
     br = collections.defaultdict(list)
@@ -123,4 +126,6 @@ def main(dump, leads, out_csv, out_md, ledger=None):
     return len(rows), len(br)
 
 if __name__ == '__main__':
+    if len(sys.argv) < 5:
+        sys.exit('usage: gwt_fr_branches.py owner.json leads.jsonl out.csv out.md [ledger.tsv]')
     print(main(*sys.argv[1:6]))
