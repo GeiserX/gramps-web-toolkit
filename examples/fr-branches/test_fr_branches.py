@@ -28,6 +28,8 @@ def test(tmp=None):
     assert '{q}' in m.PORTAL[41] and 'Rech_commune=' in m.PORTAL[41]
     open(f'{d}/e.tsv', 'w').write('person_key\tx\ty\ni1\t\t\n')
     assert m.main(f'{d}/o.json', f'{d}/l.jsonl', f'{d}/o2.csv', f'{d}/o2.md', f'{d}/e.tsv')[0] == 1  # ledger skips I1
+    open(f'{d}/none.jsonl', 'w').close()
+    assert m.main(f'{d}/o.json', f'{d}/none.jsonl', f'{d}/n.csv', f'{d}/n.md') == (0, 0)  # no leads: no crash
     print('ok')
 
 if __name__ == '__main__':
