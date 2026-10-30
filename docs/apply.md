@@ -252,6 +252,14 @@ What it does not see:
 
 `status` is `done`, `skip`, `conflict`, `error`, or `not run` for an op the run never reached (after a conflict, or when the pre-flight found likely duplicates). `reason` is the missing and differs lines joined with `; ` for `done`, the conflict or error line for those, and empty for `skip`.
 
+A skip has two causes. The op may find what this list made by its key on an earlier run (a rerun), or it may find an object the tree already had exactly as the op asks: an `update_*` with the same values, an `add_tag` whose tag is already on, a `remove_tag` whose tag is already off, a `set_attribute` already set. The second kind is a no-op. Its row carries `"noop": true` and the skip line as `reason`, and after the summary line the run prints, whenever there is a skip:
+
+```
+NOOP: 2 of 3 skip(s) found the tree already as the op asks (t add_tag, u update_note)
+```
+
+On a list's first dry run every skip should be a no-op. A chain that refuses any other skip can accept exactly these and still stop on a list that already ran. A no-op does not tell who made the value: on a rerun it is what the earlier run wrote. So a list whose keyed ops skip as well has run before.
+
 Use `--verify --snapshot` with a fresh snapshot to verify offline ([Checking an apply quickly](#checking-an-apply-quickly)).
 
 ## Snapshots

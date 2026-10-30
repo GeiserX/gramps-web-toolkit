@@ -393,6 +393,12 @@ def _run(args, argv, client: Client, run_id: str, ops, snap, old, offline: bool,
     lost = sum(r.answer_lost for r in results)
     words = [f"{v} {k}" + (f" (answer lost: {lost})" if k == "done" and lost else "") for k, v in counts.items()]
     print(", ".join(words) + (f", {not_run} not run" if not_run else ""))
+    noop = [r for r in results if r.noop]
+    if counts["skip"]:
+        # a first dry run of a list should skip nothing; a no-op skip is the exception a chain can accept: the tree
+        # already had that value or tag. The line above keeps its form, so a check that reads it still works
+        print(f"NOOP: {len(noop)} of {counts['skip']} skip(s) found the tree already as the op asks"
+              + (" (" + ", ".join(f"{r.key} {r.op}" for r in noop) + ")" if noop else ""))
     _write_json(args.json, ops, results, "not run: an earlier op stopped the list")
     if args.verify:
         landed = counts["skip"]
@@ -405,7 +411,7 @@ def _run(args, argv, client: Client, run_id: str, ops, snap, old, offline: bool,
 def _reason(r) -> str:
     if r.status == "done":
         return "; ".join(r.reasons) or (r.actions[-1] if r.actions else "")
-    if r.status in ("conflict", "error"):
+    if r.status in ("conflict", "error") or r.noop:
         return r.actions[-1] if r.actions else ""
     return ""
 
@@ -414,6 +420,7 @@ def _write_json(path: str | None, ops: list[dict], results: list, not_run: str) 
     """One object per op of the list, in its order: the ops a run never reached carry status `not run`."""
     if not path:
         return
-    rows = [{"key": r.key, "op": r.op, "status": r.status, "reason": _reason(r)} for r in results]
+    rows = [{"key": r.key, "op": r.op, "status": r.status, "reason": _reason(r), **({"noop": True} if r.noop else {})}
+            for r in results]
     rows += [{"key": op["key"], "op": op["op"], "status": "not run", "reason": not_run} for op in ops[len(results):]]
     Path(path).write_text(json.dumps(rows, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")

@@ -8,11 +8,12 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Change lists
 
-None.
+None. The summary line keeps its form; a run with skips prints one more line after it.
 
 ### Added
 
 - `gwt-apply` `update_source` corrects a source's title. Like `update_citation`'s page, the new title needs `expect`, the title the source has now, so a source renamed since it was read is a conflict and is never overwritten; a title another source with the same author and publication info already has is a conflict too.
+- `gwt-apply` tells a no-op skip (an `update_*`, `add_tag`, `remove_tag` or `set_attribute` that found the object already as it asks) from a rerun skip: a `NOOP: <n> of <m> skip(s) ...` line after the summary, and `"noop": true` with the skip line as `reason` in `--json`. A chain that wants a first dry run with no skips can accept these and still stop on a list that already ran.
 
 ## [0.2.11] - 2026-10-29
 
