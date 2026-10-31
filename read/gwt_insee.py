@@ -20,11 +20,14 @@ The reader never touches the network: the files are a bulk download the user mak
 matches one of the --surname filters becomes one gwt-rank candidate: the principal of a death record, with a birth
 event (year and commune as written) and a death event (year and the death place code). The full dates, the codes,
 the country and the act number stay as extra fields gwt-rank does not score. Dates are kept as written: INSEE's
-files hold calendar dates that never existed (29 February of a common year), so only the digits, the month (00 to
-12) and the day (00 to 31) are checked.
+files hold calendar dates that never existed (29 February of a common year).
 
-Every line is checked, matched or not: a line with a malformed date, a sex that is not 1 or 2, no `*` in the name or
-too short to hold the death date is an error naming the file and line, never skipped. Blank lines are skipped.
+Every line is checked, matched or not. A line whose columns do not line up is an error naming the file and line,
+never skipped: a date that is not eight digits, a sex that is not 1 or 2, a line too short to hold the death date.
+Some values break INSEE's own rules with the columns still in place: a month 13, a day 60, an 80-character name with no
+`*` (one line each in the 1991, 1996 and 2012 files). Those are what INSEE wrote, so the line is kept: the year is the
+date's first four digits, a name with no `*` is the surname whole, and the candidate lists the field under
+`malformed`. Each file's count of such lines goes into the envelope and on stderr. Blank lines are skipped.
 
 Encoding: the files are ASCII in practice (names and communes are upper case, without accents), and the columns
 count characters, not bytes. A few lines, mostly foreign birthplaces, are not ASCII, and the years differ. In the 2005
@@ -79,14 +82,13 @@ def _field(line, span):
 
 
 def check_date(value):
-    """The year of an AAAAMMJJ date, or None when INSEE wrote 0000; raises ValueError when it is not a date."""
+    """(year, odd) of an AAAAMMJJ date: the year is None when INSEE wrote 0000, odd is True for a month over 12 or a
+    day over 31. Raises ValueError when it is not eight digits (the columns are shifted)."""
     m = _DATE.match(value)
     if not m:
         raise ValueError('date %r is not AAAAMMJJ' % value)
     y, mo, d = (int(x) for x in m.groups())
-    if mo > 12 or d > 31:
-        raise ValueError('date %r has month %02d, day %02d' % (value, mo, d))
-    return y or None
+    return y or None, mo > 12 or d > 31
 
 
 def parse_line(line):
@@ -94,19 +96,20 @@ def parse_line(line):
     if len(line) < MIN_LENGTH:
         raise LayoutError('line is %d characters, the layout needs at least %d' % (len(line), MIN_LENGTH))
     name = _field(line, NAME)
-    if '*' not in name:
-        raise LayoutError('name %r has no "*" between the surname and the given names' % name)
     sex = line[SEX[0]:SEX[1]]
     if sex not in SEXES:
         raise LayoutError('sex %r is not 1 or 2' % sex)
-    surname, _, given = name.partition('*')
-    rec = {'surname': surname.strip(), 'given': given.rstrip('/').strip(), 'sex': SEXES[sex]}
+    surname, star, given = name.partition('*')
+    rec = {'surname': surname.rstrip('/').strip(), 'given': given.rstrip('/').strip(), 'sex': SEXES[sex],
+           'malformed': [] if star else ['name']}
     for key, span in (('birth_date', BIRTH_DATE), ('death_date', DEATH_DATE)):
         rec[key] = line[span[0]:span[1]]
         try:
-            rec[key[:-5] + '_year'] = check_date(rec[key])
+            rec[key[:-5] + '_year'], odd = check_date(rec[key])
         except ValueError as e:
             raise LayoutError('%s: %s' % (key.replace('_', ' '), e))
+        if odd:
+            rec['malformed'].append(key)
     for key, span in (('birth_place_code', BIRTH_CODE), ('birth_commune', BIRTH_TOWN), ('birth_country', BIRTH_COUNTRY),
                       ('death_place_code', DEATH_CODE), ('act', ACT)):
         rec[key] = _field(line, span)
@@ -151,6 +154,8 @@ def candidate(rec, path, lineno, encoding):
          'file': os.path.basename(path), 'line': lineno}
     if encoding != 'utf-8':
         c['encoding'] = encoding
+    if rec['malformed']:
+        c['malformed'] = rec['malformed']
     return c
 
 
@@ -160,7 +165,7 @@ def read_files(paths, surnames):
     wanted = [fold(s) for s in surnames if fold(s)]
     cands, files = [], []
     for path in paths:
-        h, lines, matched = hashlib.sha256(), 0, 0
+        h, lines, matched, odd = hashlib.sha256(), 0, 0, 0
         with open(path, 'rb') as f:
             for lineno, raw in enumerate(f, 1):
                 h.update(raw)
@@ -172,8 +177,10 @@ def read_files(paths, surnames):
                     rec = parse_line(line)
                 except LayoutError as e:
                     raise LayoutError('%s line %d: %s' % (path, lineno, e))
+                odd += bool(rec['malformed'])
                 if surname_matches(rec['surname'], wanted):
                     matched += 1
                     cands.append(candidate(rec, path, lineno, enc))
-        files.append({'file': os.path.basename(path), 'sha256': h.hexdigest(), 'lines': lines, 'matched': matched})
+        files.append({'file': os.path.basename(path), 'sha256': h.hexdigest(), 'lines': lines, 'matched': matched,
+                      'malformed': odd})
     return cands, files

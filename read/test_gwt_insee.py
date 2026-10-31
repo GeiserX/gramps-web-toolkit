@@ -198,17 +198,8 @@ class Malformed(Run):
     def test_letters_in_a_death_date(self):
         self.assert_stops(line(dd='1985-7-2'), "death date: date '1985-7-2' is not AAAAMMJJ")
 
-    def test_month_13(self):
-        self.assert_stops(line(bd='19211314'), 'month 13')
-
-    def test_day_32(self):
-        self.assert_stops(line(dd='19850732'), 'day 32')
-
     def test_a_line_too_short_for_the_death_date(self):
         self.assert_stops(line(width=150), 'line is 150 characters')
-
-    def test_a_name_without_the_star(self):
-        self.assert_stops(line(name='LORIOT PAUL/'), 'has no "*"')
 
     def test_a_sex_that_is_not_1_or_2(self):
         self.assert_stops(line(sex='M'), "sex 'M' is not 1 or 2")
@@ -227,6 +218,35 @@ class Malformed(Run):
         code, lines, _ = self.run_insee([p], ['Loriot'])
         self.assertEqual(code, 0)
         self.assertEqual(self.cands(lines)[0]['act'], '0000001')
+
+
+class OddValues(Run):
+    """Values INSEE itself wrote that break its own rules (month 13, day 60, a full 80-character name with no "*") are
+    kept as written and marked, never fatal: one such line in a year file must not block the whole year."""
+    def test_a_month_13_or_day_60_is_kept_with_its_year_and_marked(self):
+        p = self.write('o.txt', line(name='ORTEGA*ANA/', bd='19211300'), line(name='ORTEGA*JUAN/', dd='19850060'))
+        code, lines, out = self.run_insee([p], ['Ortega'])
+        self.assertEqual(code, 0, out)
+        a, j = self.cands(lines)
+        self.assertEqual((a['birth_date'], a['events']['birth']['year'], a['malformed']), ('19211300', 1921, ['birth_date']))
+        self.assertEqual((j['death_date'], j['events']['death']['year'], j['malformed']), ('19850060', 1985, ['death_date']))
+
+    def test_a_name_with_no_star_is_kept_whole_as_the_surname_and_marked(self):
+        p = self.write('n.txt', line(name='ORTEGA LORIOT DE LA FONTAINE PAUL ANDRE'))
+        code, lines, out = self.run_insee([p], ['Ortega'])
+        self.assertEqual(code, 0, out)
+        c = self.cands(lines)[0]
+        self.assertEqual((c['surnames'], c['given'], c['malformed']),
+                         (['ORTEGA LORIOT DE LA FONTAINE PAUL ANDRE'], None, ['name']))
+
+    def test_odd_lines_are_counted_even_when_no_surname_matches_them(self):
+        p = self.write('c.txt', line(name='ORTEGA*ANA/'), line(name='DUVAL*LEA/', bd='19210060'))
+        code, lines, out = self.run_insee([p], ['Ortega'])
+        self.assertEqual(code, 0)
+        with open(lines['evidence']) as f:
+            self.assertEqual(json.load(f)['files'][0]['malformed'], 1)
+        self.assertIn('c.txt: 1 line keeps a value out of INSEE\'s own rules', out)
+        self.assertNotIn('malformed', self.cands(lines)[0])
 
 
 class EndToEnd(Run):

@@ -363,6 +363,12 @@ def cmd_insee_search(a):
     except OSError as e:
         err('cannot read %s: %s; nothing was written' % (e.filename or 'a file', e.strerror or e))
         return EXIT_EMPTY
+    for f in files:
+        if f['malformed']:
+            err('%s: %d line%s %s a value out of INSEE\'s own rules (month over 12, day over 31, or a name with no '
+                '"*"), kept as written and marked "malformed"' % (f['file'], f['malformed'],
+                                                                  '' if f['malformed'] == 1 else 's',
+                                                                  'keeps' if f['malformed'] == 1 else 'keep'))
     sums = sorted(f['sha256'] for f in files)
     words = ['insee'] + sorted(gwt_insee.fold(' '.join(surnames)))
     key = gwt_reader.search_key('\n'.join(['insee'] + sums + sorted(' '.join(gwt_insee.fold(s)) for s in surnames)),
