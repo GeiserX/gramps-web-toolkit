@@ -9,6 +9,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 ### Added
 
 - `gwt-apply --private-new` saves every object the run creates as private, so a guest login never sees a new person, family, event, place, source, citation, media object or note. Objects that already exist keep their own value. Off by default; nothing about existing change lists changes.
+- `gwt-queue list --result R` prints only the rows closed with that result, so the searches that came back `blocked` or `denied` can be listed on their own.
 
 ### Fixed
 
