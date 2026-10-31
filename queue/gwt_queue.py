@@ -13,7 +13,7 @@ reopens on its own, and counts as a failed attempt.
   gwt-queue done --id ID --token T --result hit [--evidence F]
   gwt-queue fail --id ID --token T [--note why]          back off, or park the task after --max-tries attempts
   gwt-queue release --id ID --token T [--retry-after M]  nothing ran (a gate pause, a shutdown): give the try back
-  gwt-queue list [--status S] [--person KEY] [--lane L]
+  gwt-queue list [--status S] [--person KEY] [--lane L] [--result R]
   gwt-queue report [--limit N]                           the open-leads report: what is due, by priority
   gwt-queue stats
 
