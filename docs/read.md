@@ -9,15 +9,16 @@ gwt read pares search --given Ana --surname Zorvalo --out runs/     # public, no
 gwt read pares record 9000001 --out runs/
 gwt read genae search --given Ana --surname Zorvalo --out runs/    # public, no account
 gwt read boe search --name "Ana Zorvalo Quemada" --out runs/      # public, no account
+gwt read insee search --files deces-1985.txt deces-1986.txt --surname Ortega --surname Sanz --out runs/   # offline
 ```
 
-`gwt-read` runs a record search, or reads one record, on a record site, and writes the answer in the shape every record-site reader in the toolkit shares. It reads four sites: [FamilySearch](#familysearch) historical records, [PARES](#pares), the catalogue of the Spanish state archives, [Genae](#genae), a volunteer index of parish records that `gwt-read` only searches: its rows are leads, not records, and the [BOE and Gaceta de Madrid](#boe-and-gaceta-de-madrid) text search, whose hits are mentions of a name in an official act. It is slow on purpose and cached, because FamilySearch suspends accounts for volume: one of ours was suspended in 2026 after about 15 parallel lanes called the API through one night ([hard-won lesson 1](hard-won.md#1-volume-got-a-familysearch-account-suspended-and-an-ip-blocked)).
+`gwt-read` runs a record search, or reads one record, on a record site, and writes the answer in the shape every record-site reader in the toolkit shares. It reads four sites: [FamilySearch](#familysearch) historical records, [PARES](#pares), the catalogue of the Spanish state archives, [Genae](#genae), a volunteer index of parish records that `gwt-read` only searches: its rows are leads, not records, and the [BOE and Gaceta de Madrid](#boe-and-gaceta-de-madrid) text search, whose hits are mentions of a name in an official act. It also reads one source offline: [INSEE's French deaths files](#insee-french-deaths-files), downloaded once and read with no request at all. It is slow on purpose and cached, because FamilySearch suspends accounts for volume: one of ours was suspended in 2026 after about 15 parallel lanes called the API through one night ([hard-won lesson 1](hard-won.md#1-volume-got-a-familysearch-account-suspended-and-an-ip-blocked)).
 
-It never logs in and never asks for a password. PARES, Genae and the BOE need no account. For FamilySearch you sign in in your own browser, and the tool uses that session's token. Standard library only.
+It never logs in and never asks for a password. PARES, Genae, the BOE and the INSEE files need no account. For FamilySearch you sign in in your own browser, and the tool uses that session's token. Standard library only.
 
 ## The reader shape
 
-[gwt-mh](myheritage.md) (MyHeritage) and `gwt-read` (FamilySearch, PARES, Genae, BOE) write the same files, from `read/gwt_reader.py`:
+[gwt-mh](myheritage.md) (MyHeritage) and `gwt-read` (FamilySearch, PARES, Genae, BOE, INSEE) write the same files, from `read/gwt_reader.py`:
 
 | File | What it holds |
 |---|---|
@@ -36,7 +37,7 @@ results	2 total, 2 read
 
 A reader never writes the ledger: the lane runs `gwt-ledger check` before the search and `gwt-ledger add` after, with that `source` and `evidence`.
 
-Every request goes the same way. A fresh answer in [gwt-fscache](fscache.md) is served from disk with no network call and no wait. Only on a miss does the request wait for its slot in [gwt-gate](gate.md), then leave. An answer that is not a result stops the run: nothing is written, nothing is cached, and the gate hears about it so every lane on the account pauses.
+Every request goes the same way (the INSEE source makes none). A fresh answer in [gwt-fscache](fscache.md) is served from disk with no network call and no wait. Only on a miss does the request wait for its slot in [gwt-gate](gate.md), then leave. An answer that is not a result stops the run: nothing is written, nothing is cached, and the gate hears about it so every lane on the account pauses.
 
 | The site answers | gwt-read does | Exit |
 |---|---|---|
@@ -213,10 +214,49 @@ The BOE's robots.txt disallows `/buscar/gazeta.php?` and `/datos/pdfs/` for craw
 
 A page that is not a results page (the search form, a captcha) is a STOP: nothing written, nothing cached. So is an HTML page served at a PDF URL.
 
+## INSEE French deaths files
+
+INSEE publishes the "fichier des personnes décédées", every death registered in France since 1970, as one fixed-width text file per year (and per month for the current year), under the Licence Ouverte: https://www.data.gouv.fr/datasets/fichier-des-personnes-decedees/ . You download the years you need once. `insee search` reads those files on your machine and never touches the network, so it has no gate and no cache. Each line whose surname matches a `--surname` becomes a candidate for [gwt-rank](rank.md):
+
+```bash
+gwt read insee search --files deces-1985.txt deces-1986.txt --surname Ortega --surname Sanz --out runs/
+gwt rank runs/<key>.candidates.json --given Tomás --surname Ortega --facts "by=1921 bp=Villazul"
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--files` | one or more INSEE files, read in the order given |
+| `--surname` | a surname to keep. Repeat it: a line matching any of them is kept, so one pass over decades of files serves a whole branch. Case and accents are folded and the surname must stand as whole words: `Ortega` keeps `ORTEGA` and `ORTEGA SANZ`, never `ORTEGAS`. At least one is needed |
+| `--out` | where the envelope and candidates files go |
+
+Here `--surname` is a list of surnames to keep, not the first and second surname it is for the other sources. To find who to look for, `gwt-leads --kinds missing-vital --format json` lists everyone with no death event (gap `death-missing`). gwt-leads holds back anyone who may still be alive, and those are often the people a post-1970 deaths file can answer: matching them against a file on your own machine is the private use `--include-living` is for. Never feed that list into searches on outside sites.
+
+The layout is the one the dataset page gives ("Dessin d'enregistrement"), positions counted from 1:
+
+| Positions | Field | Becomes |
+| --- | --- | --- |
+| 1-80 | name, `NOM*PRENOMS`, often closed by `/` | `surnames` (the part before `*`), `given`, `name` |
+| 81 | sex, `1` male, `2` female | `sex` (`M`, `F`) |
+| 82-89 | birth date `AAAAMMJJ`, `0000`, `00`, `00` when the year, month or day is unknown | `events.birth.year`, and `birth_date` as written |
+| 90-94 | birth place code (the official geographic code; `99xxx` is a country) | `birth_place_code` |
+| 95-124 | birth commune as written | `events.birth.place`, and `birth_commune` |
+| 125-154 | birth country as written, blank for France | added to `events.birth.place` after a comma, and `birth_country` |
+| 155-162 | death date `AAAAMMJJ` | `events.death.year`, and `death_date` |
+| 163-167 | death place code | `events.death.place`, and `death_place_code` |
+| 168-176 | death act number | `act` |
+
+Every candidate is the `principal` of its line, with role `Principal`. Its `id` is the death date, place code and act number, which is how INSEE itself names a death. The full dates, the codes, the country, the act number, the `file` and its `line` stay in the candidate as fields gwt-rank does not score: gwt-rank scores years, and a year plus the birthplace is already enough for `strong`. A `strong` row is a lead for the verifier, never an identification. The reader writes no change list: the verifier reads the line and writes the [gwt-apply](apply.md) change. INSEE warns that its files are published once and never corrected, and that 1970 to 1975 may have gaps.
+
+Every line of every file is checked, matched or not. These stop the run with exit 2, the file and line in the message, and nothing written: a date that is not eight digits, or has a month over 12 or a day over 31; a sex that is not `1` or `2`; a name with no `*`; a line too short to hold the death date (162 characters); a file that cannot be read. Blank lines are skipped. Dates are kept as written: INSEE's own files hold days that never existed (29 February of a common year), so only the digits, the month and the day are checked. The death place code and the act number may be cut short, since the dataset page warns that some lines end in meaningless characters.
+
+The files are ASCII in practice: names and communes in upper case, without accents. A few lines, mostly foreign birthplaces, carry bytes from the DOS code page CP850. In the 2005 and 2010 files we found 0xA5 for Ñ, 0xC7 for Ã, 0xE0 for Ó and 0xF8 for the degree sign after an arrondissement number, and no UTF-8. Each line is read as UTF-8 (plain ASCII is UTF-8) and, when that fails, as CP850, which never fails; such a candidate carries `"encoding": "cp850"`.
+
+The envelope lists each file with its sha256, its line count and how many lines matched, and the surnames asked for. The `results` line prints `N of M lines in K files`. Exit 0 when a line matched, 2 when none did (the candidates file is written, empty), 64 with no `--surname`.
+
 ## Tests
 
 ```bash
-cd read && python3 -m unittest -v test_gwt_read test_gwt_pares test_gwt_genae test_gwt_boe
+cd read && python3 -m unittest -v test_gwt_read test_gwt_pares test_gwt_genae test_gwt_boe test_gwt_insee
 ```
 
-Invented people, descriptions and ids (the PARES pages in `read/fixtures/` keep the site's markup with invented content), a fake transport and a fake gate: the tests make no request to any site. They check that a search writes an envelope and candidates `gwt-rank` ranks, that a repeated search is served from the cache with no network call, that the gate is asked before every request, that a 403, 429, captcha, sign-in page or empty frame stops the run with nothing written or cached, and that the token never appears in a written file or a log line.
+Invented people, descriptions and ids (the PARES pages in `read/fixtures/` keep the site's markup with invented content), a fake transport and a fake gate: the tests make no request to any site. They check that a search writes an envelope and candidates `gwt-rank` ranks, that a repeated search is served from the cache with no network call, that the gate is asked before every request, that a 403, 429, captcha, sign-in page or empty frame stops the run with nothing written or cached, and that the token never appears in a written file or a log line. The INSEE tests use invented fixed-width lines (`read/fixtures/insee-deces-1985.txt`, and lines built in the test). They check that the source asks for no gate, cache or network, and that each malformed line exits 2 with nothing written.

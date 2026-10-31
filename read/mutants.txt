@@ -18,3 +18,13 @@ gwt_read.py | str(a.pdf_context), str(a.born), str(a.parents)] | str(a.pdf_conte
 gwt_read.py | gwt_reader.search_key('\n'.join([first] + words), words) | gwt_reader.search_key(first, words) | a long name rerun with other --parents still gets its own file
 gwt_read.py | max(1, min(a.pages, 5)) | max(1, a.pages) | --pages never reads more than 5 pages
 gwt_read.py | n = max(0, min(getattr(a, 'pdf_context', 0), 10)) | n = max(0, getattr(a, 'pdf_context', 0)) | --pdf-context never fetches more than 10 PDFs
+gwt_insee.py | if mo > 12 or d > 31: | if False: | an INSEE date with month over 12 or day over 31 stops the run, never skipped
+gwt_insee.py | if not m: | if False: | an INSEE date that is not eight digits stops the run with exit 2, never a crash or a skip
+gwt_insee.py | if '*' not in name: | if False: | an INSEE name with no "*" is a line out of the layout and stops the run
+gwt_insee.py | if sex not in SEXES: | if False: | an INSEE sex that is not 1 or 2 stops the run (a shifted line is caught here)
+gwt_insee.py | if len(line) < MIN_LENGTH: | if False: | an INSEE line too short to hold the death date stops the run
+gwt_insee.py | rec = parse_line(line) | rec = parse_line(line) if surname_matches(line.split('*')[0], wanted) else {'surname': ''} | every INSEE line is checked, not only the lines a --surname matches
+gwt_insee.py | if n and any(have[i:i + n] == w for i in range(len(have) - n + 1)): | if n and ' '.join(w) in ' '.join(have): | an INSEE --surname matches whole words: ORTEGA never matches ORTEGAS
+gwt_insee.py | return raw.decode('cp850'), 'cp850' | return raw.decode('latin-1'), 'latin-1' | a non-UTF-8 INSEE line is read as CP850, the code page the files use
+gwt_insee.py | return y or None | return y | an INSEE year 0000 is no year, never year 0
+gwt_read.py | return cmd_insee_search(a)      # offline: no gate, no cache, no fetcher | pass | gwt-read insee never builds a gate, a cache or a fetcher

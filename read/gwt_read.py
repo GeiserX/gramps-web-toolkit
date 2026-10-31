@@ -7,6 +7,7 @@
                         --out DIR
   gwt-read boe search --name "Given Surname1 [Surname2]" [--from Y] [--to Y] [--born Y] [--parents "F y M"]
                       [--pdf-context N] [--near W] [--pages N] --out DIR
+  gwt-read insee search --files FILE [FILE ...] --surname S [--surname S2 ...] --out DIR
   gwt-read familysearch search [--given G] [--surname S [--surname S2]] [--by Y] [--dy Y] [--years N]
                                [--place P] [--father "G S"] [--mother "G S"] [--collection ID]
                                [--count N] --out DIR
@@ -14,7 +15,8 @@
 
 PARES (the Spanish state archives' catalogue), Genae (a volunteer index of parish baptisms, marriages and
 burials) and the BOE and Gaceta de Madrid search are public: no account and no token. Genae rows are an index, never
-the record; a BOE hit is a mention of a name in an official act, never a record of a person.
+the record; a BOE hit is a mention of a name in an official act, never a record of a person. `insee` reads INSEE's
+French deaths files the user downloaded from data.gouv.fr, offline: no request, no gate, no cache.
 
 The FamilySearch session token is the one the signed-in browser already holds (its `fssessionid` cookie), read from
 $GWT_FS_TOKEN or the file named in $GWT_FS_TOKEN_FILE. The tool never asks for a password and never logs in.
@@ -26,7 +28,8 @@ search already run costs nothing.
 Writes <out>/<key>.json (the answer) and <out>/<key>.candidates.json (what gwt-rank reads), and prints
 `source`, `evidence`, `candidates` and `results` lines. It never writes the ledger.
 
-Exit codes: 0 ok, 1 an error answer (nothing saved), 2 no results, 3 rate limit, block, captcha or empty page
+Exit codes: 0 ok, 1 an error answer (nothing saved), 2 no results (insee: also a line out of INSEE's layout or a
+file that cannot be read, nothing written), 3 rate limit, block, captcha or empty page
 (HTTP 429: every lane on the account pauses; HTTP 403: the account's gate is blocked for 24 h; do other
 work), 4 signed out or the token
 expired (get a fresh token; never retry in a loop), 6 the account's gate is paused (nothing was requested),
@@ -40,6 +43,7 @@ try:                     # installed: the other tools are modules beside this on
     import gwt_pares
     import gwt_genae
     import gwt_boe
+    import gwt_insee
     from gwt_fscache import FSCache, FAMILYSEARCH_RULES, PARES_RULES, GENAE_RULES, BOE_RULES
     from gwt_gate import Gate, Paused
     import gwt_rank
@@ -52,6 +56,7 @@ except ImportError:      # a clone: they live in ../gate, ../fscache, ../rank
     import gwt_pares
     import gwt_genae
     import gwt_boe
+    import gwt_insee
     from gwt_fscache import FSCache, FAMILYSEARCH_RULES, PARES_RULES, GENAE_RULES, BOE_RULES
     from gwt_gate import Gate, Paused
     import gwt_rank
@@ -343,6 +348,34 @@ def cmd_boe_search(a, R):
     return EXIT_OK if cands else EXIT_EMPTY
 
 
+def cmd_insee_search(a):
+    """Every line of the deaths files whose surname matches one --surname, as candidates. Offline: the files are a
+    download the user made; nothing here touches the network."""
+    surnames = [s for s in a.surname if gwt_insee.fold(s)]
+    if not surnames:
+        err('give at least one --surname')
+        return EXIT_USAGE
+    try:
+        cands, files = gwt_insee.read_files(a.files, surnames)
+    except gwt_insee.LayoutError as e:
+        err('%s; nothing was written' % e)
+        return EXIT_EMPTY
+    except OSError as e:
+        err('cannot read %s: %s; nothing was written' % (e.filename or 'a file', e.strerror or e))
+        return EXIT_EMPTY
+    sums = sorted(f['sha256'] for f in files)
+    words = ['insee'] + sorted(gwt_insee.fold(' '.join(surnames)))
+    key = gwt_reader.search_key('\n'.join(['insee'] + sums + sorted(' '.join(gwt_insee.fold(s)) for s in surnames)),
+                                words)
+    env = gwt_reader.envelope('insee:' + ' '.join(f['file'] for f in files), None, files=files, surnames=surnames,
+                              text='\n'.join('%s:%d %s' % (c['file'], c['line'], c['name']) for c in cands))
+    base = gwt_reader.write_search(a.out, key, env, cands)
+    gwt_reader.print_paths(gwt_insee.SOURCE, base, out)
+    out('results\t%d of %d lines in %d file%s' % (len(cands), sum(f['lines'] for f in files), len(files),
+                                                  '' if len(files) == 1 else 's'))
+    return EXIT_OK if cands else EXIT_EMPTY
+
+
 def _save_page(a, R, url, h, page_ok, key, to_cands, total_of):
     status, rh, body, cached = R.get(url, h, refresh=a.refresh, page=page_ok)
     page = body.decode('utf-8', 'replace')
@@ -412,6 +445,13 @@ def parser():
     s.add_argument('--pages', type=int, default=1, help='pages of 50 results to read, 1 to 5 (default 1)')
     _boe_filters(s)
     s.add_argument('--out', required=True)
+    ins = sites.add_parser('insee', help="INSEE's French deaths files from data.gouv.fr, read offline; no request")
+    isub = ins.add_subparsers(dest='cmd', required=True)
+    s = isub.add_parser('search', help='every line of the files whose surname matches, as candidates')
+    s.add_argument('--files', nargs='+', required=True, help="INSEE deaths files (deces-YYYY.txt), downloaded once")
+    s.add_argument('--surname', action='append', default=[], help='a surname to keep; repeat for more, a line '
+                   'matching any of them is kept, so one pass serves a branch')
+    s.add_argument('--out', required=True)
     fs = sites.add_parser('familysearch', help='FamilySearch historical records, with your own session token')
     fs.add_argument('--account', default=os.environ.get('GWT_FS_ACCOUNT', 'default'),
                     help='names the account; each account gets its own gate (pace)')
@@ -438,6 +478,8 @@ def parser():
 
 def main(argv=None, urlopen=None, gate=None):
     a = parser().parse_args(argv)
+    if a.site == 'insee':
+        return cmd_insee_search(a)      # offline: no gate, no cache, no fetcher
     if a.site == 'pares':
         # cookies live in memory for this run only: the session cookie never reaches the cache or a file
         urlopen = urlopen or urllib.request.build_opener(urllib.request.HTTPCookieProcessor()).open
