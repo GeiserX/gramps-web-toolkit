@@ -240,7 +240,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--pre", metavar="FILE", help="with --revert: a snapshot or gwt-check dump taken before that run")
     ap.add_argument("--tag", help="a Gramps tag put on every object this run creates, e.g. r12 (ops can add their own with \"tag\")")
     ap.add_argument("--private-new", action="store_true",
-                    help="every object this run creates is saved with private=true, so a tree that shows only deceased people to guests never shows a new source, citation, media or note by default")
+                    help="every object this run creates (person, family, event, place, source, citation, media, note) is saved private, "
+                         "so a guest never sees it; objects that already exist keep their own value (see docs/apply.md, Private by default)")
     ap.add_argument("--retries", type=_at_least_one, default=5,
                     help="tries per op, and for the login and reads before the first op (at least 1)")
     ap.add_argument("--retry-wait", type=float, default=30.0, help="seconds after a busy server")

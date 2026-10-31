@@ -212,7 +212,11 @@ Before the merge, the winner gets a note that records it: `Merged Person I0042 (
 
 ### Private by default
 
-`--private-new` saves every object the run creates with `private` set (a source, citation, media object, note, event, place, person, family). The tag objects `--tag` makes are the one exception. Gramps Web hides private objects from a guest or any user below owner, so a tree that shows guests only a chosen set of people never shows a new object by default. Without the flag nothing is forced: an object is public unless an op says otherwise. Objects the run only changes keep their own `private` value.
+`--private-new` saves every object the run creates with `private` set: a person, family, event, place, source, citation, media object or note. The tags `--tag` makes are not marked, because a Gramps tag has no private flag. Gramps Web hides private objects from a guest login, so a tree that shows guests only a chosen set of people never shows a new object to them. Members and every role above them still see private objects. Without the flag every created object is public; no op can set `private`.
+
+The flag covers only the objects this run creates. An object that already exists keeps its own value: the objects the run changes, and the ones an earlier run made without the flag. A rerun of a list that already landed skips every op, so it makes nothing private, and `--verify` does not compare `private`. Mark those by hand in Gramps Web.
+
+Private objects are also hidden from some of the toolkit's own reading. `gwt-check` reports each new object under its `private` check (leave that out with `--ignore-check private`, [check options](check.md#options-of-check)), and it does not read private citations and notes as evidence for a parent link ([links](check.md#what-the-records-say-about-parent-links-links)) or for an act. `gwt-leads` holds back private people and ignores private events.
 
 ## Prove a list landed
 

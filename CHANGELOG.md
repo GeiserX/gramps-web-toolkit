@@ -8,7 +8,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Added
 
-- `gwt-apply --private-new` saves every object the run creates as private, so a tree that shows guests only some people never shows a new source, citation, media object or note by default. Off by default; nothing about existing change lists changes.
+- `gwt-apply --private-new` saves every object the run creates as private, so a guest login never sees a new person, family, event, place, source, citation, media object or note. Objects that already exist keep their own value. Off by default; nothing about existing change lists changes.
 
 ### Fixed
 
