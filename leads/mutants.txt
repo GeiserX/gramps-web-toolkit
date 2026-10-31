@@ -9,3 +9,34 @@ gwt_leads.py | for k in ('father_handle', 'mother_handle')) < 2: | for k in ('fa
 gwt_leads.py | row['kind'] in ('uncited', 'unsupported-link') | row['kind'] in ('uncited',) | an unsupported link is record work (a verify task), never folded into the person's search task
 gwt_leads.py | why == 'private') | why == 'living') | the held-back note counts the private records apart from the people who may be living
 gwt_leads.py | LINK_NOT_GAPS = ('the link itself is cited', | LINK_NOT_GAPS = ( | a cited link is a level gwt-check links writes, so a report with one is read, not refused as unknown
+gwt_leads.py | folded = [fold(n) for n in chain] | folded = [fold(n) for n in chain[:2]] | --archives matches every level of the event's place, so a country row matches, not just the two levels of bp
+gwt_leads.py | next((archives[n] for n in folded if n in archives), None) | next((archives[n] for n in reversed(folded) if n in archives), None) | the deepest matching level wins over a row higher up, whatever the file order
+gwt_leads.py | index.setdefault(fold(row['match']), {'archive' | index.__setitem__(fold(row['match']), {'archive' | between rows of the same name the first row in the file wins
+gwt_leads.py | text = ''.join(c for c in text if not unicodedata.combining(c)) | pass | archive names compare with accents folded, like the ledger
+gwt_leads.py | return year(ev) if (d.get('modifier') or 0) in (0, 3) else None | return year(ev) | a before, after or range year leaves online unknown, never a guess
+gwt_leads.py | if not ev or ev.get('private') is True: | if not ev: | a private event never gets an archive hint
+gwt_leads.py |         return death(T, p) |         return birth_dated(T, p) | a death gap asks for the death record, its place and its year
+gwt_leads.py | if missing or unknown: | if missing: | an unknown column in the archives file exits 2
+gwt_leads.py | bad = [f for f, spec, conv in fields if f not in URL_FIELDS or spec or conv] | bad = [] | a url placeholder other than {place} and {year} exits 2
+gwt_leads.py | if access not in ACCESS: | if False: | an access value outside online, browser, letter, unknown exits 2
+gwt_leads.py | if not m or int(m.group(2) or m.group(1)) < int(m.group(1)): | if not m: | a backwards years range exits 2
+gwt_leads.py |         if None in row: |         if False: | a row with more cells than the header exits 2, never drops the extra cell
+gwt_leads.py | access = row.get('access') or 'unknown' | access = row.get('access') | an empty or missing access reads as unknown
+gwt_leads.py |         if where: |         if True: | without --archives, or without a match, a row has no where key: json output is unchanged
+gwt_leads.py |     if wheres: |     if False: | a matched gap puts a where part in the queue note
+gwt_leads.py | if g.get('where') and g['where'] not in wheres: | if g.get('where'): | a task of several gaps on the same record lists that hint once
+gwt_leads.py | return fact_note({k: v for k, v in shown.items() if v not in (None, '')}) | return fact_note(shown) | an empty value or an unknown online is left out of the note
+gwt_leads.py | next((archives[n] for n in folded if n in archives), None) | next((r for m, r in archives.items() if m in folded), None) | a gap looks up each level of its place, never scans every row of a commune-sized file
+gwt_leads.py | delimiter='\t', quoting=csv.QUOTE_NONE) | delimiter='\t') | a quote in the archives file is a character: a stray one never swallows the rows after it
+gwt_leads.py |     if repeated: |     if False: | a column named twice in the archives header exits 2, never keeps the last cell in silence
+gwt_leads.py | unknown = [c or '(empty)' for c in header | unknown = [c for c in header | an empty header cell is named in the message, not left blank
+gwt_leads.py | open(path, encoding='utf-8-sig', newline='') | open(path, encoding='utf-8', newline='') | an archives file saved with a byte-order mark reads its first column
+gwt_leads.py | header = [h.strip() for h in reader.fieldnames or []] | header = list(reader.fieldnames or []) | spaces around a column name in the archives header do not count
+gwt_leads.py | row = {k: (v or '').strip() for k, v in row.items()} | row = {k: (v or '') for k, v in row.items()} | spaces around an archives cell do not count
+gwt_leads.py | gap.startswith(('birth-', 'link-')) | gap.startswith(('birth-',)) | an unsupported link asks for the child's birth record
+gwt_leads.py | if not fold(row['match']) or not row['archive']: | if not fold(row['match']): | an archives row with an empty archive exits 2
+gwt_leads.py | or spec or conv] | or conv] | a url placeholder with a format spec exits 2
+gwt_leads.py | if f is not None] | ] | a url with text after its last placeholder, or none at all, loads
+gwt_leads.py | quote(chain[0], safe='') | quote(chain[0]) | a slash in a place name is encoded in the url, never a path step
+gwt_leads.py | any(a <= y <= b for a, b in row['years']) | any(a < y < b for a, b in row['years']) | a years range includes its ends, so a single year is a range of one
+gwt_leads.py | m = re.fullmatch(r'(\d{1,4})(?: | m = re.match(r'(\d{1,4})(?: | a years cell with junk after the year (1850s) exits 2

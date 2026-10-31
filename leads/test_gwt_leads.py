@@ -639,6 +639,246 @@ class LeadsTest(unittest.TestCase):
         self.assertEqual(rc, 0, err)
         self.assertIn('unsupported-link', {json.loads(x)['kind'] for x in out.splitlines()})
 
+    # --- --archives: where each gap's record is kept ---
+
+    def archives_tree(self):
+        """I2's birth is in a parish four levels deep in an invented French chain; I3 died in the department;
+        I9 was born in another country."""
+        T = tree()
+        T['places'] = {
+            'par': {'handle': 'par', 'name': {'value': 'Saint-Éxemple'}, 'placeref_list': [{'ref': 'vil'}]},
+            'vil': {'handle': 'vil', 'name': {'value': 'Villexemple'}, 'placeref_list': [{'ref': 'dep'}]},
+            'dep': {'handle': 'dep', 'name': {'value': 'Exempleshire'}, 'placeref_list': [{'ref': 'fr'}]},
+            'fr': {'handle': 'fr', 'name': {'value': 'France'}},
+            'oth': {'handle': 'oth', 'name': {'value': 'Otherton'}, 'placeref_list': [{'ref': 'els'}]},
+            'els': {'handle': 'els', 'name': {'value': 'Otherland'}}}
+        T['events']['eb2'] = event('eb2', 'Birth', 1860, place='par', cites=())
+        T['events']['ed3'] = event('ed3', 'Death', 1930, place='dep', cites=())
+        T['events']['eb9'] = event('eb9', 'Birth', 1870, place='oth', cites=())
+        return T
+
+    def archives(self, *rows, header='match\tarchive\tseries\tyears\turl'):
+        path = os.path.join(self.td.name, 'archives-%d.tsv' % len(os.listdir(self.td.name)))
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join((header,) + rows) + '\n')
+        return path
+
+    def wheres(self, T, path, root=None):
+        rows = L.leads(T, root, L.DEFAULT_KINDS, 1925, archives=L.load_archives(path))[0]
+        return {(r['person'], r['gap']): r.get('where') for r in rows}
+
+    URL = 'https://archives.example.org/search?commune={place}&year={year}'
+
+    def test_archives_match_a_country_on_the_whole_place_hierarchy_not_the_two_levels_of_bp(self):
+        T = self.archives_tree()
+        self.assertEqual(L.facts(T, T['people']['fa'])['bp'], 'Saint-Éxemple, Villexemple')  # France is not in bp
+        got = self.wheres(T, self.archives('France\tAD Exemple\t3E\t1793-1902\t' + self.URL))
+        want = {'archive': 'AD Exemple', 'series': '3E', 'online': True, 'access': 'unknown',
+                'url': 'https://archives.example.org/search?commune=Saint-%C3%89xemple&year=1860'}
+        self.assertEqual(got[('I2', 'branch-end')], want)
+        self.assertEqual(got[('I2', 'birth-uncited')], want)
+        # a death gap asks for the death record: its own place and its own year (1930 is outside 1793-1902)
+        self.assertEqual(got[('I3', 'death-uncited')]['url'],
+                         'https://archives.example.org/search?commune=Exempleshire&year=1930')
+        self.assertIs(got[('I3', 'death-uncited')]['online'], False)
+        self.assertIsNone(got[('I9', 'birth-uncited')])  # another country: no hint, the gap is still listed
+        self.assertIsNone(got[('I4', 'death-place')])  # an event with no place gets no hint
+        self.assertIsNone(got[('I2', 'marriage-missing-F1')])  # a marriage gap has no event to place
+        T['events']['eb2']['private'] = True
+        self.assertIsNone(self.wheres(T, self.archives('France\tA\t\t\t'))[('I2', 'branch-end')])
+
+    def test_archives_the_deepest_level_wins_then_the_first_row(self):
+        got = self.wheres(self.archives_tree(), self.archives(
+            'France\tNational\t\t\t', 'Exempleshire\tDepartment\t\t\t', 'Villexemple\tTown hall\t\t\t',
+            'VILLEXEMPLE\tSecond town row\t\t\t'))
+        self.assertEqual(got[('I2', 'branch-end')]['archive'], 'Town hall')
+        self.assertEqual(got[('I3', 'death-uncited')]['archive'], 'Department')
+
+    def test_archives_compare_whole_names_folded_never_substrings(self):
+        T = self.archives_tree()
+        got = self.wheres(T, self.archives('SAINT EXEMPLE\tParish\t\t\t'))
+        self.assertEqual(got[('I2', 'branch-end')]['archive'], 'Parish')
+        got = self.wheres(T, self.archives('Ville\tA\t\t\t', 'Saint\tB\t\t\t', 'Exemple\tC\t\t\t', 'Franc\tD\t\t\t'))
+        self.assertEqual({k: v for k, v in got.items() if v}, {})
+
+    def test_archives_online_counts_an_exact_or_about_year_only(self):
+        T = self.archives_tree()
+        path = self.archives('France\tA\t\t1600-1650,1793-1902\t' + self.URL)
+
+        def online(**date):
+            T['events']['eb2']['date'] = dict({'dateval': [0, 0, date.pop('y', 1860), False]}, **date)
+            w = self.wheres(T, path)[('I2', 'branch-end')]
+            return w['online'], w['url'].rsplit('=', 1)[1]
+        self.assertEqual(online(), (True, '1860'))
+        self.assertEqual(online(y=1620), (True, '1620'))
+        self.assertEqual(online(y=1700), (False, '1700'))
+        self.assertEqual(online(modifier=3), (True, '1860'))  # about
+        self.assertEqual(online(quality=1), (True, '1860'))  # estimated
+        self.assertEqual(online(modifier=1), (None, ''))  # before: unknown, never a guess
+        self.assertEqual(online(modifier=2), (None, ''))  # after
+        self.assertEqual(online(modifier=4), (None, ''))  # a range
+        self.assertEqual(online(y=None), (None, ''))  # no year
+
+    def test_archives_access_column_is_optional_and_empty_reads_unknown(self):
+        T = self.archives_tree()
+        got = self.wheres(T, self.archives('France\tA\t\t\t'))
+        self.assertEqual(got[('I2', 'branch-end')]['access'], 'unknown')
+        got = self.wheres(T, self.archives('France\tA', header='match\tarchive\tseries\tyears\turl\taccess'))
+        self.assertEqual(got[('I2', 'branch-end')], {'archive': 'A', 'series': '', 'url': '', 'online': False,
+                                                     'access': 'unknown'})  # trailing cells left out read empty
+        for value in L.ACCESS + ('',):
+            got = self.wheres(T, self.archives('France\tA\t\t\t\t' + value,
+                                               header='match\tarchive\tseries\tyears\turl\taccess'))
+            self.assertEqual(got[('I2', 'branch-end')]['access'], value or 'unknown')
+
+    def test_archives_edge_cells_read_as_documented(self):
+        T = self.archives_tree()
+        T['places']['par']['name']['value'] = 'Saint/Éxemple'
+        branch_end = lambda *rows: self.wheres(T, self.archives(*rows))[('I2', 'branch-end')]  # born 1860
+        self.assertIs(branch_end('France\tA\t\t1860\t')['online'], True)  # a single year is a range of one
+        self.assertIs(branch_end('France\tA\t\t1800-1859,1861\t')['online'], False)
+        # text after the last placeholder stays, and a slash in the place name is encoded, never a path step
+        self.assertEqual(branch_end('France\tA\t\t\thttps://x.example/?q={place}&lang=en')['url'],
+                         'https://x.example/?q=Saint%2F%C3%89xemple&lang=en')
+        self.assertEqual(branch_end('France\tA\t\t\thttps://x.example/fixed')['url'], 'https://x.example/fixed')
+        for bad in ('France\t\t\t\t', 'France\tA\t\t1850s\t', 'France\tA\t\t\thttps://x.example/?q={place:>9}'):
+            with self.assertRaises(L.BadInput, msg=bad):
+                L.load_archives(self.archives(bad))
+
+    def test_a_bad_archives_file_exits_2_and_prints_nothing(self):
+        d = self.dump(self.archives_tree())
+        head = 'match\tarchive\tseries\tyears\turl'
+        bad = {'unknown column': self.archives('France\tA\t\t\t\tx', header=head + '\tnotes'),
+               'missing column': self.archives('France\tA\t\t', header='match\tarchive\tyears\turl'),
+               'unknown placeholder': self.archives('France\tA\t\t\thttps://x.example/?q={surname}'),
+               'placeholder with a format': self.archives('France\tA\t\t\thttps://x.example/?q={place!r}'),
+               'unbalanced brace': self.archives('France\tA\t\t\thttps://x.example/?q={place'),
+               'unknown access': self.archives('France\tA\t\t\t\tmaybe', header=head + '\taccess'),
+               'backwards years': self.archives('France\tA\t\t1902-1793\t'),
+               'years as words': self.archives('France\tA\t\tsoon\t'),
+               'extra cell': self.archives('France\tA\t\t\t\tx'),
+               'empty match': self.archives('\tA\t\t\t'),
+               'repeated column': self.archives('France\tA\t\t\thttps://a.example/?q={place}\t', header=head + '\turl'),
+               'not UTF-8': self.archives(),
+               'empty file': self.archives(header=''),
+               'missing file': os.path.join(self.td.name, 'nope.tsv')}
+        with open(bad['not UTF-8'], 'w', encoding='cp1252') as f:
+            f.write(head + '\nLeón\tA\t\t\t\n')
+        for why, path in bad.items():
+            for fmt in ('json', 'queue'):
+                rc, out, err = self.cli(d, '--archives', path, '--format', fmt)
+                self.assertEqual((rc, out), (2, ''), why)
+                self.assertIn(path, err, why)
+        rc, out, err = self.cli(d, '--archives', self.archives('Nowhere\tA\t\t\t'), '--format', 'json')
+        self.assertEqual(rc, 0, err)  # no row matches: not an error
+        self.assertNotIn('"where"', out)
+
+    def test_archives_add_a_where_part_to_the_queue_note_escaped_like_facts(self):
+        T = self.archives_tree()
+        T['people']['mo']['event_ref_list'][0] = {'ref': 'eb2b', 'role': 'Primary'}
+        T['events']['eb2b'] = event('eb2b', 'Birth', 1865, place='par', cites=())
+        T['events']['ed3']['place'] = 'oth'
+        tasks = {(t['person'], t['kind']): t for t in (L.queue_task(g) for g in L.group_by_person(
+            L.leads(T, 'I1', L.DEFAULT_KINDS, 1925, archives=L.load_archives(self.archives(
+                'France\tAD Exemple\t3E 412\t1793-1902\t' + self.URL, 'Otherland\tAD_Other\t\t\t'
+            )))[0]))}
+        note = tasks[('I2', 'search')]['note']
+        self.assertEqual(note.split(' | ')[1],
+                         'where: access=unknown archive=AD_Exemple online=true series=3E_412 '
+                         'url=https://archives.example.org/search?commune%3DSaint-%25C3%2589xemple&year%3D1860')
+        self.assertEqual(len(note.split(' | ')), 3)
+        # two gaps on the same record give that record's hint once
+        group = next(g for g in L.group_by_person(L.leads(T, 'I1', L.DEFAULT_KINDS, 1925, archives=L.load_archives(
+            self.archives('France\tAD Exemple\t\t\t')))[0]) if g['person'] == 'I2' and g['task'] == 'search')
+        group['gaps'].append(dict(group['gaps'][0], gap='birth-date', what='birth has no date'))
+        self.assertEqual(L.queue_task(group)['note'].split(' | ')[1], 'where: access=unknown archive=AD_Exemple online=false')
+        # one task of two gaps on two records: both hints, each once, in gap order
+        self.assertEqual(tasks[('I3', 'verify')]['note'].split(' | ')[1],
+                         'where: access=unknown archive=AD_Exemple online=true series=3E_412 '
+                         'url=https://archives.example.org/search?commune%3DSaint-%25C3%2589xemple&year%3D1865; '
+                         'access=unknown archive=AD%5FOther online=false')
+        self.assertTrue(tasks[('I4', 'search')]['note'].startswith('facts: by=1840 | branch-end: '))
+
+    def test_archives_bad_file_messages_name_the_problem(self):
+        d = self.dump(self.archives_tree())
+        head = 'match\tarchive\tseries\tyears\turl'
+        rc, _, err = self.cli(d, '--archives', self.archives('France\tA\t\t\t', header=head + '\turl'))
+        self.assertEqual(rc, 2)
+        self.assertIn('column url appears more than once', err)
+        rc, _, err = self.cli(d, '--archives', self.archives('France\tA\t\t\t', header=head + '\t'))
+        self.assertIn('unknown column (empty)', err)
+        latin = self.archives()
+        with open(latin, 'w', encoding='cp1252') as f:
+            f.write(head + '\nLeón\tA\t\t\t\n')
+        rc, _, err = self.cli(d, '--archives', latin)
+        self.assertEqual(rc, 2)
+        self.assertIn('not UTF-8', err)
+
+    def test_archives_are_read_as_plain_tab_text_so_a_quote_never_swallows_rows(self):
+        got = self.wheres(self.archives_tree(), self.archives(
+            'Villexemple\t"Town hall\t\t\t', 'Exempleshire\tDepartment\t\t\t', 'Otherland\t"Big" archive\t\t\t'))
+        self.assertEqual(got[('I2', 'branch-end')]['archive'], '"Town hall')
+        self.assertEqual(got[('I3', 'death-uncited')]['archive'], 'Department')
+        self.assertEqual(got[('I9', 'birth-uncited')]['archive'], '"Big" archive')
+
+    def test_archives_read_a_spreadsheet_export_with_a_bom_and_padded_cells(self):
+        path = self.archives()
+        with open(path, 'w', encoding='utf-8-sig') as f:
+            f.write(' match \tarchive\tseries\tyears\turl\n Villexemple \t Town hall \t\t 1850-1900 \t\n')
+        got = self.wheres(self.archives_tree(), path)
+        self.assertEqual(got[('I2', 'branch-end')], {'archive': 'Town hall', 'series': '', 'url': '',
+                                                     'online': True, 'access': 'unknown'})
+
+    def test_archives_an_unsupported_link_asks_for_the_childs_birth_record(self):
+        T = self.archives_tree()
+        T['events']['eb1']['place'] = 'vil'
+        links = {'rows': [{'family': 'F1', 'child': 'I1', 'level': 'cited, names neither', 'flags': []}]}
+        rows, _ = L.leads(T, None, ('unsupported-link',), 1925, hold=False, links=links,
+                          archives=L.load_archives(self.archives('Villexemple\tTown hall\t\t1850-1900\t')))
+        self.assertEqual([(r['gap'], r['where']['archive'], r['where']['online']) for r in rows],
+                         [('link-F1', 'Town hall', True)])
+
+    def test_archives_look_up_each_place_level_never_scan_every_row(self):
+        """A whole commune table must stay fast: one dict lookup per level of the place, not one pass over the
+        rows per gap."""
+        class NoScan(dict):
+            def __iter__(self):
+                raise AssertionError('scanned every row')
+            values = items = keys = __iter__
+        index = L.load_archives(self.archives('France\tNational\t\t\t', 'Villexemple\tTown hall\t\t\t'))
+        rows = L.leads(self.archives_tree(), None, L.DEFAULT_KINDS, 1925, archives=NoScan(index))[0]
+        got = {(r['person'], r['gap']): r.get('where', {}).get('archive') for r in rows}
+        self.assertEqual(got[('I2', 'branch-end')], 'Town hall')
+        self.assertEqual(got[('I3', 'death-uncited')], 'National')
+
+    @unittest.skipUnless(os.path.isfile(os.path.join(HERE, '..', 'examples', 'archives.tsv')), 'no examples folder')
+    def test_the_shipped_example_archives_file_loads_with_one_row_per_access_value(self):
+        rows = L.load_archives(os.path.join(HERE, '..', 'examples', 'archives.tsv'))
+        self.assertEqual({r['access'] for r in rows.values()}, set(L.ACCESS))
+
+    def test_without_archives_json_and_queue_are_byte_identical(self):
+        d = self.dump(self.archives_tree())
+        matching = self.archives('France\tAD Exemple\t3E\t1793-1902\t' + self.URL, 'Otherland\tB\t\t\t')
+        for fmt in ('json', 'queue'):
+            base = ['--root', 'I1', '--format', fmt, '--include-living', d]
+            rc, plain, err = self.cli(*base)
+            self.assertEqual(rc, 0, err)
+            self.assertNotIn('where', plain)
+            self.assertEqual(self.cli(*base, '--archives', self.archives('Nowhere\tA\t\t\t'))[1], plain)
+            rc, hinted, err = self.cli(*base, '--archives', matching)
+            self.assertEqual(rc, 0, err)
+            self.assertIn('where', hinted)
+            stripped = []
+            for line in hinted.splitlines():
+                obj = json.loads(line)
+                obj.pop('where', None)
+                obj['note'] = ' | '.join(x for x in obj.get('note', '').split(' | ') if not x.startswith('where: ')) \
+                    if 'note' in obj else obj.pop('note', None)
+                if obj['note'] is None:
+                    del obj['note']
+                stripped.append(json.dumps(obj, ensure_ascii=False) + '\n')
+            self.assertEqual(''.join(stripped), plain)  # the flag only adds the hint, it changes nothing else
+
 
 if __name__ == '__main__':
     unittest.main()

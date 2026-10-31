@@ -7,6 +7,7 @@ Everything here is invented: the people, the places, the parish books and the tr
 | `tree.json.gz` | A `gwt-apply` snapshot of a 30-person tree: three generations around Lucía Ortega Sanz (`I0001`), built on the tree `gwt check selftest` plants its errors in |
 | `changes.jsonl` | Nine ops that add a wife and a son for Tomás Ortega Sanz, with their marriage, its source, a citation and a note. It also adds Tomás again as a new person, although the tree already has him as `I0008`. That is the mistake the dry run must refuse |
 | `changes-fixed.jsonl` | The same list with that op gone and `I0008` used instead |
+| `archives.tsv` | An invented `gwt-leads --archives` file, one row per `access` value. Against `tree.json.gz` only the Villaejemplo row ever matches: it is deeper than the Provincia Imaginaria row, and the French rows show the format for places that tree does not have |
 | `demo.sh` | Runs the README quick start and checks every exit code |
 | `make_example.py` | Writes `tree.json.gz` again. You never need to: the file is committed |
 

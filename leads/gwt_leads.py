@@ -5,8 +5,8 @@ Reads an offline dump (the JSON `gwt-check dump` writes, or a `gwt-apply` snapsh
 touches the tree. Exit 2 on a file that is not a dump, never a silent empty list. Prints the gaps highest priority first: direct ancestors of --root count
 100 minus a point per generation (never below 40), everyone else 10.
 
-  gwt-leads [--root I0001] [--kinds branch-end,missing-vital,uncited] [--links FILE] [--limit N]
-            [--format tsv|json|queue] DUMP
+  gwt-leads [--root I0001] [--kinds branch-end,missing-vital,uncited] [--links FILE] [--archives FILE]
+            [--limit N] [--format tsv|json|queue] DUMP
 
 Gaps:
   branch-end     a person with no birth parents recorded: where a line stops
@@ -20,9 +20,11 @@ Only the person's own events count: refs with role Primary, the birth and death 
 People who may be living (no death, burial or cremation, and no date of theirs or of a descendant that proves a
 birth in --living-after or earlier) and people or events marked private are held back from every format; their Gramps ids go to stderr.
 
-`--format queue` prints one JSON line per task for `gwt-queue add --jsonl - --dedupe`. Standard library only.
+`--format queue` prints one JSON line per task for `gwt-queue add --jsonl - --dedupe`. `--archives FILE` (a TSV
+of place -> archive rows) adds where each gap's record is kept and whether that year is online; it never fetches
+anything. Standard library only.
 """
-import argparse, collections, datetime, gzip, json, re, sys
+import argparse, collections, csv, datetime, gzip, json, re, string, sys, unicodedata, urllib.parse
 
 KINDS = ('branch-end', 'missing-vital', 'uncited', 'unsupported-link')
 DEFAULT_KINDS = ('branch-end', 'missing-vital', 'uncited')  # unsupported-link needs --links, so it is asked for
@@ -38,6 +40,10 @@ FACT_KEYS = {'Birth': 'b', 'Baptism': 'bap', 'Christening': 'bap', 'Death': 'd',
 # Gramps date modifiers: 0 none, 1 before, 2 after, 3 about, 4 range, 5 span, 6 text only, 7 from, 8 to
 MODIFIER_MARK = {1: '<', 2: '>', 3: '~', 4: '~', 5: '~', 7: '>', 8: '<'}
 ABOUT_SLACK = 10  # an "about" or estimated year may be this many years early, for the living test
+ARCHIVE_COLUMNS = ('match', 'archive', 'series', 'years', 'url')  # --archives: every one must be in the header
+ARCHIVE_OPTIONAL = ('access',)
+ACCESS = ('online', 'browser', 'letter', 'unknown')  # an empty access cell reads as unknown
+URL_FIELDS = ('place', 'year')
 
 
 class BadInput(Exception):
@@ -148,11 +154,11 @@ def date_gap(ev):
     return 'has date text without an interpretable year (%s)' % text if text else 'has no date'
 
 
-def place_name(T, handle, levels=2):
-    """The place and the one it sits in, 'Parish, Town', from the dump's place hierarchy."""
+def place_chain(T, handle):
+    """Every level of a place, the place itself first: ['Parish', 'Town', 'Province', 'Country']."""
     names = []
     seen = set()
-    while handle and handle not in seen and len(names) < levels:
+    while handle and handle not in seen:
         seen.add(handle)
         pl = T.get('places', {}).get(handle) or {}
         n = pl.get('name')
@@ -161,7 +167,107 @@ def place_name(T, handle, levels=2):
             names.append(name)
         refs = pl.get('placeref_list') or []
         handle = refs[0].get('ref') if refs and isinstance(refs[0], dict) else None
-    return ', '.join(names)
+    return names
+
+
+def place_name(T, handle, levels=2):
+    """The place and the one it sits in, 'Parish, Town', from the dump's place hierarchy."""
+    return ', '.join(place_chain(T, handle)[:levels])
+
+
+def fold(text):
+    """Names compare folded the way gwt-ledger's normalize folds them: case, accents and punctuation do not count,
+    «Saint-Éxemple» == «saint exemple». A copy of that rule until the shared core lands."""
+    text = unicodedata.normalize('NFKD', (text or '').casefold())
+    text = ''.join(c for c in text if not unicodedata.combining(c))
+    return ' '.join(re.findall(r'[^\W_]+', text))
+
+
+def parse_years(text):
+    """'1600-1792,1850' -> [(1600, 1792), (1850, 1850)]; '' -> []. Anything else is BadInput."""
+    out = []
+    for part in (x.strip() for x in text.split(',')) if text.strip() else ():
+        m = re.fullmatch(r'(\d{1,4})(?:\s*-\s*(\d{1,4}))?', part)
+        if not m or int(m.group(2) or m.group(1)) < int(m.group(1)):
+            raise BadInput('years %r: write ranges like 1793-1902, comma-separated' % text)
+        out.append((int(m.group(1)), int(m.group(2) or m.group(1))))
+    return out
+
+
+def load_archives(path):
+    """An --archives TSV as {folded match: row}, the first row of a name kept: a header with match, archive, series,
+    years, url (access optional), then one row per place name. Read as plain tab-separated text, like the ledger and
+    the queue: a quote is a character, never a field delimiter. A missing, unknown or repeated column, a bad years
+    cell, an access value outside ACCESS or a url placeholder other than {place} and {year} is BadInput, never a row
+    skipped in silence."""
+    try:
+        with open(path, encoding='utf-8-sig', newline='') as fh:
+            reader = csv.DictReader(fh, delimiter='\t', quoting=csv.QUOTE_NONE)
+            header = [h.strip() for h in reader.fieldnames or []]
+            reader.fieldnames = header
+            rows = list(reader)
+    except UnicodeDecodeError:
+        raise BadInput('%s: the file is not UTF-8; save it as UTF-8 text, tab-separated' % path)
+    except (OSError, csv.Error) as exc:
+        raise BadInput('%s: %s' % (path, exc))
+    missing = [c for c in ARCHIVE_COLUMNS if c not in header]
+    unknown = [c or '(empty)' for c in header if c not in ARCHIVE_COLUMNS + ARCHIVE_OPTIONAL]
+    if missing or unknown:
+        raise BadInput('%s: %s; the columns are %s, plus %s if you want it' % (
+            path, '; '.join(x for x in ('missing column %s' % ', '.join(missing) if missing else '',
+                                         'unknown column %s' % ', '.join(unknown) if unknown else '') if x),
+            ', '.join(ARCHIVE_COLUMNS), ', '.join(ARCHIVE_OPTIONAL)))
+    repeated = sorted({c for c in header if header.count(c) > 1})
+    if repeated:
+        raise BadInput('%s: column %s appears more than once' % (path, ', '.join(repeated)))
+    index = {}
+    for n, row in enumerate(rows, 2):
+        where = '%s line %d' % (path, n)
+        if None in row:
+            raise BadInput('%s: the row has more cells than the header' % where)
+        row = {k: (v or '').strip() for k, v in row.items()}  # trailing empty cells may be left out
+        if not fold(row['match']) or not row['archive']:
+            raise BadInput('%s: match and archive must not be empty' % where)
+        access = row.get('access') or 'unknown'
+        if access not in ACCESS:
+            raise BadInput('%s: access %r is not one of %s' % (where, access, ', '.join(ACCESS)))
+        try:
+            fields = [(f, spec, conv) for _, f, spec, conv in string.Formatter().parse(row['url']) if f is not None]
+        except ValueError as exc:
+            raise BadInput('%s: url: %s' % (where, exc))
+        bad = [f for f, spec, conv in fields if f not in URL_FIELDS or spec or conv]
+        if bad:
+            raise BadInput('%s: url placeholder {%s} unknown; only {place} and {year}' % (where, bad[0]))
+        try:
+            years = parse_years(row['years'])
+        except BadInput as exc:
+            raise BadInput('%s: %s' % (where, exc))
+        index.setdefault(fold(row['match']), {'archive': row['archive'], 'series': row['series'], 'years': years,
+                                              'url': row['url'], 'access': access})  # the first row of a name wins
+    return index
+
+
+def exact_year(ev):
+    """The year to test against online ranges: a plain or "about" (or estimated) year; None for before, after,
+    a range or span, text only, or no year."""
+    d = ev.get('date') or {}
+    return year(ev) if (d.get('modifier') or 0) in (0, 3) else None
+
+
+def where_of(T, ev, archives):
+    """The archive row for an event's place (archives as load_archives returns it): the row whose match is the
+    deepest level of the place hierarchy, the first such row in the file on a tie. None when no row matches, the event has no place or is private."""
+    if not ev or ev.get('private') is True:
+        return None
+    chain = place_chain(T, ev.get('place'))
+    folded = [fold(n) for n in chain]
+    row = next((archives[n] for n in folded if n in archives), None)  # one lookup per level, the deepest first
+    if row is None:
+        return None
+    y = exact_year(ev)
+    url = row['url'].format(place=urllib.parse.quote(chain[0], safe=''), year=y or '')  # fields checked on load
+    return {'archive': row['archive'], 'series': row['series'], 'url': url,
+            'online': None if y is None else any(a <= y <= b for a, b in row['years']), 'access': row['access']}
 
 
 def label(p):
@@ -303,9 +409,19 @@ def facts(T, p):
     return out
 
 
-def leads(T, root_gid=None, kinds=DEFAULT_KINDS, living_after=None, hold=True, links=None):
+def gap_event(T, p, gap):
+    """The event whose record a gap asks for: the birth (or the baptism that dates it) for a branch end, a birth
+    gap or an unsupported link, the death (or burial) for a death gap, None for a marriage gap."""
+    if gap == 'branch-end' or gap.startswith(('birth-', 'link-')):
+        return birth_dated(T, p)
+    if gap.startswith('death-'):
+        return death(T, p)
+    return None
+
+
+def leads(T, root_gid=None, kinds=DEFAULT_KINDS, living_after=None, hold=True, links=None, archives=None):
     """(rows, held): one row per gap, highest priority first, and {gramps_id: why} for the people held back
-    (none when hold is False)."""
+    (none when hold is False). With archives (load_archives), a gap whose place matches a row gets 'where'."""
     living_after = default_living_after() if living_after is None else living_after
     gen = {}
     if root_gid:
@@ -321,6 +437,9 @@ def leads(T, root_gid=None, kinds=DEFAULT_KINDS, living_after=None, hold=True, l
         prio = max(40, 100 - g) if g is not None else 10
         out.append({'person': p.get('gramps_id', p['handle']), 'label': label(p), 'kind': kind, 'gap': gap,
                     'what': what, 'priority': prio, 'generation': g, 'weak': weak_name(p), 'facts': facts(T, p)})
+        where = where_of(T, gap_event(T, p, gap), archives) if archives else None
+        if where:
+            out[-1]['where'] = where
 
     for p in T['people'].values():
         why = held_back(T, p, living_after, old) if hold else ''
@@ -422,6 +541,12 @@ def fact_note(f):
     return ' '.join('%s=%s' % (k, esc(v)) for k, v in sorted(f.items()))
 
 
+def where_note(w):
+    """A where object in fact_note's escaping; online as true or false, and empty values left out."""
+    shown = {k: ('true' if v else 'false') if isinstance(v, bool) else v for k, v in w.items()}
+    return fact_note({k: v for k, v in shown.items() if v not in (None, '')})
+
+
 def group_by_person(rows):
     """One task per person and task kind: the gaps of one person are one search, not one search per gap.
     Priority is per person, so every row of a group carries the same one."""
@@ -438,6 +563,12 @@ def queue_task(r, source=''):
     gaps = r.get('gaps') or [r]
     task = task_of(r)
     note = '; '.join('%s: %s' % (g['gap'], g['what']) for g in gaps)
+    wheres = []
+    for g in gaps:
+        if g.get('where') and g['where'] not in wheres:
+            wheres.append(g['where'])
+    if wheres:
+        note = 'where: %s | %s' % ('; '.join(where_note(w) for w in wheres), note)
     if r.get('facts'):
         note = 'facts: %s | %s' % (fact_note(r['facts']), note)
     dedupe_key = ':'.join([r['person'].lower(), task, source.lower()] + ([] if 'gaps' in r else [r['gap']]))
@@ -456,6 +587,9 @@ def main(argv=None):
     p.add_argument('--kinds', default=','.join(DEFAULT_KINDS))
     p.add_argument('--links', metavar='FILE',
                    help='the JSON `gwt-check links --json` wrote from this same dump: adds the unsupported-link kind')
+    p.add_argument('--archives', metavar='FILE',
+                   help='TSV with match, archive, series, years, url (and optionally access): each gap whose place '
+                        'matches a row gets where its record is kept and whether its year is online')
     p.add_argument('--limit', type=int, default=0, help='keep the N highest-priority rows (tasks, in queue format)')
     p.add_argument('--format', choices=('queue', 'tsv', 'json'), default='tsv')
     p.add_argument('--living-after', type=int, default=default_living_after(), metavar='YEAR',
@@ -493,7 +627,9 @@ def main(argv=None):
             print('gwt-leads: %s: %s' % (args.links, exc), file=sys.stderr)
             return 2
     try:
-        rows, held = leads(load(args.dump), args.root, kinds, args.living_after, hold=not args.include_living, links=links)
+        archives = load_archives(args.archives) if args.archives else None
+        rows, held = leads(load(args.dump), args.root, kinds, args.living_after, hold=not args.include_living,
+                           links=links, archives=archives)
     except BadInput as exc:
         print('gwt-leads: %s' % exc, file=sys.stderr)
         return 2
