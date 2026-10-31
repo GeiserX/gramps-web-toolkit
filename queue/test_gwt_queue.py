@@ -66,7 +66,7 @@ class QueueTest(unittest.TestCase):
         usage = next(l for l in Q.__doc__.splitlines() if l.strip().startswith('gwt-queue list'))
         self.assertTrue(flags)
         for flag in sorted(flags):
-            self.assertIn('[' + flag + ' ', usage)  # the usage block at the top of --help names it too
+            self.assertIn('[' + flag + ' ', usage)  # the usage block in the module docstring names it too
 
     def test_ids_increase(self):
         self.add(); self.add(person='Jose Ruiz', query='jose ruiz 1880')
