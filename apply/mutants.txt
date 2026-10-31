@@ -112,3 +112,5 @@ gwt_apply/ops.py | if (row["handle"] != source["handle"] and (row.get("title") o
 gwt_apply/ops.py | res.noop = res.status == "skip" and self._noop | res.noop = res.status == "skip" | a skip of what this list made by key is never called a no-op
 gwt_apply/ops.py | self._noop = True | pass | an update or tag that found the tree as it asks is a no-op skip
 gwt_apply/cli.py | if r.status_code != 201: | if False: | a server backup the server did not store stops the run before it writes
+gwt_apply/cli.py | bad = _backup_problem(info) | bad = None | a 201 that names no restorable backup stops the run before it writes
+gwt_apply/cli.py | if 400 <= t.status_code < 500: | if False: | a backup task the server will not show stops the wait at once

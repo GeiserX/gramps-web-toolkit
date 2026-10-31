@@ -321,6 +321,25 @@ def _backup_id_of_task(t: dict):
     return None
 
 
+BACKUP_POLLS = 300  # 2 s apart: a big tree's backup is a whole-tree export, 10 minutes before the run gives up
+BACKUP_REFUSED = {
+    403: "creating one needs an owner or admin login",
+    409: "the server could not make a backup of this tree",
+    422: "the server could not make a backup of this tree (for example a dangling reference)",
+    429: "the server's backup limit for this tree is used up (by default 10 a day)",
+    501: "the server has no backup directory set (BACKUP_DIR)",
+}
+
+
+def _backup_problem(b) -> str | None:
+    """Why a backup the server named does not count: it needs an id and a size, and must not say it is unrestorable."""
+    if not isinstance(b, dict) or not b.get("id"):
+        return "the server named no backup id"
+    if b.get("restorable") is False or not b.get("size"):
+        return f"the backup {b['id']} is not restorable or empty"
+    return None
+
+
 def _server_backup(client: Client, args, lock) -> str | None:
     """Ask the server to store a backup of the tree. None when it did, else why not. It only creates: a restore is
     never called from here. The server deletes its oldest backup beyond the number it keeps per tree. A server with a
@@ -329,12 +348,11 @@ def _server_backup(client: Client, args, lock) -> str | None:
     def get(path):
         return _retried("server backup", lambda: client._request("GET", path), client, args, lock)
 
-    def make():
-        return client._request("POST", "/backups/", write=True)
     try:
-        r = make()  # never repeated: a second POST could store a second backup
+        r = client._request("POST", "/backups/", write=True)  # never repeated: a second POST could store a second backup
     except Retryable as exc:
-        return f"the server backup request failed ({exc}); nothing was written"
+        why = BACKUP_REFUSED.get(exc.status)
+        return f"the server backup request failed ({exc}{'; ' + why if why else ''})"
     if r.status_code == 202:
         try:
             tid = (r.json().get("task") or {}).get("id")
@@ -343,15 +361,18 @@ def _server_backup(client: Client, args, lock) -> str | None:
         if not tid:
             return "the server answered HTTP 202 without a task id, so the backup cannot be confirmed"
         info = None
-        for _ in range(30):
+        for _ in range(BACKUP_POLLS):
             t = get(f"/tasks/{tid}")
+            if 400 <= t.status_code < 500:
+                return f"the server's backup task {tid} cannot be read (HTTP {t.status_code}); it may still store a backup"
             task = t.json() if t.status_code == 200 else {}
             if task.get("state") == "FAILURE" or task.get("status") in ("failed", "lost"):
                 return f"the server's backup task {tid} failed"
             if task.get("state") == "SUCCESS" or task.get("status") == "succeeded":
                 bid = _backup_id_of_task(task)
                 lst = get("/backups/")
-                found = [b for b in (lst.json() if lst.status_code == 200 else []) if b.get("id") == bid]
+                items = lst.json() if lst.status_code == 200 else []
+                found = [b for b in items if isinstance(b, dict) and b.get("id") == bid] if isinstance(items, list) else []
                 if not bid or not found:
                     return f"the backup task {tid} succeeded but its backup is not in the server's list"
                 if found[0].get("restorable") is not True or not found[0].get("size"):
@@ -360,14 +381,19 @@ def _server_backup(client: Client, args, lock) -> str | None:
                 break
             time.sleep(2)
         if info is None:
-            return f"the server's backup task {tid} did not finish in 60 s"
+            return (f"the server's backup task {tid} did not finish in {BACKUP_POLLS * 2 // 60} min; the server may still "
+                    "store the backup and drop its oldest one")
     elif r.status_code != 201:
-        return f"the server did not store a backup (HTTP {r.status_code}; creating one needs an owner or admin login)"
+        why = BACKUP_REFUSED.get(r.status_code) or f"the server said: {r.text[:200]}"
+        return f"the server did not store a backup (HTTP {r.status_code}; {why})"
     else:
         try:
             info = r.json()
         except ValueError:
             info = {}
+        bad = _backup_problem(info)
+        if bad:
+            return f"the server answered HTTP 201 but {bad}"
     client.log(event="server-backup", id=info.get("id"), size=info.get("size"))
     print(f"server backup stored: {info.get('id')}")
     return None

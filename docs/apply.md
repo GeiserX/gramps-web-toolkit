@@ -25,7 +25,7 @@ On a multi-tree server, the tree comes from the user: the login (`POST /api/toke
 
 Every request carries the User-Agent `gramps-web-toolkit/<version> (gwt-apply; +https://github.com/GeiserX/gramps-web-toolkit)`, so a server admin can tell the toolkit apart in the logs.
 
-Other flags: `--verify` and `--json FILE` ([Prove a list landed](#prove-a-list-landed)), `--log PATH`, `--retries N` (default 5, at least 1), `--retry-wait SECONDS` (default 30), `--snapshot FILE`, `--save-snapshot FILE` and `--since OLD` ([Snapshots](#snapshots)), `--tag NAME` ([Tags](#tags)), `--break-lock` (below).
+Other flags: `--verify` and `--json FILE` ([Prove a list landed](#prove-a-list-landed)), `--log PATH`, `--retries N` (default 5, at least 1), `--retry-wait SECONDS` (default 30), `--snapshot FILE`, `--save-snapshot FILE` and `--since OLD` ([Snapshots](#snapshots)), `--tag NAME` ([Tags](#tags)), `--server-backup` ([A backup stored by the server](#a-backup-stored-by-the-server-server-backup)), `--break-lock` (below).
 
 Every run gets a run id, `<date>-<time>-<6 hex>`. The first line of output names it and the log, before the login, so a run whose login fails still says which run it was. The log path carries `(created once logged in)`: the file appears only after the login. See [The log](#the-log).
 
@@ -53,7 +53,7 @@ What it holds is one JSON object per line. Every line has `ts` (UTC) and `dry_ru
 
 - `start`: the run id, the toolkit version, the arguments, the change list's path and the sha256 of its bytes, the tree the login landed in, and the `--snapshot` file if any. A `--revert` names the log it undoes as `list` and the pre-run copy as `pre`.
 - `end`: the exit code, the count of each status (for a revert: undone, changed since the run, manual, problems), and the ops not run. `counts` is `null` when the run stopped before any op; `error` says why when an API error, a held lock or a crash stopped it, and then `exit` is `null` for a crash. A run stopped by SIGTERM or SIGHUP ends with `exit` 1.
-- `refused`: a run that stopped before its first write says why, with `reason` (`tree` for a login that landed in another tree than `GWT_TREE`, `preflight` for likely duplicates, `snapshot-plan` when the plan on the snapshot does not go through or the tree changed since, `snapshot-tree`, or `pre` for a revert's pre-run copy) and `problems`, the lines it printed.
+- `refused`: a run that stopped before its first write says why, with `reason` (`tree` for a login that landed in another tree than `GWT_TREE`, `preflight` for likely duplicates, `snapshot-plan` when the plan on the snapshot does not go through or the tree changed since, `snapshot-tree`, `server-backup` when `--server-backup` did not get a stored, restorable backup, or `pre` for a revert's pre-run copy) and `problems`, the lines it printed.
 - Every API call in between: the op's `key` and `ruling`, `method`, `path`, `status`, and the body of every write. `status: null` means a real request whose answer was lost: the server may have done it. A dry run's writes carry `planned: true` and no `status`.
 - After a create, its line carries `gramps_id`, the Gramps ID the server gave the new object (from the server's answer).
 
@@ -381,7 +381,11 @@ gwt-apply changes.jsonl --apply --server-backup
 
 With `--apply`, `--server-backup` asks the Gramps Web server to store a backup of the tree (`POST /api/backups/`) after the tree lock is taken and the plan has passed its checks, and before the first write. If the server does not store it, nothing is written and the run exits 1. The backup id is printed and logged as a `server-backup` event. It only creates a backup: `gwt-apply` never calls the server's restore, and a restore stays a decision for a person.
 
-Two limits to know. The server keeps a fixed number of backups per tree and deletes the oldest when it stores a new one. Creating a backup needs an owner or admin login; a login with a lower role gets HTTP 403 and the run stops before writing, so use the flag only with a login that can store one. A dry run needs no backup, so `--server-backup` without `--apply` is refused.
+What the server allows decides how often to use it. Gramps Web API's defaults: backups are off until the server sets a backup directory (`BACKUP_DIR`; without it the answer is HTTP 501), a tree gets at most 10 backups a day (`RATE_LIMIT_BACKUP`, HTTP 429 after that), and the server keeps the newest 5 per tree (`BACKUP_KEEP`) and deletes older ones, a backup made by hand included. So use `--server-backup` on the first run of a session, not on every block, and keep an export for anything older. Creating a backup needs an owner or admin login; a lower role gets HTTP 403. Every refusal names its status and stops the run before it writes. A server with a task queue answers 202; the run waits up to 10 minutes for the task, and if it gives up the server may still store that backup.
+
+The backup is taken while the tree lock is held, so it holds the lock note (`GWTLOCK`). A restore brings that note back; within 15 minutes of the backup the next apply then needs `--break-lock`. A `--revert` ignores the backup request in the log: it is not a change to the tree.
+
+A dry run needs no backup, so `--server-backup` without `--apply` is refused.
 
 ## Undo a run
 
