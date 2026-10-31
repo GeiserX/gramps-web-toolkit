@@ -30,3 +30,5 @@ gwt_insee.py | return cp850, 'cp850' | return latin1, 'latin-1' | a non-UTF-8 IN
 gwt_insee.py | if _plausible(latin1) > _plausible(cp850): | if False: | a Latin-1 INSEE line (0xF1 ñ, 0xB0 °) is read as Latin-1, not CP850
 gwt_insee.py | return y or None | return y | an INSEE year 0000 is no year, never year 0
 gwt_read.py | return cmd_insee_search(a)      # offline: no gate, no cache, no fetcher | pass | gwt-read insee never builds a gate, a cache or a fetcher
+gwt_insee.py | if len(line) > MAX_LENGTH: | if False: | two INSEE records glued on one line, or a CR-only file, stop the run instead of losing every record after the first
+gwt_insee.py | line = line.removeprefix('\ufeff') | pass | a UTF-8 byte order mark does not shift the first INSEE line

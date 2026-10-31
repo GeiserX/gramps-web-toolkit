@@ -23,7 +23,9 @@ the country and the act number stay as extra fields gwt-rank does not score. Dat
 files hold calendar dates that never existed (29 February of a common year).
 
 Every line is checked, matched or not. A line whose columns do not line up is an error naming the file and line,
-never skipped: a date that is not eight digits, a sex that is not 1 or 2, a line too short to hold the death date.
+never skipped: a date that is not eight digits, a sex that is not 1 or 2, a line too short to hold the death date
+or longer than two records (two records glued, or a file whose lines end in CR alone). A UTF-8 byte order mark at the
+start of a file is dropped.
 Some values break INSEE's own rules with the columns still in place: a month 13, a day 60, an 80-character name with no
 `*` (one line each in the 1991, 1996 and 2012 files). Those are what INSEE wrote, so the line is kept: the year is the
 date's first four digits, a name with no `*` is the surname whole, and the candidate lists the field under
@@ -47,6 +49,7 @@ SOURCE = 'insee'
 NAME, SEX, BIRTH_DATE, BIRTH_CODE, BIRTH_TOWN, BIRTH_COUNTRY, DEATH_DATE, DEATH_CODE, ACT = (
     (0, 80), (80, 81), (81, 89), (89, 94), (94, 124), (124, 154), (154, 162), (162, 167), (167, 176))
 MIN_LENGTH = DEATH_DATE[1]      # a line must reach the end of the death date; the code and act may be cut short
+MAX_LENGTH = 2 * ACT[1]         # real lines are 198 characters; two records glued, or a CR-only file, are far longer
 SEXES = {'1': 'M', '2': 'F'}
 _DATE = re.compile(r'^(\d{4})(\d{2})(\d{2})$')
 
@@ -95,6 +98,9 @@ def parse_line(line):
     """One line as a dict of its fields, or LayoutError (with the reason) when it is not in the layout."""
     if len(line) < MIN_LENGTH:
         raise LayoutError('line is %d characters, the layout needs at least %d' % (len(line), MIN_LENGTH))
+    if len(line) > MAX_LENGTH:
+        raise LayoutError('line is %d characters, the layout holds at most %d (two records on one line, or a file '
+                          'whose lines end in CR alone)' % (len(line), MAX_LENGTH))
     name = _field(line, NAME)
     sex = line[SEX[0]:SEX[1]]
     if sex not in SEXES:
@@ -170,6 +176,8 @@ def read_files(paths, surnames):
             for lineno, raw in enumerate(f, 1):
                 h.update(raw)
                 line, enc = decode(raw)
+                if lineno == 1:
+                    line = line.removeprefix('\ufeff')     # a UTF-8 byte order mark would shift every column
                 if not line.strip():
                     continue
                 lines += 1

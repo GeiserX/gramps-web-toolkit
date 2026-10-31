@@ -157,6 +157,12 @@ class Candidates(Run):
             env = json.load(f)
         self.assertEqual([x['file'] for x in env['files']], ['insee-deces-1985.txt', 'deces-1986.txt'])
 
+    def test_a_utf8_byte_order_mark_does_not_shift_the_first_line(self):
+        p = self.write('bom.txt', raw=b'\xef\xbb\xbf' + (line() + '\n').encode('ascii'))
+        code, lines, out = self.run_insee([p], ['Loriot'])
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.cands(lines)[0]['sex'], 'M')
+
     def test_blank_lines_are_not_rows(self):
         p = self.write('b.txt', raw=(line() + '\r\n\r\n' + line(name='LORIOT*ANNE/', sex='2') + '\r\n').encode('ascii'))
         code, lines, _ = self.run_insee([p], ['Loriot'])
@@ -206,6 +212,17 @@ class Malformed(Run):
 
     def test_a_shifted_line_is_caught(self):
         self.assert_stops(' ' + line()[:-1], "sex ' ' is not 1 or 2")
+
+    def test_two_records_glued_on_one_line(self):
+        self.assert_stops(line(name='LORIOT*PAUL/') + line(name='ORTEGA*LUIS/'), 'line is 396 characters')
+
+    def test_a_cr_only_file_is_one_long_line_and_stops(self):
+        p = self.write('cr.txt', raw=('\r'.join([line(name='ORTEGA*ANA/'), line(name='ORTEGA*LUIS/'),
+                                                  line(name='ORTEGA*JUAN/')]) + '\r').encode('ascii'))
+        code, lines, out = self.run_insee([p], ['Ortega'])
+        self.assertEqual(code, 2, out)
+        self.assertIn('cr.txt line 1: line is 596 characters', out)
+        self.assertEqual(self.written(), [])
 
     def test_a_missing_file_exits_2_and_writes_nothing(self):
         code, _, out = self.run_insee([FIX, os.path.join(self.tmp.name, 'nope.txt')], ['Ortega'])
