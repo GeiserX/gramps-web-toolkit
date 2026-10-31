@@ -4134,3 +4134,11 @@ def test_server_backup_202_list_that_is_not_a_list_writes_nothing(fake, tmp_path
     assert "not in the server's list" in capsys.readouterr().err
     assert set(fake.store["notes"]) == notes
 
+
+def test_revert_does_not_count_a_server_backup_as_a_write(tmp_path):
+    from gwt_apply import revert
+    log = tmp_path / "run.jsonl"
+    lines = [{"dry_run": False, "method": "POST", "path": "/backups/", "status": s} for s in (201, None, 503)]
+    lines.append({"dry_run": False, "method": "POST", "path": "/objects/", "status": 201, "body": []})
+    log.write_text("".join(json.dumps(x) + "\n" for x in lines))
+    assert [e["path"] for e in revert.read_log(str(log))] == ["/objects/"]
