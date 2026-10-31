@@ -8,6 +8,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Added
 
+- `gwt-apply --server-backup` asks the Gramps Web server to store a backup of the tree (`POST /api/backups/`) after the tree lock is taken and the plan has passed its checks, and before the first write. If the server does not store a restorable backup, nothing is written and the run exits 1. It only creates a backup: `gwt-apply` never restores one. It needs `--apply` and an owner or admin login. The server may answer 202 with a task; the run waits for that task, checks that the new backup is listed and restorable, and never repeats the POST. A refusal names the server's reason (403 role, 429 daily backup limit, 501 no backup directory). `--revert` does not count the backup request as a write.
 - `gwt-apply --private-new` saves every object the run creates as private, so a guest login never sees a new person, family, event, place, source, citation, media object or note. Objects that already exist keep their own value. Off by default; nothing about existing change lists changes.
 - `gwt-queue list --result R` prints only the rows closed with that result, so the searches that came back `blocked` or `denied` can be listed on their own.
 

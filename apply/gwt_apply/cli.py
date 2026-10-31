@@ -245,6 +245,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--retries", type=_at_least_one, default=5,
                     help="tries per op, and for the login and reads before the first op (at least 1)")
     ap.add_argument("--retry-wait", type=float, default=30.0, help="seconds after a busy server")
+    ap.add_argument("--server-backup", action="store_true",
+                    help="with --apply: ask the server to store a backup of the tree before the first write, and write "
+                    "nothing if it refuses (never restores one)")
     ap.add_argument("--break-lock", action="store_true",
                     help="take the tree's lock even if another apply's lock has not expired (only if that apply is dead)")
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -257,6 +260,8 @@ def main(argv: list[str] | None = None) -> int:
         return _revert(args, argv)
     if args.pre:
         ap.error("--pre goes with --revert")
+    if args.server_backup and not args.apply:
+        ap.error("--server-backup goes with --apply: a dry run writes nothing, so it needs no backup")
     if args.verify and (args.apply or args.save_snapshot):
         ap.error("--verify is a dry run: no --apply or --save-snapshot")
     if args.json and not args.change_list:
@@ -302,6 +307,99 @@ def main(argv: list[str] | None = None) -> int:
     _first_line(run_id, log)
     outcome: dict = {}
     return _ended(client, lambda: _run(args, argv, client, run_id, ops, snap, old, offline, outcome), outcome)
+
+
+def _backup_id_of_task(t: dict):
+    """The id of the backup a finished task made: `result_object.id`, else the JSON in `info` or `result`."""
+    ro = t.get("result_object")
+    if isinstance(ro, dict) and ro.get("id"):
+        return ro["id"]
+    for key in ("info", "result"):
+        try:
+            v = json.loads(t.get(key) or "")
+        except ValueError:
+            continue
+        if isinstance(v, dict) and v.get("id"):
+            return v["id"]
+    return None
+
+
+BACKUP_POLLS = 300  # 2 s apart: a big tree's backup is a whole-tree export, 10 minutes before the run gives up
+BACKUP_REFUSED = {
+    403: "creating one needs an owner or admin login",
+    409: "the server could not make a backup of this tree",
+    422: "the server could not make a backup of this tree (for example a dangling reference)",
+    429: "the server's backup limit for this tree is used up (by default 10 a day)",
+    501: "the server has no backup directory set (BACKUP_DIR)",
+}
+
+
+def _backup_problem(b) -> str | None:
+    """Why a backup the server named does not count: it needs an id and a size, and must not say it is unrestorable."""
+    if not isinstance(b, dict) or not b.get("id"):
+        return "the server named no backup id"
+    if b.get("restorable") is False or not b.get("size"):
+        return f"the backup {b['id']} is not restorable or empty"
+    return None
+
+
+def _server_backup(client: Client, args, lock) -> str | None:
+    """Ask the server to store a backup of the tree. None when it did, else why not. It only creates: a restore is
+    never called from here. The server deletes its oldest backup beyond the number it keeps per tree. A server with a
+    task queue answers 202 with a task: the backup counts only when that task succeeds and the backup it names is in
+    the list and restorable. Every read is retried like the login; the POST is never repeated."""
+    def get(path):
+        return _retried("server backup", lambda: client._request("GET", path), client, args, lock)
+
+    try:
+        r = client._request("POST", "/backups/", write=True)  # never repeated: a second POST could store a second backup
+    except Retryable as exc:
+        why = BACKUP_REFUSED.get(exc.status)
+        return f"the server backup request failed ({exc}{'; ' + why if why else ''})"
+    if r.status_code == 202:
+        try:
+            tid = (r.json().get("task") or {}).get("id")
+        except (ValueError, AttributeError):
+            tid = None
+        if not tid:
+            return "the server answered HTTP 202 without a task id, so the backup cannot be confirmed"
+        info = None
+        for _ in range(BACKUP_POLLS):
+            t = get(f"/tasks/{tid}")
+            if 400 <= t.status_code < 500:
+                return f"the server's backup task {tid} cannot be read (HTTP {t.status_code}); it may still store a backup"
+            task = t.json() if t.status_code == 200 else {}
+            if task.get("state") == "FAILURE" or task.get("status") in ("failed", "lost"):
+                return f"the server's backup task {tid} failed"
+            if task.get("state") == "SUCCESS" or task.get("status") == "succeeded":
+                bid = _backup_id_of_task(task)
+                lst = get("/backups/")
+                items = lst.json() if lst.status_code == 200 else []
+                found = [b for b in items if isinstance(b, dict) and b.get("id") == bid] if isinstance(items, list) else []
+                if not bid or not found:
+                    return f"the backup task {tid} succeeded but its backup is not in the server's list"
+                if found[0].get("restorable") is not True or not found[0].get("size"):
+                    return f"the backup {bid} is listed but not restorable or empty"
+                info = found[0]
+                break
+            time.sleep(2)
+        if info is None:
+            return (f"the server's backup task {tid} did not finish in {BACKUP_POLLS * 2 // 60} min; the server may still "
+                    "store the backup and drop its oldest one")
+    elif r.status_code != 201:
+        why = BACKUP_REFUSED.get(r.status_code) or f"the server said: {r.text[:200]}"
+        return f"the server did not store a backup (HTTP {r.status_code}; {why})"
+    else:
+        try:
+            info = r.json()
+        except ValueError:
+            info = {}
+        bad = _backup_problem(info)
+        if bad:
+            return f"the server answered HTTP 201 but {bad}"
+    client.log(event="server-backup", id=info.get("id"), size=info.get("size"))
+    print(f"server backup stored: {info.get('id')}")
+    return None
 
 
 def _run(args, argv, client: Client, run_id: str, ops, snap, old, offline: bool, outcome: dict) -> int:
@@ -371,6 +469,13 @@ def _run(args, argv, client: Client, run_id: str, ops, snap, old, offline: bool,
             print(f"{len(problems)} likely duplicate(s); nothing was written", file=sys.stderr)
             _write_json(args.json, ops, [], "not run: the list stopped on likely duplicates")
             return 1
+        if args.server_backup:
+            refused = _server_backup(client, args, lock)
+            if refused:
+                client.log(event="refused", reason="server-backup", problems=[refused])
+                print(f"{refused}; nothing was written", file=sys.stderr)
+                _write_json(args.json, ops, [], "not run: the server backup was refused")
+                return 1
         results = Applier(client, retries=args.retries, retry_wait=args.retry_wait, lock=lock, tag=args.tag,
                           verify=args.verify, private_new=args.private_new).run(ops)
     except (LockHeld, ApiError) as exc:

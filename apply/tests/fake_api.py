@@ -161,6 +161,28 @@ class FakeGrampsWeb:
 
     def _route(self, method, path, headers, params, body, data):
         parts = [p for p in path.split("/") if p][1:]  # drop "api"
+        if parts == ["backups"] and method == "GET":
+            if getattr(self, "backup_get_failures", 0):
+                self.backup_get_failures -= 1
+                return Resp(503, "busy")
+            items = getattr(self, "backup_items", [])
+            return Resp(200, list(items) if isinstance(items, list) else items)
+        if len(parts) == 2 and parts[0] == "tasks" and method == "GET":
+            if getattr(self, "task_get_failures", 0):
+                self.task_get_failures -= 1
+                return Resp(503, "busy")
+            if getattr(self, "task_status", 200) != 200:
+                return Resp(self.task_status, {"error": {"message": "Forbidden"}})
+            script = self.task_script
+            return Resp(200, script.pop(0) if len(script) > 1 else script[0])
+        if parts == ["backups"] and method == "POST":
+            if getattr(self, "backup_status", 201) == 202:  # built in the background: the answer names a task
+                return Resp(202, getattr(self, "backup_202_body", {"task": {"id": "t1", "href": "/api/tasks/t1"}}))
+            if getattr(self, "backup_status", 201) != 201:
+                return Resp(self.backup_status, {"error": {"message": "Forbidden"}})
+            self.backups = getattr(self, "backups", 0) + 1
+            self.backup_items = getattr(self, "backup_items", []) + [{"id": f"bk{self.backups}", "size": 10, "restorable": True}]
+            return Resp(201, getattr(self, "backup_201_body", {"id": f"bk{self.backups}", "size": 10, "restorable": True}))
         if parts == ["objects"] and method == "POST":
             made = []
             for obj in body:
