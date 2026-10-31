@@ -118,3 +118,5 @@ gwt_apply/cli.py | if 400 <= t.status_code < 500: | if False: | a backup task th
 gwt_apply/cli.py | if not bid or not found: | if not found: | a finished task that names no backup is never matched to an unnamed list entry
 gwt_apply/cli.py | if isinstance(ro, dict) and ro.get("id"): | if False: | the backup id is read from the task's result_object, where the server puts it
 gwt_apply/cli.py | if b.get("restorable") is False or not b.get("size"): | if b.get("restorable") is False: | a 201 that names an empty backup stops the run before it writes
+gwt_apply/ops.py | if self.private_new:  # tags never come here | if False:  # tags never come here | --private-new saves every object the run creates as private
+gwt_apply/cli.py | verify=args.verify, private_new=args.private_new).run(ops) | verify=args.verify).run(ops) | the --private-new flag reaches the run

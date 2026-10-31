@@ -4183,3 +4183,31 @@ def test_server_backup_201_without_a_size_writes_nothing(fake, tmp_path, monkeyp
     assert main([str(p), "--apply", "--server-backup", "--log", str(tmp_path / "a.jsonl")]) == 1
     assert "not restorable or empty" in capsys.readouterr().err
     assert set(fake.store["notes"]) == notes
+
+
+def test_private_new_makes_every_created_object_private_and_default_does_not(fake, scan):
+    ops = full_list(scan)
+    client = Client("https://gw.example", "u", "pw", tree="tree-test", dry_run=False, session=fake)
+    res = Applier(client, retries=1, retry_wait=0, private_new=True).run(ops)
+    assert all(r.status == "done" for r in res), [r.actions for r in res]
+    created = [fake.store[ns][stable_handle(k)] for ns, k in
+               [("people", "p-john"), ("families", "f-anna"), ("citations", "c-bapt"), ("media", "m-bapt"), ("notes", "n-john")]]
+    assert all(o["private"] is True for o in created)
+
+
+def test_without_private_new_created_objects_are_not_forced_private(fake, scan):
+    ops = full_list(scan)
+    client = Client("https://gw.example", "u", "pw", tree="tree-test", dry_run=False, session=fake)
+    Applier(client, retries=1, retry_wait=0).run(ops)
+    assert not fake.store["notes"][stable_handle("n-john")].get("private")
+
+
+def test_private_new_from_the_command_line_with_a_run_tag(fake, scan, tmp_path, env):
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text("\n".join(json.dumps(op) for op in full_list(scan)))
+    assert main([str(changes), "--apply", "--private-new", "--tag", "r1"]) == 0
+    for ns, k in [("people", "p-john"), ("events", "e-john-birth"), ("families", "f-anna"),
+                  ("citations", "c-bapt"), ("media", "m-bapt"), ("notes", "n-john")]:
+        assert fake.store[ns][stable_handle(k)]["private"] is True, (ns, k)
+    assert "private" not in fake.store["tags"][stable_handle("tag:r1")]  # a Gramps tag has no private flag
+    assert not fake.store["people"]["anna"].get("private")  # changed, not created: keeps its own value
