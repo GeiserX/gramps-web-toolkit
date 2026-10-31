@@ -26,12 +26,15 @@ files hold calendar dates that never existed (29 February of a common year), so 
 Every line is checked, matched or not: a line with a malformed date, a sex that is not 1 or 2, no `*` in the name or
 too short to hold the death date is an error naming the file and line, never skipped. Blank lines are skipped.
 
-Encoding: the files are ASCII in practice (names and communes are upper case, without accents). A few lines, mostly
-foreign birthplaces, carry bytes from the DOS code page CP850: in samples of the 2005 and 2010 files 0xA5 is Ñ (LA
-CAÑADA), 0xC7 is Ã (SÃO, GUIMARÃES), 0xE0 is Ó (MATARÓ), 0xF8 the degree sign after an arrondissement number
-(PARIS 12°); read as Latin-1 they make no sense. We found no UTF-8 in them. So a line is read as UTF-8 (plain ASCII
-is both) and, when that fails, as CP850, which maps every byte and never fails; such a candidate carries
-`"encoding": "cp850"`, so the lane knows the odd characters are INSEE's code page, read our way. Standard library only.
+Encoding: the files are ASCII in practice (names and communes are upper case, without accents), and the columns
+count characters, not bytes. A few lines, mostly foreign birthplaces, are not ASCII, and the years differ. In the 2005
+and 2010 files they are the DOS code page CP850: 0xA5 is Ñ (LA CAÑADA), 0xC7 Ã (SÃO), 0xE0 Ó (MATARÓ), 0xF8 the degree
+sign after an arrondissement number (PARIS 12°). The 1999 file mixes CP850 lines with Latin-1 ones (0xF1 ñ, 0xD1 Ñ,
+0xB0 °, 0xE9 é). The 2021 and 2022 files carry a few UTF-8 lines (°, ², é), counted in characters. So a line is read
+as UTF-8 when it is valid UTF-8 (plain ASCII is). Otherwise it is read both as CP850 and as Latin-1, and the reading
+with more accented letters of the French, Spanish and Portuguese alphabets (and °) wins; a tie goes to CP850. Such a
+candidate carries `"encoding": "cp850"` or `"encoding": "latin-1"`: the odd characters are our guess, so the
+verifier reads them against the file. Standard library only.
 """
 import hashlib, os, re
 
@@ -49,13 +52,26 @@ class LayoutError(ValueError):
     """A line that is not in INSEE's layout: the run stops, nothing is written."""
 
 
+# accented letters INSEE's birthplaces use, and the degree sign; CP850's box and line characters, ±, Ð, Þ, ø are not
+PLAUSIBLE = set('ÀÂÄÇÈÉÊËÎÏÔÖÙÛÜÑÃÕÁÍÓàâäçèéêëîïôöùûüÿñãõáíóú°')
+
+
+def _plausible(text):
+    return sum(c in PLAUSIBLE for c in text)
+
+
 def decode(raw):
-    """(text, encoding) of one line without its line end: UTF-8 (ASCII is UTF-8), else CP850."""
+    """(text, encoding) of one line without its line end: UTF-8 (ASCII is UTF-8), else CP850 or Latin-1, whichever
+    reads as more accented letters; CP850 on a tie."""
     raw = raw.rstrip(b'\r\n')
     try:
         return raw.decode('utf-8'), 'utf-8'
     except UnicodeDecodeError:
-        return raw.decode('cp850'), 'cp850'
+        pass
+    cp850, latin1 = raw.decode('cp850'), raw.decode('latin-1')
+    if _plausible(latin1) > _plausible(cp850):
+        return latin1, 'latin-1'
+    return cp850, 'cp850'
 
 
 def _field(line, span):

@@ -249,7 +249,15 @@ Every candidate is the `principal` of its line, with role `Principal`. Its `id` 
 
 Every line of every file is checked, matched or not. These stop the run with exit 2, the file and line in the message, and nothing written: a date that is not eight digits, or has a month over 12 or a day over 31; a sex that is not `1` or `2`; a name with no `*`; a line too short to hold the death date (162 characters); a file that cannot be read. Blank lines are skipped. Dates are kept as written: INSEE's own files hold days that never existed (29 February of a common year), so only the digits, the month and the day are checked. The death place code and the act number may be cut short, since the dataset page warns that some lines end in meaningless characters.
 
-The files are ASCII in practice: names and communes in upper case, without accents. A few lines, mostly foreign birthplaces, carry bytes from the DOS code page CP850. In the 2005 and 2010 files we found 0xA5 for Ñ, 0xC7 for Ã, 0xE0 for Ó and 0xF8 for the degree sign after an arrondissement number, and no UTF-8. Each line is read as UTF-8 (plain ASCII is UTF-8) and, when that fails, as CP850, which never fails; such a candidate carries `"encoding": "cp850"`.
+The files are ASCII in practice: names and communes in upper case, without accents. The columns count characters, not bytes. A few lines, mostly foreign birthplaces, are not ASCII, and the encoding differs between years:
+
+| Seen in | Encoding of the non-ASCII lines | Examples |
+| --- | --- | --- |
+| 2005, 2010 | the DOS code page CP850 | 0xA5 Ñ, 0xC7 Ã, 0xE0 Ó, 0xF8 the degree sign in `PARIS 12°` |
+| 1999 | CP850 and Latin-1 lines mixed in one file | Latin-1 0xF1 ñ, 0xD1 Ñ, 0xB0 °, 0xE9 é |
+| 2021, 2022 | a few UTF-8 lines | `°`, `²`, `é` |
+
+So each line is read as UTF-8 when it is valid UTF-8 (plain ASCII is). Otherwise it is read both as CP850 and as Latin-1, and the reading with more accented letters of the French, Spanish and Portuguese alphabets (and `°`) wins; a tie goes to CP850. Such a candidate carries `"encoding": "cp850"` or `"encoding": "latin-1"`: its odd characters are our guess, so read them against the file.
 
 The envelope lists each file with its sha256, its line count and how many lines matched, and the surnames asked for. The `results` line prints `N of M lines in K files`. Exit 0 when a line matched, 2 when none did (the candidates file is written, empty), 64 with no `--surname`.
 

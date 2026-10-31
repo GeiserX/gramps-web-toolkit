@@ -117,6 +117,36 @@ class Candidates(Run):
         self.assertEqual(c['birth_commune'], 'VILLAZUL-ÉTANG')
         self.assertNotIn('encoding', c)
 
+    def test_a_latin1_line_is_read_as_latin1_and_marked(self):
+        # some years mix Latin-1 lines with CP850 ones: 0xF1 is ñ in Latin-1, '±' in CP850
+        p = self.write('l.txt', raw=(line(btown='VILLAZU\xf1A', bcountry='ESPAGNE') + '\n').encode('latin-1'))
+        code, lines, _ = self.run_insee([p], ['Loriot'])
+        c = self.cands(lines)[0]
+        self.assertEqual((c['birth_commune'], c['encoding']), ('VILLAZUñA', 'latin-1'))
+
+    def test_a_latin1_degree_sign_is_not_read_as_a_cp850_box(self):
+        p = self.write('d.txt', raw=(line(btown='VILLENEUVE 3\xb0') + '\n').encode('latin-1'))
+        code, lines, _ = self.run_insee([p], ['Loriot'])
+        self.assertEqual(self.cands(lines)[0]['birth_commune'], 'VILLENEUVE 3°')
+
+    def test_a_latin1_birthplace_still_scores_in_gwt_rank(self):
+        p = self.write('r.txt', raw=(line(name='ORTEGA*TOMAS/', bd='19210314', btown='VILLAZU\xd1A') + '\n')
+                       .encode('latin-1'))
+        code, lines, _ = self.run_insee([p], ['Ortega'])
+        o = io.StringIO()
+        with contextlib.redirect_stdout(o), contextlib.redirect_stderr(io.StringIO()):
+            gwt_rank.main([lines['candidates'], '--given', 'Tomás', '--surname', 'Ortega',
+                           '--facts', 'by=1921 bp=Villazuña', '--format', 'json'])
+        self.assertEqual(json.loads(o.getvalue().splitlines()[0])['tier'], 'strong')
+
+    def test_columns_count_characters_not_bytes_on_a_utf8_line(self):
+        # recent files carry a few UTF-8 lines; a two-byte character must not shift the death date or act
+        p = self.write('c.txt', raw=(line(btown='VILLAZUL 4°', bcountry='ÉTANG', dd='19850705', act='Décès 7')
+                                     + '\n').encode('utf-8'))
+        code, lines, _ = self.run_insee([p], ['Loriot'])
+        c = self.cands(lines)[0]
+        self.assertEqual((c['death_date'], c['death_place_code'], c['act']), ('19850705', '64990', 'Décès 7'))
+
     def test_several_files_in_one_pass(self):
         p = self.write('deces-1986.txt', line(name='ORTEGA*LUIS/', dd='19860305'))
         code, lines, out = self.run_insee([FIX, p], ['Ortega'])
