@@ -1,7 +1,7 @@
 """Tests for `gwt-read insee`. Invented fixed-width rows in fixtures/insee-deces-1985.txt and built here; the reader
 reads local files only, and the tests check it never asks for a gate, a cache or the network.
 Run: cd read && python3 -m unittest -v test_gwt_insee"""
-import contextlib, glob, io, json, os, tempfile, unittest
+import contextlib, glob, hashlib, io, json, os, tempfile, unittest
 from unittest import mock
 
 import gwt_insee  # noqa: E402  (test_gwt_read is not needed: this source has no transport)
@@ -93,6 +93,10 @@ class Candidates(Run):
         self.assertTrue(gwt_insee.surname_matches('DE LA FONTAINE', wanted))
         self.assertFalse(gwt_insee.surname_matches('ORTEGAS', wanted))
 
+    def test_a_surname_of_several_words_keeps_only_lines_with_all_of_them(self):
+        code, lines, _ = self.run_insee([FIX], ['Ortega Sanz'])
+        self.assertEqual([c['name'] for c in self.cands(lines)], ['MARIA ROSA ORTEGA SANZ'])
+
     def test_surname_is_folded_for_case_and_accents(self):
         code, lines, _ = self.run_insee([FIX], ['ortéga'])
         self.assertEqual(len(self.cands(lines)), 2)
@@ -168,6 +172,17 @@ class Candidates(Run):
         with open(lines['evidence']) as f:
             env = json.load(f)
         self.assertEqual([x['file'] for x in env['files']], ['insee-deces-1985.txt', 'deces-1986.txt'])
+
+    def test_the_envelope_holds_each_file_sha256(self):
+        p = self.write('deces-1986.txt', line(name='ORTEGA*LUIS/', dd='19860305'))
+        code, lines, _ = self.run_insee([FIX, p], ['Ortega'])
+        with open(lines['evidence']) as f:
+            env = json.load(f)
+        want = []
+        for path in (FIX, p):
+            with open(path, 'rb') as f:
+                want.append(hashlib.sha256(f.read()).hexdigest())
+        self.assertEqual([x['sha256'] for x in env['files']], want)
 
     def test_a_utf8_byte_order_mark_does_not_shift_the_first_line(self):
         p = self.write('bom.txt', raw=b'\xef\xbb\xbf' + (line() + '\n').encode('ascii'))

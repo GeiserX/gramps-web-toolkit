@@ -34,3 +34,5 @@ gwt_insee.py | if len(line) > MAX_LENGTH: | if False: | two INSEE records glued 
 gwt_insee.py | line = line.removeprefix('\ufeff') | pass | a UTF-8 byte order mark does not shift the first INSEE line
 gwt_insee.py | if not lines: | if False: | an empty INSEE file (a failed download) is an error, never a clean "no results"
 gwt_read.py | return EXIT_ERROR      # a file that cannot be read is an error, never "no results" | return EXIT_EMPTY | an unreadable INSEE file exits 1, so a caller never logs it as "searched, none found"
+gwt_insee.py | h.update(raw) | pass | the envelope lists each INSEE file's real sha256, so a download can be checked against it
+gwt_insee.py | wanted = {tuple(fold(s)) for s in surnames if fold(s)} | wanted = {tuple(fold(s))[:1] for s in surnames if fold(s)} | an INSEE --surname of several words keeps only lines that hold all of them
