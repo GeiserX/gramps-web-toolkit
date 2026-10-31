@@ -18,3 +18,21 @@ gwt_read.py | str(a.pdf_context), str(a.born), str(a.parents)] | str(a.pdf_conte
 gwt_read.py | gwt_reader.search_key('\n'.join([first] + words), words) | gwt_reader.search_key(first, words) | a long name rerun with other --parents still gets its own file
 gwt_read.py | max(1, min(a.pages, 5)) | max(1, a.pages) | --pages never reads more than 5 pages
 gwt_read.py | n = max(0, min(getattr(a, 'pdf_context', 0), 10)) | n = max(0, getattr(a, 'pdf_context', 0)) | --pdf-context never fetches more than 10 PDFs
+gwt_insee.py | return y or None, mo > 12 or d > 31 | return y or None, False | an INSEE date with month over 12 or day over 31 is kept and marked malformed, never silent
+gwt_insee.py | if not m: | if False: | an INSEE date that is not eight digits stops the run with exit 2, never a crash or a skip
+gwt_insee.py | 'malformed': [] if star else ['name']} | 'malformed': []} | an INSEE name with no "*" is kept whole and marked malformed
+gwt_insee.py | odd += bool(rec['malformed']) | pass | each file's count of lines with a value out of INSEE's rules reaches the envelope, matched or not
+gwt_insee.py | if sex not in SEXES: | if False: | an INSEE sex that is not 1 or 2 stops the run (a shifted line is caught here)
+gwt_insee.py | if len(line) < MIN_LENGTH: | if False: | an INSEE line too short to hold the death date stops the run
+gwt_insee.py | rec = parse_line(line) | rec = parse_line(line) if surname_matches(line.split('*')[0], wanted) else {'surname': ''} | every INSEE line is checked, not only the lines a --surname matches
+gwt_insee.py | return any(have[i:j] in wanted for i in range(len(have)) for j in range(i + 1, len(have) + 1)) | return any(' '.join(w) in ' '.join(have) for w in wanted) | an INSEE --surname matches whole words: ORTEGA never matches ORTEGAS
+gwt_insee.py | return cp850, 'cp850' | return latin1, 'latin-1' | a non-UTF-8 INSEE line whose Latin-1 reading has no more accented letters is read as CP850 (PARIS 12°)
+gwt_insee.py | if _plausible(latin1) > _plausible(cp850): | if False: | a Latin-1 INSEE line (0xF1 ñ, 0xB0 °) is read as Latin-1, not CP850
+gwt_insee.py | return y or None | return y | an INSEE year 0000 is no year, never year 0
+gwt_read.py | return cmd_insee_search(a)      # offline: no gate, no cache, no fetcher | pass | gwt-read insee never builds a gate, a cache or a fetcher
+gwt_insee.py | if len(line) > MAX_LENGTH: | if False: | two INSEE records glued on one line, or a CR-only file, stop the run instead of losing every record after the first
+gwt_insee.py | line = line.removeprefix('\ufeff') | pass | a UTF-8 byte order mark does not shift the first INSEE line
+gwt_insee.py | if not lines: | if False: | an empty INSEE file (a failed download) is an error, never a clean "no results"
+gwt_read.py | return EXIT_ERROR      # a file that cannot be read is an error, never "no results" | return EXIT_EMPTY | an unreadable INSEE file exits 1, so a caller never logs it as "searched, none found"
+gwt_insee.py | h.update(raw) | pass | the envelope lists each INSEE file's real sha256, so a download can be checked against it
+gwt_insee.py | wanted = {tuple(fold(s)) for s in surnames if fold(s)} | wanted = {tuple(fold(s))[:1] for s in surnames if fold(s)} | an INSEE --surname of several words keeps only lines that hold all of them
