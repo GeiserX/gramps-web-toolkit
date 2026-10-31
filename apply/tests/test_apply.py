@@ -3974,3 +3974,14 @@ def test_without_private_new_created_objects_are_not_forced_private(fake, scan):
     client = Client("https://gw.example", "u", "pw", tree="tree-test", dry_run=False, session=fake)
     Applier(client, retries=1, retry_wait=0).run(ops)
     assert not fake.store["notes"][stable_handle("n-john")].get("private")
+
+
+def test_private_new_from_the_command_line_with_a_run_tag(fake, scan, tmp_path, env):
+    changes = tmp_path / "changes.jsonl"
+    changes.write_text("\n".join(json.dumps(op) for op in full_list(scan)))
+    assert main([str(changes), "--apply", "--private-new", "--tag", "r1"]) == 0
+    for ns, k in [("people", "p-john"), ("events", "e-john-birth"), ("families", "f-anna"),
+                  ("citations", "c-bapt"), ("media", "m-bapt"), ("notes", "n-john")]:
+        assert fake.store[ns][stable_handle(k)]["private"] is True, (ns, k)
+    assert "private" not in fake.store["tags"][stable_handle("tag:r1")]  # a Gramps tag has no private flag
+    assert not fake.store["people"]["anna"].get("private")  # changed, not created: keeps its own value

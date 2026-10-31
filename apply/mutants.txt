@@ -111,3 +111,5 @@ gwt_apply/ops.py | if now != op["expect"].strip(): | if False: | update_source n
 gwt_apply/ops.py | if (row["handle"] != source["handle"] and (row.get("title") or "").strip() == new | if (False | update_source refuses a title another source with the same author already has
 gwt_apply/ops.py | res.noop = res.status == "skip" and self._noop | res.noop = res.status == "skip" | a skip of what this list made by key is never called a no-op
 gwt_apply/ops.py | self._noop = True | pass | an update or tag that found the tree as it asks is a no-op skip
+gwt_apply/ops.py | if self.private_new:  # tags never come here | if False:  # tags never come here | --private-new saves every object the run creates as private
+gwt_apply/cli.py | verify=args.verify, private_new=args.private_new).run(ops) | verify=args.verify).run(ops) | the --private-new flag reaches the run

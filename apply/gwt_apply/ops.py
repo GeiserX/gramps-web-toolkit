@@ -646,7 +646,7 @@ class Applier:
         return self._tags[name]
 
     def create(self, obj: dict, extra: str = "") -> None:
-        if self.private_new and obj.get("_class") != "Tag":
+        if self.private_new:  # tags never come here: tag_handle makes them, and a Gramps tag has no private flag
             obj["private"] = True
         if self._op_tags:
             obj["tag_list"] = [self.tag_handle(t) for t in self._op_tags]
