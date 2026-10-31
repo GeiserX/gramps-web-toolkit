@@ -46,6 +46,18 @@ class QueueTest(unittest.TestCase):
         self.assertEqual(r['status'], 'open')
         self.assertEqual(r['tries'], '0')
 
+    def test_list_result_shows_only_rows_closed_with_that_result(self):
+        self.add(); self.add(person='Jose Ruiz', query='jose ruiz 1880')
+        for tid, result in (('q1', 'blocked'), ('q2', 'none')):
+            run('--queue', self.path, 'claim', '--lane', 'a')
+            run('--queue', self.path, 'done', '--id', tid, '--token', self.tok(tid), '--result', result)
+        _, out, _ = run('--queue', self.path, 'list', '--result', 'blocked')
+        self.assertEqual([l.split('\t')[0] for l in out.splitlines()], ['q1'])
+        _, out, _ = run('--queue', self.path, 'list')
+        self.assertEqual(len(out.splitlines()), 2)  # no filter: both rows
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            run('--queue', self.path, 'list', '--result', 'maybe')  # not one of the results
+
     def test_ids_increase(self):
         self.add(); self.add(person='Jose Ruiz', query='jose ruiz 1880')
         self.assertEqual([r['id'] for r in self.rows()], ['q1', 'q2'])

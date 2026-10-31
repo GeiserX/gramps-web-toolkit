@@ -362,6 +362,7 @@ def main(argv=None):
 
     l = sub.add_parser('list', help='rows, optionally filtered')
     l.add_argument('--status', choices=STATUS); l.add_argument('--person'); l.add_argument('--lane')
+    l.add_argument('--result', choices=RESULTS, help='only rows closed with this result, e.g. blocked or denied')
 
     rep = sub.add_parser('report', help='open leads: due tasks by priority, then not-yet-due and failed')
     rep.add_argument('--limit', type=int, default=20)
@@ -494,6 +495,8 @@ def main(argv=None):
             if args.person and r['person_key'] != key(args.person):
                 continue
             if args.lane and r['lane'] != args.lane:
+                continue
+            if args.result and r['result'] != args.result:
                 continue
             print_row(r)
         return 0
