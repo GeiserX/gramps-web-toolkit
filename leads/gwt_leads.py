@@ -195,25 +195,32 @@ def parse_years(text):
 
 
 def load_archives(path):
-    """The rows of an --archives TSV: a header with match, archive, series, years, url (access optional), then
-    one row per place name. A missing or unknown column, a bad years cell, an access value outside ACCESS or a url
-    placeholder other than {place} and {year} is BadInput, never a row skipped in silence."""
+    """An --archives TSV as {folded match: row}, the first row of a name kept: a header with match, archive, series,
+    years, url (access optional), then one row per place name. Read as plain tab-separated text, like the ledger and
+    the queue: a quote is a character, never a field delimiter. A missing, unknown or repeated column, a bad years
+    cell, an access value outside ACCESS or a url placeholder other than {place} and {year} is BadInput, never a row
+    skipped in silence."""
     try:
         with open(path, encoding='utf-8-sig', newline='') as fh:
-            reader = csv.DictReader(fh, delimiter='\t')
+            reader = csv.DictReader(fh, delimiter='\t', quoting=csv.QUOTE_NONE)
             header = [h.strip() for h in reader.fieldnames or []]
             reader.fieldnames = header
             rows = list(reader)
-    except (OSError, UnicodeDecodeError, csv.Error) as exc:
+    except UnicodeDecodeError:
+        raise BadInput('%s: the file is not UTF-8; save it as UTF-8 text, tab-separated' % path)
+    except (OSError, csv.Error) as exc:
         raise BadInput('%s: %s' % (path, exc))
     missing = [c for c in ARCHIVE_COLUMNS if c not in header]
-    unknown = [c for c in header if c not in ARCHIVE_COLUMNS + ARCHIVE_OPTIONAL]
+    unknown = [c or '(empty)' for c in header if c not in ARCHIVE_COLUMNS + ARCHIVE_OPTIONAL]
     if missing or unknown:
         raise BadInput('%s: %s; the columns are %s, plus %s if you want it' % (
             path, '; '.join(x for x in ('missing column %s' % ', '.join(missing) if missing else '',
                                          'unknown column %s' % ', '.join(unknown) if unknown else '') if x),
             ', '.join(ARCHIVE_COLUMNS), ', '.join(ARCHIVE_OPTIONAL)))
-    out = []
+    repeated = sorted({c for c in header if header.count(c) > 1})
+    if repeated:
+        raise BadInput('%s: column %s appears more than once' % (path, ', '.join(repeated)))
+    index = {}
     for n, row in enumerate(rows, 2):
         where = '%s line %d' % (path, n)
         if None in row:
@@ -235,9 +242,9 @@ def load_archives(path):
             years = parse_years(row['years'])
         except BadInput as exc:
             raise BadInput('%s: %s' % (where, exc))
-        out.append({'match': fold(row['match']), 'archive': row['archive'], 'series': row['series'],
-                    'years': years, 'url': row['url'], 'access': access})
-    return out
+        index.setdefault(fold(row['match']), {'archive': row['archive'], 'series': row['series'], 'years': years,
+                                              'url': row['url'], 'access': access})  # the first row of a name wins
+    return index
 
 
 def exact_year(ev):
@@ -248,21 +255,16 @@ def exact_year(ev):
 
 
 def where_of(T, ev, archives):
-    """The archive row for an event's place: the row whose match is the deepest level of the place hierarchy,
-    the first such row in the file on a tie. None when no row matches, the event has no place or is private."""
+    """The archive row for an event's place (archives as load_archives returns it): the row whose match is the
+    deepest level of the place hierarchy, the first such row in the file on a tie. None when no row matches, the event has no place or is private."""
     if not ev or ev.get('private') is True:
         return None
     chain = place_chain(T, ev.get('place'))
     folded = [fold(n) for n in chain]
-    best = None
-    for row in archives:
-        if row['match'] in folded:
-            depth = folded.index(row['match'])
-            if best is None or depth < best[0]:
-                best = (depth, row)
-    if best is None:
+    row = next((archives[n] for n in folded if n in archives), None)  # one lookup per level, the deepest first
+    if row is None:
         return None
-    row, y = best[1], exact_year(ev)
+    y = exact_year(ev)
     url = row['url'].format(place=urllib.parse.quote(chain[0], safe=''), year=y or '')  # fields checked on load
     return {'archive': row['archive'], 'series': row['series'], 'url': url,
             'online': None if y is None else any(a <= y <= b for a, b in row['years']), 'access': row['access']}
