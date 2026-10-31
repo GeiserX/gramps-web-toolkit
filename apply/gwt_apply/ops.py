@@ -543,12 +543,13 @@ class Result:
 
 class Applier:
     def __init__(self, client: Client, *, retries: int = 5, retry_wait: float = 30.0, lock=None, tag: str | None = None,
-                 verify: bool = False):
+                 verify: bool = False, private_new: bool = False):
         self.c = client
         self.verify = verify  # a Gramps ID that was merged away resolves to its winner through the merge note
         self._merges: dict[str, list[tuple[str, str]]] | None = None  # class -> (merge note text, note handle)
         self.reasons: list[str] = []
         self.lock = lock  # a TreeLock to keep fresh before every try, during --apply
+        self.private_new = private_new  # every object the run creates is born private (an owner-only tree)
         self.run_tag = tag  # every object the run creates gets this tag, plus the op's own `tag`
         self._tags: dict[str, str] = {}  # tag name -> handle
         self._op_tags: list[str] = []
@@ -645,6 +646,8 @@ class Applier:
         return self._tags[name]
 
     def create(self, obj: dict, extra: str = "") -> None:
+        if self.private_new:  # tags never come here: tag_handle makes them, and a Gramps tag has no private flag
+            obj["private"] = True
         if self._op_tags:
             obj["tag_list"] = [self.tag_handle(t) for t in self._op_tags]
         self.actions.append(f"create {obj['_class']}{extra}: {json.dumps(obj, ensure_ascii=False)}")
