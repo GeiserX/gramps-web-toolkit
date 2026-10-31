@@ -115,3 +115,6 @@ gwt_apply/cli.py | if r.status_code != 201: | if False: | a server backup the se
 gwt_apply/revert.py | e["path"].startswith(("/token/", "/backups/")) | e["path"].startswith("/token/") | a revert does not count the server backup POST as a write to undo
 gwt_apply/cli.py | bad = _backup_problem(info) | bad = None | a 201 that names no restorable backup stops the run before it writes
 gwt_apply/cli.py | if 400 <= t.status_code < 500: | if False: | a backup task the server will not show stops the wait at once
+gwt_apply/cli.py | if not bid or not found: | if not found: | a finished task that names no backup is never matched to an unnamed list entry
+gwt_apply/cli.py | if isinstance(ro, dict) and ro.get("id"): | if False: | the backup id is read from the task's result_object, where the server puts it
+gwt_apply/cli.py | if b.get("restorable") is False or not b.get("size"): | if b.get("restorable") is False: | a 201 that names an empty backup stops the run before it writes

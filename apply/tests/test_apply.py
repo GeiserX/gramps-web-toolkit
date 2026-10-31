@@ -4142,3 +4142,44 @@ def test_revert_does_not_count_a_server_backup_as_a_write(tmp_path):
     lines.append({"dry_run": False, "method": "POST", "path": "/objects/", "status": 201, "body": []})
     log.write_text("".join(json.dumps(x) + "\n" for x in lines))
     assert [e["path"] for e in revert.read_log(str(log))] == ["/objects/"]
+
+
+def test_server_backup_202_reads_the_id_from_result_object(fake, tmp_path, monkeypatch, capsys):
+    p = _server_backup_env(fake, tmp_path, monkeypatch)
+    slept = []
+    _backup_202(fake, monkeypatch, [PENDING, {"state": "SUCCESS", "result_object": GOOD[0]}], GOOD)
+    import gwt_apply.cli as climod
+    monkeypatch.setattr(climod.time, "sleep", slept.append)
+    assert main([str(p), "--apply", "--server-backup", "--log", str(tmp_path / "a.jsonl")]) == 0
+    assert "server backup stored: bk9" in capsys.readouterr().out
+    assert slept == [2]  # one wait between the two task reads
+
+
+@pytest.mark.parametrize("task, items, why", [
+    ({"state": "SUCCESS"}, [{"size": 10, "restorable": True}], "not in the server's list"),  # no id on either side
+    (_done(), [{"id": "bk9", "size": 0, "restorable": True}], "not restorable or empty"),
+    (_done(), None, "not in the server's list"),
+])
+def test_server_backup_202_refuses_a_backup_it_cannot_tie_to_the_task(fake, tmp_path, monkeypatch, capsys, task, items, why):
+    p = _server_backup_env(fake, tmp_path, monkeypatch)
+    _backup_202(fake, monkeypatch, [task], items)
+    notes = set(fake.store["notes"])
+    assert main([str(p), "--apply", "--server-backup", "--log", str(tmp_path / "a.jsonl")]) == 1
+    assert why in capsys.readouterr().err
+    assert set(fake.store["notes"]) == notes
+
+
+def test_server_backup_202_skips_list_entries_that_are_not_backups(fake, tmp_path, monkeypatch, capsys):
+    p = _server_backup_env(fake, tmp_path, monkeypatch)
+    _backup_202(fake, monkeypatch, [_done()], ["junk"] + GOOD)
+    assert main([str(p), "--apply", "--server-backup", "--log", str(tmp_path / "a.jsonl")]) == 0
+    assert "server backup stored: bk9" in capsys.readouterr().out
+
+
+def test_server_backup_201_without_a_size_writes_nothing(fake, tmp_path, monkeypatch, capsys):
+    p = _server_backup_env(fake, tmp_path, monkeypatch)
+    fake.backup_201_body = {"id": "bk1", "restorable": True}
+    notes = set(fake.store["notes"])
+    assert main([str(p), "--apply", "--server-backup", "--log", str(tmp_path / "a.jsonl")]) == 1
+    assert "not restorable or empty" in capsys.readouterr().err
+    assert set(fake.store["notes"]) == notes
