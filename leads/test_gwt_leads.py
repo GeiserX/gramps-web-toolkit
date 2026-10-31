@@ -731,6 +731,20 @@ class LeadsTest(unittest.TestCase):
                                                header='match\tarchive\tseries\tyears\turl\taccess'))
             self.assertEqual(got[('I2', 'branch-end')]['access'], value or 'unknown')
 
+    def test_archives_edge_cells_read_as_documented(self):
+        T = self.archives_tree()
+        T['places']['par']['name']['value'] = 'Saint/Éxemple'
+        branch_end = lambda *rows: self.wheres(T, self.archives(*rows))[('I2', 'branch-end')]  # born 1860
+        self.assertIs(branch_end('France\tA\t\t1860\t')['online'], True)  # a single year is a range of one
+        self.assertIs(branch_end('France\tA\t\t1800-1859,1861\t')['online'], False)
+        # text after the last placeholder stays, and a slash in the place name is encoded, never a path step
+        self.assertEqual(branch_end('France\tA\t\t\thttps://x.example/?q={place}&lang=en')['url'],
+                         'https://x.example/?q=Saint%2F%C3%89xemple&lang=en')
+        self.assertEqual(branch_end('France\tA\t\t\thttps://x.example/fixed')['url'], 'https://x.example/fixed')
+        for bad in ('France\t\t\t\t', 'France\tA\t\t1850s\t', 'France\tA\t\t\thttps://x.example/?q={place:>9}'):
+            with self.assertRaises(L.BadInput, msg=bad):
+                L.load_archives(self.archives(bad))
+
     def test_a_bad_archives_file_exits_2_and_prints_nothing(self):
         d = self.dump(self.archives_tree())
         head = 'match\tarchive\tseries\tyears\turl'

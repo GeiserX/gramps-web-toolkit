@@ -34,3 +34,9 @@ gwt_leads.py | open(path, encoding='utf-8-sig', newline='') | open(path, encodin
 gwt_leads.py | header = [h.strip() for h in reader.fieldnames or []] | header = list(reader.fieldnames or []) | spaces around a column name in the archives header do not count
 gwt_leads.py | row = {k: (v or '').strip() for k, v in row.items()} | row = {k: (v or '') for k, v in row.items()} | spaces around an archives cell do not count
 gwt_leads.py | gap.startswith(('birth-', 'link-')) | gap.startswith(('birth-',)) | an unsupported link asks for the child's birth record
+gwt_leads.py | if not fold(row['match']) or not row['archive']: | if not fold(row['match']): | an archives row with an empty archive exits 2
+gwt_leads.py | or spec or conv] | or conv] | a url placeholder with a format spec exits 2
+gwt_leads.py | if f is not None] | ] | a url with text after its last placeholder, or none at all, loads
+gwt_leads.py | quote(chain[0], safe='') | quote(chain[0]) | a slash in a place name is encoded in the url, never a path step
+gwt_leads.py | any(a <= y <= b for a, b in row['years']) | any(a < y < b for a, b in row['years']) | a years range includes its ends, so a single year is a range of one
+gwt_leads.py | m = re.fullmatch(r'(\d{1,4})(?: | m = re.match(r'(\d{1,4})(?: | a years cell with junk after the year (1850s) exits 2
