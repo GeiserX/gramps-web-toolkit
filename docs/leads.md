@@ -55,7 +55,7 @@ With `--root I0001` (a Gramps id), the root's ancestors rank first: 100 minus on
 ## Output
 
 - `--format tsv` (default): `priority`, person id, label, kind, what. Tabs and newlines inside a value become spaces.
-- `--format json`: one JSON object per gap, with `gap` (a stable code such as `birth-place` or `branch-end`), `generation`, `weak` and `facts`.
+- `--format json`: one JSON object per gap, with `gap` (a stable code such as `birth-place` or `branch-end`), `generation`, `weak` and `facts`, plus `where` when `--archives` matched the gap's place (see [Archive hints](#archive-hints)).
 - `--format queue`: one JSON line per task for `gwt-queue add --jsonl`. One task per person and task kind (`search` for branch ends and missing vitals, `verify` for uncited facts and unsupported links), with every gap in the note. `--per-gap` gives one task per gap instead.
 
 `--limit N` keeps the N highest-priority rows; in queue format it counts tasks.
@@ -77,3 +77,40 @@ Write the seeds to a file and chain with `&&`: piped into another command, a bad
 - `--skip-weak` leaves out people with no given name or no surname (or none at all), unless they are the root or one of its ancestors. Their ids go to stderr. A thin name makes a poor outside search, but an ancestor stays on the list.
 
 `--source`, `--per-gap` and `--skip-weak` only apply to `--format queue`; with another format they are an error.
+
+## Archive hints
+
+`--archives FILE` tells each gap which archive keeps its record, and whether the year is online there. The file is a TSV with a header row, so it can be edited in a spreadsheet. `examples/archives.tsv` is an invented one:
+
+```
+match	archive	series	years	url	access
+Villaejemplo	Invented parish archive of Villaejemplo	Sacramental books	1850-1920	https://archives.example.org/parish?place={place}&year={year}	online
+Provincia Imaginaria	Invented provincial archive	Civil register	1871-1950	https://archives.example.org/civil?q={place}	browser
+Exempleshire	Archives of an invented department	3E	1793-1912	https://archives.example.org/search?commune={place}&year={year}	letter
+France	Invented national archive				
+```
+
+| column | holds |
+|---|---|
+| `match` | a place name, at any level: a parish, a town, a province, a country |
+| `archive` | the archive's name |
+| `series` | the series or call number, or empty |
+| `years` | the years that are online, as ranges separated by commas: `1600-1792,1793-1902`. A single year is a range of one. Empty means none |
+| `url` | a search address, or empty. `{place}` becomes the name of the event's own place (the deepest level, URL-encoded) and `{year}` the year counted for `online` (empty when there is none) |
+| `access` | optional: `online` (a lane can search it), `browser` (a person has to open it, behind a login or a captcha), `letter` (only by writing) or `unknown`. An empty cell, or no column, is `unknown` |
+
+The file must be right, or nothing runs: a missing or unknown column, an empty `match` or `archive`, a row with more cells than the header (fewer is fine: the missing cells at the end read as empty), `years` that are not ranges, an `access` value outside the four, or a placeholder other than `{place}` and `{year}` exits `2` and prints no gaps.
+
+**Which record.** A branch end, a birth gap or an unsupported link asks for the birth record: the birth, or the baptism that dates it, the same event `facts` reads. A death gap asks for the death or burial. A marriage gap, a gap with no event (`birth-missing`, `death-missing`), an event with no place and a private event get no hint.
+
+**Matching.** Every level of the event's place is compared, from the place itself up to the top, not just the two levels in `bp`, so a row for a department or a country matches. Names compare whole, folded the way `gwt-ledger` folds them: case, accents and punctuation do not count, so `SAINT EXEMPLE` matches `Saint-Éxemple`, but `Ville` never matches `Villexemple`. When several rows match, the deepest level wins, then the first row in the file. No matching row is not an error: the gap is listed as before, with no hint.
+
+**`online`** is `true` when the year falls in one of the row's ranges and `false` when it does not. The year is the one `facts` shows for that record: an exact year, or an "about" or estimated one. A "before", "after", range or span year, or none at all, leaves `online` unknown (`null`), never a guess.
+
+**Output.**
+
+- `--format json`: a gap with a match gets `"where": {"archive", "series", "url", "online", "access"}`. A gap with no match has no `where` key.
+- `--format queue`: the note gets a `where:` part after `facts:`, escaped the same way, with empty values and an unknown `online` left out: `facts: bp=Villaejemplo,_Provincia_Imaginaria by=1870 | where: access=online archive=Invented_parish_archive_of_Villaejemplo online=true series=Sacramental_books url=https://archives.example.org/parish?place%3DVillaejemplo&year%3D1870 | birth-uncited: birth has no citation`. To use a value, turn `_` back into spaces, then percent-decode it. A task whose gaps sit on two records (a birth and a death) lists both hints, separated by `; `, in gap order.
+- `--format tsv` does not change.
+
+Without `--archives` every format prints exactly what it printed before. The hint changes no priority and no dedupe key, and `gwt-leads` never opens the URL: it only writes it down.

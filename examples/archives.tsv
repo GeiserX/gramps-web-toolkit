@@ -1,0 +1,5 @@
+match	archive	series	years	url	access
+Villaejemplo	Invented parish archive of Villaejemplo	Sacramental books	1850-1920	https://archives.example.org/parish?place={place}&year={year}	online
+Provincia Imaginaria	Invented provincial archive	Civil register	1871-1950	https://archives.example.org/civil?q={place}	browser
+Exempleshire	Archives of an invented department	3E	1793-1912	https://archives.example.org/search?commune={place}&year={year}	letter
+France	Invented national archive				

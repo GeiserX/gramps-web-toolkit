@@ -9,3 +9,21 @@ gwt_leads.py | for k in ('father_handle', 'mother_handle')) < 2: | for k in ('fa
 gwt_leads.py | row['kind'] in ('uncited', 'unsupported-link') | row['kind'] in ('uncited',) | an unsupported link is record work (a verify task), never folded into the person's search task
 gwt_leads.py | why == 'private') | why == 'living') | the held-back note counts the private records apart from the people who may be living
 gwt_leads.py | LINK_NOT_GAPS = ('the link itself is cited', | LINK_NOT_GAPS = ( | a cited link is a level gwt-check links writes, so a report with one is read, not refused as unknown
+gwt_leads.py | folded = [fold(n) for n in chain] | folded = [fold(n) for n in chain[:2]] | --archives matches every level of the event's place, so a country row matches, not just the two levels of bp
+gwt_leads.py | if best is None or depth < best[0]: | if True: | the deepest matching level wins over a row higher up, whatever the file order
+gwt_leads.py | if best is None or depth < best[0]: | if best is None or depth <= best[0]: | between rows of the same level the first row in the file wins
+gwt_leads.py | text = ''.join(c for c in text if not unicodedata.combining(c)) | pass | archive names compare with accents folded, like the ledger
+gwt_leads.py | if row['match'] in folded: | if any(row['match'] in n for n in folded): | archive names compare whole, never as substrings
+gwt_leads.py | return year(ev) if (d.get('modifier') or 0) in (0, 3) else None | return year(ev) | a before, after or range year leaves online unknown, never a guess
+gwt_leads.py | if not ev or ev.get('private') is True: | if not ev: | a private event never gets an archive hint
+gwt_leads.py |         return death(T, p) |         return birth_dated(T, p) | a death gap asks for the death record, its place and its year
+gwt_leads.py | if missing or unknown: | if missing: | an unknown column in the archives file exits 2
+gwt_leads.py | bad = [f for f, spec, conv in fields if f not in URL_FIELDS or spec or conv] | bad = [] | a url placeholder other than {place} and {year} exits 2
+gwt_leads.py | if access not in ACCESS: | if False: | an access value outside online, browser, letter, unknown exits 2
+gwt_leads.py | if not m or int(m.group(2) or m.group(1)) < int(m.group(1)): | if not m: | a backwards years range exits 2
+gwt_leads.py |         if None in row: |         if False: | a row with more cells than the header exits 2, never drops the extra cell
+gwt_leads.py | access = row.get('access') or 'unknown' | access = row.get('access') | an empty or missing access reads as unknown
+gwt_leads.py |         if where: |         if True: | without --archives, or without a match, a row has no where key: json output is unchanged
+gwt_leads.py |     if wheres: |     if False: | a matched gap puts a where part in the queue note
+gwt_leads.py | if g.get('where') and g['where'] not in wheres: | if g.get('where'): | a task of several gaps on the same record lists that hint once
+gwt_leads.py | return fact_note({k: v for k, v in shown.items() if v not in (None, '')}) | return fact_note(shown) | an empty value or an unknown online is left out of the note
