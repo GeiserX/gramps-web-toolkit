@@ -6,6 +6,12 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-31
+
+### Change lists
+
+None. `--private-new` and `--server-backup` are off unless asked for, and `gwt-leads` output without `--archives` is byte-identical to 0.2.12.
+
 ### Added
 
 - `gwt-read insee search --files F [F ...] --surname S [--surname S2 ...]` reads INSEE's French deaths files ("fichier des personnes décédées", data.gouv.fr) offline: no request, no gate, no cache. Each line whose surname matches any `--surname` (whole words, case and accents folded) becomes a `principal` gwt-rank candidate with a birth event (year, commune and country as written) and a death event (year, place code). The full dates, codes and act number stay as fields gwt-rank does not score. Every line is checked: a line whose columns do not line up (a date that is not eight digits, a sex that is not 1 or 2, a line too short, or one longer than two records) exits 2 with the file and line, and nothing is written. A value INSEE wrote that breaks its own rules (month 13, day 60, a name with no `*`) is kept as written and marked `"malformed"`, and each file's count is in the envelope and on stderr. A file that cannot be read or holds no line exits 1, so it never reads as "no results". Columns count characters. A line that is not valid UTF-8 is read as CP850 or Latin-1, whichever gives more accented letters (CP850 on a tie), since the years differ, and marked `"encoding": "cp850"` or `"latin-1"`.
