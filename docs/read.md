@@ -216,7 +216,7 @@ A page that is not a results page (the search form, a captcha) is a STOP: nothin
 
 ## INSEE French deaths files
 
-INSEE publishes the "fichier des personnes décédées", every death registered in France since 1970, as one fixed-width text file per year (and per month for the current year), under the Licence Ouverte: https://www.data.gouv.fr/datasets/fichier-des-personnes-decedees/ . You download the years you need once. `insee search` reads those files on your machine and never touches the network, so it has no gate and no cache. Each line whose surname matches a `--surname` becomes a candidate for [gwt-rank](rank.md):
+INSEE publishes the "fichier des personnes décédées", every death registered in France since 1970, as one fixed-width text file per year, and per quarter and per month for recent years, under the Licence Ouverte: https://www.data.gouv.fr/datasets/fichier-des-personnes-decedees/ . You download the years you need once. `insee search` reads those files on your machine and never touches the network, so it has no gate and no cache. Each line whose surname matches a `--surname` becomes a candidate for [gwt-rank](rank.md):
 
 ```bash
 gwt read insee search --files deces-1985.txt deces-1986.txt --surname Ortega --surname Sanz --out runs/
@@ -228,6 +228,13 @@ gwt rank runs/<key>.candidates.json --given Tomás --surname Ortega --facts "by=
 | `--files` | one or more INSEE files, read in the order given |
 | `--surname` | a surname to keep. Repeat it: a line matching any of them is kept, so one pass over decades of files serves a whole branch; each line looks its surname up, so hundreds of `--surname` cost about what one does. Case and accents are folded and the surname must stand as whole words: `Ortega` keeps `ORTEGA` and `ORTEGA SANZ`, never `ORTEGAS`. At least one is needed |
 | `--out` | where the envelope and candidates files go |
+
+To try it without a download, `read/fixtures/insee-deces-1985.txt` holds six invented lines in the layout: `--files read/fixtures/insee-deces-1985.txt`.
+
+Which files to pass:
+
+- **Never mix a year's file with its quarter or month files.** They overlap, so the same death comes back twice with the same `id`, and gwt-rank lists both rows. Use the yearly file for a closed year, and the quarter or month files only for the year still running. The same file given twice does the same.
+- **A death can sit in a later year's file.** A file holds the deaths registered that year, and a late registration carries an earlier death date (a 1997 death in the 1999 file). Pass every year from the earliest possible death year onward.
 
 Here `--surname` is a list of surnames to keep, not the first and second surname it is for the other sources. To find who to look for, `gwt-leads --kinds missing-vital --format json` lists everyone with no death event (gap `death-missing`). gwt-leads holds back anyone who may still be alive, and those are often the people a post-1970 deaths file can answer: matching them against a file on your own machine is the private use `--include-living` is for. Never feed that list into searches on outside sites.
 
@@ -246,6 +253,10 @@ The layout is the one the dataset page gives ("Dessin d'enregistrement"), positi
 | 168-176 | death act number | `act` |
 
 Every candidate is the `principal` of its line, with role `Principal`. Its `id` is the death date, place code and act number, which is how INSEE itself names a death. The full dates, the codes, the country, the act number, the `file` and its `line` stay in the candidate as fields gwt-rank does not score: gwt-rank scores years, and a year plus the birthplace is already enough for `strong`. A `strong` row is a lead for the verifier, never an identification. The reader writes no change list: the verifier reads the line and writes the [gwt-apply](apply.md) change. INSEE warns that its files are published once and never corrected, and that 1970 to 1975 may have gaps.
+
+INSEE gives no death commune name, only its code, so `events.death.place` is the code: give gwt-rank `dp=<code>`, or leave `dp` out. A `dp=<town name>` never scores.
+
+INSEE also publishes, in the same dataset, the "fichier des oppositions": deaths whose publication someone has opposed, listed by death date, death place code and act number, which is exactly the candidate `id`. The reader does not read it. Before anything you publish, drop the candidates whose `id` is in that file.
 
 Every line of every file is checked, matched or not. A line whose columns do not line up stops the run with exit 2, the file and line in the message, and nothing written: a date that is not eight digits, a sex that is not `1` or `2`, a line too short to hold the death date (162 characters), or longer than two records (352 characters: two records glued on one line, or a file whose lines end in a carriage return alone, which would otherwise lose every record after the first). Real lines are 198 characters. A UTF-8 byte order mark at the start of a file is dropped. Blank lines are skipped. The death place code and the act number may be cut short, since the dataset page warns that some lines end in meaningless characters.
 
