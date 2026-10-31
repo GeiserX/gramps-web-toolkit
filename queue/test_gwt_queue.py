@@ -548,5 +548,53 @@ class QueueTest(unittest.TestCase):
         self.assertEqual({r['status'] for r in self.rows()}, {'claimed'})
 
 
+def _person(h, gid, first, sur, fam=None, events=()):
+    return {'handle': h, 'gramps_id': gid, 'primary_name': {'first_name': first, 'surname_list': [{'surname': sur}]},
+            'parent_family_list': [fam] if fam else [], 'event_ref_list': [{'ref': e} for e in events]}
+
+
+class SeedTest(unittest.TestCase):
+    def dump(self):
+        ev = [{'handle': 'b1', 'type': 'Birth', 'date': {'dateval': [1, 1, 1850, False]}, 'place': 'pl1'},
+              {'handle': 'd1', 'type': 'Death', 'date': {'dateval': [1, 1, 1900, False]}},
+              {'handle': 'b2', 'type': 'Birth', 'date': {'dateval': [1, 1, 2000, False]}}]
+        people = [_person('r', 'I0', 'Root', 'Zed', 'f0'),
+                  _person('a', 'I1', 'Ann', 'Alfa', 'f1', ['b1', 'd1']),   # has parents: not a frontier
+                  _person('b', 'I2', 'Bob', 'Beta', None, ['b1']),          # frontier, gen 1, born 1850
+                  _person('c', 'I3', 'Cy', 'Gama', None, ['b2']),           # frontier, maybe alive: skipped
+                  _person('g', 'I4', 'Gus', 'Delta', None, ['d1'])]         # frontier gen 2, dead
+        fams = [{'handle': 'f0', 'father_handle': 'b', 'mother_handle': 'c'},
+                {'handle': 'f1', 'father_handle': 'g'}]
+        # Ann is Root's... keep the line: root -> f0 -> Bob and Cy; Ann is a stranger with parents
+        return {'objects': {'people': people, 'families': fams, 'events': ev,
+                            'places': [{'handle': 'pl1', 'name': {'value': 'Conan'}}]}}
+
+    def test_frontier_lists_dead_parentless_ancestors_nearest_first(self):
+        tasks = Q.frontier(self.dump(), 'I0', this_year=2026)
+        self.assertEqual([t['person'] for t in tasks], ['I2'])
+        self.assertEqual(tasks[0]['priority'], 95)
+        self.assertEqual(tasks[0]['source'], 'Conan')
+        self.assertIn('generation 1', tasks[0]['note'])
+
+    def test_dead_from_gen_is_opt_in(self):
+        d = self.dump()
+        d['objects']['events'] = [e for e in d['objects']['events'] if e['handle'] != 'b1']
+        self.assertEqual(Q.frontier(d, 'I0', this_year=2026), [])
+        self.assertEqual([t['person'] for t in Q.frontier(d, 'I0', this_year=2026, dead_from_gen=1)], ['I2', 'I3'])
+
+    def test_unknown_root_is_an_error(self):
+        with self.assertRaises(ValueError):
+            Q.frontier(self.dump(), 'I9')
+
+    def test_seed_command_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as d:
+            dump, q = os.path.join(d, 'd.json'), os.path.join(d, 'cola.tsv')
+            json.dump(self.dump(), open(dump, 'w'))
+            code, out, _ = run('--queue', q, 'seed', dump, '--root', 'I0')
+            self.assertEqual(code, 0)
+            run('--queue', q, 'seed', dump, '--root', 'I0')
+            self.assertEqual(len(open(q).read().strip().splitlines()), 2)  # header + 1 row
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -69,3 +69,9 @@ gwt-queue add --person "Ana Peiró Toledo" --label "Ana Peiró Toledo" \
 `--dedupe` only knows this queue. A search logged in [gwt-ledger](ledger.md) from outside the queue is not seen, so check the ledger before a lane runs a task.
 
 Keep the queue next to the ledger: `buscado.tsv` says what was searched, `cola.tsv` says what is still to do.
+
+### Seeding from a tree: `seed`
+
+`gwt-queue seed DUMP --root I0001` reads a `gwt-check` dump and queues one search task for every ancestor of the root person (a Gramps ID) who has no parents in the tree yet, nearest generation first (priority 95 for generation 1, then 5 less per generation, never below 1). The task's source is the birth place (else the death place), its query is name, year and place, and its note says the generation and which of birth, marriage and death the tree lacks. It is idempotent: it seeds with `--dedupe`, keyed by person, so running it again adds nothing.
+
+Only people the tree shows to be dead are queued: a person with a death event, or born more than 100 years ago. Nothing is sought outside about someone who may be alive. `--dead-from-gen N` also treats every ancestor from generation N up as dead even with no dates; it is the owner's decision and is never the default. `--max-gen` (default 12) bounds the walk.

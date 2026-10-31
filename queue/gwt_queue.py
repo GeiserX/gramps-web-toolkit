@@ -308,6 +308,79 @@ def read_jsonl(stream, rows):
     return out
 
 
+def person_name(p):
+    n = p.get('primary_name') or {}
+    sur = (n.get('surname_list') or [{}])[0].get('surname', '')
+    return clean('%s %s' % (n.get('first_name', ''), sur))
+
+
+def frontier(dump, root, max_gen=12, this_year=None, dead_from_gen=None):
+    """Tasks to extend a tree upward, from a gwt-check dump: every ancestor of the root person (Gramps ID) with no
+    parents in the tree, nearest generation first. Only people shown to be dead (a death event, or born over 100
+    years ago): nothing is sought outside about someone who may be alive. dead_from_gen, when given, also takes
+    every ancestor from that generation up as dead (the owner's call, never the default). Returns dicts for read_jsonl."""
+    this_year = this_year or datetime.date.today().year
+    objs = dump['objects'] if 'objects' in dump else dump
+    people = {p['handle']: p for p in objs['people']}
+    fams = {f['handle']: f for f in objs['families']}
+    events = {e['handle']: e for e in objs['events']}
+    places = {x['handle']: x for x in objs.get('places', [])}
+    start = [p for p in people.values() if p.get('gramps_id') == root]
+    if not start:
+        raise ValueError('no person %s in the dump' % root)
+
+    def parents(p):
+        for fh in p.get('parent_family_list') or []:
+            f = fams.get(fh) or {}
+            return [people[h] for h in (f.get('father_handle'), f.get('mother_handle')) if h in people]
+        return []
+
+    def facts(p):
+        out = {}
+        for r in p.get('event_ref_list') or []:
+            e = events.get(r.get('ref'))
+            if not e or e.get('type') not in ('Birth', 'Death', 'Baptism', 'Marriage'):
+                continue
+            val = (e.get('date') or {}).get('dateval') or []
+            year = val[2] if len(val) > 2 and val[2] else None
+            pl = places.get(e.get('place'))
+            name = ((pl or {}).get('name') or {}).get('value', '')
+            out.setdefault(e['type'], (year, name))
+        return out
+
+    seen, level, tasks = {start[0]['handle']}, start, []
+    for gen in range(1, max_gen + 1):
+        nxt = []
+        for child in level:
+            for par in parents(child):
+                if par['handle'] in seen:
+                    continue
+                seen.add(par['handle'])
+                nxt.append(par)
+        for p in nxt:
+            if parents(p):
+                continue
+            f = facts(p)
+            born = (f.get('Birth') or f.get('Baptism') or (None, ''))
+            dead = 'Death' in f or (born[0] is not None and this_year - born[0] > 100) \
+                or (dead_from_gen is not None and gen >= dead_from_gen)
+            if not dead:
+                continue
+            place = born[1] or (f.get('Death') or (None, ''))[1]
+            year = born[0] or (f.get('Death') or (None, ''))[0]
+            gaps = [w for w, ev in (('birth', 'Birth'), ('marriage', 'Marriage'), ('death', 'Death')) if ev not in f]
+            what = 'the birth and marriage records' if 'Birth' not in f and 'Baptism' not in f else 'the parents\' marriage record'
+            tasks.append({'person': p['gramps_id'], 'label': person_name(p), 'kind': 'search', 'source': place,
+                          'query': ' '.join(x for x in (person_name(p), str(year or ''), place) if x),
+                          'priority': max(1, 100 - 5 * gen),
+                          'note': 'generation %d, no parents in the tree; look for %s. Missing: %s' % (gen, what, ', '.join(gaps) or 'nothing'),
+                          'dedupe_key': '%s:frontier:' % p['gramps_id']})
+        level = nxt
+        if not level:
+            break
+    return tasks
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog='gwt-queue', description=__doc__.split('\n')[0])
     p.add_argument('--queue', default=os.environ.get('GWT_QUEUE', 'cola.tsv'))
@@ -333,6 +406,11 @@ def main(argv=None):
                    help='skip a task already queued, running or done (same dedupe key, else same '
                         'person+kind+source+query); an open match gets the new label, query, note and priority')
     a.add_argument('--retry-failed', action='store_true', help='with --dedupe, queue again a task that parked as failed')
+
+    sd = sub.add_parser('seed', help='queue the ancestors of a person who have no parents yet, nearest generation first')
+    sd.add_argument('dump', help='gwt-check dump (JSON)'); sd.add_argument('--root', required=True, help='Gramps ID of the person to count from')
+    sd.add_argument('--max-gen', type=int, default=12)
+    sd.add_argument('--dead-from-gen', type=int, help='treat ancestors from this generation up as dead even with no dates (your decision)')
 
     c = sub.add_parser('claim', help='take the best due task for a lane; exit 1 if none is due')
     c.add_argument('--lane', required=True, help='lane name; recorded on the row')
@@ -400,6 +478,20 @@ def main(argv=None):
                 print_row(row)
             return rows, 0
         return with_queue(args.queue, add_fn)
+
+    if args.cmd == 'seed':
+        try:
+            with open(args.dump, encoding='utf-8') as fh:
+                tasks = frontier(json.load(fh), args.root, args.max_gen, dead_from_gen=args.dead_from_gen)
+        except (OSError, ValueError) as e:
+            p.error('seed: %s' % e)
+        batch = [json.dumps(t, ensure_ascii=False) for t in tasks]
+
+        def seed_fn(rows):
+            for row in add_rows(rows, read_jsonl(batch, rows), True, False):
+                print_row(row)
+            return rows, 0
+        return with_queue(args.queue, seed_fn)
 
     if args.cmd == 'claim':
         def claim_fn(rows):

@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Added
+
+- `gwt-queue seed DUMP --root ID` queues a search task for each ancestor of a person who has no parents in the tree yet, nearest generation first. Only people shown to be dead (a death event, or born over 100 years ago) are queued; `--dead-from-gen N` also takes ancestors from that generation up as dead, and is never the default.
+
 ### Fixed
 
 - `gwt-rawstore put` names the file that failed. A FAIL line now gives the path and the error type (a bare `TimeoutError()` used to print an empty line), and a last line on stderr and stdout lists every file not stored, so a log of stdout alone shows it. A transient error (network, 5xx, 429, a body that changed while it was read, an object the store did not confirm) is retried, three attempts in all with the file hashed again each time; a 403 or a missing file is not.
