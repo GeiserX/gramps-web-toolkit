@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Added
+
+- `gwt-apply --server-backup` asks the Gramps Web server to store a backup of the tree (`POST /api/backups/`) after the tree lock is taken and the plan has passed its checks, and before the first write. If the server does not store a restorable backup, nothing is written and the run exits 1. It only creates a backup: `gwt-apply` never restores one. It needs `--apply` and an owner or admin login. The server may answer 202 with a task; the run waits for that task, checks that the new backup is listed and restorable, and never repeats the POST.
+
 ### Fixed
 
 - `gwt-rawstore put` names the file that failed. A FAIL line now gives the path and the error type (a bare `TimeoutError()` used to print an empty line), and a last line on stderr and stdout lists every file not stored, so a log of stdout alone shows it. A transient error (network, 5xx, 429, a body that changed while it was read, an object the store did not confirm) is retried, three attempts in all with the file hashed again each time; a 403 or a missing file is not.

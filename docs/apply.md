@@ -373,6 +373,16 @@ Ten rounds of LLM-driven applies on two trees, each followed by a verification p
 
 Two habits from those rounds belong around every apply, with or without this tool: export a backup of the tree before writing (`POST /api/exporters/gramps/file`) and compare its checksum after copying it; and prove the verification script can fail by running it on a copy of the dump with errors injected.
 
+## A backup stored by the server (`--server-backup`)
+
+```bash
+gwt-apply changes.jsonl --apply --server-backup
+```
+
+With `--apply`, `--server-backup` asks the Gramps Web server to store a backup of the tree (`POST /api/backups/`) after the tree lock is taken and the plan has passed its checks, and before the first write. If the server does not store it, nothing is written and the run exits 1. The backup id is printed and logged as a `server-backup` event. It only creates a backup: `gwt-apply` never calls the server's restore, and a restore stays a decision for a person.
+
+Two limits to know. The server keeps a fixed number of backups per tree and deletes the oldest when it stores a new one. Creating a backup needs an owner or admin login; a login with a lower role gets HTTP 403 and the run stops before writing, so use the flag only with a login that can store one. A dry run needs no backup, so `--server-backup` without `--apply` is refused.
+
 ## Undo a run
 
 A backup restores the whole tree. When one run went wrong and the rest of the tree has moved on since, undo only that run:
