@@ -226,7 +226,7 @@ gwt rank runs/<key>.candidates.json --given Tomás --surname Ortega --facts "by=
 | Option | Meaning |
 | --- | --- |
 | `--files` | one or more INSEE files, read in the order given |
-| `--surname` | a surname to keep. Repeat it: a line matching any of them is kept, so one pass over decades of files serves a whole branch. Case and accents are folded and the surname must stand as whole words: `Ortega` keeps `ORTEGA` and `ORTEGA SANZ`, never `ORTEGAS`. At least one is needed |
+| `--surname` | a surname to keep. Repeat it: a line matching any of them is kept, so one pass over decades of files serves a whole branch; each line looks its surname up, so hundreds of `--surname` cost about what one does. Case and accents are folded and the surname must stand as whole words: `Ortega` keeps `ORTEGA` and `ORTEGA SANZ`, never `ORTEGAS`. At least one is needed |
 | `--out` | where the envelope and candidates files go |
 
 Here `--surname` is a list of surnames to keep, not the first and second surname it is for the other sources. To find who to look for, `gwt-leads --kinds missing-vital --format json` lists everyone with no death event (gap `death-missing`). gwt-leads holds back anyone who may still be alive, and those are often the people a post-1970 deaths file can answer: matching them against a file on your own machine is the private use `--include-living` is for. Never feed that list into searches on outside sites.

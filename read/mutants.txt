@@ -25,7 +25,7 @@ gwt_insee.py | odd += bool(rec['malformed']) | pass | each file's count of lines
 gwt_insee.py | if sex not in SEXES: | if False: | an INSEE sex that is not 1 or 2 stops the run (a shifted line is caught here)
 gwt_insee.py | if len(line) < MIN_LENGTH: | if False: | an INSEE line too short to hold the death date stops the run
 gwt_insee.py | rec = parse_line(line) | rec = parse_line(line) if surname_matches(line.split('*')[0], wanted) else {'surname': ''} | every INSEE line is checked, not only the lines a --surname matches
-gwt_insee.py | if n and any(have[i:i + n] == w for i in range(len(have) - n + 1)): | if n and ' '.join(w) in ' '.join(have): | an INSEE --surname matches whole words: ORTEGA never matches ORTEGAS
+gwt_insee.py | return any(have[i:j] in wanted for i in range(len(have)) for j in range(i + 1, len(have) + 1)) | return any(' '.join(w) in ' '.join(have) for w in wanted) | an INSEE --surname matches whole words: ORTEGA never matches ORTEGAS
 gwt_insee.py | return cp850, 'cp850' | return latin1, 'latin-1' | a non-UTF-8 INSEE line whose Latin-1 reading has no more accented letters is read as CP850 (PARIS 12°)
 gwt_insee.py | if _plausible(latin1) > _plausible(cp850): | if False: | a Latin-1 INSEE line (0xF1 ñ, 0xB0 °) is read as Latin-1, not CP850
 gwt_insee.py | return y or None | return y | an INSEE year 0000 is no year, never year 0

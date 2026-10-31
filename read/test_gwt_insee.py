@@ -78,8 +78,20 @@ class Candidates(Run):
         code, lines, _ = self.run_insee([FIX], ['Ortega'])
         names = [c['name'] for c in self.cands(lines)]
         self.assertEqual(names, ['TOMAS ORTEGA', 'MARIA ROSA ORTEGA SANZ'])    # never ORTEGAS
-        self.assertFalse(gwt_insee.surname_matches('ORTEGAS', [['ortega']]))
-        self.assertTrue(gwt_insee.surname_matches('DE LA FONTAINE', [['la', 'fontaine']]))
+        self.assertFalse(gwt_insee.surname_matches('ORTEGAS', {('ortega',)}))
+        self.assertTrue(gwt_insee.surname_matches('DE LA FONTAINE', {('la', 'fontaine')}))
+        self.assertFalse(gwt_insee.surname_matches('DE LA FONTAINE', {('de', 'fontaine')}))
+
+    def test_a_line_never_walks_the_whole_surname_list(self):
+        # a branch passes hundreds of --surname: each line looks its words up, it never loops over every surname
+        class NoScan(set):
+            def __iter__(self):
+                raise AssertionError('the wanted surnames were walked for one line')
+        wanted = NoScan()
+        set.update(wanted, [('s%d' % i,) for i in range(500)] + [('ortega',), ('la', 'fontaine')])
+        self.assertTrue(gwt_insee.surname_matches('ORTEGA SANZ', wanted))
+        self.assertTrue(gwt_insee.surname_matches('DE LA FONTAINE', wanted))
+        self.assertFalse(gwt_insee.surname_matches('ORTEGAS', wanted))
 
     def test_surname_is_folded_for_case_and_accents(self):
         code, lines, _ = self.run_insee([FIX], ['ortéga'])

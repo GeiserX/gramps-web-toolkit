@@ -133,13 +133,10 @@ def fold(text):
 
 def surname_matches(surname, wanted):
     """True when one wanted surname stands as whole words inside the line's surname: ORTEGA matches ORTEGA and
-    ORTEGA SANZ, never ORTEGAS. `wanted` holds folded word lists."""
-    have = fold(surname)
-    for w in wanted:
-        n = len(w)
-        if n and any(have[i:i + n] == w for i in range(len(have) - n + 1)):
-            return True
-    return False
+    ORTEGA SANZ, never ORTEGAS. `wanted` is a set of folded word tuples; each run of the line's words is looked up in
+    it, so the cost per line does not grow with the number of surnames a branch passes."""
+    have = tuple(fold(surname))
+    return any(have[i:j] in wanted for i in range(len(have)) for j in range(i + 1, len(have) + 1))
 
 
 def candidate(rec, path, lineno, encoding):
@@ -173,7 +170,7 @@ def read_files(paths, surnames):
     """(candidates, per-file summaries) for every line of every file whose surname matches. Raises LayoutError with
     the file and line of the first line out of layout, EmptyFile for a file with no line, and OSError for a file
     that cannot be read."""
-    wanted = [fold(s) for s in surnames if fold(s)]
+    wanted = {tuple(fold(s)) for s in surnames if fold(s)}
     cands, files = [], []
     for path in paths:
         h, lines, matched, odd = hashlib.sha256(), 0, 0, 0
