@@ -261,7 +261,15 @@ The files are ASCII in practice: names and communes in upper case, without accen
 
 So each line is read as UTF-8 when it is valid UTF-8 (plain ASCII is). Otherwise it is read both as CP850 and as Latin-1, and the reading with more accented letters of the French, Spanish and Portuguese alphabets (and `°`) wins; a tie goes to CP850. Such a candidate carries `"encoding": "cp850"` or `"encoding": "latin-1"`: its odd characters are our guess, so read them against the file.
 
-The envelope lists each file with its sha256, its line count and how many lines matched, and the surnames asked for. The `results` line prints `N of M lines in K files`. Exit 0 when a line matched, 2 when none did (the candidates file is written, empty), 64 with no `--surname`.
+The envelope lists each file with its sha256, its line count and how many lines matched, and the surnames asked for. The `results` line prints `N of M lines in K files`. | Exit | Meaning | Files written |
+| --- | --- | --- |
+| 0 | at least one line matched | envelope and candidates |
+| 2 | no line matched | envelope and an empty candidates file |
+| 2 | a line out of the layout (the message names the file and line) | none |
+| 1 | a file that cannot be read, or holds no line (a failed download) | none |
+| 64 | no `--surname` | none |
+
+So exit 2 means "none found" only when the candidates file was written. A download cut short at a line boundary cannot be seen from the file alone: compare the sha256 and line count the envelope lists for each file with the download.
 
 ## Tests
 

@@ -186,6 +186,12 @@ class Candidates(Run):
         self.assertEqual(code, 0)
         boom.assert_not_called()
 
+    def test_the_code_and_act_may_be_cut_short(self):
+        p = self.write('short.txt', line(width=176).rstrip())
+        code, lines, _ = self.run_insee([p], ['Loriot'])
+        self.assertEqual(code, 0)
+        self.assertEqual(self.cands(lines)[0]['act'], '0000001')
+
 
 class Malformed(Run):
     """A line out of the layout stops the run with exit 2 and nothing written, even a line no --surname matches."""
@@ -224,17 +230,22 @@ class Malformed(Run):
         self.assertIn('cr.txt line 1: line is 596 characters', out)
         self.assertEqual(self.written(), [])
 
-    def test_a_missing_file_exits_2_and_writes_nothing(self):
-        code, _, out = self.run_insee([FIX, os.path.join(self.tmp.name, 'nope.txt')], ['Ortega'])
-        self.assertEqual(code, 2)
+
+
+class Unreadable(Run):
+    """A file that cannot be read, or holds no line, is an error (exit 1, nothing written), never "no results"."""
+    def test_a_missing_file_exits_1_and_writes_nothing(self):
+        code, _, out = self.run_insee([FIX, os.path.join(self.tmp.name, 'nope.txt')], ['Zorvalo'])
+        self.assertEqual(code, 1)
         self.assertIn('cannot read', out)
         self.assertEqual(self.written(), [])
 
-    def test_the_code_and_act_may_be_cut_short(self):
-        p = self.write('short.txt', line(width=176).rstrip())
-        code, lines, _ = self.run_insee([p], ['Loriot'])
-        self.assertEqual(code, 0)
-        self.assertEqual(self.cands(lines)[0]['act'], '0000001')
+    def test_an_empty_file_exits_1_and_writes_nothing(self):
+        p = self.write('deces-empty.txt', raw=b'\r\n\n')
+        code, _, out = self.run_insee([FIX, p], ['Zorvalo'])
+        self.assertEqual(code, 1, out)
+        self.assertIn('deces-empty.txt holds no line', out)
+        self.assertEqual(self.written(), [])
 
 
 class OddValues(Run):

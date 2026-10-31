@@ -32,3 +32,5 @@ gwt_insee.py | return y or None | return y | an INSEE year 0000 is no year, neve
 gwt_read.py | return cmd_insee_search(a)      # offline: no gate, no cache, no fetcher | pass | gwt-read insee never builds a gate, a cache or a fetcher
 gwt_insee.py | if len(line) > MAX_LENGTH: | if False: | two INSEE records glued on one line, or a CR-only file, stop the run instead of losing every record after the first
 gwt_insee.py | line = line.removeprefix('\ufeff') | pass | a UTF-8 byte order mark does not shift the first INSEE line
+gwt_insee.py | if not lines: | if False: | an empty INSEE file (a failed download) is an error, never a clean "no results"
+gwt_read.py | return EXIT_ERROR      # a file that cannot be read is an error, never "no results" | return EXIT_EMPTY | an unreadable INSEE file exits 1, so a caller never logs it as "searched, none found"

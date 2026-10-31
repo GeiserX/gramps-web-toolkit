@@ -28,8 +28,8 @@ search already run costs nothing.
 Writes <out>/<key>.json (the answer) and <out>/<key>.candidates.json (what gwt-rank reads), and prints
 `source`, `evidence`, `candidates` and `results` lines. It never writes the ledger.
 
-Exit codes: 0 ok, 1 an error answer (nothing saved), 2 no results (insee: also a line out of INSEE's layout or a
-file that cannot be read, nothing written), 3 rate limit, block, captcha or empty page
+Exit codes: 0 ok, 1 an error answer (nothing saved; insee: a file that cannot be read or holds no line), 2 no results
+(insee: also a line out of INSEE's layout, with nothing written: no candidates file means it was not "none"), 3 rate limit, block, captcha or empty page
 (HTTP 429: every lane on the account pauses; HTTP 403: the account's gate is blocked for 24 h; do other
 work), 4 signed out or the token
 expired (get a fresh token; never retry in a loop), 6 the account's gate is paused (nothing was requested),
@@ -61,7 +61,7 @@ except ImportError:      # a clone: they live in ../gate, ../fscache, ../rank
     from gwt_gate import Gate, Paused
     import gwt_rank
 
-from gwt_reader import EXIT_OK, EXIT_EMPTY, EXIT_PAUSED  # noqa: E402
+from gwt_reader import EXIT_OK, EXIT_ERROR, EXIT_EMPTY, EXIT_PAUSED  # noqa: E402
 
 FS_HOST = 'https://www.familysearch.org'
 SEARCH_PATH = '/service/search/hr/v2/personas'
@@ -360,9 +360,12 @@ def cmd_insee_search(a):
     except gwt_insee.LayoutError as e:
         err('%s; nothing was written' % e)
         return EXIT_EMPTY
+    except gwt_insee.EmptyFile as e:
+        err('%s; nothing was written' % e)
+        return EXIT_ERROR
     except OSError as e:
         err('cannot read %s: %s; nothing was written' % (e.filename or 'a file', e.strerror or e))
-        return EXIT_EMPTY
+        return EXIT_ERROR      # a file that cannot be read is an error, never "no results"
     for f in files:
         if f['malformed']:
             err('%s: %d line%s %s a value out of INSEE\'s own rules (month over 12, day over 31, or a name with no '

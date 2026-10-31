@@ -58,6 +58,10 @@ class LayoutError(ValueError):
     """A line that is not in INSEE's layout: the run stops, nothing is written."""
 
 
+class EmptyFile(ValueError):
+    """A file with no line at all, such as a failed download: the run stops, nothing is written."""
+
+
 # accented letters INSEE's birthplaces use, and the degree sign; CP850's box and line characters, ±, Ð, Þ, ø are not
 PLAUSIBLE = set('ÀÂÄÇÈÉÊËÎÏÔÖÙÛÜÑÃÕÁÍÓàâäçèéêëîïôöùûüÿñãõáíóú°')
 
@@ -167,7 +171,8 @@ def candidate(rec, path, lineno, encoding):
 
 def read_files(paths, surnames):
     """(candidates, per-file summaries) for every line of every file whose surname matches. Raises LayoutError with
-    the file and line of the first line out of layout, and OSError for a file that cannot be read."""
+    the file and line of the first line out of layout, EmptyFile for a file with no line, and OSError for a file
+    that cannot be read."""
     wanted = [fold(s) for s in surnames if fold(s)]
     cands, files = [], []
     for path in paths:
@@ -189,6 +194,8 @@ def read_files(paths, surnames):
                 if surname_matches(rec['surname'], wanted):
                     matched += 1
                     cands.append(candidate(rec, path, lineno, enc))
+        if not lines:
+            raise EmptyFile('%s holds no line' % path)
         files.append({'file': os.path.basename(path), 'sha256': h.hexdigest(), 'lines': lines, 'matched': matched,
                       'malformed': odd})
     return cands, files
