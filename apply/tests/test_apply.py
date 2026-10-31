@@ -3957,3 +3957,20 @@ def test_unlink_child_dry_run_on_a_snapshot_and_verify(fake, tmp_path, env, monk
     capsys.readouterr()
     assert main([str(changes), "--verify"]) == 0  # applied: a skip
     assert "[skip] u-tom" in capsys.readouterr().out
+
+
+def test_private_new_makes_every_created_object_private_and_default_does_not(fake, scan):
+    ops = full_list(scan)
+    client = Client("https://gw.example", "u", "pw", tree="tree-test", dry_run=False, session=fake)
+    res = Applier(client, retries=1, retry_wait=0, private_new=True).run(ops)
+    assert all(r.status == "done" for r in res), [r.actions for r in res]
+    created = [fake.store[ns][stable_handle(k)] for ns, k in
+               [("people", "p-john"), ("families", "f-anna"), ("citations", "c-bapt"), ("media", "m-bapt"), ("notes", "n-john")]]
+    assert all(o["private"] is True for o in created)
+
+
+def test_without_private_new_created_objects_are_not_forced_private(fake, scan):
+    ops = full_list(scan)
+    client = Client("https://gw.example", "u", "pw", tree="tree-test", dry_run=False, session=fake)
+    Applier(client, retries=1, retry_wait=0).run(ops)
+    assert not fake.store["notes"][stable_handle("n-john")].get("private")

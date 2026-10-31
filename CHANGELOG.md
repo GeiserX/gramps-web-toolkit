@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Added
+
+- `gwt-apply --private-new` saves every object the run creates as private, so a tree that shows guests only some people never shows a new source, citation, media object or note by default. Off by default; nothing about existing change lists changes.
+
 ### Fixed
 
 - `gwt-rawstore put` names the file that failed. A FAIL line now gives the path and the error type (a bare `TimeoutError()` used to print an empty line), and a last line on stderr and stdout lists every file not stored, so a log of stdout alone shows it. A transient error (network, 5xx, 429, a body that changed while it was read, an object the store did not confirm) is retried, three attempts in all with the file hashed again each time; a 403 or a missing file is not.

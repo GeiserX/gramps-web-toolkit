@@ -25,7 +25,7 @@ On a multi-tree server, the tree comes from the user: the login (`POST /api/toke
 
 Every request carries the User-Agent `gramps-web-toolkit/<version> (gwt-apply; +https://github.com/GeiserX/gramps-web-toolkit)`, so a server admin can tell the toolkit apart in the logs.
 
-Other flags: `--verify` and `--json FILE` ([Prove a list landed](#prove-a-list-landed)), `--log PATH`, `--retries N` (default 5, at least 1), `--retry-wait SECONDS` (default 30), `--snapshot FILE`, `--save-snapshot FILE` and `--since OLD` ([Snapshots](#snapshots)), `--tag NAME` ([Tags](#tags)), `--break-lock` (below).
+Other flags: `--verify` and `--json FILE` ([Prove a list landed](#prove-a-list-landed)), `--log PATH`, `--retries N` (default 5, at least 1), `--retry-wait SECONDS` (default 30), `--snapshot FILE`, `--save-snapshot FILE` and `--since OLD` ([Snapshots](#snapshots)), `--tag NAME` ([Tags](#tags)), `--private-new` ([Private by default](#private-by-default)), `--break-lock` (below).
 
 Every run gets a run id, `<date>-<time>-<6 hex>`. The first line of output names it and the log, before the login, so a run whose login fails still says which run it was. The log path carries `(created once logged in)`: the file appears only after the login. See [The log](#the-log).
 
@@ -209,6 +209,10 @@ A merge is the one op that deletes something, so it says everything it will do b
 The merge itself is the server's (`POST /api/people/<winner>/merge/<loser>`, `POST /api/families/<winner>/merge/<loser>`, `POST /api/events/<winner>/merge/<loser>`), the same code the Gramps Web merge screen runs, so references are moved by Gramps and never by hand-written `PUT`s. `merge_repository` is the exception: Gramps Web has no repository merge, so it moves each source's entry with a `PUT` and then deletes the loser with `DELETE`. On a person merge the winner keeps its own name, gender, birth and death; `use_loser: ["birth"]` makes the loser's birth event the winner's birth instead (likewise `death`). That change is written to the winner before the merge.
 
 Before the merge, the winner gets a note that records it: `Merged Person I0042 (John Smith) into this person (ruling R-12). <reason>`. The note is how a rerun knows the merge is done: when the loser is gone and the winner has that note, the op is skipped; when the loser is gone and there is no note, the op is a conflict.
+
+### Private by default
+
+`--private-new` saves every object the run creates with `private` set (a source, citation, media object, note, event, place, person, family). The tag objects `--tag` makes are the one exception. Gramps Web hides private objects from a guest or any user below owner, so a tree that shows guests only a chosen set of people never shows a new object by default. Without the flag nothing is forced: an object is public unless an op says otherwise. Objects the run only changes keep their own `private` value.
 
 ## Prove a list landed
 
