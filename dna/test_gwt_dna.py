@@ -283,6 +283,16 @@ class Identity(unittest.TestCase):
         self.assertFalse([o for o in ops if o.get("person") == o.get("target") is not None])
         self.assertEqual(len([o for o in ops if o["op"] == "add_person"]), 2)
 
+    def test_id_map_with_a_bom_an_unknown_target_or_a_shared_name(self):
+        p = os.path.join(self.d.name, "map.tsv")
+        with open(p, "w", encoding="utf-8-sig") as fh:
+            fh.write("myheritage\tD-11AA\tI0002\n")
+        self.assertEqual(D.read_id_map(p, "myheritage")["D-11AA"], "I0002")
+        with self.assertRaises(D.BadInput):
+            run("myheritage", ["myheritage-matches.csv"], id_map={"D-11AA": "I9999"})
+        with self.assertRaises(D.BadInput):   # FTDNA's two Lee Wards are two people: a name cannot map both
+            run("ftdna", ["ftdna-matches.csv"], id_map={"Lee Ward": "I0002", "name:lee ward": "I0002"})
+
     def test_id_map_file(self):
         p = os.path.join(self.d.name, "map.tsv")
         with open(p, "w") as fh:
@@ -347,6 +357,53 @@ class Files(unittest.TestCase):
             self.assertIn("--force", err)
             code, err = self.cli(*base, "--tested", "I0999", "--force")
             self.assertEqual((code, "not in the snapshot" in err), (2, True))
+
+
+class BadFiles(unittest.TestCase):
+    """A file that cannot be read is exit 2 and one line, never a traceback."""
+
+    def cli(self, d, *files, snapshot=fx("tree.json"), out="c.jsonl", extra=()):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code = D.main(["--site", "myheritage", "--tested", "I0001", "--snapshot", snapshot,
+                           "--out", os.path.join(d, out), *extra, *files])
+        return code, err.getvalue()
+
+    def test_missing_files_and_folders(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(self.cli(d, os.path.join(d, "nosuch.csv"))[0], 2)
+            self.assertEqual(self.cli(d, fx("myheritage-matches.csv"), out="no/dir/c.jsonl")[0], 2)
+            self.assertEqual(self.cli(d, fx("myheritage-matches.csv"),
+                                      extra=["--id-map", os.path.join(d, "none.tsv")])[0], 2)
+
+    def test_old_mac_line_ends_and_utf16(self):
+        with tempfile.TemporaryDirectory() as d:
+            with open(fx("myheritage-matches.csv"), encoding="utf-8") as fh:
+                text = fh.read()
+            mac, u16 = os.path.join(d, "mac.csv"), os.path.join(d, "u16.csv")
+            with open(mac, "w", newline="") as fh:
+                fh.write(text.replace("\n", "\r"))
+            with open(u16, "w", encoding="utf-16") as fh:
+                fh.write(text)
+            for f in (mac, u16):
+                self.assertEqual(len(D.read_files([f], {})[0]), 4, f)
+
+    def test_a_snapshot_whose_people_are_not_objects(self):
+        with tempfile.TemporaryDirectory() as d:
+            snap = os.path.join(d, "t.json")
+            with open(snap, "w") as fh:
+                json.dump({"objects": {"people": ["x"], "notes": []}}, fh)
+            code, err = self.cli(d, fx("myheritage-matches.csv"), snapshot=snap)
+            self.assertEqual(code, 2, err)
+
+    def test_fewer_batches_than_last_time_leaves_no_old_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            files = [fx("myheritage-matches.csv"), fx("myheritage-segments.csv")]
+            self.assertEqual(self.cli(d, *files, extra=["--batch", "4"])[0], 0)
+            self.assertEqual(len(os.listdir(d)), 4)
+            self.assertEqual(self.cli(d, *files, extra=["--batch", "7"])[0], 2)   # old files: --force first
+            self.assertEqual(self.cli(d, *files, extra=["--batch", "7", "--force"])[0], 0)
+            self.assertEqual(sorted(os.listdir(d)), ["c-01.jsonl", "c-02.jsonl", "c-03.jsonl"])
 
 
 @unittest.skipIf(FakeGrampsWeb is None and not os.environ.get("CI"), "gwt-apply not importable")   # CI must run it

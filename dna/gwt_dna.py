@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import glob
 import gzip
 import io
 import json
@@ -106,12 +107,16 @@ def read_csv(path: str) -> list[list[str]]:
     with open(path, "rb") as fh:
         raw = fh.read()
     try:
-        text = raw.decode("utf-8-sig")
+        text = raw.decode("utf-16") if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else raw.decode("utf-8-sig")
     except UnicodeDecodeError:
         text = raw.decode("cp1252", errors="replace")
+    text = io.StringIO(text, newline=None).read()  # \r\n and an old Mac's lone \r become \n
     first = text.split("\n", 1)[0]
     delim = max(",;\t", key=first.count)
-    rows = [r for r in csv.reader(io.StringIO(text), delimiter=delim) if any(c.strip() for c in r)]
+    try:
+        rows = [r for r in csv.reader(io.StringIO(text), delimiter=delim) if any(c.strip() for c in r)]
+    except csv.Error as exc:
+        raise BadInput(f"{path}: not a CSV file ({exc})")
     if len(rows) < 2:
         raise BadInput(f"{path}: no header and rows")
     return rows
@@ -280,6 +285,8 @@ def load_tree(path: str) -> dict:
     notes = objs.get("notes") or objs.get("Note") or []
     if not isinstance(people, list) or not people:
         raise BadInput(f"{path}: no people in it")
+    if not isinstance(notes, list) or not all(isinstance(o, dict) for o in people + notes):
+        raise BadInput(f"{path}: its people and notes are not lists of objects; take a new one")
     note_text = {}
     for n in notes:
         t = n.get("text")
@@ -308,7 +315,7 @@ def read_id_map(path: str | None, site: str) -> dict:
     out = {}
     if not path:
         return out
-    with open(path, encoding="utf-8") as fh:
+    with open(path, encoding="utf-8-sig") as fh:  # a TSV saved by Notepad or Excel starts with a BOM
         for n, line in enumerate(fh, 1):
             if not line.strip() or line.startswith("#"):
                 continue
@@ -334,13 +341,20 @@ def build(matches: dict, tree: dict, *, site: str, tested: str, kit: str, ruling
     """One group of ops per match (a group never splits across files), and the report."""
     if tested not in tree["ids"]:
         raise BadInput(f"--tested {tested}: not in the snapshot")
+    if (gone := sorted(set(id_map.values()) - set(tree["ids"]))):
+        raise BadInput(f"--id-map points at {', '.join(gone)}, not in the snapshot")
     label = SITES[site]
     groups, made_names = [], {}
+    names = {}
+    for m in matches.values():
+        names[fold(m["name"])] = names.get(fold(m["name"]), 0) + 1
     rep = {"matches": len(matches), "new_people": 0, "in_tree": [], "cross_site": [], "cross_ambiguous": [],
            "self": [], "namesakes": [], "with_segments": 0}
     for m in sorted(matches.values(), key=lambda m: (-(m["cm"] or 0), m["id"])):
         mid, name, cm = m["id"], m["name"], m["cm"]
         pkey = f"dna-{site}-{mid}"
+        if not id_map.get(mid) and "name:" + fold(name) in id_map and names[fold(name)] > 1:
+            raise BadInput(f"--id-map names {name!r}, which {names[fold(name)]} matches share; map them by id")
         target, how = id_map.get(mid) or id_map.get("name:" + fold(name)), "id-map"
         if not target and (site, mid) in tree["marks"]:
             target, how = tree["marks"][(site, mid)], "same-site"
@@ -455,9 +469,13 @@ def main(argv=None):
         files = blocks(groups, a.batch)
         stem, ext = os.path.splitext(a.out)
         names = [a.out] if len(files) <= 1 else [f"{stem}-{i:02d}{ext}" for i in range(1, len(files) + 1)]
-        for n in names + ([a.report] if a.report else []):
+        older = [a.out] + sorted(glob.glob(f"{glob.escape(stem)}-[0-9][0-9]{glob.escape(ext)}"))
+        for n in older + ([a.report] if a.report else []):
             if os.path.exists(n) and not a.force:
                 raise BadInput(f"{n} exists; --force to overwrite")
+        for n in set(older) - set(names):  # a longer earlier run's files would be applied after this run's
+            if os.path.exists(n):
+                os.remove(n)
         for n, ops in zip(names, files or [[]]):
             with open(n, "w", encoding="utf-8") as fh:
                 fh.writelines(json.dumps(op, ensure_ascii=False) + "\n" for op in ops)
@@ -465,7 +483,7 @@ def main(argv=None):
         if a.report:
             with open(a.report, "w", encoding="utf-8") as fh:
                 json.dump(rep, fh, indent=1, ensure_ascii=False)
-    except BadInput as exc:
+    except (BadInput, OSError) as exc:  # OSError: a file that cannot be read or written
         print(f"gwt-import-dna: {exc}", file=sys.stderr)
         return 2
     ignored = sorted({h for c in cols.values() for h in c["ignored"]})

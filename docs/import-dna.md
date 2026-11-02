@@ -34,7 +34,7 @@ The keys hold the site and the match id, so a rerun of the same export produces 
 
 A match is pointed at instead of made again, in this order:
 
-1. **`--id-map TSV`**: lines `site<TAB>match id or name<TAB>Gramps ID`, for a match you placed yourself, or one of your own kits. Lines for other sites are skipped, so one file serves every site. A match that maps to the tested person gets no association (a person is never their own match).
+1. **`--id-map TSV`**: lines `site<TAB>match id or name<TAB>Gramps ID`, for a match you placed yourself, or one of your own kits. Lines for other sites are skipped, so one file serves every site. A Gramps ID not in the snapshot stops the run, and so does a name that two matches in the file share (map those by id). A match that maps to the tested person gets no association (a person is never their own match).
 2. **The same site, an earlier import.** A person whose note starts with the mark line for this site and match id. A second kit of the same site (a parent's test) gets its own association and notes on the same person.
 3. **Another site.** A person whose mark is from another site, with the same name (case, accents and punctuation folded) and a close cM: both share at least 20 cM and the two differ by at most 30 % of the larger, because sites count cM differently. When two people qualify, neither is used: the match becomes a new person and the report lists it under `cross_ambiguous`. Same name with a far cM is another person, made with `allow_namesake`. Below 20 cM a name proves nothing (most matches are small, and common names repeat among them), so a small match is always a new namesake person; join the two by hand, or with `--id-map` on the next run, once you know they are one.
 
@@ -60,7 +60,7 @@ A DNA match took a test, so they are alive ([shared rules](rules.md): a DNA matc
 
 ## Output and report
 
-`--out` is JSON Lines. When the list is longer than `--batch` ops (default 1,500), it is split into `<out>-01.jsonl`, `<out>-02.jsonl`... in order, never splitting a match's ops; apply them in that order, since a namesake of a later file only names earlier ones. `--report FILE` writes JSON with the counts, `in_tree` (and how each was found), `cross_site` (both cM), `cross_ambiguous`, `self`, `namesakes`, and under `columns` each file's columns read and ignored and its `skipped_rows` (rows with neither a name nor an id). Neither file is overwritten without `--force`. Exit 0 on success, 2 on a bad file or option (a missing column, a tested ID not in the snapshot).
+`--out` is JSON Lines. When the list is longer than `--batch` ops (default 1,500), it is split into `<out>-01.jsonl`, `<out>-02.jsonl`... in order, never splitting a match's ops; apply them in that order, since a namesake of a later file only names earlier ones. With `--force`, a rerun that writes fewer files than the last one removes the old extra files, so none of them gets applied by mistake. `--report FILE` writes JSON with the counts, `in_tree` (and how each was found), `cross_site` (both cM), `cross_ambiguous`, `self`, `namesakes`, and under `columns` each file's columns read and ignored and its `skipped_rows` (rows with neither a name nor an id). Neither file is overwritten without `--force`. Exit 0 on success, 2 on a bad file or option (a missing file or column, a tested ID not in the snapshot). A match id listed twice (the same file passed twice) is read once and listed under `duplicate_ids`.
 
 ## Limits
 

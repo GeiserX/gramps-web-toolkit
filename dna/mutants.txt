@@ -24,3 +24,9 @@ gwt_dna.py | SEGMENT_HEADER = "Chromosome,Start Location,End Location,Centimorga
 gwt_dna.py | rows = sorted(segs, key=lambda s: (CHROM_ORDER.get(s["chromosome"], 99), s["chromosome"], s["start"])) | rows = segs | segments are written in chromosome order, X after 22
 gwt_dna.py |         if _hfold(overrides.get(field, "")) in folded: |         if field in overrides: | --column names its column in the file that has it, so a match list and its segment file import together
 gwt_dna.py |     for field in sorted(set(overrides) - used): |     for field in []: | a --column header no file has stops the run
+gwt_dna.py |         for n in set(older) - set(names): |         for n in []: | a run with fewer batch files than the last one leaves none of the old ones to be applied
+gwt_dna.py |     if (gone := sorted(set(id_map.values()) - set(tree["ids"]))): |     if False: | an --id-map target not in the snapshot stops the run before gwt-apply
+gwt_dna.py | and names[fold(name)] > 1: | and False: | an --id-map name two matches share never merges them into one person
+gwt_dna.py | encoding="utf-8-sig") as fh:  # a TSV | encoding="utf-8") as fh:  # a TSV | an --id-map saved with a BOM keeps its first line
+gwt_dna.py |     except (BadInput, OSError) as exc: |     except BadInput as exc: | a missing file or folder is exit 2 and one line, not a traceback
+gwt_dna.py |     text = io.StringIO(text, newline=None).read() |     pass | a CSV with an old Mac's line ends reads
