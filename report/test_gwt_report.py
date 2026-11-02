@@ -398,6 +398,15 @@ class DigestTest(unittest.TestCase):
         groups = R.digest(old, T, root='hX1')
         self.assertEqual([g['side'] for g in groups if g['person'] == 'hA2'], ['both sides'])
 
+    def test_digest_on_a_big_pedigree_finds_the_side_and_says_paths_were_cut(self):
+        with tempfile.TemporaryDirectory() as td:
+            old = big_pedigree(os.path.join(td, 'old.json'), drop=('Cm',))
+            new = big_pedigree(os.path.join(td, 'new.json'))
+            code, out, err = run('digest', '--from', old, '--to', new, '--root', 'P1')
+        self.assertEqual(code, 0, err)
+        self.assertIn("## mother's side\n\n### Cm (Cm), first cousin", out)
+        self.assertIn('kin paths were cut at 2000 per person for 1 of these people', out)
+
     def test_without_root_one_group(self):
         out = self.digest()
         self.assertIn('## other', out)
