@@ -24,10 +24,10 @@ def fake():
     return f
 
 
-def run(fake, ops, *, dry_run=False, verify=False):
+def run(fake, ops, *, dry_run=False, verify=False, landed=frozenset()):
     c = Client("https://gw.example", "u", "pw", tree="tree-test", dry_run=dry_run or verify, session=fake)
     c.login()
-    return Applier(c, retries=3, retry_wait=0, verify=verify).run(ops)
+    return Applier(c, retries=3, retry_wait=0, verify=verify, landed=landed).run(ops)
 
 
 DETACH = {"op": "detach", "key": "d", "ruling": R, "target": {"person": "I0001"}, "object": {"note": "N0002"}}  # a typo
@@ -80,6 +80,8 @@ def test_attach_existing_with_expect_absent_refuses_a_link_already_there(fake):
     res = run(fake, [dict(op, expect="absent")], dry_run=True)[0]
     assert res.status == "conflict" and "already has N0001 in note_list" in res.actions[-1], res.actions
     assert run(fake, [dict(op, expect="absent")], verify=True)[0].status == "skip"
+    # a rerun of the same list after its --apply made the link: the link is what that apply left, not a typo
+    assert run(fake, [dict(op, expect="absent")], landed=frozenset({"a"}))[0].status == "skip"
     new = dict(op, object={"note": "N0002"}, expect="absent")
     assert run(fake, [new])[0].status == "done" and fake.store["people"]["anna"]["note_list"] == ["n1", "n2"]
 

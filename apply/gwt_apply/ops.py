@@ -2003,7 +2003,8 @@ class Applier:
         """
         cls, ref, lst = _parse_object(op["object"])
         handle = self.resolve(cls, ref)
-        if op.get("expect") == "absent" and not (self.verify or self._lost):  # every check before the first write
+        # every check before the first write; a link this list made on an earlier --apply of it is no surprise
+        if op.get("expect") == "absent" and not (self.verify or self._lost or op["key"] in self.landed):
             for spec in op["attach"]:
                 _, carrier, label = self.holder(*_parse_target(spec))
                 if self._has(carrier.get(lst) or [], handle, op.get("rect")):

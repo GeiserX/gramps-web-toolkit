@@ -142,7 +142,7 @@ Three cases tell a removal that already happened from a mistyped ID, and skip it
 
 A `detach` whose object is gone, when a `delete` op of the same list takes it (detach a note, then delete it), follows the same rule; without that `delete`, an object the tree does not have is a conflict.
 
-`attach_existing` is the other way round. Without `expect`, a target that already has the link is a skip; with `expect: "absent"`, the list says the link is not there yet, so finding it is a conflict.
+`attach_existing` is the other way round. Without `expect`, a target that already has the link is a skip; with `expect: "absent"`, the list says the link is not there yet, so finding it is a conflict. `--verify` and a rerun of the same list, whose earlier `--apply` logged the op as `done`, read the link as landed and skip.
 
 Place names, place types and person names are compared without case, accents or repeated spaces: `Mónte  Alto` matches `monte alto`.
 
