@@ -115,3 +115,12 @@ def test_cli_wires_crop(page):
     assert len(list(page.parent.glob("0001_pag-1_grid1x2-*.jpg"))) == 2
     with pytest.raises(SystemExit):
         cli.parser().parse_args(["crop", str(page)])  # one of --box, --grid, --half is required
+
+
+def test_box_to_the_preview_edge_stays_inside_the_page(tmp_path):
+    # 150+750 ends at the preview's right edge; scaling x and w apart rounded to 822+4108 = 4930 > 4929
+    p = tmp_path / "wide.png"
+    Image.new("L", (4929, 600)).save(p)
+    assert crop.run(args([p], box="150,0,750,110", from_size="900x110")) == 0
+    out = tmp_path / "wide_box-822-0-4107-600.jpg"
+    assert size(out) == (4107, 600)

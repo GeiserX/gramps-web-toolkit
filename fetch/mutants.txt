@@ -11,6 +11,7 @@ gwt_fetch/iiif.py | m = host.endswith("canadiana.ca") and re.match(r"/view/([^/?
 gwt_fetch/iiif.py | if _is_image_info(manifest): | if False: | an info.json passed as a manifest stops with a pointer to --image-base
 gwt_fetch/iiif.py |     except Exception as e:  # a missing page or a broken info.json fails this image, not the run |     except ZeroDivisionError as e: | a page with no info.json fails that page and the rest still download
 gwt_fetch/crop.py | box = scale_box(box, parse_pair(args.from_size, "--from-size"), size) | pass | a box measured on a preview is scaled to the real image
+gwt_fetch/crop.py | x0, y0, x1, y1 = round(x * sx), round(y * sy), round((x + w) * sx), round((y + h) * sy) | x0, y0, x1, y1 = round(x * sx), round(y * sy), round(x * sx) + round(w * sx), round(y * sy) + round(h * sy) | a box that ends at the preview's edge ends at the image's edge, not one pixel past it
 gwt_fetch/crop.py | if x + w > W or y + h > H: | if False: | a box past the image's edge is refused, not padded with black
 gwt_fetch/crop.py | ox, oy = round((x1 - x0) * overlap), round((y1 - y0) * overlap) | ox, oy = 0, 0 | --overlap makes grid tiles reach into their neighbours
 gwt_fetch/crop.py | if args.max and max(piece.size) > args.max: | if False: | --max shrinks a piece to its longest side

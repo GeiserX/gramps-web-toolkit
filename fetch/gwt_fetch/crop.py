@@ -33,10 +33,15 @@ def parse_pair(text: str, what: str) -> tuple[int, int]:
 
 
 def scale_box(box, from_size, size):
-    """A box measured on an image of from_size, in the pixels of an image of size."""
+    """A box measured on an image of from_size, in the pixels of an image of size.
+
+    The edges are scaled, not the width and height, so a box that ends at the preview's edge
+    ends at the image's edge instead of rounding one pixel past it.
+    """
     (x, y, w, h), (fw, fh), (W, H) = box, from_size, size
     sx, sy = W / fw, H / fh
-    return round(x * sx), round(y * sy), round(w * sx), round(h * sy)
+    x0, y0, x1, y1 = round(x * sx), round(y * sy), round((x + w) * sx), round((y + h) * sy)
+    return x0, y0, x1 - x0, y1 - y0
 
 
 def grid(size, cols: int, rows: int, overlap: float):
