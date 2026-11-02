@@ -1,0 +1,4 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Denmark|Danmark|Dinamarca|Danemark	country	Rigsarkivet Arkivalieronline	Church books, censuses 1787-1940	birth,marriage,death,census,probate,military	1640-1969		https://arkivalieronline.rigsarkivet.dk/en/	browser			2026-11-02	
+Denmark|Danmark|Dinamarca|Danemark	country	Link-Lives (Digidata release)	Linked censuses and Copenhagen burials (bulk files)	census,death	1787-1921		https://digidata.rigsarkivet.dk/aflevering/14001/	online			2026-11-02	Cite the release number
+Denmark|Danmark|Dinamarca|Danemark	country	Danish Family Search	Census transcriptions, church book index	census,birth,marriage,death	1787-1930		https://www.danishfamilysearch.com/	login			2026-11-02	

@@ -1,4 +1,8 @@
-"""IIIF Presentation v2/v3: resolve a manifest, pick canvases, download each at the largest size served."""
+"""IIIF Presentation v2/v3: resolve a manifest, pick canvases, download each at the largest size served.
+
+Also a bare IIIF Image API base (`--image-base .../info.json`), fetched at the native width that
+info.json gives, for archives that serve no Presentation manifest.
+"""
 from __future__ import annotations
 
 import re
@@ -20,6 +24,28 @@ class Canvas:
 
 # ---------------------------------------------------------------- viewer URL -> manifest
 
+ANTENATI = "https://antenati.cultura.gov.it/"
+
+
+def portal_referer(url: str) -> str | None:
+    """The Referer a portal's WAF wants, whatever page the URL came from; None when any will do.
+
+    Antenati's manifest server (dam-antenati) and image server (iiif-antenati) answer 403 unless
+    the Referer is the portal itself; the manifest URL as Referer is refused too.
+    """
+    host = urlsplit(url).hostname or ""
+    if host in ("dam-antenati.cultura.gov.it", "iiif-antenati.cultura.gov.it"):
+        return ANTENATI
+    return None
+
+
+def _is_canadiana(host: str) -> bool:
+    return host == "canadiana.ca" or host.endswith(".canadiana.ca")
+
+
+CANADIANA_DELAY = 10.0  # https://heritage.canadiana.ca/robots.txt: Crawl-delay: 10
+
+
 def resolve(url: str, client) -> tuple[str, str]:
     """Return (manifest_url, referer) for a manifest URL or a viewer URL from a known portal."""
     u = urlsplit(url)
@@ -27,7 +53,8 @@ def resolve(url: str, client) -> tuple[str, str]:
     q = parse_qs(u.query)
     for key in ("manifest", "iiif-content", "manifestUrl"):
         if key in q:
-            return unquote(q[key][0]), url
+            manifest = unquote(q[key][0])
+            return manifest, portal_referer(manifest) or url
     if host.endswith("antenati.cultura.gov.it") and "/ark:/" in u.path:
         html = client.text(url)
         m = re.search(r"https://dam-antenati\.cultura\.gov\.it/antenati/containers/\w+/manifest", html)
@@ -40,7 +67,10 @@ def resolve(url: str, client) -> tuple[str, str]:
     m = re.search(r"europeana\.eu$", host) and re.search(r"/item/(\d+)/([^/?#]+)", u.path)
     if m:
         return f"https://iiif.europeana.eu/presentation/{m.group(1)}/{m.group(2)}/manifest", url
-    return url, url
+    m = _is_canadiana(u.hostname or "") and re.match(r"/view/([^/?#]+)", u.path)
+    if m:  # Canadiana viewer, e.g. heritage.canadiana.ca/view/<id>/<page>
+        return f"{u.scheme}://{u.netloc}/iiif/{m.group(1)}/manifest", url
+    return url, portal_referer(url) or url
 
 
 # ---------------------------------------------------------------- manifest parsing
@@ -94,16 +124,27 @@ def canvases(manifest: dict) -> list[Canvas]:
     return out
 
 
-def select(cs: list[Canvas], pages: str | None, labels: str | None) -> list[Canvas]:
-    if pages:
-        want: set[int] = set()
-        for part in pages.split(","):
-            part = part.strip()
+def parse_pages(text: str, total: int | None = None) -> list[int]:
+    """1-based positions from `1-5,9,12-`, in order, once each. An open end runs to `total`."""
+    want: list[int] = []
+    for part in text.split(","):
+        part = part.strip()
+        try:
             if "-" in part:
                 a, b = part.split("-", 1)
-                want.update(range(int(a), int(b or len(cs)) + 1))
+                if not b and total is None:
+                    raise SystemExit("gwt-fetch: --image-base cannot count the pages; give an end, e.g. 12-40")
+                want.extend(range(int(a), int(b or total) + 1))
             elif part:
-                want.add(int(part))
+                want.append(int(part))
+        except ValueError:
+            raise SystemExit(f"gwt-fetch: --pages wants numbers and ranges such as 1-5,9,12-, got {text!r}")
+    return list(dict.fromkeys(want))
+
+
+def select(cs: list[Canvas], pages: str | None, labels: str | None) -> list[Canvas]:
+    if pages:
+        want = set(parse_pages(pages, len(cs)))
         cs = [c for c in cs if c.index in want]
     if labels:
         rx = re.compile(labels, re.I)
@@ -136,19 +177,35 @@ def _unwrap_thumbnail(url: str) -> str:
 # ---------------------------------------------------------------- command
 
 def run(args, client) -> int:
+    if getattr(args, "image_base", None):
+        return run_image_base(args, client)
+    if not args.url:
+        raise SystemExit("gwt-fetch: give a manifest or viewer URL, or --image-base URL")
     manifest_url, referer = resolve(args.url, client)
+    if _is_canadiana(urlsplit(manifest_url).hostname or "") and client.delay < CANADIANA_DELAY:
+        print(f"gwt-fetch: Canadiana asks for {CANADIANA_DELAY:.0f} s between requests; waiting that long",
+              file=sys.stderr)
+        client.delay = CANADIANA_DELAY
     manifest = client.json(manifest_url, referer=referer)
+    if _is_image_info(manifest):
+        raise SystemExit(f"gwt-fetch: {manifest_url} is a IIIF Image API info.json, not a manifest; "
+                         f"use --image-base {manifest_url}")
     cs = select(canvases(manifest), args.pages, args.labels)
     title = _label(manifest.get("label"))
     print(f"gwt-fetch: {title or manifest_url}: {len(cs)} canvas(es) selected", file=sys.stderr)
     if args.list:
         for c in cs:
-            print(f"{c.index}\t{c.label}\t{(candidates(c) or [''])[0]}")
+            url = f"{c.service}/info.json" if getattr(args, "native", False) and c.service else \
+                (candidates(c) or [""])[0]
+            print(f"{c.index}\t{c.label}\t{url}")
         return 0
     store = Store(args.out)
     failed = 0
     for c in cs:
         stem = f"{c.index:04d}_{slug(c.label, 40)}"
+        if getattr(args, "native", False) and c.service:
+            failed += not _fetch_native(client, store, stem, c.label, c.service, manifest_url, referer)
+            continue
         urls = candidates(c)
         if store.done(stem, c.label, urls[0] if urls else "", manifest_url):
             continue
@@ -165,6 +222,119 @@ def run(args, client) -> int:
         else:
             failed += 1
             print(f"gwt-fetch: canvas {c.index} ({c.label}) failed: {'; '.join(tried)}", file=sys.stderr)
+    if store.manifest.exists():
+        print(f"gwt-fetch: manifest rows in {store.manifest}", file=sys.stderr)
+    return 1 if failed else 0
+
+
+# ---------------------------------------------------------------- Image API base, native width
+
+def _is_image_info(doc) -> bool:
+    if not isinstance(doc, dict) or "sequences" in doc or "items" in doc:
+        return False
+    return doc.get("protocol") == "http://iiif.io/api/image" or "/api/image/" in str(doc.get("@context", ""))
+
+
+PAGE = re.compile(r"\{page(?::(0\d+))?\}")
+
+
+def image_bases(spec: str, pages: str | None) -> list[tuple[int, str]]:
+    """(position, base URL) for each image. `{page}` in the URL is replaced by each --pages number,
+    `{page:04}` by the number padded with zeros to 4 digits."""
+    base = re.sub(r"/info\.json$", "", spec.strip()).rstrip("/")
+    if not PAGE.search(base):
+        if pages:
+            raise SystemExit("gwt-fetch: --pages needs {page} in --image-base; the URL has no {page}")
+        return [(1, base)]
+    if not pages:
+        raise SystemExit("gwt-fetch: --image-base with {page} needs --pages, e.g. --pages 1-20")
+    want = parse_pages(pages)
+    if not want:
+        raise SystemExit(f"gwt-fetch: --pages {pages} selects no page")
+    return [(n, PAGE.sub(lambda m: format(n, m.group(1) or ""), base)) for n in want]
+
+
+def pixel_width(data: bytes) -> int | None:
+    """Width in pixels of a JPEG or PNG, read from its header; None for anything else."""
+    if data[:8] == b"\x89PNG\r\n\x1a\n" and len(data) >= 24:
+        return int.from_bytes(data[16:20], "big")
+    if data[:2] != b"\xff\xd8":
+        return None
+    i = 2
+    while i + 9 < len(data):
+        if data[i] != 0xFF:
+            return None
+        marker = data[i + 1]
+        if marker == 0xFF:  # fill byte
+            i += 1
+            continue
+        if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7:  # markers without a length
+            i += 2
+            continue
+        size = int.from_bytes(data[i + 2:i + 4], "big")
+        if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):  # start of frame
+            return int.from_bytes(data[i + 7:i + 9], "big")
+        i += 2 + size
+    return None
+
+
+NATIVE_URL = re.compile(r"/full/\d+,/0/default\.jpg$")
+
+
+def _fetch_native(client, store: Store, stem: str, label: str, base: str, source: str, referer: str) -> bool:
+    """Fetch one image at the width its info.json gives. Refuse (write nothing) a file of another width.
+
+    A file already saved at native width costs no request. One saved earlier from full/max (a plain
+    run into the same folder) is kept, and the native image goes beside it as <stem>_native.
+    """
+    p = store.find(stem)
+    row = store.rows.get(p.name) if p else None
+    if row and not NATIVE_URL.search(row["image_url"]):
+        stem += "_native"
+        p = store.find(stem)
+        row = store.rows.get(p.name) if p else None
+    if row:
+        return True
+    try:
+        width = int(client.json(f"{base}/info.json", referer=referer)["width"])
+    except Exception as e:  # a missing page or a broken info.json fails this image, not the run
+        print(f"gwt-fetch: {label}: {base}/info.json: {e.__class__.__name__}: {e}", file=sys.stderr)
+        return False
+    url = f"{base}/full/{width},/0/default.jpg"
+    if store.done(stem, label, url, source):
+        return True
+    r = client.get(url, referer=referer)
+    ctype = r.headers.get("Content-Type", "")
+    if not r.ok or ctype.startswith("text/"):
+        print(f"gwt-fetch: {label}: {url} -> {r.status_code} {ctype}", file=sys.stderr)
+        r.close()
+        return False
+    got = pixel_width(r.content)
+    if got != width:
+        print(f"gwt-fetch: {label}: {url} is {got} px wide, info.json says {width}; not saved "
+              f"(the server rescaled it)", file=sys.stderr)
+        return False
+    p = store.write(stem, [r.content], ctype, label, url, source)
+    print(f"{p}", file=sys.stderr)
+    return True
+
+
+def run_image_base(args, client) -> int:
+    if getattr(args, "labels", None):
+        raise SystemExit("gwt-fetch: --labels needs a manifest; --image-base has no labels to match")
+    bases = image_bases(args.image_base, args.pages)
+    print(f"gwt-fetch: {len(bases)} image(s) from a IIIF Image API base", file=sys.stderr)
+    if args.list:
+        for n, base in bases:
+            print(f"{n}\t{base.rsplit('/', 1)[-1]}\t{base}/info.json")
+        return 0
+    store = Store(args.out)
+    failed = 0
+    for n, base in bases:
+        label = base.rsplit("/", 1)[-1]
+        referer = portal_referer(base) or f"{base}/info.json"
+        ok = _fetch_native(client, store, f"{n:04d}_{slug(label, 40)}", label, base, f"{base}/info.json", referer)
+        failed += not ok
     if store.manifest.exists():
         print(f"gwt-fetch: manifest rows in {store.manifest}", file=sys.stderr)
     return 1 if failed else 0

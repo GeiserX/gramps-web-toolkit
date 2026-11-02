@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - run: python -m pip install requests pytest
+      - run: python -m pip install requests pytest pillow  # pillow: gwt-check --download tests on generated images
       - name: every package's tests
         run: python .github/scripts/run_tests.py
       - name: mutants (packages this pull request touches; all on main)

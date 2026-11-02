@@ -1,0 +1,3 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Australia|Australie|Australien	country	Trove (National Library of Australia)	Newspapers with family notices	press,birth,marriage,death	1803-		https://trove.nla.gov.au/	online			2026-11-02	The API needs a free personal key
+New South Wales|NSW	region	NSW Registry of Births, Deaths and Marriages	Historical index (births 100, marriages 50, deaths 30 years closed)	birth,marriage,death	1788-	1856	https://www.bdm.nsw.gov.au/	browser			2026-11-02	Each state keeps its own index

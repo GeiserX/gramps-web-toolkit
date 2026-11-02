@@ -1,0 +1,7 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Canada|Kanada	country	Canadiana heritage (LAC microfilm)	Censuses, Quebec parish copies, passenger lists (IIIF)	birth,marriage,death,census,land,migration,military	1600-1950		https://heritage.canadiana.ca/	online			2026-11-02	
+Canada|Kanada	country	Library and Archives Canada collection search	Census indexes, CEF files, passenger lists	census,migration,military,land	1825-1935		https://recherche-collection-search.bac-lac.gc.ca/	browser	challenge			Probe: answered a script with HTTP 403 on 2026-11-02 (a bot check or a block); a browser may still get in
+Québec|Bas-Canada|Lower Canada	region	BAnQ numérique	Quebec newspapers, notarial greffes	press,notarial,court,other	1621-1969		https://numerique.banq.qc.ca/	online			2026-11-02	
+Québec|Bas-Canada|Lower Canada	region	PRDH / Généalogie Québec	Reconstituted Catholic parish records	birth,marriage,death	1621-1849		https://www.prdh-igd.com/	paid			2026-11-02	
+Nova Scotia|Nouvelle-Écosse	region	Nova Scotia Historical Vital Statistics	Civil registration with images	birth,marriage,death	1763-1969		https://archives.novascotia.ca/vital-statistics/	online			2026-11-02	
+Canada|Kanada	country	Automated Genealogy	Census transcriptions	census	1851-1911		http://automatedgenealogy.com/	browser	challenge			Probe: answered a script with HTTP 468 on 2026-11-02

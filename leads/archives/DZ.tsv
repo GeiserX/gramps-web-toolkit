@@ -1,0 +1,2 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Algeria|Algérie|Argelia|Algerien	country	ANOM: état civil Algérie	Civil registration (name search to 1904)	birth,marriage,death	1830-1925		http://anom.archivesnationales.culture.gouv.fr/caomec2/recherche.php?territoire=ALGERIE	browser				About two thirds of the registers were filmed; the server rejects scripted TLS. Probe: robots.txt did not answer a script on 2026-11-02 (TLS error, timeout or server error), so the probe skipped it

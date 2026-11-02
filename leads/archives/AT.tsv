@@ -1,0 +1,4 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Austria|Österreich|Autriche	country	Matricula Online: Österreich	Catholic parish registers (images)	birth,marriage,death	1550-1938	1938	https://data.matricula-online.eu/en/oesterreich/	browser	disallow		2026-11-02	No civil registration before 1938: the church books are the record
+Austria|Österreich|Autriche	country	ANNO (Austrian Newspapers Online)	Newspapers (OCR)	press	1568-1950		https://anno.onb.ac.at/	browser	challenge		2026-11-02	The website is behind a Turnstile check; the IIIF manifests are open
+Austria|Österreich|Autriche	country	Österreichisches Staatsarchiv (Archivinformationssystem)	Kriegsarchiv: Grundbuchblätter, Musterlisten	military,migration,other	1700-1945		https://archivinformationssystem.at/	online			2026-11-02	
