@@ -1,0 +1,6 @@
+{"op": "add_event", "key": "e-nora-res", "ruling": "R-6", "person": "I10", "type": "Residence", "date": "2015-03-02", "place": "P1"}
+{"op": "add_person", "key": "p-partner", "ruling": "R-6", "first_name": "Leo", "surname": "Sol", "gender": "M"}
+{"op": "add_family", "key": "f-nora", "ruling": "R-6", "father": "key:p-partner", "mother": "I10"}
+{"op": "add_event", "key": "e-nora-marr", "ruling": "R-6", "family": "key:f-nora", "type": "Marriage", "date": "2018"}
+{"op": "add_note", "key": "n-kit", "ruling": "R-6", "text": "Kit wrote: «my grandmother came from Villaejemplo».", "attach": [{"person": "I12"}]}
+{"op": "add_note", "key": "n-ana-id", "ruling": "R-6", "text": "Her grandson's DNI 12345678Z is on the deed.", "attach": [{"person": "I1"}]}

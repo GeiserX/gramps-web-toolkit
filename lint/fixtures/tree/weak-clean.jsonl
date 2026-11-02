@@ -1,0 +1,7 @@
+{"op": "add_person", "key": "p-ana-2", "ruling": "R-8", "first_name": "Ana", "surname": "Prieto Gil", "allow_namesake": true, "namesake_reason": "Born 30 years later in another town.", "namesake_of": ["I1"], "tag": "weak"}
+{"op": "add_citation", "key": "c-low", "ruling": "R-8", "source": "S1", "page": "folio 9", "confidence": 1, "attach": [{"person": "I4"}], "tag": ["weak", "r8"]}
+{"op": "add_citation", "key": "c-iker", "ruling": "R-8", "source": "S2", "page": "row 9", "attach": [{"child_ref": {"family": "F2", "child": "I9"}}]}
+{"op": "update_citation", "key": "u-c1", "ruling": "R-8", "citation": "C1", "set": {"confidence": 1}}
+{"op": "add_tag", "key": "t-c1", "ruling": "R-8", "target": {"citation": "C1"}, "name": "weak"}
+{"op": "update_citation", "key": "u-c2", "ruling": "R-8", "citation": "C2", "set": {"confidence": 0}}
+{"op": "link_child", "key": "l-new", "ruling": "R-8", "family": "F3", "child": "I12", "probable": true, "probable_reason": "Only the DNA match suggests it."}

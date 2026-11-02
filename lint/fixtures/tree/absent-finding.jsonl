@@ -1,0 +1,2 @@
+{"op": "detach", "key": "d-n2", "ruling": "R-9", "target": {"person": "I1"}, "object": {"note": "N2"}}
+{"op": "remove_tag", "key": "r-c2", "ruling": "R-9", "target": {"citation": "C2"}, "name": "weak", "expect": "present"}

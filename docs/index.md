@@ -61,6 +61,7 @@ The toolkit works for genealogy in any country. `gwt-spanish-poller` and some `g
 - [gwt-import-excel](import-excel.md): turns a research workbook into a change list for review.
 - [gwt-leads](leads.md): reads a tree dump offline and ranks its gaps as queue tasks.
 - [gwt-report](report.md): how two people are related, in English, Spanish and French, and what is new since the family was last told.
+- [gwt-lint](lint.md): checks a change list against the tree before it is applied: scope, protected and living people, overlap with other lists, weak claims; every rule proves it can fail.
 
 ## Research tools
 

@@ -136,6 +136,7 @@ nav:
       - gwt-import-excel: import-excel.md
       - gwt-leads: leads.md
       - gwt-report: report.md
+      - gwt-lint: lint.md
   - Research tools:
       - gwt-queue: queue.md
       - gwt-ledger: ledger.md
