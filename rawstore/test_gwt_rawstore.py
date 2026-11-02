@@ -322,6 +322,8 @@ class GitTest(Base):
         self.write('raw/.gitignore', b'.DS_Store')   # no newline at the end
         R.ignore_binaries(os.path.join(self.dir, 'raw'), ['a.jpg', 'b.pdf'])
         self.assertEqual(open(os.path.join(self.dir, 'raw/.gitignore')).read(), '.DS_Store\n*.jpg\n*.pdf\n')
+        R.ignore_binaries(os.path.join(self.dir, 'raw'), ['c.jpg'])   # a second migrate adds no duplicate
+        self.assertEqual(open(os.path.join(self.dir, 'raw/.gitignore')).read(), '.DS_Store\n*.jpg\n*.pdf\n')
 
     def cli(self, *argv):
         env = {k: v for k, v in os.environ.items() if not k.startswith('GWT_RAWSTORE_')}

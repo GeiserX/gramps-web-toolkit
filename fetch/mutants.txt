@@ -2,3 +2,8 @@
 gwt_fetch/store.py | name = self.stored.get(stem) | name = None | a file whose rawstore.tsv row says it is in the bucket is not downloaded again
 gwt_fetch/store.py | if p and p.name not in self.rows and p.exists(): | if p and p.name not in self.rows: | done() never hashes a file that lives only in the bucket
 gwt_fetch/cli.py | if rs.is_binary_name(f) and (folder / f).is_file() | if (folder / f).is_file() | --rawstore moves binaries only; text files stay in git
+gwt_fetch/cli.py | if rs.is_binary_name(f) and (folder / f).is_file() | if rs.is_binary_name(f) | a second --rawstore run does not fail on files already in the bucket
+gwt_fetch/cli.py | rc = max(rc, 1) | rc = rc | --rawstore exits 1 when the bucket does not confirm a file
+gwt_fetch/cli.py | and not getattr(args, "list", False) | and True | --list with --rawstore moves nothing
+gwt_fetch/cli.py | if rawstore and bucket is None: | if False: | a missing bucket config stops the run before any download
+gwt_fetch/store.py | if len(r) == 4 and | if len(r) >= 1 and | a short line in rawstore.tsv does not crash the run

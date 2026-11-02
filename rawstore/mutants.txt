@@ -2,3 +2,4 @@
 gwt_rawstore.py | m.add_argument('--evict', action='store_true' | m.add_argument('--evict-later', action='store_true' | gwt-rawstore migrate takes --evict from the command line
 gwt_rawstore.py | if failures: | if False: | migrate --evict deletes and untracks nothing when an upload fails
 gwt_rawstore.py | f.write(('\n' if text and not text.endswith('\n') else '') + | f.write('' + | a new ignore pattern never joins the last line of a .gitignore that has no final newline
+gwt_rawstore.py | - set(text.splitlines())) | ) | a second migrate does not repeat an ignore pattern

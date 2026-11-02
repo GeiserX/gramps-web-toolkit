@@ -407,3 +407,52 @@ def test_rawstore_flag_keeps_the_file_when_the_bucket_does_not_confirm(tmp_path,
     assert (tmp_path / "0001_a.jpg").read_bytes() == b"scan"
     assert not (tmp_path / "rawstore.tsv").exists()
     assert "not confirmed" in capsys.readouterr().err
+
+
+def scan_once(args, client):
+    Store(args.out).write("0001_a", [b"scan"], "image/jpeg", "a", "http://i/1", "http://m")
+    return 0
+
+
+def test_rawstore_run_again_has_nothing_to_move(tmp_path):
+    from gwt_fetch import cli
+    scan_once(ns(out=str(tmp_path)), None)
+    bucket = Bucket()
+    assert cli.to_bucket(tmp_path, bucket) == 0
+    assert cli.to_bucket(tmp_path, bucket) == 0   # the manifest row's file is in the bucket now, not a failure
+
+
+def test_rawstore_exits_1_when_the_bucket_does_not_confirm(tmp_path, monkeypatch, capsys):
+    from gwt_fetch import cli
+    monkeypatch.setattr(cli.rawstore_module(), "WAIT", 0)
+    monkeypatch.setattr(iiif, "run", scan_once)
+    assert cli.main(["iiif", "https://m/manifest", "--out", str(tmp_path), "--rawstore"], bucket=Bucket(keeps=False)) == 1
+    assert (tmp_path / "0001_a.jpg").exists()
+
+
+def test_rawstore_with_list_moves_nothing(tmp_path, monkeypatch):
+    from gwt_fetch import cli
+    scan_once(ns(out=str(tmp_path)), None)
+    monkeypatch.setattr(iiif, "run", lambda args, client: 0)
+    bucket = Bucket()
+    assert cli.main(["iiif", "https://m/manifest", "--out", str(tmp_path), "--list", "--rawstore"], bucket=bucket) == 0
+    assert (tmp_path / "0001_a.jpg").exists() and not bucket.objects
+
+
+def test_rawstore_without_bucket_config_stops_before_downloading(tmp_path, monkeypatch):
+    from gwt_fetch import cli
+    for k in [k for k in __import__("os").environ if k.startswith("GWT_RAWSTORE_")]:
+        monkeypatch.delenv(k)
+    monkeypatch.setenv("GWT_RAWSTORE_CONFIG", str(tmp_path / "no-config"))
+    ran = []
+    monkeypatch.setattr(iiif, "run", lambda args, client: ran.append(1) or 0)
+    with pytest.raises(SystemExit, match="missing config"):
+        cli.main(["iiif", "https://m/manifest", "--out", str(tmp_path), "--rawstore"])
+    assert not ran
+
+
+def test_store_skips_short_rawstore_lines(tmp_path):
+    bucket_row(tmp_path, "0003_x.pdf")
+    with open(tmp_path / "rawstore.tsv", "a", encoding="utf-8") as f:
+        f.write("\n")   # a blank line left by a hand edit
+    assert Store(tmp_path).find("0003_x").name == "0003_x.pdf"
