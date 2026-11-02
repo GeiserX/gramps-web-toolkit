@@ -240,5 +240,241 @@ class CliTest(unittest.TestCase):
         self.assertEqual(r.returncode, 3, r.stderr)
 
 
+NOTE = ("import sys\n"
+        "with open(sys.argv[1], 'a') as f:\n"
+        "    f.write('\\x1f'.join(sys.argv[2:]) + '\\n')\n")
+FIXTURES = os.path.join(HERE, '..', 'myheritage', 'fixtures')
+
+
+class HumanAuthProfileTest(unittest.TestCase):
+    """Captchas park the gate for a person, a 401 parks one account, a site's limits cap the pace."""
+    gate, calls, tearDown = GateTest.gate, GateTest.calls, GateTest.tearDown
+
+    def setUp(self):
+        GateTest.setUp(self)
+        self.out = os.path.join(self.tmp.name, 'notices.txt')
+        self.script = os.path.join(self.tmp.name, 'note.py')
+        with open(self.script, 'w') as f:
+            f.write(NOTE)
+        self.notify = f'{sys.executable} -I {self.script} {self.out} {{site}} {{lane}} {{url}} {{what}}'
+        self.sleeps = 0
+
+    def notices(self):
+        try:
+            with open(self.out) as f:
+                return [line.rstrip('\n').split('\x1f') for line in f]
+        except OSError:
+            return []
+
+    def capped_sleep(self, s):  # a wait-clear that never stops fails the test instead of hanging it
+        self.sleeps += 1
+        if self.sleeps > 200:
+            raise RuntimeError('wait-clear never stopped')
+        self.clock.sleep(s)
+
+    def test_human_parks_every_lane_and_notifies_once_per_parking(self):
+        g = self.gate(start=10, notify=self.notify)
+        self.assertTrue(g.human('lane-a', 'hCaptcha', 'https://example.org/search?q=1'))
+        self.assertFalse(g.human('lane-b', 'hCaptcha again'))  # same parking: no second notice
+        self.assertEqual(self.notices(), [[os.path.basename(self.tmp.name), 'lane-a',
+                                           'https://example.org/search?q=1', 'hCaptcha']])
+        for lane in ('lane-a', 'lane-c'):
+            with self.assertRaises(G.Paused) as cm:
+                g.wait(lane)
+            self.assertEqual(cm.exception.left, G.PARKED)
+        self.assertIn('until it is cleared', str(cm.exception))
+        self.assertIn('hCaptcha', cm.exception.why)
+        self.assertEqual(g.status()['gap_s'], 30)  # a captcha is a rate answer too
+        self.assertEqual(g.status()['human']['lane'], 'lane-a')
+        self.clock.t += 10 * 86400  # no timer ends the parking
+        with self.assertRaises(G.Paused):
+            g.wait('lane-a')
+        g.clear('solved it by hand')
+        self.assertIn('CLEAR solved it by hand (was: a person: hCaptcha)', self.calls())
+        g.wait('lane-a')
+        self.assertTrue(g.human('lane-a', 'second captcha'))  # a new parking notifies again
+        self.assertEqual(len(self.notices()), 2)
+
+    def test_notify_fills_each_word_alone_and_never_runs_a_shell(self):
+        g = self.gate(notify=self.notify)
+        marker = os.path.join(self.tmp.name, 'pwned')
+        what = f'two words; touch {marker} $(touch {marker}) `touch {marker}`'
+        g.human('a', what, 'https://example.org/a b')
+        self.assertEqual(self.notices()[0][2:], ['https://example.org/a b', what])
+        self.assertFalse(os.path.exists(marker))
+
+    def test_a_failing_notify_command_is_logged_not_raised(self):
+        g = self.gate(notify='/nonexistent/notify {what}')
+        g.human('a', 'captcha')
+        self.assertTrue(any(c.startswith('NOTIFY a exit=FileNotFoundError') for c in self.calls()))
+
+    def test_wait_clear_releases_when_the_probe_passes(self):
+        flag = os.path.join(self.tmp.name, 'solved')
+        g = G.Gate(self.tmp.name, clock=self.clock, notify=self.notify,
+                   sleep=lambda s: (self.capped_sleep(s), self.sleeps == 3 and open(flag, 'w').close()))
+        g.human('a', 'captcha')
+        probe = f'{sys.executable} -I -c "import os,sys; sys.exit(0 if os.path.exists(sys.argv[1]) else 1)" {flag}'
+        self.assertTrue(g.wait_clear(probe, every=60, timeout=3600))
+        self.assertEqual(self.sleeps, 3)
+        self.assertEqual(len(self.notices()), 1)  # passed before the timeout: no reminder
+        g.wait('a')
+        self.assertTrue(any(c.startswith('CLEAR probe passed') for c in self.calls()))
+
+    def test_wait_clear_reminds_once_after_the_timeout_then_gives_up_parked(self):
+        g = G.Gate(self.tmp.name, clock=self.clock, sleep=self.capped_sleep, notify=self.notify)
+        g.human('a', 'captcha', 'https://example.org/')
+        fail = f'{sys.executable} -I -c "raise SystemExit(1)"'
+        self.assertFalse(g.wait_clear(fail, every=600, timeout=1800))
+        n = self.notices()
+        self.assertEqual([x[3] for x in n], ['captcha', 'still waiting: captcha'])  # first notice + one reminder
+        self.assertEqual(round(self.clock.t - 1_000_000), 3600)
+        with self.assertRaises(G.Paused):
+            g.wait('a')
+
+    def test_wait_clear_stops_at_once_when_someone_cleared_by_hand(self):
+        g = G.Gate(self.tmp.name, clock=self.clock, sleep=self.capped_sleep)
+        self.assertTrue(g.wait_clear(f'{sys.executable} -I -c "raise SystemExit(1)"'))
+        self.assertEqual(self.sleeps, 0)
+
+    def test_auth_expired_parks_one_account_and_keeps_the_gap(self):
+        session = os.path.join(self.tmp.name, 'session.txt')
+        with open(session, 'w') as f:
+            f.write('old')
+        g = self.gate(start=10, pause=1200)
+        g.auth_expired('a', 'acct-1', session, 'HTTP 401')
+        st = g.status()
+        self.assertEqual((st['gap_s'], st['paused_for_s'], st['auth_expired']), (10, 0, ['acct-1']))
+        with self.assertRaises(G.Paused) as cm:
+            g.wait('a', account='acct-1')
+        self.assertIn('acct-1', str(cm.exception))
+        g.wait('b', account='acct-2')  # another account goes on
+        g.wait('c')                    # and so does a lane that names no account
+        self.assertEqual(sum(self.clock.slept), 10)  # one plain gap, no pause
+        os.utime(session, ns=(0, os.stat(session).st_mtime_ns + 10 ** 9))  # someone signed in again
+        g.wait('a', account='acct-1')
+        self.assertIn(f'AUTH acct-1 session renewed ({session})', self.calls())
+        self.assertNotIn('auth_expired', g.status())
+
+    def test_hit_triples_the_gap_where_auth_expired_does_not(self):  # the positive control
+        g = self.gate(start=10)
+        g.hit('a', 'HTTP 429')
+        self.assertEqual(g.status()['gap_s'], 30)
+
+    def test_a_per_hour_cap_refuses_the_next_request_in_the_hour(self):
+        g = self.gate(start=1, floor=1, per_hour=3, max_wait=120)
+        for _ in range(3):
+            g.wait('a')
+        with self.assertRaises(G.Paused) as cm:
+            g.wait('a')
+        self.assertIn('3 requests an hour', cm.exception.why)
+        self.assertAlmostEqual(cm.exception.left, 3600 - 2, delta=1)
+        self.clock.t += 3600
+        g.wait('a')
+        self.assertEqual(g.status()['limits'], {'per_hour': 3, 'burst': None, 'cooldown_s': 0})
+
+    def test_a_burst_spaces_calls_by_the_cooldown(self):
+        g = self.gate(start=1, floor=1, burst=1, cooldown=5)
+        g.wait('a')
+        t = self.clock.t
+        g.wait('b')
+        self.assertEqual(self.clock.t, t + 5)  # the Crawl-delay, not the 1 s gap
+        g2 = self.gate(start=1, floor=1, burst=2, cooldown=60)
+        self.clock.t += 120
+        t = self.clock.t
+        g2.wait('a'); g2.wait('a'); g2.wait('a')
+        self.assertEqual(self.clock.t, t + 60)  # two in a row, the third waits out the window
+
+    def test_eta(self):
+        g = self.gate(start=10)
+        self.assertEqual(g.eta(0), 0)
+        self.assertEqual(g.eta(4), 30)
+        self.assertEqual(self.gate(start=10, burst=1, cooldown=120).eta(4), 360)
+        g.hit('a', 'x')
+        self.assertEqual(g.eta(1), 1200)
+        g.human('a', 'captcha')
+        self.assertIsNone(g.eta(1))
+
+    def test_challenge_names_the_vendor(self):
+        def page(name):
+            with open(os.path.join(FIXTURES, name), 'rb') as f:
+                return f.read()
+        self.assertEqual(G.challenge(page('imperva.html')), 'imperva')
+        self.assertEqual(G.challenge(page('imperva_es.html').decode()), 'hcaptcha')
+        self.assertEqual(G.challenge('', 'https://validate.perfdrive.com/?ssa=1'), 'perfdrive')
+        self.assertEqual(G.challenge('<script src="/cdn-cgi/challenge-platform/h/b/orchestrate"></script>'),
+                         'cloudflare')
+        self.assertEqual(G.challenge('<title>Just a moment...</title>'), 'cloudflare')
+        self.assertEqual(G.challenge('<div class="g-recaptcha" data-sitekey="x"></div>'), 'recaptcha')
+        self.assertIsNone(G.challenge('<p>Fill in the captcha field of our contact form.</p>'))
+        self.assertIsNone(G.challenge(b''))
+
+    def test_the_shipped_profiles_load_and_cite_a_source(self):
+        rows = G.load_profiles()
+        self.assertGreater(len(rows), 0)
+        for host, r in rows.items():
+            self.assertRegex(r['notes'], r'https://\S+', host)
+            self.assertTrue(r['per_hour'] or r['burst'], host)
+
+    def test_a_bad_profiles_file_is_refused(self):
+        bad = os.path.join(self.tmp.name, 'p.tsv')
+        for text in ('host\tper_hour\n', 'host\tper_hour\tburst\tcooldown_s\tfresh_profile\tnotes\nx\t\t2\t\tno\tn\n',
+                     'host\tper_hour\tburst\tcooldown_s\tfresh_profile\tnotes\nx\tmany\t\t\tno\tn\n'):
+            with open(bad, 'w') as f:
+                f.write(text)
+            with self.assertRaises(ValueError):
+                G.load_profiles(bad)
+
+
+class CliHumanProfileTest(unittest.TestCase):
+    setUp, tearDown, cli = CliTest.setUp, CliTest.tearDown, CliTest.cli
+
+    def test_profile_flags_and_errors(self):
+        prof = os.path.join(self.tmp.name, 'p.tsv')
+        with open(prof, 'w') as f:
+            f.write('# invented\nhost\tper_hour\tburst\tcooldown_s\tfresh_profile\tnotes\n'
+                    'records.example.org\t2\t1\t5\tyes\tinvented https://example.org/robots.txt\n')
+        code, out, _ = self.cli('--profiles', prof, '--profile', 'https://records.example.org/search', 'status')
+        self.assertEqual(json.loads(out.splitlines()[0])['limits'], {'per_hour': 2, 'burst': 1, 'cooldown_s': 5.0})
+        code, out, _ = self.cli('--profiles', prof, '--profile', 'records.example.org', '--per-hour', '9', 'status')
+        self.assertEqual(json.loads(out.splitlines()[0])['limits']['per_hour'], 9)  # a flag beats the profile
+        code, _, err = self.cli('--profiles', prof, '--profile', 'other.example.org', 'status')
+        self.assertEqual(code, 2)
+        self.assertIn('no profile for other.example.org', err)
+        self.assertEqual(self.cli('--profile', 'www.loc.gov', 'status')[0], 0)  # the shipped file
+
+    def test_auth_expired_and_eta(self):
+        session = os.path.join(self.tmp.name, 'tok')
+        open(session, 'w').close()
+        self.assertEqual(self.cli('auth-expired', 'a', '--account', 'x', '--session', session)[0], 4)
+        self.assertEqual(self.cli('wait', 'a', '--account', 'x')[0], 3)
+        self.assertEqual(self.cli('wait', 'b')[0], 0)
+        code, out, _ = self.cli('eta', '3')
+        self.assertEqual(json.loads(out), {'requests': 3, 'eta_s': 45, 'parked': False})
+
+    def test_smoke_a_fake_reader_meets_a_captcha(self):
+        """A fake reader saves an answer, finds the wall, parks the gate; a person solves it; work resumes."""
+        out = os.path.join(self.tmp.name, 'notices.txt')
+        script = os.path.join(self.tmp.name, 'note.py')
+        with open(script, 'w') as f:
+            f.write(NOTE)
+        page = os.path.join(FIXTURES, 'imperva.html')
+        exe = [sys.executable, '-I', os.path.join(HERE, 'gwt-gate'), '--dir', self.tmp.name,
+               '--notify', f'{sys.executable} -I {script} {out} {{site}} {{what}}']
+        run = lambda *a: subprocess.run(exe + list(a), capture_output=True, text=True)
+        self.assertEqual(run('wait', 'reader').returncode, 0)
+        r = run('challenge', page)
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, 'imperva'))
+        self.assertEqual(run('human', 'reader', r.stdout.strip(), '--url', 'https://example.org/').returncode, 0)
+        r = run('wait', 'other')
+        self.assertEqual(r.returncode, 3)
+        self.assertIn('until it is cleared', r.stderr)
+        self.assertEqual(run('wait-clear', '--probe', f'{sys.executable} -I -c pass').returncode, 0)
+        self.assertNotIn('human', json.loads(run('status').stdout.splitlines()[0]))
+        self.assertIn('CLEAR probe passed', run('status').stdout)
+        with open(out) as f:
+            self.assertEqual(f.read().count('\n'), 1)
+        self.assertEqual(run('challenge', os.path.join(FIXTURES, 'catalog.html')).returncode, 1)
+
+
 if __name__ == '__main__':
     unittest.main()

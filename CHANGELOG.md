@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Added
+
+- `gwt-gate human <lane> <what> --url U` parks every lane until a person solves a captcha, triples the gap like a hit, and runs the `--notify` command template (`{site}`, `{lane}`, `{url}`, `{what}`, no shell) once per parking. `gwt-gate wait-clear --probe CMD` ends the parking when the probe exits 0, reminds once after `--timeout`, then exits 5 still parked. `gwt-gate auth-expired <lane> --account A --session FILE` parks only the lanes that `wait --account A`, leaves the gap alone, and lets them go when the session file changes. `--profile HOST` applies a site's published limits from `gate/profiles.tsv` (per hour, burst and cooldown; each row cites its source). `gwt-gate eta <n>` estimates how long n requests take, and `gwt_gate.challenge()` / `gwt-gate challenge FILE` names the bot wall (Radware perfdrive, Imperva, Cloudflare, hCaptcha, reCAPTCHA) in a saved answer. Existing calls behave as before.
+
 ## [0.3.0] - 2026-10-31
 
 ### Change lists
