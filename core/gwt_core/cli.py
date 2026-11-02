@@ -21,6 +21,7 @@ TOOLS = {  # name: (module with main(argv), one line)
     "rawstore": ("gwt_rawstore", "keep source images in an S3-compatible bucket"),
     "mh": ("gwt_mh_cli", "MyHeritage records through a signed-in browser (extra: mh)"),
     "read": ("gwt_read", "FamilySearch and PARES record search and records, slow and cached"),
+    "report": ("gwt_report", "how two people are related, and what is new since the family was told"),
 }
 
 
