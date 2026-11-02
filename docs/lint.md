@@ -74,6 +74,8 @@ words = ["tree", "árbol"]            # default: the word for "tree" in every gw
 
 Each rule judges an op on the tree as the list leaves it: the people, families and events the list adds (as `key:<key>`) and the links it adds count, so a child the list links into the root's family is in scope. What the list removes does not count, so an op is judged on the tree before the removal.
 
+*New text* is every free-text field an op writes: note and transcription text, event descriptions, citation pages, media descriptions, source titles, authors and publication details, attribute values, and the reasons ops give (`namesake_reason`, `reason`, ...). Names, IDs, types and paths are not.
+
 ### scope
 
 Every person and family an op touches must be a blood relative of a root, or the spouse of one. Blood is the roots' ancestors and every descendant of those ancestors, through parent links of type Birth, Adopted, Unknown or none. A Stepchild, Foster or Sponsored link is never a blood line, and neither is a marriage: a spouse's brother is out. A family is in scope when one of its parents is a blood relative. An event touches the people and families that list it; a child_ref its child and family; notes, citations, media, places and sources touch nobody. `namesake_of` and `new_couple_of` name the people and families a new object is *not*, so they touch nobody either (here and in overlap).

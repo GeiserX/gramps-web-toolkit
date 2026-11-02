@@ -49,7 +49,15 @@ TEXT_FIELDS = {"add_note": ("text",), "add_transcription": ("text", "margin_read
                "link_child": ("probable_reason",), "unlink_child": ("reason",), "add_person": ("namesake_reason",),
                "add_family": ("new_couple_reason",), "update_child_ref": ("confirm_probable",),
                "set_attribute": ("value",), "merge_person": ("reason",), "merge_family": ("reason",),
-               "merge_event": ("reason",), "merge_repository": ("reason",)}
+               "merge_event": ("reason",), "merge_repository": ("reason",), "add_citation": ("page",),
+               "update_citation": ("set.page",), "add_media": ("desc",), "add_source": ("title", "author", "pubinfo"),
+               "update_source": ("set.title",)}
+# fields of gwt-apply ops that are a name, an ID, a type or a path, not free text; a test checks that every field
+# gwt-apply takes is in TEXT_FIELDS or here, so a field it adds later cannot slip past the text rules unseen
+LABELS = {"first_name", "surname", "gender", "gramps_id", "person", "event", "place", "note", "citation", "source",
+          "family", "child", "father", "mother", "repository", "winner", "loser", "enclosed_by", "date", "role", "type",
+          "frel", "mrel", "name", "abbrev", "url", "call_number", "media_type", "file", "path", "mime", "list",
+          "relation"}
 PROBABLE = "[probable]"
 
 

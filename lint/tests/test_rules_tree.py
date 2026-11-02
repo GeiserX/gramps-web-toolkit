@@ -258,3 +258,24 @@ def test_weak_counts_any_tag_whose_name_holds_a_weak_tag_like_gwt_report():
             "namesake_reason": "r", "tag": "hipótesis"}]
     ctx = F.Context([dict(o, _line=1) for o in ops], F.Tree.load(TREE), {"weak": {"tag": ["weak", "hipotesis"]}})
     assert T.Weak().check(ctx) == []
+
+
+def test_every_free_text_field_gwt_apply_takes_is_read():
+    # an identity number in a citation page or a media description is as public as one in a note
+    ops = [{"op": "add_citation", "key": "c", "source": "S1", "page": "Census 2020, sheet 4, DNI 12345678Z",
+            "attach": [{"person": "I10"}]},
+           {"op": "add_media", "key": "m", "file": "a.jpg", "path": "a.jpg", "desc": "ID card 12345678Z",
+            "attach": [{"person": "I10"}]},
+           {"op": "update_citation", "key": "u", "citation": "C1", "set": {"page": "DNI 12345678Z"},
+            "expect": "old page"}]
+    ctx = F.Context([dict(o, _line=1) for o in ops], F.Tree.load(TREE), {"living": {"this_year": 2026}})
+    assert [(f.code, f.key) for f in T.Living().check(ctx)] == [("living-id", "c"), ("living-id", "m"),
+                                                                 ("living-id", "u")]
+
+
+def test_no_field_gwt_apply_takes_is_forgotten():
+    # a field gwt-apply adds is either read as free text or named as a label or ID; neither means lint is blind to it
+    from gwt_apply.ops import NOT_TEXT, SPECS
+    for op, (required, optional) in SPECS.items():
+        for f in sorted((required | optional) - NOT_TEXT):
+            assert f in F.TEXT_FIELDS.get(op, ()) or f in F.LABELS, (op, f)
