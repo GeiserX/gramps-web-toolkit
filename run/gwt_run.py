@@ -10,15 +10,18 @@ Five steps, each one a gwt-apply or gwt-check run of its own:
     verify   gwt-apply LIST --verify: every op must read as in the tree
     gate     gwt-check check --from DIR/pre.json.gz --baseline DIR/pre.json.gz [--known K]: no new finding
 
-DIR (default LIST.run) keeps run.json with every step's status. Running the same command again skips the steps
-that are done and goes on from the first that is not; a list changed since the run began is refused.
+DIR (default LIST.run) keeps run.json with every step's status. Until the apply writes, running the same command
+again starts over (an edited list is accepted), from a backup that reads only what changed. After that it skips the
+steps that are done and goes on from the first that is not; a changed list, another tree or a changed backup is
+refused.
 
 A watchdog ends a step that shows no progress (no output line and no API call in its log) for --stall seconds,
 and the run exits 5 naming the last thing the step did.
 
-Exit codes: 0 done; 1 an unexpected failure; 2 bad input (a missing file, a list changed since the run began,
-another gwt-run on the same DIR); 3 the dry run refused the list (nothing written); 4 the apply did not finish;
-5 a step stalled or ran past its deadline; 6 the verify found ops not in the tree; 7 the gate found new problems.
+Exit codes: 0 done; 1 an unexpected failure (or a verify or gate that could not read the tree); 2 bad input (a
+missing file, a list changed after the apply wrote, another tree, another gwt-run on the same DIR); 3 the dry run
+refused the list (nothing written); 4 the apply did not finish; 5 a step stalled or ran past its deadline; 6 the
+verify found ops not in the tree; 7 the gate found new problems; 128 + N gwt-run got signal N (Ctrl-C is 130).
 """
 
 from __future__ import annotations
@@ -468,7 +471,7 @@ def _lock(path: Path):
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="gwt-run", description=__doc__.split("\n\n")[0],
                                  epilog="Exit codes: 0 done, 1 unexpected, 2 bad input, 3 dry run refused, "
-                                        "4 apply did not finish, 5 stalled, 6 verify failed, 7 gate failed.")
+                                        "4 apply did not finish, 5 stalled, 6 verify failed, 7 gate failed, 128+N signal N.")
     ap.add_argument("change_list", help="the gwt-apply change list")
     ap.add_argument("--dir", help="the run's folder: run.json, the backup, each step's output (default LIST.run)")
     ap.add_argument("--config", help="KEY=VALUE file with GWT_URL, the login and GWT_TREE, passed to every step")
@@ -477,13 +480,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--tag", help="passed to gwt-apply: a tag on every object the run creates")
     ap.add_argument("--private-new", action="store_true", help="passed to gwt-apply: new objects are private")
     ap.add_argument("--server-backup", action="store_true",
-                    help="also ask the server for a backup before the first write (gwt-apply --server-backup, once)")
+                    help="also ask the server for a backup before the first write (gwt-apply --server-backup, until it confirms one)")
     ap.add_argument("--accept-skip", action="append", default=[], metavar="KEY",
                     help="an op key whose dry-run skip is expected (repeatable); a no-op skip never stops the run")
     ap.add_argument("--retries", type=int, default=5, help="gwt-apply --retries: tries per op (default 5)")
     ap.add_argument("--retry-wait", type=float, default=30.0,
                     help="seconds after a busy server, per op and between apply tries (default 30)")
-    ap.add_argument("--apply-tries", type=int, default=3, help="whole apply runs before giving up (default 3)")
+    ap.add_argument("--apply-tries", type=int, default=3, help="whole apply runs before giving up, per run of gwt-run (default 3)")
     ap.add_argument("--verify-tries", type=int, default=2, help="verify runs before giving up (default 2)")
     ap.add_argument("--verify-timeout", type=float, default=900.0, help="seconds one verify may take (default 900)")
     ap.add_argument("--stall", type=float, default=600.0,
