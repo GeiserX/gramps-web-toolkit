@@ -2028,7 +2028,7 @@ class Applier:
     def remove_tag(self, op):
         """Take one tag off an object the tree already has: a weak mark once the fact is proven. The tag itself
         stays in the tree, and so does everything else on the object. A name the tree has no tag for is a conflict
-        (a typo would otherwise pass as a skip); an object without the tag is a skip."""
+        (a typo would otherwise pass as a skip); so is an object without the tag, unless expect: absent."""
         cls, ref = _tag_target(op["target"])
         target = self.obj(cls, ref)
         target.setdefault("_class", cls)
@@ -2509,6 +2509,9 @@ class Applier:
         if any(self._alt_matches(n, cls, f) for n in names):
             self.skip_noop(f"skip: {cls} {self.label(obj)} already has that other name")
             return
+        if cls == "Person" and self._alt_matches(obj.get("primary_name") or {}, cls, {"first_name": "", "surnames": [], **f}):
+            raise Conflict(f"Person {self.label(obj)} has that name as its primary name; an other name the same as it "
+                           "is a duplicate")
         if cls == "Place":
             new = {"_class": "PlaceName", "value": f["name"].strip(), "lang": f.get("lang", "")}
         else:

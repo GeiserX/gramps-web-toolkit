@@ -298,6 +298,13 @@ def test_alternate_names_of_a_person_and_a_place(fake, tmp_path):
     del remove[0]["type"]  # found by the fields given
     (tmp_path / "rm").mkdir()
     roundtrip(fake, tmp_path / "rm", remove)
+    # the primary name again is a duplicate, not another name; the same name as a married name is not
+    same = dict(add[0], key="n3", surnames=[{"surname": "example"}])
+    del same["type"]
+    res = run(fake, [same], dry_run=True)[0]
+    assert res.status == "conflict" and "as its primary name" in res.actions[-1], res.actions
+    assert run(fake, [dict(same, type="Married Name")], dry_run=True)[0].status == "done"
+    assert run(fake, [dict(same, first_name="Anne")], dry_run=True)[0].status == "done"
     assert [r.status for r in run(fake, remove)] == ["done", "done"]
     assert fake.store["people"]["anna"]["alternate_names"] == [] and fake.store["places"]["plc1"]["alt_names"] == []
     names_twice = [dict(add[0], key="t1"), dict(add[0], key="t2", type="Also Known As")]

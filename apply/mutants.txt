@@ -155,3 +155,4 @@ gwt_apply/ops.py | if "source" in f and not isinstance(f["source"], str): | if F
 gwt_apply/ops.py | if person == family.get(f"{other}_handle") or person in | if False and person in | update_family never makes the family's mother its father too
 gwt_apply/ops.py | person in {r.get("ref") for r in family.get("child_ref_list") or []}: | False: | update_family never makes a child of the family its father
 gwt_apply/ops.py | return re.sub(r"[\s._-]", "", fold(system)) == "familysearch" | return fold(system) == "familysearch" | set_external_id knows FamilySearch written with a space or a dash
+gwt_apply/ops.py | if cls == "Person" and self._alt_matches(obj.get("primary_name") or {}, cls, {"first_name": "", "surnames": [], **f}): | if False: | add_alternate_name refuses a copy of the primary name
