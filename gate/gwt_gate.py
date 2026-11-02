@@ -190,7 +190,7 @@ class Gate:
         self._locked(h)
 
     def clear(self, reason, human_only=False):
-        """End a pause, a block or a parking for a person now. human_only ends the parking alone: a probe that
+        """End a pause, a block, a parking for a person and every expired account now. human_only ends the parking alone: a probe that
         passes shows the site answers, not that a block (an account suspended) was lifted."""
         def h(s):
             was = s.get('why') or ('a person: ' + s['human']['what'] if s.get('human') else '?')
@@ -198,6 +198,9 @@ class Gate:
                 was = 'a person: ' + s['human']['what'] if s.get('human') else '?'
             else:
                 s['pause_until'] = min(s['pause_until'], self.clock()); s['why'] = ''
+                if s.get('auth'):  # a sign-in that never rewrites the watched file has no other way out
+                    was = '; '.join([was] * (was != '?') + [f'session of {a}' for a in sorted(s['auth'])])
+                    s['auth'] = {}
             s['human'] = None
             self.log(f'CLEAR {reason} (was: {was})')
         self._locked(h)
@@ -266,9 +269,9 @@ class Gate:
         """A 401 for one account: only lanes that wait with that account park, the gap and the pause stay. They
         resume on their own when the session file changes (someone signed in again)."""
         def h(s):
-            s.setdefault('auth', {})[account] = {'session': os.path.expanduser(session),
-                                                 'mtime': _mtime(session), 'why': what}
-            self.log(f'AUTH-EXPIRED {lane} {account} {what} -> account parked until {session} changes, '
+            path = os.path.abspath(os.path.expanduser(session))  # a lane in another directory sees the same file
+            s.setdefault('auth', {})[account] = {'session': path, 'mtime': _mtime(path), 'why': what}
+            self.log(f'AUTH-EXPIRED {lane} {account} {what} -> account parked until {path} changes, '
                      f'gap={round(s["gap"], 2)}s')
         self._locked(h)
 

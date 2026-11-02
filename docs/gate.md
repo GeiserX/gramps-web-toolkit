@@ -12,7 +12,7 @@ Standard library only, Python 3.8 or newer, on macOS or Linux only: it locks a f
 - **Paused lanes do other work.** While the pause has more than `max_wait` seconds left (default 2 minutes), `wait` does not sleep: it exits with code 3 at once, and the lane goes on with sources that do not need this site. A shorter pause is waited out.
 - **A block stops everything.** `block <hours> <why>` parks the gate, for an account suspension or an IP block.
 - **Every pause carries its reason.** `wait`, `status` and the `Paused` exception show the text of the hit, `dead` or `block` that started the pause. When the pause ends, so does its reason, so an old block never shows up as the cause of a later pause.
-- **`clear <reason>` ends a pause or a block now** and logs a `CLEAR` line with your reason and the one it replaced. Use it instead of editing `state.json` or `calls.log` by hand.
+- **`clear <reason>` ends a pause, a block, a parking for a person and every expired account now** and logs a `CLEAR` line with your reason and the one it replaced. Use it instead of editing `state.json` or `calls.log` by hand.
 
 ## Which answer goes to which verb
 
@@ -58,12 +58,12 @@ gate/gwt-gate wait-clear --probe 'curl -fsS -o /dev/null https://records.example
 `dead` pauses every lane for `pause` seconds, which is right when the whole gate is one account. When lanes on one gate use several accounts, a 401 on one account should stop only that account, and it should end when someone signs in again, not after a fixed 20 minutes:
 
 ```sh
-gate/gwt-gate auth-expired my-lane 'HTTP 401 /records' --account acct-1 --session ~/.config/mysite/acct-1.token
+gate/gwt-gate auth-expired my-lane /records --account acct-1 --session ~/.config/mysite/acct-1.token
 gate/gwt-gate wait my-lane --account acct-1   # exit 3 until the token file changes
 gate/gwt-gate wait other-lane                 # lanes that name no account, or another one, go on
 ```
 
-`auth-expired` exits 4, like `dead`. It leaves the gap and the pause alone, since an expired session says nothing about the request rate. The account resumes on its own the next time one of its lanes calls `wait` after the session file's modification time changed, and a line `AUTH <account> session renewed` goes to the log. A lane that does not pass `--account` is never parked by it.
+`auth-expired` exits 4, like `dead`. It leaves the gap and the pause alone, since an expired session says nothing about the request rate. The account resumes on its own the next time one of its lanes calls `wait` after the session file's modification time changed, and a line `AUTH <account> session renewed` goes to the log. A lane that does not pass `--account` is never parked by it. The session path is stored in full, so a relative `--session` names the same file for lanes started in other directories. If a sign-in never rewrites that file (a browser cookie jar, a token written somewhere else), `clear <reason>` releases every expired account and names them in its `CLEAR` line.
 
 ## Limits a site publishes
 

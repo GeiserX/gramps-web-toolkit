@@ -368,6 +368,29 @@ class HumanAuthProfileTest(unittest.TestCase):
         self.assertIn(f'AUTH acct-1 session renewed ({session})', self.calls())
         self.assertNotIn('auth_expired', g.status())
 
+    def test_a_relative_session_path_holds_from_any_directory(self):
+        os.makedirs(os.path.join(self.tmp.name, 'one', 'sub'))
+        with open(os.path.join(self.tmp.name, 'one', 'sub', 'tok'), 'w') as f:
+            f.write('old')
+        here = os.getcwd()
+        try:
+            os.chdir(os.path.join(self.tmp.name, 'one'))
+            self.gate().auth_expired('a', 'acct-1', 'sub/tok', 'HTTP 401')
+            os.chdir('sub')  # a lane started elsewhere: 'sub/tok' no longer exists from here
+            with self.assertRaises(G.Paused):
+                self.gate().wait('b', account='acct-1')
+        finally:
+            os.chdir(here)
+
+    def test_clear_releases_an_expired_account(self):
+        session = os.path.join(self.tmp.name, 'never-rewritten.txt')
+        g = self.gate()
+        g.auth_expired('a', 'acct-1', session, 'HTTP 401')
+        g.clear('signed in through the browser')
+        g.wait('a', account='acct-1')
+        self.assertNotIn('auth_expired', g.status())
+        self.assertIn('CLEAR signed in through the browser (was: session of acct-1)', self.calls())
+
     def test_hit_triples_the_gap_where_auth_expired_does_not(self):  # the positive control
         g = self.gate(start=10)
         g.hit('a', 'HTTP 429')

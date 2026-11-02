@@ -17,3 +17,5 @@ gwt_gate.py | self.clear(f'probe passed: {probe}', human_only=True) | self.clear
 gwt_gate.py | first = max(s['pause_until'], s['last'] + s['gap'], cap, now) - now | first = max(s['pause_until'], s['last'] + s['gap'], now) - now | eta counts a per-hour cap that is spent
 gwt_gate.py | if any(v is not None and v < 1 for v in (per_hour, burst)) or cooldown < 0: | if False: | a flag of 0 or below exits 2 instead of a traceback or a silent no limit
 gwt_gate.py | if any(v is not None and v < 1 for v in (rows[r['host'].lower()]['per_hour'], | if False and any(v is not None and v < 1 for v in (rows[r['host'].lower()]['per_hour'], | a profiles row with a per_hour or burst below 1 is refused
+gwt_gate.py | path = os.path.abspath(os.path.expanduser(session)) | path = os.path.expanduser(session) | a relative session path is stored whole, so a lane in another directory does not unpark the account
+gwt_gate.py | s['auth'] = {} | pass | clear releases an expired account too, since a sign-in may never rewrite the watched file
