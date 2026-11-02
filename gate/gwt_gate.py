@@ -75,6 +75,7 @@ class Gate:
         # A site's own limits: at most per_hour calls in any hour, at most burst calls in any cooldown seconds.
         self.per_hour, self.burst, self.cooldown = per_hour or None, burst or None, cooldown or 0
         self.notify_cmd = notify  # a command template run once per parking: {site} {lane} {url} {what}
+        self.notice = None  # what the last notice returned: 0, the command's exit code or the error
         self.site = os.path.basename(self.root.rstrip(os.sep))
         self.clock, self.sleep = clock, sleep
 
@@ -224,7 +225,7 @@ class Gate:
             return True
         first = self._locked(h)
         if first:
-            self.notify(lane, what, url)
+            self.notice = self.notify(lane, what, url)
         return first
 
     def notify(self, lane, what, url, again=False):
@@ -244,7 +245,8 @@ class Gate:
     def wait_clear(self, probe, every=60.0, timeout=3600.0):
         """Run the probe command (no shell) every `every` seconds while the gate is parked for a person; when it
         exits 0, end the parking. After `timeout` seconds the notify command runs once more; after a second
-        `timeout`, give up with the gate still parked. Returns True when the gate is no longer parked."""
+        `timeout`, give up with the gate still parked. Returns True when the gate is no longer parked. Raises
+        OSError at once when the probe cannot run at all (not found, not executable)."""
         argv, start, reminded = shlex.split(probe), self.clock(), False
         while True:
             h = self._locked(lambda s: s.get('human'))
@@ -253,7 +255,10 @@ class Gate:
             try:
                 rc = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                     stderr=subprocess.DEVNULL, timeout=max(every, 30)).returncode
-            except (OSError, subprocess.SubprocessError):
+            except OSError as exc:
+                self._locked(lambda s: self.log(f'WAIT-CLEAR the probe cannot run: {exc}, still parked'))
+                raise  # no retry can fix a probe that does not exist
+            except subprocess.SubprocessError:
                 rc = None
             if rc == 0:
                 self.clear(f'probe passed: {probe}', human_only=True)
@@ -451,6 +456,16 @@ def main(argv=None):
     sub.add_parser('eta').add_argument('n', type=int, help='how many requests are still to make')
     sub.add_parser('challenge').add_argument('file', nargs='?', default='-', help='a saved answer; - for stdin')
     a = p.parse_args(argv)
+    fields = dict.fromkeys(('site', 'lane', 'url', 'what'), '')
+    try:  # a template that cannot be filled fails now, not silently at the first captcha
+        if a.cmd in ('human', 'wait-clear') and a.notify:
+            [w.format(**fields) for w in shlex.split(a.notify)]
+        if a.cmd == 'wait-clear':
+            shlex.split(a.probe)
+    except (ValueError, KeyError, IndexError) as exc:
+        print(f'gwt-gate: cannot use the --notify or --probe command ({type(exc).__name__}: {exc}); '
+              'close every quote, and write a literal brace as {{ or }}', file=sys.stderr)
+        return 2
     if a.cmd == 'challenge':
         try:
             body = sys.stdin.buffer.read() if a.file == '-' else open(a.file, 'rb').read()
@@ -505,8 +520,16 @@ def main(argv=None):
             print('already parked for a person; no new notice', file=sys.stderr)
         elif not gate.notify_cmd:
             print('parked for a person; no --notify command is set, so nobody was told', file=sys.stderr)
+        elif gate.notice != 0:
+            print(f'parked for a person, but the notice failed ({gate.notice}); nobody was told', file=sys.stderr)
+            return 1
     elif a.cmd == 'wait-clear':
-        if not gate.wait_clear(a.probe, every=a.every, timeout=a.timeout):
+        try:
+            passed = gate.wait_clear(a.probe, every=a.every, timeout=a.timeout)
+        except OSError as exc:
+            print(f'gwt-gate: the probe cannot run: {exc}; the gate is still parked', file=sys.stderr)
+            return 2
+        if not passed:
             print('the probe never passed; the gate is still parked for a person', file=sys.stderr)
             return EXIT_STILL_PARKED
     elif a.cmd == 'auth-expired':

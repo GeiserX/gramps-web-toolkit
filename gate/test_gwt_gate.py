@@ -308,6 +308,14 @@ class HumanAuthProfileTest(unittest.TestCase):
         g.human('a', 'captcha')
         self.assertTrue(any(c.startswith('NOTIFY a exit=FileNotFoundError') for c in self.calls()))
 
+    def test_wait_clear_stops_at_once_when_the_probe_cannot_run(self):
+        g = G.Gate(self.tmp.name, clock=self.clock, sleep=self.capped_sleep)
+        g.human('a', 'captcha')
+        with self.assertRaises(OSError):
+            g.wait_clear('/nonexistent/probe --check', every=60, timeout=3600)
+        self.assertEqual(self.sleeps, 0)  # never two hours of retries on a probe that does not exist
+        self.assertTrue(any(c.startswith('WAIT-CLEAR the probe cannot run') for c in self.calls()))
+
     def test_wait_clear_releases_when_the_probe_passes(self):
         flag = os.path.join(self.tmp.name, 'solved')
         g = G.Gate(self.tmp.name, clock=self.clock, notify=self.notify,
@@ -496,6 +504,25 @@ class CliHumanProfileTest(unittest.TestCase):
         code, out, err = self.cli('challenge', os.path.join(self.tmp.name, 'missing.html'))
         self.assertEqual((code, out), (2, ''))  # 1 means "no wall": a missing page must never read as that
         self.assertIn('missing.html', err)
+
+    def test_a_notice_that_fails_is_said_on_stderr_with_exit_1(self):
+        code, _, err = self.cli('--notify', '/nonexistent/notify {url}', 'human', 'a', 'captcha', '--url', 'https://x.example/')
+        self.assertEqual(code, 1)
+        self.assertIn('the notice failed', err)
+        self.assertEqual(self.cli('wait', 'a')[0], 3)  # still parked: the parking itself worked
+
+    def test_a_bad_notify_or_probe_template_exits_2_before_anything_happens(self):
+        code, _, err = self.cli('--notify', 'curl -d {"text":"{what}"} https://hooks.example.invalid',
+                                'human', 'a', 'captcha')
+        self.assertEqual(code, 2)
+        self.assertIn('{{', err)  # tells how to write a literal brace
+        self.assertEqual(self.cli('wait', 'a')[0], 0)  # nothing was parked
+        self.assertEqual(self.cli('--notify', "echo 'unclosed", 'human', 'a', 'captcha')[0], 2)
+        self.assertEqual(self.cli('wait-clear', '--probe', "echo 'unclosed")[0], 2)
+        self.cli('human', 'a', 'captcha')
+        code, _, err = self.cli('wait-clear', '--probe', '/nonexistent/probe')
+        self.assertEqual(code, 2)
+        self.assertIn('/nonexistent/probe', err)
 
     def test_auth_expired_and_eta(self):
         session = os.path.join(self.tmp.name, 'tok')
