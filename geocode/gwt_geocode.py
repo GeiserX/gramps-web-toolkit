@@ -383,6 +383,7 @@ class Geocoder:
         self.used = {e.get('place') for e in events if e.get('place') in places}
         self.memo = {}
         self.cc_memo = {}
+        self.cc_errors = {}  # country name -> why a provider could not tell its code
 
     # place helpers
     def ptype(self, h):
@@ -439,7 +440,8 @@ class Geocoder:
                 if hasattr(p, 'country_code'):
                     try:
                         cc = p.country_code(name)
-                    except ProviderError:
+                    except ProviderError as exc:
+                        self.cc_errors.setdefault(key, []).append('%s: %s' % (p.name, exc))
                         cc = None
                     if cc:
                         self.cc_memo[key] = cc.lower()
@@ -469,6 +471,11 @@ class Geocoder:
         if kind == 'area' and h not in self.used:
             return {'match': 'unresolved', 'note': 'an area no event uses is not looked up'}
         cc = self.country_code(h)
+        top = self.chain(h)[-1]
+        if cc is None and self.ptype(top) == 'Country':  # never search worldwide: a namesake abroad would win
+            return {'match': 'unresolved', 'note': '; '.join(
+                ['the country %r has no known code: pass --country %s=CC' % ((self.pname(top),) * 2)]
+                + self.cc_errors.get(rules.fold(self.pname(top)), []))}
         names = [self.pname(x) for x in self.chain(h)]
         town = self.town_above(h)
         ctx = {'name': self.pname(h), 'kind': kind, 'cc': cc, 'path': names,
@@ -498,8 +505,6 @@ class Geocoder:
             notes.insert(0, 'not found near %s' % ctx['town'])
             return {'match': 'town-centroid', 'lat': ref[0], 'lon': ref[1], 'distance_km': '0.0',
                     'note': '; '.join(notes)}
-        if cc is None and self.ptype(self.chain(h)[-1]) == 'Country':
-            notes.append('the country %r has no known code: pass --country %s=CC' % ((self.pname(self.chain(h)[-1]),) * 2))
         return {'match': 'unresolved', 'note': '; '.join(['no provider found it'] + notes)}
 
     def choose(self, ctx, found, ref, notes):

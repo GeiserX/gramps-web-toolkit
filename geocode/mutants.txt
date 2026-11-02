@@ -17,3 +17,4 @@ gwt_geocode.py |             if os.path.exists(p): |             if False: | a r
 gwt_geocode.py | and (c['group'] is None or c['group'] != first['group']) for _, c in ok[1:]): | for _, c in ok[1:]): | a town's point and its municipality's centroid with one INE code are one place, not two namesakes
 gwt_geocode.py | ok.sort(key=lambda dc: (dc[0], dc[1]['rank'])) | ok.sort(key=lambda dc: (dc[0], -dc[1]['rank'])) | a town's own point is preferred to its municipality's centroid
 gwt_geocode.py | r['name'].split(',')[0] | r['name'] | a CartoCiudad toponym is named by its address up to the comma
+gwt_geocode.py | if cc is None and self.ptype(top) == 'Country': | if False: | a place under a country with no known code is never searched worldwide, so a namesake abroad cannot win

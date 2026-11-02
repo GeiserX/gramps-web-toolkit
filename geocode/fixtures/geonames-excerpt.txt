@@ -5,3 +5,4 @@
 9000005	Doppio	Doppio		43.0	11.0	P	PPL	IT						0			Europe/Rome	2026-01-01
 9000006	Doppio	Doppio		45.0	9.0	P	PPL	IT						0			Europe/Rome	2026-01-01
 9000007	Torre Lontana	Torre Lontana		44.0	10.0	S	TOWR	IT						0			Europe/Rome	2026-01-01
+9000008	Pueblo Raro	Pueblo Raro		41.0	12.0	P	PPL	IT						0			Europe/Rome	2026-01-01

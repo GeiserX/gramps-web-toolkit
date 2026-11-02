@@ -206,6 +206,14 @@ class Countries(unittest.TestCase):
                        'namedetails': '1', 'limit': '10'}, [c[1] for c in http.calls])
         self.assertNotIn('--country', rows['P9051']['note'])
 
+    def test_an_unknown_country_never_takes_a_namesake_abroad(self):
+        # the dump has an Italian Pueblo Raro; with no code for Ruritania nothing may be searched worldwide
+        _, rows, ops, http, _ = run('--providers', 'geonames-dump,nominatim')
+        self.assertEqual(rows['P9051']['match'], 'unresolved')
+        self.assertIn('--country Ruritania=CC', rows['P9051']['note'])
+        self.assertNotIn('P9051', ops)
+        self.assertFalse(any(c[1].get('q') == 'Pueblo Raro, Ruritania' for c in http.calls))
+
 
 class OnlyMissing(unittest.TestCase):
     def test_places_with_a_point_are_left_alone(self):

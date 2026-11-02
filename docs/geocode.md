@@ -39,7 +39,7 @@ Each place is looked up by its own name and the names above it, through a chain 
 
 Every answer is cached on disk (`--cache`, default `~/.cache/gwt-geocode`), so a second run asks nothing again. `--no-cache` asks again.
 
-The country decides which providers apply. It is read from the top place of the hierarchy when its type is `Country`: a two-letter name is taken as the code, then the GeoNames dump and Nominatim are asked. When none of them knows the name, the report says so; give the code with `--country Ruritania=rr`.
+The country decides which providers apply. It is read from the top place of the hierarchy when its type is `Country`: a two-letter name is taken as the code, then the GeoNames dump and Nominatim are asked. When none of them knows the name, no place under that country is looked up, so a namesake in another country can never win; the report says so, and you give the code with `--country Ruritania=rr`.
 
 ## The rules
 
