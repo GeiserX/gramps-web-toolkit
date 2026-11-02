@@ -84,6 +84,29 @@ class Clean(Base):
             self.assertIn('error', json.loads(out[0]))
             self.assertIn('gwt-rawstore doctor:', err.getvalue())
 
+    def test_non_utf8_path_is_no_crash(self):
+        """A tracked path that is not UTF-8 (an old Latin-1 archive) is read, not a traceback that exits 1."""
+        oid = sh(self.repo, 'hash-object', '-w', '--stdin', inp='invented scan\n').strip()
+        subprocess.run([b'git', b'update-index', b'--add', b'--cacheinfo', b'100644,' + oid.encode() + b',bad\xff.pdf'],
+                       cwd=self.repo, check=True, capture_output=True)
+        for as_json in (True, False):
+            out = []
+            with redirect_stderr(io.StringIO()) as err:
+                rc = D.main(argparse.Namespace(repo=self.repo, json=as_json, max_packs=D.PACKS, max_tmp_gb=D.TMP_GB,
+                                               max_binary_gb=D.BINARY_GB), out=out.append)
+            self.assertEqual((rc, err.getvalue()), (0, ''), out)
+            if as_json:
+                self.assertEqual(json.loads(out[0])['findings'], 0)
+
+    def test_unexpected_error_exits_2(self):
+        a = argparse.Namespace(repo=self.repo, json=True, max_packs=D.PACKS, max_tmp_gb=D.TMP_GB,
+                               max_binary_gb=D.BINARY_GB)
+        out = []
+        with mock.patch.object(D, 'tree_size', side_effect=ValueError('invented')), mock.patch.object(
+                D, 'SCRATCH_DIRS', ('.',)), redirect_stderr(io.StringIO()):
+            self.assertEqual(D.main(a, out=out.append), 2)
+        self.assertIn('internal error', json.loads(out[0])['error'])
+
     def test_cli_subcommand_needs_no_store_config(self):
         with mock.patch.dict(os.environ, {'GWT_RAWSTORE_CONFIG': os.path.join(self.t.name, 'none')}), \
                 redirect_stderr(io.StringIO()), mock.patch('builtins.print'):

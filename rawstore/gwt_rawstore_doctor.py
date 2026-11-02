@@ -26,8 +26,9 @@ class CannotRun(Exception):
 
 
 def run(args, cwd, timeout=120):
+    # surrogateescape: a tracked path that is not UTF-8 stays readable instead of crashing the run
     return subprocess.run(args, cwd=cwd, env=dict(os.environ, **ENV), capture_output=True, text=True,
-                          timeout=timeout, check=False)
+                          errors='surrogateescape', timeout=timeout, check=False)
 
 
 def git(cwd, *args):
@@ -37,6 +38,11 @@ def git(cwd, *args):
 
 def truthy(v):
     return (v or '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def shown(s):
+    """s printable on any terminal: bytes of a non-UTF-8 file name become U+FFFD."""
+    return s.encode('utf-8', 'surrogateescape').decode('utf-8', 'replace')
 
 
 def gb(n):
@@ -211,14 +217,19 @@ def main(a, out=None):
             out(json.dumps({'error': str(e)}))
         print('gwt-rawstore doctor: %s' % e, file=sys.stderr)
         return 2
+    except Exception as e:   # a bug must not look like exit 1, "findings"
+        if a.json:
+            out(json.dumps({'error': 'internal error: %r' % e}))
+        print('gwt-rawstore doctor: internal error: %r' % e, file=sys.stderr)
+        return 2
     if a.json:
         out(json.dumps(rep, indent=2))
     else:
         out('gwt-rawstore doctor: %s (git %s%s)' % (rep['repo'], rep['git'], ', partial clone' if rep['partial_clone']
                                                      else ''))
         for c in rep['checks']:
-            out('%-5s %s: %s' % (c['level'], c['check'], c['message']))
+            out(shown('%-5s %s: %s' % (c['level'], c['check'], c['message'])))
             if c['fix']:
-                out('      fix: ' + c['fix'])
+                out(shown('      fix: ' + c['fix']))
         out('%d finding(s)' % rep['findings'])
     return 1 if rep['findings'] else 0

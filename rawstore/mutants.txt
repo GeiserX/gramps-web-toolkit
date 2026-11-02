@@ -16,3 +16,5 @@ gwt_rawstore_doctor.py | if '[Excluded]' not in r.stdout: | if False: | a big fo
 gwt_rawstore_doctor.py | if platform != 'darwin': | if False: | Time Machine checks run on macOS only
 gwt_rawstore_doctor.py | return 1 if rep['findings'] else 0 | return 0 | any finding exits 1
 gwt_rawstore_doctor.py |         return 2 | return 0 | a folder that is not a work tree exits 2
+gwt_rawstore_doctor.py | errors='surrogateescape', | errors='strict', | a tracked path that is not UTF-8 does not crash the run
+gwt_rawstore_doctor.py | except Exception as e:   # a bug must not look like exit 1, "findings" | except ZeroDivisionError as e: | an unexpected error exits 2, never 1
