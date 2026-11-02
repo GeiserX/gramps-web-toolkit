@@ -64,6 +64,10 @@ class ProviderError(Exception):
     pass
 
 
+# what reading a provider's answer raises when it comes in a shape it never documented ({"error": ...}, null)
+ODD_ANSWER = (KeyError, IndexError, TypeError, AttributeError, ValueError)
+
+
 def km(a, b):
     la1, lo1, la2, lo2 = map(math.radians, (a[0], a[1], b[0], b[1]))
     h = math.sin((la2 - la1) / 2) ** 2 + math.cos(la1) * math.cos(la2) * math.sin((lo2 - lo1) / 2) ** 2
@@ -488,6 +492,9 @@ class Geocoder:
                     except ProviderError as exc:
                         self.cc_errors.setdefault(key, []).append('%s: %s' % (p.name, exc))
                         cc = None
+                    except ODD_ANSWER as exc:
+                        self.cc_errors.setdefault(key, []).append('%s: unexpected answer (%r)' % (p.name, exc))
+                        cc = None
                     if cc:
                         self.cc_memo[key] = cc.lower()
                         break
@@ -541,6 +548,9 @@ class Geocoder:
                 found = p.search(ctx)
             except ProviderError as exc:
                 notes.append('%s: %s' % (p.name, exc))
+                continue
+            except ODD_ANSWER as exc:
+                notes.append('%s: unexpected answer (%r)' % (p.name, exc))
                 continue
             got = self.choose(ctx, found, ref, notes)
             if got:

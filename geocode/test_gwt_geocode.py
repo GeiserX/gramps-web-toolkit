@@ -444,6 +444,31 @@ class Failures(unittest.TestCase):
         self.assertEqual((code, http.calls), (2, []))
 
 
+class OddAnswers(unittest.TestCase):
+    """A provider answering in a shape it never documented is a note on the place, never a crash of the run."""
+
+    class OddHttp(FakeHttp):
+        def get_json(self, url, params=None):
+            self.calls.append((url, dict(params or {})))
+            if 'nominatim' in url:
+                return {'error': 'Unable to geocode'}
+            if 'api-adresse' in url:
+                return {'features': [{'properties': {'name': 'x'}, 'geometry': None}]}
+            return None  # CartoCiudad
+
+    def test_every_provider(self):
+        http = self.OddHttp()
+        with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(io.StringIO()) as out, \
+                contextlib.redirect_stderr(io.StringIO()):
+            code = G.main(['--snapshot', TREE, '--out', os.path.join(d, 'c.jsonl'), '--no-cache',
+                           '--country', 'España=es', '--geonames', DUMP], http=http)
+        rows = {line.split('\t')[0]: line for line in out.getvalue().splitlines()}
+        self.assertEqual(code, 0)
+        self.assertIn('cartociudad: unexpected answer', rows['P9003'])
+        self.assertIn('nominatim: unexpected answer', rows['P9003'])
+        self.assertIn('ban: unexpected answer', rows['P9022'])
+
+
 class BadInputs(unittest.TestCase):
     def test_not_a_snapshot(self):
         with tempfile.NamedTemporaryFile('w', suffix='.json', delete=False) as f:

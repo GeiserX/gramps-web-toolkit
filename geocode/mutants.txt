@@ -30,3 +30,4 @@ gwt_geocode.py | data = json.loads(body) if body.strip() else None | data = json
 gwt_geocode.py | except (OSError, ValueError):  # a damaged cache file | except ():  # a damaged cache file | a damaged cache file is asked again, not a crash on every later run
 gwt_geocode.py | raise BadInput('--out: %s' % exc) | raise | an --out that cannot be written stops with exit 2 before any request
 gwt_geocode.py | return 3 | return 0 | a run where no provider answered a single request exits 3, not 0
+gwt_geocode.py | ODD_ANSWER = (KeyError, IndexError, TypeError, AttributeError, ValueError) | ODD_ANSWER = (ZeroDivisionError,) | a provider answer in a shape it never documented is a note on that place, not a crash that loses the run
