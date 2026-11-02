@@ -324,6 +324,9 @@ def test_set_external_id_writes_familysearch_where_gramps_reads_it(fake, tmp_pat
     clash = run(fake, [dict(op, key="z", id="GWT0-002")])[0]
     assert clash.status == "conflict" and "GWT0-001" in clash.actions[-1], clash.actions
     assert validate([dict(op, id="not an id")]) and validate([dict(other, target={"event": "E0001"})])
+    spaced = run(fake, [dict(op, key="s", system="Family Search", id="gwt0-001")])[0]  # the same system
+    assert spaced.status == "skip" and FAMILYSEARCH in spaced.actions[-1], spaced.actions
+    assert validate([dict(op, system="family-search", id="not an id")])
 
 
 # ---- deletes and merges

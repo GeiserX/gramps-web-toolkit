@@ -121,7 +121,7 @@ UNREFERENCE = {"Note": "detach it first", "Citation": "detach it first", "Media"
                "Event": "merge_event or move_event first", "Person": "unlink_child, merge_person or merge_family first",
                "Family": "unlink_child or merge_family first"}
 _QUOTED = re.compile(r'"((?:[^"\\]|\\.)*)"')  # every string in a JSON text
-FAMILYSEARCH = "_FSFTID"  # the attribute Gramps 6.1 and Gramps Web keep a FamilySearch tree id in
+FAMILYSEARCH = "_FSFTID"  # the attribute Gramps' FamilySearch support and its GEDCOM import and export use
 CHILD_REF_FIELDS = {"frel", "mrel"}
 CONFIRMED = "[confirmed]"  # what a [probable] mark becomes once a document settles the link
 GENDER = {"F": 0, "M": 1, "U": 2}
@@ -290,6 +290,11 @@ def _target_refs(spec) -> list:
         return []
     value = next(iter(spec.values()))
     return [v for k, v in value.items() if k != "relation"] if isinstance(value, dict) else [value]
+
+
+def _is_familysearch(system: str) -> bool:
+    """FamilySearch however it is written: "FamilySearch", "Family Search", "family-search"."""
+    return re.sub(r"[\s._-]", "", fold(system)) == "familysearch"
 
 
 def _tag_names(value) -> list:
@@ -645,7 +650,7 @@ def validate(ops: list[dict]) -> list[str]:
                     raise ValueError("url starts with http:// or https://")
                 if "url" in op and _parse_target(op.get("target"))[0] not in ("Person", "Repository"):
                     raise ValueError("url goes on a person or a repository")
-                if fold(str(op.get("system"))) == "familysearch" and not re.fullmatch(
+                if _is_familysearch(str(op.get("system"))) and not re.fullmatch(
                         r"[A-Z0-9]{4}-[A-Z0-9]{2,4}", str(op.get("id")).strip().upper()):
                     raise ValueError("a FamilySearch tree id is four letters or digits, a dash and two to four more")
             if name == "add_media" and not Path(op.get("file", "")).is_file():
@@ -2538,13 +2543,13 @@ class Applier:
 
     def set_external_id(self, op):
         """The id an outside tree gives this person or record. FamilySearch's goes in the attribute _FSFTID, where
-        Gramps 6.1 and Gramps Web read it; any other system in an attribute "<system> ID", and with `url` a link on
+        Gramps' FamilySearch support and its GEDCOM export read it; any other system in an attribute "<system> ID", and with `url` a link on
         a person or repository too. Another id of the same system already there is a conflict, never replaced."""
         cls, ref = _parse_target(op["target"])
         target = self.obj(cls, ref)
         target.setdefault("_class", cls)
         system, value = op["system"].strip(), op["id"].strip()
-        atype = FAMILYSEARCH if fold(system) == "familysearch" else f"{system} ID"
+        atype = FAMILYSEARCH if _is_familysearch(system) else f"{system} ID"
         if atype == FAMILYSEARCH:
             value = value.upper()
         before = copy.deepcopy(target)
