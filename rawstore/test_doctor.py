@@ -1,5 +1,5 @@
 """gwt-rawstore doctor against small repos built in a temp folder. Every repo, file and size here is invented."""
-import argparse, io, json, os, subprocess, sys, tempfile, unittest
+import argparse, io, json, os, subprocess, sys, tempfile, time, unittest
 from contextlib import redirect_stderr
 from unittest import mock
 
@@ -230,15 +230,42 @@ class PartialClone(unittest.TestCase):
         sh(self.src, 'commit', '-qm', 'invented scans')
         sh(root, 'clone', '-q', '--filter=blob:none', '--sparse', 'file://' + self.src, self.repo)
 
-    def test_lazy_fetch_on_is_a_finding_and_off_is_not(self):
+    def promisor_packs(self, n, age=0):
+        """n invented promisor packs, as lazy fetches leave them, written `age` seconds ago."""
+        pack = os.path.join(self.repo, '.git', 'objects', 'pack')
+        for i in range(n):
+            oid = sh(self.repo, 'hash-object', '-w', '--stdin', inp='lazy blob %d\n' % len(packs(self.repo))).strip()
+            name = sh(self.repo, 'pack-objects', '-q', os.path.join(pack, 'pack'), inp=oid + '\n').strip()
+            write(os.path.join(pack, 'pack-%s.promisor' % name), b'')
+            t = time.time() - age
+            os.utime(os.path.join(pack, 'pack-%s.pack' % name), (t, t))
+
+    def test_lazy_fetch_is_measured_from_recent_promisor_packs(self):
+        """The finding is packs piling up today, whoever runs doctor; this shell's variable is only information."""
         rep = D.doctor(self.repo, environ={}, platform='linux')
         self.assertTrue(rep['partial_clone'])
         c = by_check(rep)['lazy-fetch'][0]
-        self.assertEqual(c['level'], 'warn')
+        self.assertEqual(c['level'], 'info')   # a quiet partial clone run from a plain shell is no finding
         self.assertIn('blob:none', c['message'])
-        self.assertIn('export GIT_NO_LAZY_FETCH=1', c['fix'])
-        self.assertEqual(by_check(D.doctor(self.repo, environ={'GIT_NO_LAZY_FETCH': 'true'}, platform='linux'))
-                         ['lazy-fetch'][0]['level'], 'ok')
+        self.assertEqual(rep['findings'], 0)
+        base = len(packs(self.repo))   # the clone's own promisor packs, written just now
+        self.promisor_packs(3, age=2 * 86400)   # old ones never count
+        with mock.patch.object(D, 'PROMISOR_PER_DAY', base + 2):
+            self.assertEqual(by_check(D.doctor(self.repo, environ={}, platform='linux'))['lazy-fetch'][0]['level'],
+                             'info')
+            self.promisor_packs(2)   # the limit itself is still fine
+            self.assertEqual(by_check(D.doctor(self.repo, environ={}, platform='linux'))['lazy-fetch'][0]['level'],
+                             'info')
+            self.promisor_packs(1)
+            for env in ({}, {'GIT_NO_LAZY_FETCH': '1'}):   # the variable in this shell does not hide it
+                c = by_check(D.doctor(self.repo, environ=env, platform='linux'))['lazy-fetch'][0]
+                self.assertEqual((c['level'], c['fix']), ('warn', 'export GIT_NO_LAZY_FETCH=1'))
+                self.assertIn('%d promisor packs' % (base + 3), c['message'])
+
+    def test_lazy_fetch_variable_parsed_like_git(self):
+        for v, level in (('1', 'ok'), ('true', 'ok'), ('2', 'ok'), ('0', 'info'), ('false', 'info'), ('', 'info')):
+            c = by_check(D.doctor(self.repo, environ={'GIT_NO_LAZY_FETCH': v}, platform='linux'))['lazy-fetch'][0]
+            self.assertEqual(c['level'], level, v)
 
     def test_doctor_never_fetches(self):
         """Every process doctor starts is a known read-only command with lazy fetch off, and no pack appears;

@@ -5,8 +5,12 @@ gwt_rawstore_doctor.py | ENV = dict(GIT_NO_LAZY_FETCH='1', | ENV = dict( | docto
 gwt_rawstore_doctor.py | if len(packs) > max_packs: | if False: | too many packs is a finding
 gwt_rawstore_doctor.py | if len(packs) > max_packs: | if len(packs) >= max_packs: | exactly --max-packs packs is still fine
 gwt_rawstore_doctor.py | if uncovered > MIDX_PACKS: | if False: | many packs with no multi-pack-index is a finding
-gwt_rawstore_doctor.py | if partial and not truthy(environ.get('GIT_NO_LAZY_FETCH')): | if False: | a partial clone with lazy fetch on is a finding
-gwt_rawstore_doctor.py | if partial and not truthy(environ.get('GIT_NO_LAZY_FETCH')): | if partial: | GIT_NO_LAZY_FETCH set in the environment clears the finding
+gwt_rawstore_doctor.py | if recent > PROMISOR_PER_DAY: | if False: | many promisor packs written in the last day are a finding
+gwt_rawstore_doctor.py | if recent > PROMISOR_PER_DAY: | if recent >= PROMISOR_PER_DAY: | exactly the daily limit is still fine
+gwt_rawstore_doctor.py | if recent > PROMISOR_PER_DAY: | if recent > PROMISOR_PER_DAY or partial: | a quiet partial clone run from a plain shell is no finding
+gwt_rawstore_doctor.py | recent += os.stat(os.path.join(packdir, n)).st_mtime > day_ago | recent += 1 | promisor packs older than a day do not count
+gwt_rawstore_doctor.py | elif partial and not truthy(environ.get('GIT_NO_LAZY_FETCH')): | elif partial: | GIT_NO_LAZY_FETCH set in this shell turns the note to ok
+gwt_rawstore_doctor.py | (v.lstrip('-').isdigit() and int(v) != 0) | False | a non-zero integer is true, as git reads it
 gwt_rawstore_doctor.py | if binary_total > max_binary_gb * GB: | if False: | tracked binaries over --max-binary-gb are a finding
 gwt_rawstore_doctor.py | continue   # outside a sparse checkout: never read it from the object store | size = 10 ** 6 | a binary not in the work tree is skipped, never read from git
 gwt_rawstore_doctor.py |             if size > max_tmp_gb * GB: | if False: | a scratch folder over --max-tmp-gb is a finding

@@ -8,13 +8,14 @@ fixes it. Exit status 0 when nothing is wrong, 1 when something is, 2 when it ca
 It never fetches. It runs only `git version`, `rev-parse`, `count-objects -v`, `config --get`, `ls-files` and, on
 macOS, `tmutil isexcluded`; it reads no object, and every git it starts has GIT_NO_LAZY_FETCH=1 as a second guard.
 """
-import json, os, re, struct, subprocess, sys
+import json, os, re, struct, subprocess, sys, time
 
 GB = 10 ** 9
 PACKS = 500           # default --max-packs
 TMP_GB = 1.0          # default --max-tmp-gb: a scratch or cache folder, or a .git, bigger than this
 BINARY_GB = 1.0       # default --max-binary-gb: binaries tracked in git, summed
 MIDX_PACKS = 50       # more packs than this with no multi-pack-index is a finding
+PROMISOR_PER_DAY = 100   # more promisor packs written in the last 24 h than this: something is lazy fetching
 SCRATCH_DIRS = ('tmp', 'temp', 'scratch', '.tmp')
 GEOMETRIC_PROMISOR = (2, 53)   # git repack --geometric handles promisor packs from 2.53 on
 # a git that cannot fetch, prompt or take optional locks, whatever the caller's environment says
@@ -37,7 +38,9 @@ def git(cwd, *args):
 
 
 def truthy(v):
-    return (v or '').strip().lower() in ('1', 'true', 'yes', 'on')
+    """A git boolean: true, yes, on, or a non-zero integer."""
+    v = (v or '').strip().lower()
+    return v in ('true', 'yes', 'on') or (v.lstrip('-').isdigit() and int(v) != 0)
 
 
 def shown(s):
@@ -142,14 +145,24 @@ def doctor(repo='.', max_packs=PACKS, max_tmp_gb=TMP_GB, max_binary_gb=BINARY_GB
     add('maintenance', 'info', 'gc.auto=%s maintenance.auto=%s' % (config['gc.auto'] or 'unset',
                                                                    config['maintenance.auto'] or 'unset'))
 
-    # ---- lazy fetching in a partial clone
-    if partial and not truthy(environ.get('GIT_NO_LAZY_FETCH')):
-        add('lazy-fetch', 'warn', 'partial clone (filter %s) with lazy fetching on: git show <rev>:<path>, '
-            'grep <rev>, archive, log -p and log -S download each missing blob as its own pack'
-            % (','.join(filters) or 'unknown'),
-            'export GIT_NO_LAZY_FETCH=1   (in every agent\'s environment; prefetch on purpose, in one batch)')
+    # ---- lazy fetching in a partial clone: measured from the packs it leaves, not from this shell's environment
+    day_ago, recent = time.time() - 86400, 0
+    for n in packs:
+        if n[:-5] + '.promisor' in names:
+            try:
+                recent += os.stat(os.path.join(packdir, n)).st_mtime > day_ago
+            except OSError:
+                pass
+    if recent > PROMISOR_PER_DAY:
+        add('lazy-fetch', 'warn', '%d promisor packs written in the last 24 h: something reads missing objects one '
+            'fetch at a time (git show <rev>:<path>, grep <rev>, archive, log -p). Set GIT_NO_LAZY_FETCH=1 in '
+            'every agent\'s environment and prefetch in one batch after each git fetch (hard-won lessons 55 '
+            'and 56)' % recent, 'export GIT_NO_LAZY_FETCH=1')
+    elif partial and not truthy(environ.get('GIT_NO_LAZY_FETCH')):
+        add('lazy-fetch', 'info', '%d promisor packs in the last 24 h; GIT_NO_LAZY_FETCH is not set in this '
+            'shell (filter %s)' % (recent, ','.join(filters) or 'unknown'))
     else:
-        add('lazy-fetch', 'ok', 'off' if partial else 'not a partial clone')
+        add('lazy-fetch', 'ok', '%d promisor packs in the last 24 h' % recent if partial else 'not a partial clone')
 
     # ---- binaries tracked in git: index only, sizes from the work tree
     by_folder = {}
