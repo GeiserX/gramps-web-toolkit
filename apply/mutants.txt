@@ -150,3 +150,7 @@ gwt_apply/ops.py | elif op["key"] in self.landed: | elif False: | a removal an e
 gwt_apply/cli.py | or lines[0].get("list_sha256") != sha | or False | only the logs of the same list (same sha256) count as an earlier run of it
 gwt_apply/ops.py | set(_QUOTED.findall(json.dumps(o))) & known: | {k for k in known if k in json.dumps(o)}: | offline, a handle that only starts with the object's handle does not hold it
 gwt_apply/ops.py | {UNREFERENCE[cls]}, nothing was | detach it first, nothing was | delete's conflict names the op that takes that kind of reference off
+gwt_apply/ops.py | if role in f and not isinstance(f[role], str): | if False: | validate refuses a null father or mother, where the run crashed
+gwt_apply/ops.py | if "source" in f and not isinstance(f["source"], str): | if False: | validate refuses a null citation source
+gwt_apply/ops.py | if person == family.get(f"{other}_handle") or person in | if False and person in | update_family never makes the family's mother its father too
+gwt_apply/ops.py | person in {r.get("ref") for r in family.get("child_ref_list") or []}: | False: | update_family never makes a child of the family its father

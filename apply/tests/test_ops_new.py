@@ -172,6 +172,15 @@ def test_update_family_sets_a_missing_father_and_never_replaces_one(fake, tmp_pa
     assert twin.status == "conflict" and "merge_family" in twin.actions[-1], twin.actions
     assert validate([dict(op, set={"father": "I0002", "mother": "I0002"})])
     assert validate([dict(op, set={"father": "0123456789abcdef0123456789ab"})])  # never a handle
+    assert validate([dict(op, set={"father": None})])  # a parent is never taken away
+    assert validate([{"op": "update_citation", "key": "c", "ruling": R, "citation": "C0001", "set": {"source": None},
+                      "expect_source": "S0001"}])
+    # the family's mother, or one of its children, never becomes its father too
+    fake.add("families", {"handle": "fam3", "mother_handle": "carl", "type": "Unknown",
+                          "child_ref_list": [{"ref": "ben"}]})  # F0003
+    for who in ("I0003", "I0002"):
+        same = run(fake, [dict(op, key="i", family="F0003", set={"father": who})])[0]
+        assert same.status == "conflict" and "already the mother or a child" in same.actions[-1], same.actions
 
 
 def test_update_citation_moves_to_another_source_only_from_the_one_it_names(fake, tmp_path):

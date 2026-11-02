@@ -515,6 +515,8 @@ def validate(ops: list[dict]) -> list[str]:
                     raise ValueError("confidence is 0-4")
                 if "date" in f:
                     parse_date(f["date"])
+                if "source" in f and not isinstance(f["source"], str):
+                    raise ValueError("source is a Gramps ID or key:<key>: a citation always cites a source")
                 if ("source" in f) != isinstance(op.get("expect_source"), str):
                     raise ValueError("moving a citation to another source needs expect_source: the Gramps ID of the "
                                      "source it has now (and expect_source goes only with set.source)")
@@ -533,6 +535,10 @@ def validate(ops: list[dict]) -> list[str]:
                     raise ValueError(f"set takes only {sorted(FAMILY_FIELDS)}")
                 if "type" in f and (not isinstance(f["type"], str) or not f["type"].strip()):
                     raise ValueError("type is a non-empty text, e.g. Married")
+                for role in ("father", "mother"):
+                    if role in f and not isinstance(f[role], str):
+                        raise ValueError(f"{role} is a Gramps ID or key:<key>: a family's parent is never taken away "
+                                         "(unlink_child, or merge the two people)")
                 if f.get("father") is not None and f.get("father") == f.get("mother"):
                     raise ValueError("father and mother are the same person")
             if name == "update_media":
@@ -1564,6 +1570,10 @@ class Applier:
             if role not in s:
                 continue
             person = self.resolve("Person", s[role])
+            other = "mother" if role == "father" else "father"
+            if person == family.get(f"{other}_handle") or person in {r.get("ref") for r in family.get("child_ref_list") or []}:
+                raise Conflict(f"{s[role]} is already the {other} or a child of Family {self.label(family)}; not "
+                               f"made its {role}")
             now = family.get(f"{role}_handle") or None
             if now not in (None, person):
                 p = self.c.get("Person", now) or {}
