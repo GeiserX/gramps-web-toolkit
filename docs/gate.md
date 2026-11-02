@@ -48,7 +48,7 @@ gate/gwt-gate wait-clear --probe 'curl -fsS -o /dev/null https://records.example
 - **Parked means parked.** While parked, `wait` exits 3 for every lane, and `Paused.left` is `gwt_gate.PARKED` (infinity), whatever `--max-wait` says. `status` shows the `human` entry: lane, what, URL and when.
 - **`wait-clear --probe CMD`** runs a control command every `--every` seconds (default 60) and ends the parking the first time it exits 0. The probe is your own request that only succeeds on a normal answer, for example a known search that must return a known record. If the probe still fails after `--timeout` seconds (default one hour), the notice runs once more with `still waiting:` in front of `{what}`. After a second timeout it exits 5 with the gate still parked. It returns at once if someone has already run `clear`. A passing probe ends the parking only: a `block` or a pause that is running keeps running, since a page that answers says nothing about an account being reinstated. The probe runs without a shell too, and it does not take a gate slot, so keep it to one request. A probe that cannot run at all (the program does not exist) stops `wait-clear` at once with exit 2 and the gate still parked.
 - `clear <reason>` ends a parking by hand, like a pause.
-- **The gap stays tripled after the parking ends**, as after a `hit`: a captcha usually means the pace was too fast. It shrinks back after `step_after` quiet seconds. If a site shows captchas whatever the pace, `clear` and lower `--start` for it.
+- **The gap stays tripled after the parking ends**, as after a `hit`: a captcha usually means the pace was too fast. It shrinks by a fifth after each `step_after` seconds without a hit, down to `floor`.
 
 ### Which wall is it?
 
