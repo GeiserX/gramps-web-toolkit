@@ -48,7 +48,8 @@ KINDS = ('index', 'image', 'fulltext', 'catalogue', 'newspaper')
 REGISTRY_COLUMNS = ('id', 'aliases', 'country', 'kind', 'from', 'to')
 SUFFIXES = ('verify', 'sweep', 'followup')  # task kinds of the research loop: <source>-verify and so on
 ANY = 'any'                                 # the research loop's source for a task with no source
-SHIPPED_REGISTRY = (os.path.join(HERE, 'sources.tsv'), os.path.join(HERE, 'gwt_ledger_sources.tsv'))
+# the wheel's own name first: an installed copy sits in site-packages, where another package may own sources.tsv
+SHIPPED_REGISTRY = (os.path.join(HERE, 'gwt_ledger_sources.tsv'), os.path.join(HERE, 'sources.tsv'))
 NEAR_CUTOFF = 0.8  # an unknown source this close to a known name is a typo or a drift, not a new source
 
 REQUEST_COLUMNS = ('id', 'person_key', 'person_label', 'archive', 'channel', 'thread', 'sent', 'next_date', 'cost',
@@ -517,11 +518,15 @@ def coverage(args, reg, rows, err):
     else:
         order = sorted(ix.people, key=lambda h: str(ix.people[h].get('gramps_id') or ''))
     groups = collections.defaultdict(list)
-    by_prefix = collections.defaultdict(set)  # `i0042` -> {`i0042-ana-zorvalo`, ...}: keys that start with an id
     for r in rows:
-        k = key(r['person_key'])
-        groups[(k, reg.canon(r['source']))].append(r)
-        by_prefix[k.split('-', 1)[0]].add(k)
+        groups[(key(r['person_key']), reg.canon(r['source']))].append(r)
+    gids = {key(p.get('gramps_id') or '') for p in ix.people.values()} - {''}
+    owned = collections.defaultdict(set)  # `i0042` -> {`i0042-ana-zorvalo`, ...}: keys that start with an id
+    for k in {k for k, _ in groups}:
+        parts = k.split('-')  # the longest id wins: `i0042-b-luis` is I0042-b's, never I0042's
+        owner = next((g for g in ('-'.join(parts[:n]) for n in range(len(parts), 0, -1)) if g in gids), None)
+        if owner:
+            owned[owner].add(k)
 
     def label_of(p):
         name = p.get('primary_name') or {}
@@ -534,7 +539,7 @@ def coverage(args, reg, rows, err):
         """A person's ledger keys: their Gramps id, any key that starts with `<id>-`, and their name as a slug
         when no one else in the tree has it, so namesakes never show each other's rows."""
         gid, name = key(p.get('gramps_id') or ''), key(label_of(p))
-        out = {gid} | {k for k in by_prefix.get(gid, ()) if k.startswith(gid + '-')} if gid else set()
+        out = {gid} | owned.get(gid, set()) if gid else set()
         if name and names[name] == 1:
             out.add(name)
         return out

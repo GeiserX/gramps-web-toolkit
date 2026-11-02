@@ -29,7 +29,7 @@ The path comes from `--ledger`, else `$GWT_LEDGER`, else `./buscado.tsv`. The ag
 export GWT_LEDGER=research/buscado.tsv GWT_AGENT=lane-7
 
 # Before a search. Prints the matching rows (best score first, newest first among equals). Exit 0 if one of them
-# is a search that ran (hit, none, partial) and is not due again; exit 1 if not; exit 2 on a usage error.
+# is a search that ran (hit, none, partial, out-of-coverage) and is not due again; exit 1 if not; exit 2 on a usage error.
 gwt-ledger check --person "Ana Peiro Toledo" --source familysearch \
   --query "Villanueva del Campo baptisms 1801-1850 Ana Peiro"
 
@@ -156,7 +156,7 @@ boe	1	0	0	1	0	0.00	0.00	0.00
 `coverage` prints a person by source matrix for a tree: what was searched where, and what is still open.
 
 ```sh
-gwt-check dump > work/tree.json        # or a gwt-apply snapshot
+gwt-check dump work/tree.json          # or a gwt-apply snapshot
 printf 'familysearch\nbvph\nmatchid\n' > work/columns.txt
 gwt-ledger coverage --dump work/tree.json --sources work/columns.txt --root I0001
 ```
@@ -168,7 +168,7 @@ I0002	Pedro Zorvalo	-	blocked	n/a
 I0003	Juana Toledo	-	due	-
 ```
 
-A cell is `due` when its newest row's `next_date` has arrived, `hit` when any row is a hit, else the newest row's result. With no row it is `-`, or `n/a` when the source's `from`/`to` years cannot hold the person's life: from their own birth to their own death, a missing end taken as 110 years from the other, and with neither, any of their own dated events give or take 110 years. A person with no dated event is never `n/a`. A person's rows are those whose `person_key` is their Gramps id (`I0001`), starts with it and a hyphen (`i0001-ana-zorvalo`), or is their name as a slug when no one else in the tree has that name; namesakes never get each other's rows, so a Gramps id in the key is the exact match. When some person keys of the ledger match nobody in the dump, a note on stderr says how many, so a column of `-` is not read as "never searched". `--root` limits the rows to that person and their ancestors; the `--sources` file takes the first column of each line and skips `-*` rows, so the registry itself works as one.
+A cell is `due` when its newest row's `next_date` has arrived, `hit` when any row is a hit, else the newest row's result. With no row it is `-`, or `n/a` when the source's `from`/`to` years cannot hold the person's life: from their own birth to their own death, a missing end taken as 110 years from the other, and with neither, any of their own dated events give or take 110 years. A person with no dated event is never `n/a`. A person's rows are those whose `person_key` is their Gramps id (`I0001`), starts with it and a hyphen (`i0001-ana-zorvalo`; the longest id wins, so `i0001-b-ana` belongs to `I0001-b`), or is their name as a slug when no one else in the tree has that name; namesakes never get each other's rows, so a Gramps id in the key is the exact match. When some person keys of the ledger match nobody in the dump, a note on stderr says how many, so a column of `-` is not read as "never searched". `--root` limits the rows to that person and their ancestors; the `--sources` file takes the first column of each line and skips `-*` rows, so the registry itself works as one.
 
 ## Requests to archives
 

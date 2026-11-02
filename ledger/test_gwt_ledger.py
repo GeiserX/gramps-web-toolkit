@@ -468,6 +468,36 @@ class RegistryTest(unittest.TestCase):
         self.assertEqual(run(*base, '--control-ok', good)[0], 0)
         self.assertEqual(L.read_rows(self.path)[0]['result'], 'none')
 
+    def test_a_control_file_needs_an_ok_line_and_no_short_or_void_line(self):
+        ok = 'control\tcontrol\t--name x\t25 read, want at least 10\tok\n'
+        base = ('--ledger', self.path, 'add', '--person', 'x', '--source', 'boe', '--query', 'q', '--result', 'none')
+        for name, text in (('empty', ''), ('search-only', 'results\t0\n'),
+                           ('short', ok + 'control\tafter\t--name x\t0 read, want at least 10\tSHORT\n'),
+                           ('void', ok + 'void\tboe: 1 of 1 canaries read less than their minimum\n')):
+            ref = os.path.join(self.dir.name, name + '.txt')
+            write(ref, text)
+            code, err = fail(*base, '--control-ok', ref)
+            self.assertEqual(code, 2, name)
+            self.assertIn('not a passing control run', err)
+        self.assertFalse(os.path.exists(self.path))
+
+    def test_an_empty_source_is_refused(self):
+        code, _ = fail('--ledger', self.path, 'add', '--person', 'x', '--source', '-', '--query', 'q', '--result', 'hit')
+        self.assertEqual(code, 2)
+        self.assertFalse(os.path.exists(self.path))
+
+    def test_sources_filters_by_country_and_a_registry_refuses_bad_ids_and_years(self):
+        out = run('sources', '--country', 'nl')[1].splitlines()[1:]
+        self.assertTrue(out)
+        self.assertEqual({line.split('\t')[2] for line in out}, {'NL'})
+        mine = os.path.join(self.dir.name, 'mine.tsv')
+        write(mine, 'familysearch\tfsy\n')
+        self.assertIn('fs', L.load_registry(mine).sources['familysearch']['aliases'].split(','))
+        for row in ('Parish X\t\tES\timage\t\t\n', 'parish-x\t\tES\timage\t16th\t\n'):
+            write(mine, row)
+            with self.assertRaises(ValueError):
+                L.load_registry(mine)
+
     def test_a_control_path_with_a_typo_is_refused_not_stored_as_a_run_id(self):
         base = ('--ledger', self.path, 'add', '--person', 'x', '--source', 'boe', '--query', 'q', '--result', 'none')
         for ref in (os.path.join(self.dir.name, 'boe-contrl.txt'), 'runs/boe-control', 'boe-control.txt', 'no', '-'):
@@ -557,6 +587,16 @@ class RegistryTest(unittest.TestCase):
         self.assertEqual([(r['result'], r['control']) for r in L.read_rows(self.path)], [('none', good), ('hit', good)])
         self.assertEqual(run('--ledger', self.path, 'check', '--person', 'ana-zorvalo', '--source', 'boe')[0], 0)
         self.assertEqual(fail(*argv, '--control-ok', 'runs/typo.txt')[0], 2)
+
+    def test_import_refuses_an_empty_query_a_bad_date_and_a_ledger_dir_without_agent(self):
+        src = os.path.join(self.dir.name, 'old-log.tsv')
+        argv = ('--ledger', self.path, 'import-tsv', src, '--map', 'source=where,query=what,result=outcome,date=when')
+        for row in ('boe\t...\thit\t2026-01-01\n', 'boe\tedicto\thit\t2026-13-01\n'):
+            write(src, 'where\twhat\toutcome\twhen\n' + row)
+            self.assertEqual(fail(*argv)[0], 2, row)
+        write(src, 'where\twhat\toutcome\twhen\nboe\tedicto\thit\t2026-01-01\n')
+        self.assertEqual(fail('--ledger-dir', os.path.join(self.dir.name, 'lanes'), *argv)[0], 2)
+        self.assertFalse(os.path.exists(self.path))
 
     def test_importing_the_same_file_twice_adds_nothing(self):
         src = os.path.join(self.dir.name, 'old-log.tsv')
@@ -648,6 +688,14 @@ class CoverageTest(unittest.TestCase):
             f.write('i4-luis-gil-1901\tLuis\tfs\tq\t2026-01-01\thit\t\t\t\t\n')
         self.assertEqual({r[0]: r[2:] for r in self.matrix()[1:]}['I4'], ['hit', '-', '-'])
 
+    def test_a_key_of_a_suffixed_id_goes_to_that_id_only(self):
+        self.tree['people'].append(person('h5', 'I4-b', 'Luis', 'Gil'))  # an import may suffix an id: I4-b
+        write(self.dump, json.dumps({'objects': self.tree}))
+        with open(self.path, 'a', encoding='utf-8') as f:
+            f.write('i4-b-luis-gil\tLuis\tfs\tq\t2026-01-01\thit\t\t\t\t\n')
+        rows = {r[0]: r[2:] for r in self.matrix()[1:]}
+        self.assertEqual((rows['I4'][0], rows['I4-b'][0]), ('-', 'hit'))
+
     def test_a_name_two_people_share_matches_neither(self):
         self.tree['people'].append(person('h5', 'I5', 'Pedro', 'Zorvalo'))  # a namesake of I2
         write(self.dump, json.dumps({'objects': self.tree}))
@@ -661,6 +709,16 @@ class CoverageTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn('1 of 4 person keys of the ledger match nobody', err)
 
+    def test_a_source_that_ends_before_a_birth_is_n_a_and_an_older_hit_beats_a_newer_none(self):
+        self.tree['people'][3]['event_ref_list'] = [{'ref': 'e4'}]
+        self.tree['events'].append(event('e4', 'Birth', 1960))  # Luis, born after matricula's records end
+        write(self.dump, json.dumps({'objects': self.tree}))
+        write(self.sources, 'matricula\nboe\n')
+        with open(self.path, 'a', encoding='utf-8') as f:
+            f.write('i4\tLuis\tboe\tq\t2026-01-01\thit\t\t\t\t\n'
+                    'i4\tLuis\tboe\tq2\t2026-03-01\tnone\t\t\t\trun-2\n')
+        self.assertEqual({r[0]: r[2:] for r in self.matrix()[1:]}['I4'], ['n/a', 'hit'])
+
     def test_whole_tree_without_root(self):
         self.assertEqual([r[0] for r in self.matrix()[1:]], ['I1', 'I2', 'I3', 'I4'])
 
@@ -672,7 +730,7 @@ class CoverageTest(unittest.TestCase):
                               '--root', 'I99')[0], 2)
 
     def test_the_shipped_registry_works_as_a_sources_file(self):
-        self.sources = L.SHIPPED_REGISTRY[0]
+        self.sources = next(p for p in L.SHIPPED_REGISTRY if os.path.exists(p))
         m = self.matrix('--root', 'I1')
         self.assertEqual(m[0][:3], ['id', 'name', 'familysearch'])
         self.assertEqual(len(m[0]), 2 + sum(1 for r in L.load_registry().sources if not r.endswith('-*')))

@@ -23,8 +23,13 @@ gwt_ledger.py | if key(ref) in NOT_PROOF or not normalize(ref): | if False: | --
 gwt_ledger.py | checked[control] = control_problem(control) | checked[control] = None | import-tsv checks each row's control like add
 gwt_ledger.py | control = clean(v.get('control')) or clean(args.control_ok) | control = clean(v.get('control')) | import-tsv --control-ok vouches for the rows with no control
 gwt_ledger.py | if same(row) in seen: | if False: | importing the same file twice adds nothing
-gwt_ledger.py | out = {gid} | {k for k in by_prefix.get(gid, ()) if k.startswith(gid + '-')} if gid else set() | out = {gid} if gid else set() | coverage counts a person key that starts with <gramps-id>- for that person
+gwt_ledger.py | out = {gid} | owned.get(gid, set()) if gid else set() | out = {gid} if gid else set() | coverage counts a person key that starts with <gramps-id>- for that person
 gwt_ledger.py | if name and names[name] == 1: | if name: | coverage never gives one namesake the other's rows
 gwt_ledger.py | if unmatched: | if False: | coverage says how many ledger keys match nobody, so an empty matrix is not read as not searched
 gwt_ledger.py | ids = [l.split('\t', 1)[0] for l in lines[1 if lines and lines[0].startswith('id\t') else 0:]] | ids = [l.split('\t', 1)[0] for l in lines] | request update refuses the header word id
 gwt_ledger.py | return format(d, 'f')  # 1e3 is stored as 1000 | return str(d)  # 1e3 is stored as 1000 | a cost of 1e3 is stored as 1000
+gwt_ledger.py | if bad or not oks: | if bad: | a --control-ok file with no ok control line (empty, or a search's output) is no proof
+gwt_ledger.py | bad = [l for l in lines if l.startswith('void\t') or | bad = [l for l in lines if False or | a --control-ok file with a void line is no proof, whatever its ok lines say
+gwt_ledger.py | return bool((src['to'] and int(src['to']) < lo) or (src['from'] and int(src['from']) > hi)) | return bool((src['from'] and int(src['from']) > hi)) | coverage marks n/a a source whose records end before the person was born
+gwt_ledger.py | if any(r['result'] == 'hit' for r in rows): | if False: | coverage shows an older hit over a newer none
+gwt_ledger.py | for n in range(len(parts), 0, -1)) | for n in range(1, len(parts) + 1)) | a key of a suffixed id (i0042-b-...) goes to I0042-b, never to I0042
