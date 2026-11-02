@@ -8,7 +8,7 @@ fixes it. Exit status 0 when nothing is wrong, 1 when something is, 2 when it ca
 It never fetches. It runs only `git version`, `rev-parse`, `count-objects -v`, `config --get`, `ls-files` and, on
 macOS, `tmutil isexcluded`; it reads no object, and every git it starts has GIT_NO_LAZY_FETCH=1 as a second guard.
 """
-import json, os, re, struct, subprocess, sys, time
+import json, os, re, shlex, struct, subprocess, sys, time
 
 GB = 10 ** 9
 PACKS = 500           # default --max-packs
@@ -109,7 +109,7 @@ def doctor(repo='.', max_packs=PACKS, max_tmp_gb=TMP_GB, max_binary_gb=BINARY_GB
     common = os.path.normpath(os.path.join(os.path.abspath(repo), common))
     checks = []
 
-    def add(check, level, message, fix=''):
+    def add(check, level, message, fix=''):   # fix: a command alone, ready to paste; advice goes in message
         checks.append({'check': check, 'level': level, 'message': message, 'fix': fix})
 
     # ---- packs and the multi-pack-index
@@ -130,11 +130,11 @@ def doctor(repo='.', max_packs=PACKS, max_tmp_gb=TMP_GB, max_binary_gb=BINARY_GB
 
     summary = '%d packs (%d promisor), %s in .git' % (len(packs), promisor, gb(git_bytes))
     if len(packs) > max_packs:
-        fix = 'git repack --geometric=2 -d && git multi-pack-index write   ' \
-              '(in the foreground, on a quiet disk, never while a backup runs)'
+        why = summary + '; over %d, every missing-object lookup reads every pack index. Merge them in the ' \
+            'foreground, on a quiet disk, never while a backup runs' % max_packs
         if partial and git_version(version) < GEOMETRIC_PROMISOR:
-            fix = 'upgrade git to 2.53 or newer first (older repack --geometric mishandles promisor packs), then ' + fix
-        add('packs', 'warn', summary + '; over %d, every missing-object lookup reads every pack index' % max_packs, fix)
+            why += '. Upgrade git to 2.53 or newer first: older repack --geometric mishandles promisor packs'
+        add('packs', 'warn', why, 'git repack --geometric=2 -d && git multi-pack-index write')
     else:
         add('packs', 'ok', summary)
     if uncovered > MIDX_PACKS:
@@ -183,8 +183,9 @@ def doctor(repo='.', max_packs=PACKS, max_tmp_gb=TMP_GB, max_binary_gb=BINARY_GB
     biggest = sorted(by_folder.items(), key=lambda kv: -kv[1][1])[:3]
     named = ', '.join('%s/ %s' % (f, gb(s)) for f, (_, s) in biggest)
     if binary_total > max_binary_gb * GB:
-        add('binaries', 'warn', '%d tracked binaries, %s (%s)' % (binary_files, gb(binary_total), named),
-            ' ; '.join('gwt-rawstore migrate %s --remove' % f for f, _ in biggest) + '   then commit the rawstore.tsv files')
+        add('binaries', 'warn', '%d tracked binaries, %s (%s); after migrating, commit the rawstore.tsv files'
+            % (binary_files, gb(binary_total), named),
+            ' && '.join('gwt-rawstore migrate %s --remove' % shlex.quote(f) for f, _ in biggest))
     else:
         add('binaries', 'ok', '%d tracked binaries, %s' % (binary_files, gb(binary_total)))
 
@@ -195,8 +196,8 @@ def doctor(repo='.', max_packs=PACKS, max_tmp_gb=TMP_GB, max_binary_gb=BINARY_GB
         if os.path.isdir(p) and not os.path.islink(p):
             sized[p] = size = tree_size(p)
             if size > max_tmp_gb * GB:
-                add('scratch', 'warn', '%s/ holds %s' % (name, gb(size)),
-                    'move scratch out of the repo (one mktemp -d per lane) and delete what is done')
+                add('scratch', 'warn', '%s/ holds %s: move scratch out of the repo (one mktemp -d per lane) and '
+                    'delete what is done' % (name, gb(size)))
             else:
                 add('scratch', 'ok', '%s/ holds %s' % (name, gb(size)))
     caches = {}
@@ -215,7 +216,7 @@ def doctor(repo='.', max_packs=PACKS, max_tmp_gb=TMP_GB, max_binary_gb=BINARY_GB
         sized[p] = n = tree_size(p)
         msg = '%s inside the repo: %s (%s)' % (why, os.path.relpath(p, top), gb(n))
         if n > max_tmp_gb * GB:
-            add('cache', 'warn', msg, 'keep caches under ~/.cache, outside the work tree' +
+            add('cache', 'warn', msg + ': keep caches under ~/.cache, outside the work tree' +
                 (', and point %s there' % why if why[0] == '$' else ''))
         else:
             add('cache', 'ok', msg)
@@ -241,9 +242,9 @@ def doctor(repo='.', max_packs=PACKS, max_tmp_gb=TMP_GB, max_binary_gb=BINARY_GB
                 included.append(p)
         else:
             if included:
-                add('time-machine', 'warn', 'backed up by Time Machine: ' + ', '.join(included),
-                    ' ; '.join('tmutil addexclusion %s' % p for p in included) +
-                    '   (for .git, only once the remote has every commit)')
+                add('time-machine', 'warn', 'backed up by Time Machine: %s (exclude .git only once the remote has '
+                    'every commit)' % ', '.join(included),
+                    ' && '.join('tmutil addexclusion %s' % shlex.quote(p) for p in included))
             else:
                 add('time-machine', 'ok', '%d big folder(s), all excluded' % len(big) if big else 'no folder over %s'
                     % gb(max_tmp_gb * GB))

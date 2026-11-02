@@ -27,3 +27,4 @@ gwt_rawstore_doctor.py |         return 2 | return 0 | a folder that is not a wo
 gwt_rawstore_doctor.py | errors='surrogateescape', | errors='strict', | a tracked path that is not UTF-8 does not crash the run
 gwt_rawstore_doctor.py | except Exception as e:   # a bug must not look like exit 1, "findings" | except ZeroDivisionError as e: | an unexpected error exits 2, never 1
 gwt_rawstore_doctor.py | uncovered = max(0, len(packs) - (covered or 0)) | uncovered = 0 if covered is not None else len(packs) | packs added after the multi-pack-index was written count against it
+gwt_rawstore_doctor.py | shlex.quote(f) for f, _ in biggest | f for f, _ in biggest | a folder name with a space stays one argument in the printed fix

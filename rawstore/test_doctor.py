@@ -1,5 +1,5 @@
 """gwt-rawstore doctor against small repos built in a temp folder. Every repo, file and size here is invented."""
-import argparse, io, json, os, subprocess, sys, tempfile, time, unittest
+import argparse, io, json, os, shlex, subprocess, sys, tempfile, time, unittest
 from contextlib import redirect_stderr
 from unittest import mock
 
@@ -197,8 +197,34 @@ class Findings(Base):
                                                                    max_tmp_gb=TINY))['cache']], ['ok'])
 
 
+class FixCommands(Base):
+    def test_every_fix_is_a_command_you_can_paste(self):
+        """The fix line is the command alone: it parses as shell, and a path with a space stays one argument."""
+        write(os.path.join(self.repo, 'My Scans', 'a.pdf'), b'%PDF' + b'0' * 2000)
+        sh(self.repo, 'add', '.')
+        sh(self.repo, 'commit', '-qm', 'scans')
+        write(os.path.join(self.repo, 'tmp', 'dump.bin'), b'0' * 2000)
+        write(os.path.join(self.repo, '.cache', 'x'), b'0' * 2000)
+        self.add_packs(3)
+        with mock.patch.object(D, 'run', TimeMachine.fake('Included')[1]), mock.patch.object(D, 'MIDX_PACKS', 1):
+            rep = self.doctor(platform='darwin', max_packs=1, max_tmp_gb=TINY, max_binary_gb=TINY)
+        warned = {c['check'] for c in rep['checks'] if c['level'] == 'warn'}
+        self.assertEqual(warned, {'packs', 'multi-pack-index', 'binaries', 'scratch', 'cache', 'time-machine'})
+        for c in rep['checks']:
+            if c['fix']:
+                r = subprocess.run(['bash', '-n', '-c', c['fix']], capture_output=True, text=True)
+                self.assertEqual(r.returncode, 0, (c, r.stderr))
+                self.assertNotIn('(', c['fix'], c)
+        fixes = {c['check']: c['fix'] for c in rep['checks']}
+        self.assertEqual(fixes['packs'], 'git repack --geometric=2 -d && git multi-pack-index write')
+        self.assertEqual(shlex.split(fixes['binaries']), ['gwt-rawstore', 'migrate', 'My Scans', '--remove'])
+        self.assertIn(['tmutil', 'addexclusion', os.path.join(self.repo, 'tmp')],
+                      [shlex.split(x) for x in fixes['time-machine'].split(' && ')])
+
+
 class TimeMachine(Base):
-    def fake_tmutil(self, answer):
+    @staticmethod
+    def fake(answer):
         calls, real = [], D.run
 
         def run(args, cwd, timeout=120):
@@ -206,6 +232,10 @@ class TimeMachine(Base):
                 calls.append(args)
                 return subprocess.CompletedProcess(args, 0, '[%s]    %s\n' % (answer, args[-1]), '')
             return real(args, cwd, timeout)
+        return calls, run
+
+    def fake_tmutil(self, answer):
+        calls, run = self.fake(answer)
         return calls, mock.patch.object(D, 'run', run)
 
     def test_linux_skips_with_a_note(self):
