@@ -1,0 +1,1 @@
+gwt_fscache.py | for path in self._paths(self.key(method, url, headers, data))[1:]: | for path in self._paths(self.key(method, url, headers, data))[2:]: | forget removes both files of an answer, never leaves its metadata behind
