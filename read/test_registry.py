@@ -84,6 +84,8 @@ class Registry(unittest.TestCase):
         bad = gwt_reader.spec_problems({'id': 'Not A Slug', 'controls': [{'argv': [], 'min_count': 0}]})
         for word in ('help must', 'pace must', 'cache_rules must', 'id must be a lowercase slug', 'each control'):
             self.assertTrue(any(word in b for b in bad), (word, bad))
+        zero = gwt_reader.spec_problems({'controls': [{'argv': ['--surname', 'Smith'], 'min_count': 0}]})
+        self.assertTrue(any('each control' in b for b in zero), 'a canary with a minimum of 0 rows proves nothing')
 
 
 class Classify(unittest.TestCase):
@@ -176,6 +178,7 @@ class FamilySearch(Base):
             {'labelId': 'EXT_DATA', 'text': json.dumps({'EVENT_PLACE_ALT_ORIG': 'Parroquia de Santa Oria, Villazul'})},
             {'labelId': 'FS_UNSUPPORTED', 'text': json.dumps({'EVENT_PLACE_SUP': 'Caserío Alto'})},
             {'labelId': 'EXT_DATA_ORIG', 'text': '{not json'},                  # unreadable: skipped, no crash
+            {'labelId': 'EXT_DATA', 'text': json.dumps({'EVENT_PLACE_ALT_ORIG': ['Villazul']})},  # not text: skipped
             {'labelId': 'BIRTH_PLACE_ORIG', 'text': 'Lejos'},                   # a person's place, not the event's
             {'labelId': 'EVENT_PLACE_ORIG', 'value': 'Villazul'}]}]}            # repeated: listed once
         self.assertEqual(gwt_read.place_orig(g), ['Villazul', 'San Bartolo', 'Ermita de Ruvel',
@@ -266,6 +269,12 @@ class FamilySearch(Base):
         self.run_fs(['record', '1:1:QZZ1-AAA'], net, gate)
         code, _, _ = self.run_fs(['--control-ark', '1:1:QZZ1-AAA', 'record', '1:1:QZZ9-RRR'], net, gate)
         self.assertEqual((code, len(net.requests)), (gwt_reader.EXIT_RESTRICTED, 3))
+
+    def test_a_record_429_stays_a_wall_even_with_a_control_ark(self):
+        gate = DenyGate()
+        net = FakeNet(gate, (429, b'Access to artifact denied'), (200, json.dumps(RECORD).encode()))
+        code, _, text = self.run_fs(['--control-ark', '1:1:QZZ1-AAA', 'record', '1:1:QZZ9-RRR'], net, gate)
+        self.assertEqual((code, len(gate.hits), gate.denials, len(net.requests)), (gwt_reader.EXIT_WALL, 1, [], 1), text)
 
     def test_a_search_403_is_never_read_as_restricted(self):
         gate = FakeGate()

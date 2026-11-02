@@ -65,3 +65,6 @@ gwt_read.py | if lab in ('EVENT_PARISH_ORIG', 'CP_MAR_PLACE_ORIG') or | if lab i
 gwt_read.py | if lab in _PLACE_IN_JSON and t.lstrip().startswith('{'): | if False: | place_orig reads the typed place some collections keep only inside EXT_DATA or FS_UNSUPPORTED JSON
 gwt_read.py | if t and t not in found: | if t: | place_orig lists each typed place once, even when the record repeats it
 gwt_read.py | undo()      # a canary that was stopped proved nothing either: the run is void all the same | pass | a search whose after-canary hits a block or a captcha leaves no file or cached answer that reads as "none"
+gwt_reader.py | if verdict == 'blocked' and on_403 is not None | if on_403 is not None | only a 403 is asked whether it is restricted: a 429 on a record stays a wall, even with --control-ark
+gwt_reader.py | and isinstance(c.get('min_count'), int) and c['min_count'] > 0): | and isinstance(c.get('min_count'), int)): | a canary must want at least one row: a minimum of 0 passes on any page and proves nothing
+gwt_read.py | return v if isinstance(v, str) and v else None | return v | place_orig keeps only text from the JSON fields, never a list or a number
