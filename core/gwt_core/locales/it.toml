@@ -1,0 +1,49 @@
+# Italian. Every locale file has the same sections; see docs/rules.md.
+code = "it"
+name = "Italian"
+
+[fold]
+pairs = []
+particles = ["di", "de", "da", "del", "della", "dei", "degli", "delle", "lo", "la", "d"]
+
+[months]
+"1" = ["gennaio", "genn", "gen"]
+"2" = ["febbraio", "febb", "feb"]
+"3" = ["marzo", "mar"]
+"4" = ["aprile", "apr"]
+"5" = ["maggio", "mag"]
+"6" = ["giugno", "giu"]
+"7" = ["luglio", "lug"]
+"8" = ["agosto", "ago"]
+"9" = ["settembre", "sett", "set", "7bre"]
+"10" = ["ottobre", "ott", "8bre"]
+"11" = ["novembre", "nov", "9bre"]
+"12" = ["dicembre", "dic", "xbre", "10bre"]
+
+[dates]
+filler = ["il", "di", "del", "giorno", "anno", "addi", "li"]
+
+[roles]
+godparent = ["padrino", "madrina", "compare", "comare"]
+witness = ["testimone", "testimoni"]
+father = ["padre"]
+mother = ["madre"]
+child = ["figlio", "figlia", "figli"]
+spouse = ["marito", "moglie", "sposo", "sposa", "vedovo", "vedova"]
+priest = ["parroco", "sacerdote", "curato", "arciprete", "prevosto"]
+
+[events]
+birth = ["nascita", "nato", "nata"]
+baptism = ["battesimo", "battezzato", "battezzata"]
+marriage = ["matrimonio", "sposalizio", "sposato", "pubblicazioni", "processetto"]
+death = ["morte", "decesso", "morto", "morta", "defunto"]
+burial = ["sepoltura", "sepolto", "sepolta"]
+
+[dedication]
+pairs = [
+  ["Sto.", "Santo"],
+  ["Sta.", "Santa"],
+  ["Smo.", "Santissimo"],
+  ["Sma.", "Santissima"],
+  ["N.S.", "Nostra Signora"],
+]

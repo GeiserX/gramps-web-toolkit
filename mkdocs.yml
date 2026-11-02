@@ -154,3 +154,4 @@ nav:
       - gwt-fscache: fscache.md
   - Development:
       - Development: development.md
+      - Shared rules and locales: rules.md
