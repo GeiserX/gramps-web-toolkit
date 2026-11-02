@@ -316,6 +316,11 @@ class GitTest(Base):
         self.assertNotIn('D  ', self.git('status', '--porcelain'))
         self.assertFalse(os.path.exists(os.path.join(folder, '.gitignore')))
 
+    def test_ignore_patterns_start_on_their_own_line(self):
+        self.write('raw/.gitignore', b'.DS_Store')   # no newline at the end
+        R.ignore_binaries(os.path.join(self.dir, 'raw'), ['a.jpg', 'b.pdf'])
+        self.assertEqual(open(os.path.join(self.dir, 'raw/.gitignore')).read(), '.DS_Store\n*.jpg\n*.pdf\n')
+
     def cli(self, *argv):
         env = {k: v for k, v in os.environ.items() if not k.startswith('GWT_RAWSTORE_')}
         env['GWT_RAWSTORE_CONFIG'] = os.path.join(self.dir, 'no-config')

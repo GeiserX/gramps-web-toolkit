@@ -376,11 +376,11 @@ def ignore_binaries(folder, names):
     """One pattern per binary extension in the folder's .gitignore (`*.jpg` covers every subfolder), not one line
     per file: a folder of thousands of scans got thousands of lines."""
     ig = os.path.join(folder, '.gitignore')
-    have = set(open(ig, encoding='utf-8').read().splitlines()) if os.path.isfile(ig) else set()
-    new = sorted({'*' + os.path.splitext(n)[1] for n in names} - have)
+    text = open(ig, encoding='utf-8').read() if os.path.isfile(ig) else ''
+    new = sorted({'*' + os.path.splitext(n)[1] for n in names} - set(text.splitlines()))
     if new:
         with open(ig, 'a', encoding='utf-8') as f:
-            f.write('\n'.join(new) + '\n')
+            f.write(('\n' if text and not text.endswith('\n') else '') + '\n'.join(new) + '\n')
 
 
 def migrate(store, folder, prefix='', remove=False, jobs=4, log=print, evict=False):
