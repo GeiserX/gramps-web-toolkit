@@ -116,3 +116,6 @@ gwt_check/media.py | if bits <= DUP_BITS: | if bits < DUP_BITS: | two images exa
 gwt_check/media.py | if bits <= DUP_BITS: | if True: | two images more than DUP_BITS apart are not a pair
 gwt_check/cli.py | f["info"] or f["check"] in media.AFTER_READ | f["info"] | what the server says about files survives a read that settled while someone wrote
 gwt_check/media.py | "pagesize": random.randrange(1, 2**62)}) | "pagesize": 1}) | a file deleted after an earlier run is not hidden by the server's cached answer
+gwt_check/media.py | NO_THUMB = frozenset(range(400, 500)) - {401, 429} | {501} | NO_THUMB = frozenset({404, 413, 415}) | a thumbnail the server cannot make (422, 501) is counted, not the end of the run
+gwt_check/client.py | if status in none_on: | if False: | a status the caller expects answers None instead of ending the run
+gwt_check/media.py | unread += bool(got.get("unread")) | unread += 0 | thumbnails --download could not read are counted in the report

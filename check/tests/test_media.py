@@ -11,6 +11,7 @@ import pytest
 
 from gwt_check import checks, media, selftest
 from gwt_check.cli import main
+from gwt_check.client import Client
 from gwt_check.tree import Tree
 
 KEY = "status"  # in `_tree`'s fields: what the server said about that media object, kept beside the objects
@@ -95,6 +96,11 @@ def test_annotate_keeps_earlier_measures():
     assert status["hO0001"]["file_missing"] is True and status["hO0001"]["dhash"] == "0f" * 32
 
 
+def test_thumbnails_not_read_are_counted_in_the_report():
+    _, info = _found(_tree({KEY: {"file_missing": False, "unread": True}}))
+    assert info["media thumbnails not read"] == 1
+
+
 def test_a_tree_read_with_every_file_checked_has_no_note():
     _, info = _found(_tree({KEY: {"file_missing": False}}))
     assert "media files not checked" not in info
@@ -152,31 +158,25 @@ def _bare():
     return selftest.clean_tree()
 
 
-class FakeClient:
-    """Client.get and Client._call over a dict of thumbnails; counts requests."""
+class FakeClient(Client):
+    """The real Client over a dict of thumbnails (bytes, or the HTTP status the server answers); counts requests."""
 
     def __init__(self, missing=(), thumbs=None):
-        import threading
-        self.base, self.token, self._lock, self.sleep = "https://gramps.example.org/api", "t", threading.RLock(), \
-            (lambda s: None)
+        super().__init__("https://gramps.example.org", "u", "pw", sleep=lambda s: None)
+        self.token = "t"
         self.missing, self.thumbs, self.calls = set(missing), thumbs or {}, []
 
-    def login(self):
-        self.token = "t"
-
-    def get(self, path, params):
-        self.calls.append((path, params))
-        assert path == "/media/" and "page" not in params
-        assert {k: v for k, v in params.items() if k != "pagesize"} == {"filemissing": 1, "keys": "handle"}
-        return {}, [{"handle": h} for h in self.missing]
-
     def _call(self, req):
-        path = urllib.parse.urlparse(req.full_url).path
+        url = urllib.parse.urlparse(req.full_url)
+        path = url.path.removeprefix("/api")
+        if path == "/media/":
+            q = dict(urllib.parse.parse_qsl(url.query))
+            self.calls.append((path, q))
+            assert {k: v for k, v in q.items() if k != "pagesize"} == {"filemissing": "1", "keys": "handle"}
+            return 200, {}, json.dumps([{"handle": h} for h in self.missing]).encode()
         self.calls.append((path, None))
-        handle = path.split("/")[3]
-        if handle not in self.thumbs:
-            return 404, {}, b""
-        return 200, {}, self.thumbs[handle]
+        got = self.thumbs.get(path.split("/")[2], 404)
+        return (got, {}, b"") if isinstance(got, int) else (200, {}, got)
 
 
 def test_annotate_marks_missing_files_in_one_request():
@@ -314,5 +314,19 @@ def test_download_measures_the_thumbnails_and_counts_what_it_could_not_read(caps
     client = FakeClient(thumbs={"hO0001": _thumb(_page(1))})
     status = media.annotate(client, d, download=True, workers=2)
     assert status["hO0001"]["w"] == 192 and "dhash" in status["hO0001"]
-    assert set(status["hO0002"]) == {"file_missing"}  # 404: nothing measured
+    assert status["hO0002"] == {"file_missing": False, "unread": True}  # 404: nothing measured, counted
     assert "1 thumbnail(s) measured, 1 the server would not give" in capsys.readouterr().err
+
+
+def test_a_thumbnail_the_server_cannot_make_is_counted_not_the_end_of_the_run(capsys):
+    # 422: a file the server cannot open (corrupt, HEIC without its plugin); 501: a PDF without poppler
+    pytest.importorskip("PIL.Image")
+    d = _bare()
+    for h in ("hO0002", "hO0003"):
+        d["media"].append({**copy.deepcopy(d["media"][0]), "handle": h, "gramps_id": h[1:]})
+    client = FakeClient(thumbs={"hO0001": _thumb(_page(1)), "hO0002": 422, "hO0003": 501})
+    status = media.annotate(client, d, download=True, workers=1)
+    assert "dhash" in status["hO0001"] and "unread" not in status["hO0001"]
+    assert status["hO0002"] == status["hO0003"] == {"file_missing": False, "unread": True}
+    assert sum(p == "/media/hO0003/thumbnail/256" for p, _ in client.calls) == 1  # a 501 is not tried again
+    assert "1 thumbnail(s) measured, 2 the server would not give" in capsys.readouterr().err

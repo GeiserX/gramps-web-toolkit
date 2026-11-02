@@ -12,11 +12,8 @@ from __future__ import annotations
 import mimetypes
 import random
 import sys
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
-
-from .client import NETWORK_ERRORS, TRIES, USER_AGENT, ApiError, backoff
 
 # dump key: {media handle: {"file_missing": bool}} from a live read, plus "w", "h", "tone", "dhash" with --download
 STATUS = "media_status"
@@ -86,37 +83,9 @@ def measure(data: bytes) -> dict:
                 "dhash": f"{dhash(rows):0{HASH_SIDE * HASH_SIDE // 4}x}"}
 
 
-def _fetch(client, path: str) -> bytes | None:
-    """The bytes at `path`, or None when the server has no thumbnail for it (404, 413 too large, 415 no
-    thumbnailer). Retries a network error, a 429 and a 5xx like Client.get, and logs in again on a 401."""
-    url = client.base + path
-    for attempt in range(1, TRIES + 1):
-        with client._lock:
-            if client.token is None:
-                client.login()
-            token = client.token
-        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}", "User-Agent": USER_AGENT})
-        try:
-            status, headers, data = client._call(req)
-        except NETWORK_ERRORS:
-            if attempt < TRIES:
-                client.sleep(backoff(attempt))
-            continue
-        if status == 200:
-            return data
-        if status in (404, 413, 415):
-            return None
-        if status == 401:
-            with client._lock:
-                if client.token == token:
-                    client.token = None
-            continue
-        if status == 429 or status >= 500:
-            if attempt < TRIES:
-                client.sleep(float(headers.get("Retry-After") or backoff(attempt)))
-            continue
-        raise ApiError(f"GET {path}: HTTP {status}")
-    raise ApiError(f"GET {path}: gave up after {TRIES} tries")
+# a thumbnail the server will not make: 404 gone, 413 too large, 415 no thumbnailer, 422 a file it cannot read
+# (corrupt, HEIC without its plugin), 501 a PDF without poppler; counted as unread, never the end of the run
+NO_THUMB = frozenset(range(400, 500)) - {401, 429} | {501}
 
 
 def annotate(client, objects: dict, status: dict | None = None, *, download: bool = False,
@@ -142,13 +111,18 @@ def annotate(client, objects: dict, status: dict | None = None, *, download: boo
         return status
     todo = [o for o in media if is_image(o) and not status[o["handle"]]["file_missing"]]
     def one(o):
-        data = _fetch(client, f"/media/{o['handle']}/thumbnail/{THUMB}")
-        if data is None:
-            return False
+        got = status[o["handle"]]
+        _, data = client.get(f"/media/{o['handle']}/thumbnail/{THUMB}", {}, raw=True, none_on=NO_THUMB)
         try:
-            status[o["handle"]].update(measure(data))
+            if data is None:
+                raise ValueError("no thumbnail")
+            got.update(measure(data))
         except Exception:  # noqa: BLE001 - Pillow raises many kinds on a file it cannot read
+            for k in ("w", "h", "tone", "dhash"):  # an earlier dump's measures are of what may be another file now
+                got.pop(k, None)
+            got["unread"] = True
             return False
+        got.pop("unread", None)
         return True
 
     with ThreadPoolExecutor(max(1, workers)) as pool:
@@ -164,11 +138,12 @@ def media_checks(T: dict, status: dict, out, in_scope, info: dict, label) -> Non
     kinds report media in scope; a same-page pair needs one side in scope."""
     M = T["media"]
     S = {h: status.get(h) if isinstance(status.get(h), dict) else {} for h in M}
-    unchecked = 0
+    unchecked = unread = 0
     for h, o in M.items():
         got = S[h]
         if "file_missing" not in got:
             unchecked += 1
+        unread += bool(got.get("unread"))
         if not in_scope("media", h):
             continue
         gid = o.get("gramps_id") or h
@@ -186,6 +161,8 @@ def media_checks(T: dict, status: dict, out, in_scope, info: dict, label) -> Non
                                           "replace it, or detach it")
     if unchecked:
         info["media files not checked"] = unchecked
+    if unread:  # asked with --download, and the server would not give it or Pillow could not read it
+        info["media thumbnails not read"] = unread
     # the same page twice on one citation: near thumbnails, different files (the same file is dup-media)
     for c in T["citations"].values():
         refs = [r.get("ref") for r in c.get("media_list") or [] if isinstance(r, dict)]
@@ -213,3 +190,6 @@ def print_media_info(info: dict) -> None:
     if info.get("media files not checked"):
         print(f"media files not checked: {info['media files not checked']} (whether a file is missing is read from "
               "the live tree; a dump gwt-check saved carries it)")
+    if info.get("media thumbnails not read"):
+        print(f"media thumbnails not read: {info['media thumbnails not read']} (the server would not give them or "
+              "Pillow could not read them; media-tiny, media-uniform and media-dup-page did not see them)")
