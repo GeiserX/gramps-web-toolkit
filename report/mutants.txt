@@ -3,7 +3,7 @@ gwt_report.py | degree, removed = min(g1, g2) - 1, abs(g1 - g2) | degree, remove
 gwt_report.py | n, d = min(g1, g2), abs(g1 - g2) | n, d = min(g1, g2) - 1, abs(g1 - g2) | the Spanish ordinal counts from siblings: the child of a primo hermano is a sobrino segundo
 gwt_report.py | deg, gap = min(g1, g2) - 1, abs(g1 - g2) | deg, gap = min(g1, g2), abs(g1 - g2) | the French cousin degree: children of siblings are cousins germains
 gwt_report.py | n = 2 * n + (step[2] == 'mother') | n = 2 * n + (step[2] == 'father') | Ahnentafel numbers: a father is 2n, a mother 2n+1
-gwt_report.py | return not any(step[0] in common for step in path) | return True | a path through a nearer common ancestor is that ancestor's relationship, never one more per ancestor above it
+gwt_report.py | if not on_a.isdisjoint(s[0] for s in path_b): | if False: | two lines that meet below the common ancestor are the nearer ancestor's relationship, never one more per ancestor above it
 gwt_report.py | (fam_a != fam_b or len(members) == 1 and all( | (len(members) == 1 and all( | two lines that reach the shared ancestor through different families are half kin
 gwt_report.py | len(members) == 1 and all( | len(members) == 1 or all( | one shared parent of a family that records only one parent is not called half
 gwt_report.py | LINEAGE = ('', 'Birth', 'Unknown', 'Adopted') | LINEAGE = ('', 'Birth', 'Unknown', 'Adopted', 'Stepchild') | a stepchild link is never a blood path

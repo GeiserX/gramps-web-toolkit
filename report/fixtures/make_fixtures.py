@@ -7,6 +7,9 @@ kin-tree.json: Adam and Eve (F1) have A1, B1 and C1. Line A goes A1 > A2 > ... >
 B1 > B2 > ... > B6 (daughters), so A_i and B_j are cousins of every degree. Adam also has H1 with Lilith (F2), a half
 sister of A1. C1's son C2 marries B1's daughter E2: their child X has Adam and Eve twice in the pedigree. K is
 adopted into A1's family, S1 is a stepchild there. B2's husband Sam is an in-law, never blood.
+Double cousins: Gil and Gwen (FG) have P1 and Q1. P1 and Wanda (FP) have AF and BF. DA is AF's son. DB is the
+daughter of BF and BM, and BM is Q1's daughter, so DB is DA's first cousin through P1 and Wanda and also his second
+cousin through Gil and Gwen.
 Marks on links: A2's link to A1 carries a [probable] note, A3 is tagged "hipótesis", B2's link to B1 carries a
 citation of confidence 3.
 
@@ -88,6 +91,17 @@ def kin_tree():
     t.family("FS", None, "SF", ["S1"])
     t.family("FC", "C1", None, ["C2"])
     t.family("FX", "C2", "E2", ["X1"])
+    # double cousins
+    for gid, first, sn, g in (("G1", "Gil", "Dale", 1), ("G2", "Gwen", "Dale", 0), ("P1", "Pete", "Dale", 1),
+                              ("Q1", "Quinn", "Dale", 0), ("W1", "Wanda", "Shaw", 0), ("AF", "Al", "Dale", 1),
+                              ("BF", "Ben", "Dale", 1), ("BM", "Beth", "Cole", 0), ("QH", "Quentin", "Cole", 1),
+                              ("DA", "Dan", "Dale", 1), ("DB", "Dora", "Dale", 0)):
+        t.add(gid, first, sn, g)
+    t.family("FG", "G1", "G2", ["P1", "Q1"])
+    t.family("FP", "P1", "W1", ["AF", "BF"])
+    t.family("FQ", "QH", "Q1", ["BM"])
+    t.family("FDA", "AF", None, ["DA"])
+    t.family("FDB", "BF", "BM", ["DB"])
     # marks on links
     t.o["Note"].append({"handle": "hN1", "gramps_id": "N1", "text": {"string": "[probable] index line only"},
                         "type": "Research"})

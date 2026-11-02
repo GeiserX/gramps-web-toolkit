@@ -49,7 +49,7 @@ Two people with no common ancestor print `no blood path`. The exit code is `0` e
 
 - A path goes from child to parent through the person's parent families, never through a marriage. A spouse, a spouse's parents and a spouse's siblings are in-laws, never blood kin.
 - A parent link counts when its relation (`frel` for the father, `mrel` for the mother) is `Birth`, `Adopted`, `Unknown` or empty. `Stepchild`, `Foster` and `Sponsored` never do. A path through an adoption is named as usual and says `(through an adoption)`.
-- A path that passes through another common ancestor belongs to that nearer ancestor: a direct line is one relationship, not one more per generation above.
+- Two lines that meet below a common ancestor (they share a person on the way up) belong to that nearer ancestor: a direct line is one relationship, not one more per generation above. A line counts as soon as the other side reaches the ancestor without that person, so double cousins (two siblings who married two siblings, or a cousin who also descends from a sibling of your grandparent) get both relationships.
 - **Half**: the two lines reach the shared ancestor through two different families, or through one family where both parents are recorded but only one is shared. A child of a family that records only a father is not called half: the mother is unknown, not different.
 - A person recorded as their own ancestor (bad data) stops that path; it never loops. Paths stop at 30 generations. The walk goes one generation at a time and keeps 2,000 paths per person, nearest first, so on a big pedigree only the most distant relationships are left out, and a note says the list was cut. `digest` says so too, under the list.
 

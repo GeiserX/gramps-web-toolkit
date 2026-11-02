@@ -178,13 +178,14 @@ def relationships(T, a, b, weak_tags=WEAK_TAGS, max_paths=MAX_PATHS, a_paths=Non
     pa, ta = a_paths or ancestor_paths(T, a, max_paths=max_paths)
     pb, tb = ancestor_paths(T, b, max_paths=max_paths)
     common = set(pa) & set(pb)
-
-    def clear(path):  # a path through another common ancestor belongs to that ancestor's relationship
-        return not any(step[0] in common for step in path)
     groups = {}
     for c in common:
-        for path_a in filter(clear, pa[c]):
-            for path_b in filter(clear, pb[c]):
+        for path_a in pa[c]:
+            on_a = {s[0] for s in path_a}
+            for path_b in pb[c]:
+                # two lines that meet below c (share a person) belong to that nearer ancestor's relationship
+                if not on_a.isdisjoint(s[0] for s in path_b):
+                    continue
                 key = (tuple(s[0] for s in path_a), tuple(s[0] for s in path_b),
                        path_a[-1][3] if path_a else None, path_b[-1][3] if path_b else None)
                 groups.setdefault(key, []).append((c, path_a, path_b))

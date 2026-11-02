@@ -181,6 +181,15 @@ class KinTest(unittest.TestCase):
         self.assertEqual(sorted(r['name']['en'] for r in rels), ['great-niece', 'great-niece'])
         self.assertEqual(sorted(tuple(r['path_b'][:2]) for r in rels), [('hX1', 'hC2'), ('hX1', 'hE2')])
 
+    def test_double_cousins_have_both_relationships(self):
+        # DA's line to Gil and Gwen runs through Pete, a nearer common ancestor; DB's does not, so it counts
+        rels = self.kin('DA', 'DB')['relationships']
+        self.assertEqual([r['name'] for r in rels], [
+            {'en': 'first cousin', 'es': 'prima hermana', 'fr': 'cousine germaine'},
+            {'en': 'second cousin', 'es': 'prima segunda', 'fr': 'cousine issue de germain'}])
+        self.assertEqual([(c, na, nb) for c, na, nb in rels[1]['ancestors']], [('hG1', 8, 14), ('hG2', 9, 15)])
+        self.assertFalse(any(r['half'] for r in rels))
+
     def test_own_ancestor_loop_ends(self):
         T = copy.deepcopy(self.T)
         T['people']['hI3']['parent_family_list'].append('hF3')  # Lilith recorded as her own grandchild: bad data
