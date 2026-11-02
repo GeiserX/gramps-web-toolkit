@@ -46,7 +46,7 @@ gate/gwt-gate wait-clear --probe 'curl -fsS -o /dev/null https://records.example
 - **The notice runs once per parking.** `--notify` (or `GWT_GATE_NOTIFY`) is a command template. `{site}` (the name of the gate directory), `{lane}`, `{url}` and `{what}` are filled in. Any program works: `osascript` for a macOS dialog, `ntfy`, `notify-send`, a script of your own. A second `human` while the gate is already parked only writes a log line, so ten lanes meeting the same wall send one notice.
 - **No shell.** The template is split into words first, and each word is filled in on its own, so a `{what}` or `{url}` copied from a site stays one argument and can never start a second command. Use a script of your own if you need pipes. A notice that fails is logged as `NOTIFY ... exit=` and never stops the gate.
 - **Parked means parked.** While parked, `wait` exits 3 for every lane, and `Paused.left` is `gwt_gate.PARKED` (infinity), whatever `--max-wait` says. `status` shows the `human` entry: lane, what, URL and when.
-- **`wait-clear --probe CMD`** runs a control command every `--every` seconds (default 60) and ends the parking the first time it exits 0. The probe is your own request that only succeeds on a normal answer, for example a known search that must return a known record. If the probe still fails after `--timeout` seconds (default one hour), the notice runs once more with `still waiting:` in front of `{what}`. After a second timeout it exits 5 with the gate still parked. It returns at once if someone has already run `clear`. The probe runs without a shell too, and it does not take a gate slot, so keep it to one request.
+- **`wait-clear --probe CMD`** runs a control command every `--every` seconds (default 60) and ends the parking the first time it exits 0. The probe is your own request that only succeeds on a normal answer, for example a known search that must return a known record. If the probe still fails after `--timeout` seconds (default one hour), the notice runs once more with `still waiting:` in front of `{what}`. After a second timeout it exits 5 with the gate still parked. It returns at once if someone has already run `clear`. A passing probe ends the parking only: a `block` or a pause that is running keeps running, since a page that answers says nothing about an account being reinstated. The probe runs without a shell too, and it does not take a gate slot, so keep it to one request.
 - `clear <reason>` ends a parking by hand, like a pause.
 
 ### Which wall is it?
@@ -58,7 +58,7 @@ gate/gwt-gate wait-clear --probe 'curl -fsS -o /dev/null https://records.example
 `dead` pauses every lane for `pause` seconds, which is right when the whole gate is one account. When lanes on one gate use several accounts, a 401 on one account should stop only that account, and it should end when someone signs in again, not after a fixed 20 minutes:
 
 ```sh
-gate/gwt-gate auth-expired my-lane --account acct-1 --session ~/.config/mysite/acct-1.token 'HTTP 401 /records'
+gate/gwt-gate auth-expired my-lane 'HTTP 401 /records' --account acct-1 --session ~/.config/mysite/acct-1.token
 gate/gwt-gate wait my-lane --account acct-1   # exit 3 until the token file changes
 gate/gwt-gate wait other-lane                 # lanes that name no account, or another one, go on
 ```
@@ -83,7 +83,7 @@ GWT_GATE_PROFILE=geneteka.genealodzy.pl gate/gwt-gate wait my-lane
 gate/gwt-gate --per-hour 100 --burst 1 --cooldown 5 wait my-lane   # a host with no row
 ```
 
-The site's limits come on top of the gate's own pace: a call waits for whichever is later. When a limit has more than `max_wait` seconds to run, `wait` exits 3 at once with the reason (`the site allows 20 requests every 60 s`), like a pause. `--profile` accepts a URL too. `--profiles FILE` (`GWT_GATE_PROFILES`) reads your own file. `--per-hour`, `--burst` and `--cooldown` (`GWT_GATE_PER_HOUR`, `GWT_GATE_BURST`, `GWT_GATE_COOLDOWN`) beat the profile. A host with no row is an error (exit 2), never a silent "no limit". Every process on the gate directory must use the same profile, since only calls made with a limit are counted against it.
+The site's limits come on top of the gate's own pace: a call waits for whichever is later. When a limit has more than `max_wait` seconds to run, `wait` exits 3 at once with the reason (`the site allows 20 requests every 60 s`), like a pause. `--profile` accepts a URL too. `--profiles FILE` (`GWT_GATE_PROFILES`) reads your own file. `--per-hour`, `--burst` and `--cooldown` (`GWT_GATE_PER_HOUR`, `GWT_GATE_BURST`, `GWT_GATE_COOLDOWN`) beat the profile. A host with no row is an error (exit 2), never a silent "no limit". So is a `per_hour` or `burst` below 1 in a row or a flag: leave the cell empty for no limit. Every process on the gate directory must use the same profile, since only calls made with a limit are counted against it.
 
 Only add a row for a limit the site itself publishes, with its URL. A limit you discovered by being blocked belongs in [Hard-won lessons](hard-won.md) and in your own profiles file.
 

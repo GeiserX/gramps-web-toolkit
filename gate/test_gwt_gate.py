@@ -320,6 +320,19 @@ class HumanAuthProfileTest(unittest.TestCase):
         g.wait('a')
         self.assertTrue(any(c.startswith('CLEAR probe passed') for c in self.calls()))
 
+    def test_a_passing_probe_ends_the_parking_but_not_a_block(self):
+        g = G.Gate(self.tmp.name, clock=self.clock, sleep=self.capped_sleep)
+        g.block(24, 'account suspended')
+        g.human('a', 'captcha')
+        ok = f'{sys.executable} -I -c "raise SystemExit(0)"'
+        self.assertTrue(g.wait_clear(ok, every=60, timeout=3600))
+        self.assertNotIn('human', g.status())
+        with self.assertRaises(G.Paused) as cm:
+            g.wait('a')
+        self.assertEqual(cm.exception.why, 'account suspended')  # the block still runs
+        g.clear('lifted')  # by hand, clear ends both
+        g.wait('a')
+
     def test_wait_clear_reminds_once_after_the_timeout_then_gives_up_parked(self):
         g = G.Gate(self.tmp.name, clock=self.clock, sleep=self.capped_sleep, notify=self.notify)
         g.human('a', 'captcha', 'https://example.org/')
@@ -394,6 +407,13 @@ class HumanAuthProfileTest(unittest.TestCase):
         g.human('a', 'captcha')
         self.assertIsNone(g.eta(1))
 
+    def test_eta_counts_a_spent_per_hour_cap(self):
+        g = self.gate(start=1, floor=1, per_hour=3, max_wait=120)
+        for _ in range(3):
+            g.wait('a')
+        self.assertAlmostEqual(g.eta(1), 3600 - 2, delta=1)  # the next call waits out the hour, not the gap
+        self.assertEqual(len(g._locked(dict)['recent']), 3)  # eta reads the history, it never saves a pruned one
+
     def test_challenge_names_the_vendor(self):
         def page(name):
             with open(os.path.join(FIXTURES, name), 'rb') as f:
@@ -418,7 +438,8 @@ class HumanAuthProfileTest(unittest.TestCase):
     def test_a_bad_profiles_file_is_refused(self):
         bad = os.path.join(self.tmp.name, 'p.tsv')
         for text in ('host\tper_hour\n', 'host\tper_hour\tburst\tcooldown_s\tfresh_profile\tnotes\nx\t\t2\t\tno\tn\n',
-                     'host\tper_hour\tburst\tcooldown_s\tfresh_profile\tnotes\nx\tmany\t\t\tno\tn\n'):
+                     'host\tper_hour\tburst\tcooldown_s\tfresh_profile\tnotes\nx\tmany\t\t\tno\tn\n',
+                     'host\tper_hour\tburst\tcooldown_s\tfresh_profile\tnotes\nx\t-3\t\t\tno\tn\n'):
             with open(bad, 'w') as f:
                 f.write(text)
             with self.assertRaises(ValueError):
@@ -441,6 +462,10 @@ class CliHumanProfileTest(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn('no profile for other.example.org', err)
         self.assertEqual(self.cli('--profile', 'www.loc.gov', 'status')[0], 0)  # the shipped file
+        for flags in (('--per-hour', '0'), ('--burst', '-1', '--cooldown', '5'), ('--cooldown', '-5')):
+            code, _, err = self.cli(*flags, 'wait', 'a')
+            self.assertEqual(code, 2, flags)  # never a traceback, never a silent "no limit"
+            self.assertIn('must be', err)
 
     def test_auth_expired_and_eta(self):
         session = os.path.join(self.tmp.name, 'tok')

@@ -189,11 +189,16 @@ class Gate:
                 self.log(f'DEAD {lane} {what} -> pause kept ({s.get("why") or "?"}), gap={round(s["gap"], 2)}s')
         self._locked(h)
 
-    def clear(self, reason):
-        """End a pause, a block or a parking for a person now."""
+    def clear(self, reason, human_only=False):
+        """End a pause, a block or a parking for a person now. human_only ends the parking alone: a probe that
+        passes shows the site answers, not that a block (an account suspended) was lifted."""
         def h(s):
             was = s.get('why') or ('a person: ' + s['human']['what'] if s.get('human') else '?')
-            s['pause_until'] = min(s['pause_until'], self.clock()); s['why'] = ''; s['human'] = None
+            if human_only:
+                was = 'a person: ' + s['human']['what'] if s.get('human') else '?'
+            else:
+                s['pause_until'] = min(s['pause_until'], self.clock()); s['why'] = ''
+            s['human'] = None
             self.log(f'CLEAR {reason} (was: {was})')
         self._locked(h)
 
@@ -247,7 +252,7 @@ class Gate:
             except (OSError, subprocess.SubprocessError):
                 rc = None
             if rc == 0:
-                self.clear(f'probe passed: {probe}')
+                self.clear(f'probe passed: {probe}', human_only=True)
                 return True
             if self.clock() - start >= timeout:
                 if reminded:
@@ -274,9 +279,10 @@ class Gate:
         if s.get('human'):
             return None
         now = self.clock()
+        cap, _ = self._limit_ready(s, now)  # s is a copy: pruning its history saves nothing
         pace = max([s['gap']] + ([3600.0 / self.per_hour] if self.per_hour else [])
                    + ([self.cooldown / self.burst] if self.burst else []))
-        first = max(s['pause_until'], s['last'] + s['gap'], now) - now
+        first = max(s['pause_until'], s['last'] + s['gap'], cap, now) - now
         return round(first + max(0, n - 1) * pace) if n > 0 else 0
 
     def block(self, hours, why):
@@ -388,6 +394,9 @@ def load_profiles(path=None):
                     'notes': r['notes']}
             except ValueError:
                 raise ValueError(f'{path}:{n}: per_hour and burst must be whole numbers, cooldown_s a number')
+            if any(v is not None and v < 1 for v in (rows[r['host'].lower()]['per_hour'],
+                                                      rows[r['host'].lower()]['burst'])):
+                raise ValueError(f'{path}:{n}: per_hour and burst must be 1 or more; leave the cell empty for none')
             if rows[r['host'].lower()]['burst'] and not rows[r['host'].lower()]['cooldown_s']:
                 raise ValueError(f'{path}:{n}: a burst needs a cooldown_s')
     return rows
@@ -458,6 +467,9 @@ def main(argv=None):
     per_hour = a.per_hour if a.per_hour is not None else limits['per_hour']
     burst = a.burst if a.burst is not None else limits['burst']
     cooldown = a.cooldown if a.cooldown is not None else limits['cooldown_s']
+    if any(v is not None and v < 1 for v in (per_hour, burst)) or cooldown < 0:
+        print('gwt-gate: --per-hour and --burst must be 1 or more, --cooldown 0 or more', file=sys.stderr)
+        return 2
     gate = Gate(a.dir, priority={x.strip() for x in a.priority.split(',') if x.strip()}, start=a.start,
                 floor=a.floor, ceil=a.ceil, step_after=a.step_after, pause=a.pause, share=a.share,
                 max_wait=a.max_wait, per_hour=per_hour, burst=burst, cooldown=cooldown, notify=a.notify or None)

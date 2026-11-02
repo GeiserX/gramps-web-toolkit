@@ -3,7 +3,7 @@
 # of gate/ and fails when the tests still pass. The text must occur exactly once in the file.
 gwt_gate.py | if already: | if False: | the notify command runs once per parking, never again for a second report of the same captcha
 gwt_gate.py | if parked: | if False: | while the gate is parked for a person, wait refuses every lane, with no timer
-gwt_gate.py | s['why'] = ''; s['human'] = None | s['why'] = '' | clear ends a parking for a person too
+gwt_gate.py | s['human'] = None | pass | clear ends a parking for a person too
 gwt_gate.py | if reminded: | if False: | wait-clear sends one reminder after the timeout, then gives up with the gate still parked
 gwt_gate.py | argv = [w.format(**fields) for w in shlex.split(self.notify_cmd)] | argv = shlex.split(self.notify_cmd.format(**fields)) | each notify word is filled in alone, so text from the site never splits into extra words or commands
 gwt_gate.py | 'mtime': _mtime(session), 'why': what} | 'mtime': _mtime(session), 'why': what}; s['gap'] = min(self.ceil, s['gap'] * 3) | an expired session never slows the pace: auth-expired leaves the gap alone
@@ -13,3 +13,7 @@ gwt_gate.py | if self.per_hour and len(recent) >= self.per_hour: | if False: | a
 gwt_gate.py | if self.burst and len(recent) >= self.burst and | if False and | a burst limit (a Crawl-delay) spaces calls by its cooldown
 gwt_gate.py | if cap - now > self.max_wait: | if False: | a cap with long to run raises Paused at once instead of sleeping the hour away
 gwt_gate.py | if vendor else 1 | if True else 1 | gwt-gate challenge exits 1 when the answer holds no known wall
+gwt_gate.py | self.clear(f'probe passed: {probe}', human_only=True) | self.clear(f'probe passed: {probe}') | a passing probe ends the parking only, never a block or pause that is running
+gwt_gate.py | first = max(s['pause_until'], s['last'] + s['gap'], cap, now) - now | first = max(s['pause_until'], s['last'] + s['gap'], now) - now | eta counts a per-hour cap that is spent
+gwt_gate.py | if any(v is not None and v < 1 for v in (per_hour, burst)) or cooldown < 0: | if False: | a flag of 0 or below exits 2 instead of a traceback or a silent no limit
+gwt_gate.py | if any(v is not None and v < 1 for v in (rows[r['host'].lower()]['per_hour'], | if False and any(v is not None and v < 1 for v in (rows[r['host'].lower()]['per_hour'], | a profiles row with a per_hour or burst below 1 is refused
