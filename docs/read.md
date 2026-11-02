@@ -46,8 +46,36 @@ Every request goes the same way (the INSEE source makes none). A fresh answer in
 | HTTP 429, a captcha or block page | pauses every lane (20 min) and triples the gap | 3 |
 | HTTP 200 with an empty body, a page that is not JSON from a JSON site, or a page without the record text from a page site (an empty frame, an Imperva block inside an iframe, the site's own error page) | read as a block: pauses every lane | 3 |
 | HTTP 401, or a sign-in page | pauses every lane; get a fresh token | 4 |
+| HTTP 403 for one FamilySearch record whose access is restricted (see [restricted records](#a-403-for-one-record-restricted-or-blocked)) | writes the envelope with `access: restricted` and no candidates; the gate only logs it as a denial (no pause, no block) | 5 |
 | JSON of an unexpected shape, or another HTTP error | nothing saved, the gate is not told | 1 |
 | the gate is paused | no request at all | 6 |
+
+## Canary controls
+
+A search that finds nothing proves nothing unless the site could have answered. A site under a soft block can answer HTTP 200 with an empty page skeleton, a site can change its "no results" wording, and a filter can stop working. Each source therefore declares canary searches: public, neutral queries that any working copy of the site answers with at least a known number of rows.
+
+```bash
+gwt read pares control                                         # run the canaries now
+gwt read boe search --name "Ana Zorvalo Quemada" --controls both --out runs/   # canaries before and after
+```
+
+`control` runs each canary without the cache, through the gate like any request, and prints one line each. It exits 0 when every canary reads at least its minimum, and 3 with a `void` line otherwise:
+
+```text
+control	control	--given Cristóbal --surname Colón	25 read, want at least 10	ok
+```
+
+`--controls before|after|both` on `search` runs the canaries around that search, and reads the search itself without the cache, since the canaries only prove the site works now. A short canary before the search means no search. A short canary after it, or one stopped by a block or a captcha, makes the run void (exit 3): the envelope and candidates files the search wrote are removed (one `removed` line each), and so are the answers it cached, so nothing on disk reads as "none" and the next run asks the site again. To bracket a batch, run `control` before the first search and after the last one: a canary costs one search, which is two requests on PARES (the search form, then the search), so do not add it to every search.
+
+| Source | Canary | Minimum rows |
+|---|---|---|
+| `pares` | `--given Cristóbal --surname Colón` (a surname alone is too broad: the site answers "too many results") | 10 |
+| `genae` | none: the site's robots.txt disallows its search pages for every robot, so gwt-read adds no automated searches there | |
+| `boe` | `--name "Manuel Rodríguez"` | 10 |
+| `familysearch` | `--surname Smith` | 10 |
+| `insee` | none: it reads files you downloaded, offline | |
+
+A source added through the registry also names the marks of its results page: a row of results (`hits`), or the site's own words for "nothing found" (`none`). A page with neither is `unknown`, and `unknown` is a STOP, exit 3, never zero results. PARES, Genae and the BOE apply the same rule through their own page checks. [gwt-read sources](sources/index.md) explains how a new source declares all this.
 
 ## FamilySearch
 
@@ -72,8 +100,9 @@ When the session expires the tool exits 4. Sign in again in the browser and copy
 | `--lane NAME` | `$GWT_AGENT` or `gwt-read` | who asked, for the gate log |
 | `--user-agent UA` | `$GWT_FS_USER_AGENT` or `gramps-web-toolkit (+repo URL)` | the User-Agent header |
 | `--refresh` | off | skip the cache; the request still waits for the gate |
+| `--control-ark ARK` | `$GWT_FS_CONTROL_ARK` or none | a record your account can read, used to tell a restricted record from a block (below) |
 
-The search uses the JSON endpoint the site's own search page calls (`/service/search/hr/v2/personas`), and the record uses the ark URL asking for GEDCOM X JSON. Both answers are turned into candidates by gwt-rank's own GEDCOM X reader, so `gwt-rank` ranks them like any other search. Searches stay in the cache for 7 days and records forever (`FAMILYSEARCH_RULES` in [gwt-fscache](fscache.md#freshness)).
+The search uses the JSON endpoint the site's own search page calls (`/service/search/hr/v2/personas`), and the record uses the ark URL asking for GEDCOM X JSON. Both answers are turned into candidates by gwt-rank's own GEDCOM X reader, so `gwt-rank` ranks them like any other search. Each candidate keeps its `role` and `principal` flag, and `place_orig` lists the event place as the index typed it, when the record has one: the `EVENT_PLACE..._ORIG` fields (which often name the parish the standard place drops), `EVENT_PARISH_ORIG` and `CP_MAR_PLACE_ORIG`, and the typed place some collections keep only inside the JSON text of `EXT_DATA`, `EXT_DATA_ORIG` (`EVENT_PLACE_ALT_ORIG`) or `FS_UNSUPPORTED` (`EVENT_PLACE_SUP`). Searches stay in the cache for 7 days and records forever (`FAMILYSEARCH_RULES` in [gwt-fscache](fscache.md#freshness)).
 
 ### The default pace, and why
 
@@ -81,7 +110,17 @@ One account starts at one request every **30 seconds** (120 an hour). After an h
 
 These numbers are fixed in `gwt-read` (`FS_PACE`); `gwt gate --dir ~/.cache/gwt-gate-fs-default status` shows where an account's pace stands now. After a 403, the gate stays blocked for 24 hours; `gwt gate --dir ... clear <reason>` ends the block early, which you should only do once you know why it happened.
 
-Every 403 counts as a block, even one that only refuses a single restricted record. That can park an account for a day over one record its access level cannot see. We chose it on purpose: from the outside, a 403 for one record looks the same as a 403 for the account or the IP, and guessing wrong the other way is how an account gets suspended. `gwt gate denied` exists for tools that can tell the two apart; `gwt-read` cannot.
+### A 403 for one record: restricted or blocked
+
+A 403 is a block by default, and it parks the account's gate for a day. Some records are refused to every account of an access level, though, and treating that 403 as a block paused every lane for nothing. So a 403 on `record` (an indexed record, a `1:1:` ark) is checked before the gate blocks:
+
+1. When the answer says `Access to artifact denied`, or names the record's permissions (`ThemisPrm...`) and none of them is `ThemisPrmAnyone`, the record is restricted. No other request is made. This reads the 403 body, so it is best effort: the wording is FamilySearch's to change.
+2. Otherwise, with `--control-ark` set, that control record is read again, without the cache, through the gate. If it answers, the account and the IP are fine, so the 403 was about this record: restricted. If the control is refused too, or its read fails in any other way (a 5xx, an answer of the wrong shape, a 429, a paused gate), the first 403 stays a block, and the gate is blocked as before. This is the dependable check: set it.
+3. Without `--control-ark`, a 403 that says neither is a block, as before.
+
+`--control-ark` must be a `1:1:` record ark other than the one you read; anything else exits 64. A restricted record is logged in the gate log as a denial (`gwt gate denied`), which pauses nothing. `gwt-read` reads no images, so a 403 on a film image is outside this check.
+
+A restricted record exits 5, writes an envelope with `access: restricted`, the permissions it named and an empty candidates file, and prints `results	restricted ...`. Log it as restricted, never as "none": someone with the right access can still read it. A 403 on a search is always a block. Pick a control record your account has read before, and never one that is restricted itself.
 
 ### Account safety rules
 
@@ -176,7 +215,7 @@ Each row becomes a candidate. A baptism gives the child with the parents' first 
 
 A page that is not the block asked for (an empty frame, the search form, a captcha) is a STOP: nothing written, nothing cached, every lane pauses. A block the site answers with its notice that no books are indexed for those years in that place is a real answer with no rows.
 
-Genae publishes no terms for scripted use, and its robots.txt disallows `/buscar/` for crawlers. The reader keeps to a person's pace: one search of four requests a minute at most, each answer cached for a week, and it never pages. Genae rows are an index made by volunteers: a hit is a lead, and the act or the image behind it is the evidence.
+Genae publishes no terms for scripted use, and its robots.txt disallows `/buscar/` for crawlers. The reader keeps to a person's pace: one search of four requests a minute at most, each answer cached for a week, and it never pages. For the same reason Genae has no canary: `gwt read genae control` and `--controls` do not exist, so a Genae zero carries no proof the site could have answered. Genae rows are an index made by volunteers: a hit is a lead, and the act or the image behind it is the evidence.
 
 ## BOE and Gaceta de Madrid
 
@@ -287,7 +326,9 @@ So exit 2 means "none found" only when the candidates file was written. A downlo
 ## Tests
 
 ```bash
-cd read && python3 -m unittest -v test_gwt_read test_gwt_pares test_gwt_genae test_gwt_boe test_gwt_insee
+cd read && python3 -m unittest -v test_gwt_read test_gwt_pares test_gwt_genae test_gwt_boe test_gwt_insee test_registry test_controls
 ```
+
+`test_registry` checks every source against the registry's shape, the three-state page classifier on fixture pages (a skeleton page is `unknown`, a STOP), and that a restricted FamilySearch record never reaches the gate while a refused control record still blocks it. `test_controls` checks that a canary skips the cache, that a short one voids the run, and that `--controls` brackets a search.
 
 Invented people, descriptions and ids (the PARES pages in `read/fixtures/` keep the site's markup with invented content), a fake transport and a fake gate: the tests make no request to any site. They check that a search writes an envelope and candidates `gwt-rank` ranks, that a repeated search is served from the cache with no network call, that the gate is asked before every request, that a 403, 429, captcha, sign-in page or empty frame stops the run with nothing written or cached, and that the token never appears in a written file or a log line. The INSEE tests use invented fixed-width lines (`read/fixtures/insee-deces-1985.txt`, and lines built in the test). They check that the source asks for no gate, cache or network, that each line out of the layout exits 2 with nothing written, and that a value INSEE wrote out of its own rules is kept and marked.

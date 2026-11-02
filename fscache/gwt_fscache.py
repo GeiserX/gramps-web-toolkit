@@ -117,6 +117,17 @@ class FSCache:
             os.replace(tmp, path)
         return True
 
+    def forget(self, method, url, headers=None, data=None):
+        """Drop one stored answer, so the next fetch asks the site again. True when there was one."""
+        gone = False
+        for path in self._paths(self.key(method, url, headers, data))[1:]:
+            try:
+                os.remove(path)
+                gone = True
+            except FileNotFoundError:
+                pass
+        return gone
+
     def fetch(self, method, url, headers, data, fetcher, refresh=False):
         """Serve from cache if fresh, else call fetcher(method, url, headers, data) and store a 2xx answer."""
         cacheable = method.upper() in self.methods
