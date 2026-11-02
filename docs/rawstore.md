@@ -74,3 +74,31 @@ python3 -m unittest rawstore/test_gwt_rawstore.py
 ```
 
 The tests run against an in-process S3 stub that, like Garage, refuses a body that does not match its `x-amz-content-sha256`, plus the signed example from the AWS SigV4 documentation, so the signer is checked against a known answer.
+
+## Repo health: `doctor`
+
+```sh
+gwt-rawstore doctor [--repo PATH] [--json] [--max-packs 500] [--max-tmp-gb 1] [--max-binary-gb 1]
+```
+
+A read-only check of how a research repo uses the disk, for repos that many agents read and commit to. It needs no store configuration. Each finding prints the command that fixes it. Exit status 0 when nothing is wrong, 1 when something is, 2 when it cannot run (no such folder, not a git work tree, no git).
+
+| Check | A finding when | Fix it prints |
+|---|---|---|
+| `packs` | more than `--max-packs` packs | `git repack --geometric=2 -d && git multi-pack-index write`, in the foreground, never while a backup runs; in a partial clone on git older than 2.53, upgrade git first |
+| `multi-pack-index` | more than 50 packs and no multi-pack-index | `git multi-pack-index write` |
+| `lazy-fetch` | a partial clone (a `partialclonefilter`, `extensions.partialclone` or a `.promisor` pack) and `GIT_NO_LAZY_FETCH` is not set | `export GIT_NO_LAZY_FETCH=1` in every agent's environment |
+| `binaries` | the binaries git tracks (by extension, sized from the work tree) add up to more than `--max-binary-gb` | `gwt-rawstore migrate <folder> --remove` for the three biggest folders |
+| `scratch` | `tmp/`, `temp/`, `scratch/` or `.tmp/` at the top of the work tree holds more than `--max-tmp-gb` | move scratch out of the repo |
+| `cache` | a `.cache` folder at the top or one level down, or a `GWT_*_DIR` / `GWT_*_CACHE` variable pointing inside the work tree | keep caches under `~/.cache` |
+| `time-machine` | macOS only: `.git`, a scratch or cache folder, or a big binary folder over `--max-tmp-gb` that `tmutil isexcluded` says is backed up | `tmutil addexclusion <path>` (for `.git`, only once the remote has every commit) |
+
+It also prints `gc.auto` and `maintenance.auto` as information. On Linux the Time Machine check is skipped with a note.
+
+It never fetches. It runs only `git version`, `rev-parse`, `count-objects -v`, `config --get`, `ls-files` and `tmutil isexcluded`, never a command that reads an object, and starts every git with `GIT_NO_LAZY_FETCH=1` as well. A binary outside a sparse checkout is skipped, not read from the object store. Why these checks: [hard-won lessons 7, 8 and 55 to 57](hard-won.md#git-and-disk).
+
+```sh
+python3 -m unittest rawstore/test_doctor.py
+```
+
+The tests build small repos in a temp folder: many tiny packs, a tracked image, a big `tmp/` file, a `.cache` folder, and a `blob:none` partial clone over `file://`. One test records every process doctor starts and checks that no pack appears; its control step then reads a blob outside the sparse checkout and shows that a lazy fetch in that clone does add one.

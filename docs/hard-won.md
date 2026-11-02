@@ -54,7 +54,7 @@ Format: what happened, why, and the rule.
 
 **Why.** In a partial clone, any command that reads many blobs that are not on disk (`git grep <rev>`, `git log -S`, `git log -G`, `git log -p`) turns into one network fetch per object.
 
-**Rule.** Grep the working tree (`rg`, or `git grep` with no revision). For files outside the sparse checkout, use the server's code search or a full clone on a server. `git show HEAD:<path>` for one known file is fine. If load spikes, look for `index-pack --promisor` in `ps` and check `packs:` in `git count-objects -v`.
+**Rule.** Grep the working tree (`rg`, or `git grep` with no revision). For files outside the sparse checkout, use the server's code search or a full clone on a server. `git show HEAD:<path>` for one known file is one fetch; thousands of them are thousands of packs (lesson 56). If load spikes, look for `index-pack --promisor` in `ps` and check `packs:` in `git count-objects -v`.
 
 ### 8. Git auto-maintenance repacks filled the disk
 
@@ -75,6 +75,37 @@ Format: what happened, why, and the rule.
 **What happened.** Two lanes wrote the same obvious filename in `/tmp`. One lane's output went out with the other's text, and nothing failed.
 
 **Rule.** Every lane uses its own scratch directory (`mktemp -d`, or a path with the lane name).
+
+### 55. Lazy fetching turned one-off commands into gigabyte downloads
+
+**What happened.** In the same partial clone, a few `git grep <rev>`, `git archive` and `git log -p` runs each fetched most of the tree's history, and each left a pack of several gigabytes. Gigabyte-sized log files committed to the repo made every such fetch bigger.
+
+**Why.** Git fetches a missing object the moment a command needs it, unless lazy fetching is off. Turning it off makes those commands fail at once instead (`GIT_NO_LAZY_FETCH`, git 2.45: https://github.com/git/git/blob/ebdc087dc99d68bb340c282b2ba5f722def28d19/Documentation/git.adoc).
+
+**Rule.** Export `GIT_NO_LAZY_FETCH=1` in every agent's environment, and fetch on purpose (lesson 56). `gwt-rawstore doctor` reports a partial clone where it is not set ([rawstore.md](rawstore.md#repo-health-doctor)).
+
+### 56. Reading fresh files one `git show` at a time made a pack per read
+
+**What happened.** Lanes never pulled. To read the latest version of a shared file they ran `git show origin/main:<path>`, many times an hour, in many lanes. The repo gained over a thousand packs a day, most holding a single blob, and the endpoint security agent scanned every new file (each pack is four: pack, index, reverse index and promisor marker).
+
+**Why.** In a partial clone, each read of a blob that is not local is its own fetch, and each fetch writes its own pack. Git 2.55 batches the fetches of `git grep` and `git cherry` (https://github.com/git/git/blob/ebdc087dc99d68bb340c282b2ba5f722def28d19/Documentation/RelNotes/2.55.0.adoc), not a `git show` of one path.
+
+**Rule.** Read a fresh file over the forge's raw HTTP URL, or fetch every missing blob in one batch after each `git fetch`. One batch is one pack:
+
+```sh
+git ls-tree -r origin/main -- <paths> | awk '{print $3}' |
+  GIT_NO_LAZY_FETCH=1 git cat-file --batch-check | awk '$2 == "missing" {print $1}' |
+  git -c fetch.negotiationAlgorithm=noop fetch -q origin --no-tags --no-write-fetch-head \
+      --recurse-submodules=no --filter=blob:none --stdin
+```
+
+### 57. Merge packs with `repack --geometric`, never with a multi-pack-index repack
+
+**What happened.** With thousands of packs and no multi-pack-index, looking up one missing object took tens of seconds on a cold disk, and every lazy fetch starts with such a lookup. The cleanup, one big merge of every pack, ran next to a Time Machine backup on a nearly full disk and froze the laptop.
+
+**Why.** Git looks for an object in each pack's index in turn; a multi-pack-index makes it one lookup. In a partial clone the packs from the server carry a `.promisor` marker, which tells git that the objects they point to may be missing on purpose. On git 2.54, `git multi-pack-index repack --batch-size=0` followed by `expire` merged ten promisor packs into one pack with no marker, and `git fsck` then reported the missing blobs as errors. `git repack --geometric=2 -d` kept the markers; before git 2.53 it did not work with promisor packs (https://github.com/git/git/blob/ebdc087dc99d68bb340c282b2ba5f722def28d19/Documentation/RelNotes/2.53.0.adoc).
+
+**Rule.** In a partial clone, merge packs only with `git repack --geometric=2 -d`, on git 2.53 or newer, in the foreground, on a quiet disk and never while a backup runs; then `git multi-pack-index write`. Never `git multi-pack-index repack` or `git maintenance run --task=incremental-repack` there. `gwt-rawstore doctor` warns at 500 packs and at 50 packs with no multi-pack-index.
 
 ## Gramps Web
 

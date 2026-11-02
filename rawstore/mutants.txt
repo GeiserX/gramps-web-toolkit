@@ -1,0 +1,18 @@
+# Mutations the rawstore tests must catch. One row each: file | exact text | replacement | why
+# `python3 .github/scripts/run_tests.py --mutants --only rawstore` applies each row to a scratch copy
+# of rawstore/ and fails when the tests still pass. The text must occur exactly once in the file.
+gwt_rawstore_doctor.py | ENV = dict(GIT_NO_LAZY_FETCH='1', | ENV = dict( | doctor's own git processes never lazy-fetch
+gwt_rawstore_doctor.py | if len(packs) > max_packs: | if False: | too many packs is a finding
+gwt_rawstore_doctor.py | if len(packs) > max_packs: | if len(packs) >= max_packs: | exactly --max-packs packs is still fine
+gwt_rawstore_doctor.py | if len(packs) > MIDX_PACKS and not midx: | if False: | many packs with no multi-pack-index is a finding
+gwt_rawstore_doctor.py | if partial and not truthy(environ.get('GIT_NO_LAZY_FETCH')): | if False: | a partial clone with lazy fetch on is a finding
+gwt_rawstore_doctor.py | if partial and not truthy(environ.get('GIT_NO_LAZY_FETCH')): | if partial: | GIT_NO_LAZY_FETCH set in the environment clears the finding
+gwt_rawstore_doctor.py | if binary_total > max_binary_gb * GB: | if False: | tracked binaries over --max-binary-gb are a finding
+gwt_rawstore_doctor.py | continue   # outside a sparse checkout: never read it from the object store | size = 10 ** 6 | a binary not in the work tree is skipped, never read from git
+gwt_rawstore_doctor.py |             if size > max_tmp_gb * GB: | if False: | a scratch folder over --max-tmp-gb is a finding
+gwt_rawstore_doctor.py | caches[os.path.join(d, '.cache')] = '.cache folder' | pass | a .cache folder inside the work tree is a finding
+gwt_rawstore_doctor.py | caches[p] = '$' + k | pass | a GWT_*_DIR cache pointed inside the work tree is a finding
+gwt_rawstore_doctor.py | if '[Excluded]' not in r.stdout: | if False: | a big folder Time Machine still backs up is a finding
+gwt_rawstore_doctor.py | if platform != 'darwin': | if False: | Time Machine checks run on macOS only
+gwt_rawstore_doctor.py | return 1 if rep['findings'] else 0 | return 0 | any finding exits 1
+gwt_rawstore_doctor.py |         return 2 | return 0 | a folder that is not a work tree exits 2
