@@ -87,7 +87,7 @@ Nothing to check: no root, or a root the snapshot does not have.
 
 ### protect
 
-People who asked to stay out of the tree (the tree's owners, say) get no new data. No new or moved event on them or the families they head, no date, place or other change to their events, no new parent or child link, no note, citation, media, attribute or association attached to them, and no new text that names them (by Gramps ID, or first name followed by a surname word) within eight words of a life-event word. The life-event words are the `events` section of the [locale tables](rules.md): born, baptised, married, died, buried and their forms in each language.
+People who asked to stay out of the tree (the tree's owners, say) get no new data. No update or merge of them, no new or moved event on them or the families they head, no date, place or other change to their events, no new parent or child link, no note, citation, media, attribute or association attached to them, and no new text that names them (by Gramps ID, or first name followed by a surname word) within eight words of a life-event word. The life-event words are the `events` section of the [locale tables](rules.md): born, baptised, married, died, buried and their forms in each language.
 
 | Code | When |
 |---|---|
@@ -96,6 +96,7 @@ People who asked to stay out of the tree (the tree's owners, say) get no new dat
 | `protect-place` | the place of a protected person's event changed |
 | `protect-link` | a parent or child link to a protected person |
 | `protect-attach` | a note, citation, media, attribute or association on a protected person |
+| `protect-update` | an `update_person` or `update_family` on a protected person or their family, or a merge where one side is a protected person, their family or their event |
 | `protect-text` | new text names a protected person near a life-event word |
 | `protect-unknown` | a protected ID is not in the snapshot, so nothing protects that person |
 

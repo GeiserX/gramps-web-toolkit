@@ -4,3 +4,5 @@
 {"op": "add_note", "key": "n-nora", "ruling": "R-4", "text": "Seen in a school photograph.", "attach": [{"person": "I10"}]}
 {"op": "link_child", "key": "l-nora", "ruling": "R-4", "family": "F2", "child": "I10"}
 {"op": "add_note", "key": "n-elena", "ruling": "R-4", "text": "Her daughter Nora Ruiz was born in the city hospital.", "attach": [{"person": "I6"}]}
+{"op": "update_person", "key": "u-nora-gender", "ruling": "R-4", "person": "I10", "set": {"gender": "F"}}
+{"op": "merge_person", "key": "m-nora", "ruling": "R-4", "winner": "I10", "loser": "I8", "reason": "same woman"}

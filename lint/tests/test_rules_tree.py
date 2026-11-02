@@ -45,7 +45,8 @@ def test_clean_list_exits_0(rule):
 EXPECTED = {
     "scope": {"scope-out": ["e-hugo-res", "n-sara", "a-f5"], "scope-unknown": ["e-ghost"]},
     "protect": {"protect-event": ["e-nora-res"], "protect-date": ["u-nora-birth"], "protect-place": ["u-nora-place"],
-                "protect-attach": ["n-nora"], "protect-link": ["l-nora"], "protect-text": ["n-elena"]},
+                "protect-attach": ["n-nora"], "protect-link": ["l-nora"], "protect-text": ["n-elena"],
+                "protect-update": ["u-nora-gender", "m-nora"]},
     "living": {"living-date": ["e-nora-res"], "living-place": ["e-nora-res"],
                "living-marriage": ["e-nora-marr", "e-nora-marr"], "living-quote": ["n-kit"],
                "living-id": ["n-ana-id"]},

@@ -17,9 +17,10 @@ from collections import deque
 
 from gwt_core.rules import LIVING_YEARS, LOCALES, DateError, find_ids, fold, load_locale, possibly_living, read_date
 
-from .framework import (PROBABLE, Mutant, NothingToCheck, Rule, attach_targets, creates, refs, tags_of, text_of,
-                        texts)
+from .framework import (MERGED, PROBABLE, Mutant, NothingToCheck, Rule, attach_targets, creates, refs, tags_of,
+                        text_of, texts)
 
+UPDATED = {"update_person": "Person", "update_family": "Family"}  # update_event has its own codes
 LINEAGE = {"", "Birth", "Unknown", "Adopted"}  # parent links that carry blood; Stepchild, Foster, Sponsored do not
 QUOTE = re.compile(r"«[^»]+»|“[^”]+”|\"[^\"]+\"")
 # The word "tree" in each locale of gwt_core; [count] words in lint.toml replaces it
@@ -191,6 +192,7 @@ class Protect(Rule):
              "protect-place": "changes the place of a protected person's event",
              "protect-link": "adds a parent or child link to a protected person",
              "protect-attach": "attaches a note, citation, media, attribute or association to a protected person",
+             "protect-update": "updates or merges a protected person, their family or their event",
              "protect-text": "new text names a protected person near a life-event word",
              "protect-unknown": "a protected Gramps ID is not in the snapshot"}
 
@@ -241,6 +243,11 @@ class Protect(Rule):
                         [("Person", c) for c in op.get("children") or []] + [("Family", op.get("family"))]
                 for who in (w for cls, ref in cands if isinstance(ref, str) for w in hit(cls, ref)):
                     out.append(self.finding("protect-link", op, f"changes the family links of protected {who}"))
+            elif kind in UPDATED or kind in MERGED:
+                cands = [(UPDATED[kind], op.get(UPDATED[kind].lower()))] if kind in UPDATED else \
+                        [(MERGED[kind], op.get(f)) for f in ("winner", "loser")]
+                for who in (w for cls, ref in cands if isinstance(ref, str) for w in hit(cls, ref)):
+                    out.append(self.finding("protect-update", op, f"{kind} changes protected {who}"))
             if kind not in ("add_event", "move_event", "update_event", "add_tag", "remove_tag", "detach"):
                 targets = attach_targets(op) + ([("Person", op.get("person"))] if kind == "add_association" else [])
                 for who in (w for cls, ref in targets for w in hit(cls, ref)):
