@@ -54,3 +54,4 @@ gwt_lint/rules_tree.py |             elif kind in UPDATED or kind in MERGED: |  
 gwt_lint/rules_tree.py |             if kind in ("add_event", "update_event", "move_event"): |             if kind in ("add_event", "update_event"): | an event moved onto someone who may be living is judged like a new one
 gwt_lint/rules_tree.py |         return bool((text.get("dateval") or [0])[0]) |         return False | a moved event's exact date in the snapshot counts
 gwt_lint/framework.py | "add_citation": ("page",), | "add_citation": (), | a citation page is new text the living, protect and count rules read
+gwt_lint/framework.py |     if before.status == "nothing": |     if False: | --prove fails a rule that has nothing to check under your own settings

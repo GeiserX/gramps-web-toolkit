@@ -147,12 +147,9 @@ class Scope(Rule):
         return _dedupe(out)
 
     def mutate(self, ctx):
-        roots = ctx.section("scope").get("roots") or [_first_gid(ctx)]
-        if not roots[0]:
-            return None
         op = {"op": "add_person", "key": "lint-prove-scope", "ruling": "prove", "first_name": "Prove",
               "surname": "Stranger", "_line": len(ctx.ops) + 1}
-        return Mutant(ctx.ops + [op], "scope-out", {"scope": {"roots": roots}})
+        return Mutant(ctx.ops + [op], "scope-out")
 
 
 def _dedupe(out):
@@ -263,12 +260,12 @@ class Protect(Rule):
         return _dedupe(out)
 
     def mutate(self, ctx):
-        ids = ctx.section("protect").get("ids") or [_first_gid(ctx)]
-        if not ids[0]:
+        ids = [i for i in ctx.section("protect").get("ids") or [] if ctx.view.resolve(i, "Person")]
+        if not ids:
             return None
         op = {"op": "add_event", "key": "lint-prove-protect", "ruling": "prove", "type": "Residence",
               "person": ids[0], "date": "1950", "_line": len(ctx.ops) + 1}
-        return Mutant(ctx.ops + [op], "protect-event", {"protect": {"ids": ids}})
+        return Mutant(ctx.ops + [op], "protect-event")
 
 
 class Living(Rule):
@@ -378,10 +375,10 @@ class Overlap(Rule):
 
     def check(self, ctx):
         sec = ctx.section("overlap")
-        if ctx.injected is None and not sec.get("open") and not sec.get("applied"):
+        if not sec.get("open") and not sec.get("applied"):
             raise NothingToCheck("no lists to compare with: give --open DIR or --applied DIR")
         out = []
-        others = ctx.open_lists(sec.get("open")) if ctx.injected is not None or sec.get("open") else {}
+        others = ctx.open_lists(sec["open"]) if sec.get("open") else {}
         for name, ops in others.items():
             theirs = set().union(*(_touched(o) for o in ops)) if ops else set()
             for op in ctx.ops:
@@ -389,7 +386,7 @@ class Overlap(Rule):
                 if both:
                     out.append(self.finding("overlap-open", op, f"{', '.join(sorted(both))} also in open list {name}",
                                             "apply one list first, then rebase the other on a fresh snapshot"))
-        if sec.get("applied") and ctx.injected is None:
+        if sec.get("applied"):
             from .framework import read_lists
             done = {_same(o): name for name, ops in read_lists(sec["applied"], skip=ctx.path).items() for o in ops
                     if o["op"].startswith("update_") or o["op"] in REPEATABLE}
@@ -400,14 +397,17 @@ class Overlap(Rule):
         return out
 
     def mutate(self, ctx):
-        gid = next((g for op in ctx.ops for g in sorted(_touched(op))), None) or _first_gid(ctx)
+        """Tag an object one of your open lists touches; with no open list that touches anything, no mutant."""
+        folder = ctx.section("overlap").get("open")
+        theirs = sorted({g for ops in (ctx.open_lists(folder) if folder else {}).values() for op in ops
+                         for g in _touched(op)})
+        cls, gid = next(((c, g) for g in theirs for c, h in ctx.tree.gids.items()
+                         if g in h and c in ("Person", "Family", "Event", "Citation", "Media")), (None, None))
         if not gid:
             return None
-        cls = next((c.lower() for c, h in ctx.tree.gids.items() if gid in h), "person")
-        mine = {"op": "add_tag", "key": "lint-prove-overlap", "ruling": "prove", "target": {cls: gid},
+        mine = {"op": "add_tag", "key": "lint-prove-overlap", "ruling": "prove", "target": {cls.lower(): gid},
                 "name": "prove", "_line": len(ctx.ops) + 1}
-        theirs = dict(mine, key="other", _line=1)
-        return Mutant(ctx.ops + [mine], "overlap-open", open_lists={"prove-open.jsonl": [theirs]})
+        return Mutant(ctx.ops + [mine], "overlap-open")
 
 
 class Weak(Rule):
@@ -476,12 +476,10 @@ class Weak(Rule):
         return out
 
     def mutate(self, ctx):
-        tag = ctx.section("weak").get("tag") or "weak"
-        tag = tag if isinstance(tag, str) else tag[0]
         op = {"op": "add_person", "key": "lint-prove-weak", "ruling": "prove", "first_name": "Prove",
               "surname": "Weak", "allow_namesake": True, "namesake_reason": "prove", "namesake_of": [],
               "_line": len(ctx.ops) + 1}
-        return Mutant(ctx.ops + [op], "weak-untagged", {"weak": {"tag": tag}})
+        return Mutant(ctx.ops + [op], "weak-untagged")
 
 
 def _low(conf) -> bool:

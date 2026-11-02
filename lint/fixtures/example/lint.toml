@@ -1,0 +1,13 @@
+# Settings for proving the rules on examples/changes.jsonl (lint/ci-extra.sh); every name and ID is invented.
+[scope]
+roots = ["I0001"]
+
+[protect]
+ids = ["I0009"]
+locales = ["en", "es"]
+
+[overlap]
+open = "open"
+
+[weak]
+tag = "weak"

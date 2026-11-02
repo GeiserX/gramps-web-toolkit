@@ -7,11 +7,13 @@ Every rule ships its own broken copy of a list and the code it must fire on it, 
 It reads files only: the list, a snapshot, and optionally a config file and folders of other lists. It never contacts a server.
 
 ```sh
-gwt-lint changes.jsonl --snapshot tree.json.gz --root I0001 --protect I0009 --weak-tag weak
+gwt-lint changes.jsonl --snapshot tree.json.gz --root I0001 --protect I0009 --weak-tag weak --rules scope,protect,living,weak
 gwt-lint changes.jsonl --snapshot tree.json.gz --config lint.toml --json
-gwt-lint --prove changes.jsonl --snapshot tree.json.gz
+gwt-lint --prove changes.jsonl --snapshot tree.json.gz --config lint.toml
 gwt-lint --list-rules
 ```
+
+With no `--rules`, every rule runs, and a rule whose setting is missing (overlap without `--open`, say) makes the run exit 2. Keep the settings in a `lint.toml`, or name the rules you mean.
 
 The snapshot is a `gwt-check dump` or a `gwt-apply --save-snapshot` file, plain or gzipped. Take it right before you lint: a list judged against an old tree is judged wrongly.
 
@@ -158,15 +160,18 @@ Nothing to check: no weak tag.
 
 ## Proving the rules
 
-`gwt-lint --prove LIST --snapshot DUMP` runs each rule twice: on the list, and on the rule's own mutant of it (the list with one bad op added, plus the setting that op needs, such as a root or a weak tag). A rule passes only when its expected code fires more often on the mutant than on the list. So a rule that fires anyway, fires another code, or has nothing to check on its mutant fails, and the run exits 1:
+`gwt-lint --prove LIST --snapshot DUMP --config lint.toml` runs each rule twice, under your own settings: on the list, and on the rule's own mutant of it (the list with one bad op added, such as a stranger for scope or a dated event on the first protected person). A rule passes only when it could look and its expected code fires more often on the mutant than on the list. So a rule that has nothing to check under your settings, fires anyway, fires another code, or cannot fire on its mutant fails, and the run exits 1:
 
 ```text
 proved scope: scope-out fired on its mutant (15 on the list, 16 on the mutant)
-FAILED living: its mutant did not fire living-date (0 on the list, 0 on the mutant; fired nothing)
+FAILED protect: nothing to check under these settings: no protected people: give --protect or [protect] ids
+FAILED overlap: no mutant can be built from this tree and these settings
 exit 1: a rule did not catch its own mutant
 ```
 
-CI runs `gwt-lint --prove` on [examples/changes.jsonl](https://github.com/GeiserX/gramps-web-toolkit/blob/main/examples/changes.jsonl), and a test makes each rule blind in turn and checks that `--prove` then fails.
+Nothing is filled in for you: overlap's mutant touches an object one of *your* open lists touches, so an empty or missing open folder fails `--prove`. Run `--prove` with the same settings as the lint run it vouches for, in the same step.
+
+CI runs `gwt-lint --prove` on [examples/changes.jsonl](https://github.com/GeiserX/gramps-web-toolkit/blob/main/examples/changes.jsonl) with the invented settings in `lint/fixtures/example/lint.toml`, and a test makes each rule blind in turn and checks that `--prove` then fails.
 
 ## Adding a rule
 

@@ -4,11 +4,12 @@ A rule is a subclass of Rule in a module named in RULE_MODULES. It has a `name`,
 methods:
 
     check(ctx)  -> list of Finding; raise NothingToCheck(reason) when it could not look at anything
-    mutate(ctx) -> Mutant: a broken copy of ctx.ops, the code the rule must fire on it, and the config or open
-                   lists that copy needs; None when no mutant can be built from this tree
+    mutate(ctx) -> Mutant: a broken copy of ctx.ops and the code the rule must fire on it, built from the
+                   run's own settings; None when no mutant can be built from them
 
-`prove()` runs each rule on its own mutant and passes only when the expected code fires more often on the
-mutant than on the list itself, so a rule that fails for another reason, or fires anyway, proves nothing.
+`prove()` runs each rule on the list and on its own mutant, under the same settings, and passes only when the
+rule could look and the expected code fires more often on the mutant than on the list. So a rule that has
+nothing to check under your settings, fails for another reason, or fires anyway, proves nothing.
 """
 from __future__ import annotations
 
@@ -86,8 +87,6 @@ class Finding:
 class Mutant:
     ops: list
     code: str
-    config: dict = field(default_factory=dict)
-    open_lists: dict | None = None
 
 
 class Rule:
@@ -387,9 +386,9 @@ def tags_of(op) -> list[str]:
 class Context:
     """One lint run's inputs. `view` is built on first use, for these ops."""
 
-    def __init__(self, ops, tree, config=None, path=None, records=None, open_lists=None):
+    def __init__(self, ops, tree, config=None, path=None, records=None):
         self.ops, self.tree, self.config = ops, tree, config or {}
-        self.path, self.records, self.injected = path, records, open_lists
+        self.path, self.records = path, records
         self._view = None
 
     @property
@@ -403,12 +402,11 @@ class Context:
         return s if isinstance(s, dict) else {}
 
     def open_lists(self, folder) -> dict[str, list[dict]]:
-        """Injected lists (a mutant's) win over the folder."""
-        return self.injected if self.injected is not None else read_lists(folder, skip=self.path)
+        """The other open lists, the list itself left out."""
+        return read_lists(folder, skip=self.path)
 
-    def but(self, ops=None, config=None, open_lists=None):
-        return Context(self.ops if ops is None else ops, self.tree, self.config if config is None else config,
-                       self.path, self.records, self.injected if open_lists is None else open_lists)
+    def but(self, ops):
+        return Context(ops, self.tree, self.config, self.path, self.records)
 
 
 @dataclass
@@ -442,26 +440,20 @@ def exit_code(results) -> int:
     return 1 if any(r.findings for r in results) else 0
 
 
-def merge(base: dict, extra: dict) -> dict:
-    out = copy.deepcopy(base)
-    for k, v in extra.items():
-        out[k] = {**out[k], **v} if isinstance(v, dict) and isinstance(out.get(k), dict) else v
-    return out
-
-
 def _count(result, code) -> int:
     return sum(f.code == code for f in result.findings)
 
 
 def prove(rule, ctx) -> tuple[bool, str]:
-    """Run the rule on its own mutant: (passed, one line). It passes when the mutant fires the expected code
-    more often than the list itself does under the same settings."""
+    """Run the rule on the list and on its own mutant, both under the run's own settings: (passed, one line).
+    It passes when the rule could look and the mutant fires the expected code more often than the list."""
+    before = run_rule(rule, ctx)
+    if before.status == "nothing":
+        return False, f"{rule.name}: nothing to check under these settings: {before.reason}"
     m = rule.mutate(ctx)
     if m is None:
-        return False, f"{rule.name}: no mutant can be built from this tree"
-    base = ctx.but(config=merge(ctx.config, m.config), open_lists=m.open_lists)
-    before = run_rule(rule, base)
-    after = run_rule(rule, base.but(ops=m.ops))
+        return False, f"{rule.name}: no mutant can be built from this tree and these settings"
+    after = run_rule(rule, ctx.but(m.ops))
     if after.status == "nothing":
         return False, f"{rule.name}: had nothing to check on its own mutant: {after.reason}"
     b, a = _count(before, m.code), _count(after, m.code)

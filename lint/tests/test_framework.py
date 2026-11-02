@@ -16,6 +16,8 @@ LINT = os.path.dirname(HERE)
 ROOT = os.path.dirname(LINT)
 EXAMPLE = [os.path.join(ROOT, "examples", "changes.jsonl"), "--snapshot", os.path.join(ROOT, "examples", "tree.json.gz")]
 FIX = os.path.join(LINT, "fixtures", "tree")
+EXAMPLE_CONFIG = os.path.join(LINT, "fixtures", "example", "lint.toml")
+PROVE = ["--prove"] + EXAMPLE + ["--config", EXAMPLE_CONFIG]
 
 
 def run(argv):
@@ -26,7 +28,7 @@ def run(argv):
 
 
 def test_prove_passes_on_the_example_list():
-    code, out, _ = run(["--prove"] + EXAMPLE)
+    code, out, _ = run(PROVE)
     assert code == 0, out
     assert out.count("proved ") == len(F.registry())
 
@@ -44,7 +46,7 @@ def test_prove_fails_when_a_rule_stops_detecting(rule, monkeypatch):
     # the positive control for the framework: a rule that finds nothing must fail --prove
     cls = type(F.registry()[rule])
     monkeypatch.setattr(cls, "check", lambda self, ctx: [])
-    code, out, _ = run(["--prove"] + EXAMPLE)
+    code, out, _ = run(PROVE)
     assert code == 1
     assert f"FAILED {rule}: its mutant did not fire" in out
 
@@ -78,12 +80,16 @@ def test_prove_fails_when_the_mutant_fires_another_code():
 
 
 def test_prove_fails_when_the_rule_has_nothing_to_check_on_its_mutant():
-    rule = F.registry()["scope"]
+    class Blind(F.Rule):
+        name, codes = "blind", {"blind-x": "x"}
 
-    class Blind(type(rule)):
+        def check(self, ctx):
+            if any(op["key"] == "blind" for op in ctx.ops):
+                raise F.NothingToCheck("the mutant blinds it")
+            return []
+
         def mutate(self, ctx):
-            m = super().mutate(ctx)
-            return F.Mutant(m.ops, m.code, {"scope": {"roots": []}})
+            return F.Mutant(ctx.ops + [{"op": "add_tag", "key": "blind", "_line": 2}], "blind-x")
     ctx = F.Context([{"op": "add_tag", "key": "t", "_line": 1, "target": {"person": "I1"}, "name": "x"}],
                     F.Tree.load(os.path.join(FIX, "tree.json")))
     passed, line = F.prove(Blind(), ctx)
@@ -149,7 +155,7 @@ def test_refs_name_every_kind_of_reference():
 
 
 def test_the_wrapper_runs_from_a_clone():
-    r = subprocess.run([sys.executable, os.path.join(LINT, "gwt-lint"), "--prove"] + EXAMPLE,
+    r = subprocess.run([sys.executable, os.path.join(LINT, "gwt-lint")] + PROVE,
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
 
@@ -212,3 +218,16 @@ def test_json_output_reports_an_input_error_on_stdout(tmp_path):
     code, out, _ = run([str(empty), "--snapshot", os.path.join(FIX, "tree.json"), "--json"])
     doc = json.loads(out)
     assert code == 2 and doc["exit"] == 2 and "no ops" in doc["error"]
+
+
+
+def test_prove_judges_your_own_settings_not_injected_ones(tmp_path):
+    # a rule that cannot look under your settings has proved nothing about your run
+    code, out, _ = run(["--prove"] + EXAMPLE)
+    assert code == 1
+    assert "FAILED scope: nothing to check under these settings: no roots" in out
+    # an empty open folder: overlap has no other list to clash with, so its mutant cannot fire
+    code, out, _ = run(["--prove"] + EXAMPLE + ["--config", EXAMPLE_CONFIG, "--open", str(tmp_path)])
+    assert code == 1 and "FAILED overlap" in out
+    code, out, _ = run(["--prove"] + EXAMPLE + ["--config", EXAMPLE_CONFIG])
+    assert code == 0, out
