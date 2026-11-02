@@ -160,8 +160,9 @@ def test_the_wrapper_runs_from_a_clone():
     assert r.returncode == 0, r.stdout + r.stderr
 
 
-def test_the_default_run_never_asks_for_a_field_gwt_apply_refuses(tmp_path):
-    # `expect` on detach and remove_tag is refused by gwt-apply until it accepts it, so no rule may demand it
+def test_the_default_run_does_not_ask_for_expect_on_a_removal(tmp_path):
+    # gwt-apply already stops a removal that finds nothing (a conflict unless expect: absent), so lint does not
+    # ask every detach and remove_tag for an expect
     lst = tmp_path / "detach.jsonl"
     lst.write_text('{"op": "detach", "key": "d", "ruling": "R-1", "target": {"person": "I1"}, '
                    '"object": {"note": "N2"}}\n')
