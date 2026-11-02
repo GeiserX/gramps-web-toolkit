@@ -26,7 +26,7 @@ The full-text answer repeats the caller's IP address and User-Agent in a `sessio
 
 ## When it stops
 
-"None" is the API's own count: `numFound` (catalogue) or `hits.total` (full text) 0 in a well-shaped answer. Any other answer is a STOP and nothing is written or cached: an error status, a full-text answer that says it did not succeed, or a renamed result container. A `--page` past the last row is the end of the results, not a STOP: exit 2, with `past the end` on the results line. A 5xx or no answer is an outage: exit 3, and the gate pauses every lane.
+"None" is the API's own count: `numFound` (catalogue) or `hits.total` (full text) 0 in a well-shaped answer. Any other answer is a STOP and nothing is written or cached: an error status, a full-text answer that says it did not succeed, or a renamed result container. A `--page` past the last row is the end of the results, not a STOP: exit 2, with `past the end` on the results line. A 5xx or no answer is an outage: exit 3, and the gate pauses every lane. A full-text query that takes longer than the fetcher's 60 s timeout counts as no answer too, so a very slow query pauses the lanes; narrow the words and run it again later.
 
 ## Pace, cache and terms
 
