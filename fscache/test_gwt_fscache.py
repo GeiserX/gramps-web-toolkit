@@ -141,6 +141,8 @@ class FSCacheTest(unittest.TestCase):
         self.assertTrue(self.cache.forget('GET', RECORD))
         self.assertFalse(self.cache.forget('GET', RECORD))
         self.assertIsNone(self.cache.lookup('GET', RECORD))
+        _, meta, body = self.cache._paths(self.cache.key('GET', RECORD, None, None))
+        self.assertFalse(os.path.exists(meta) or os.path.exists(body), 'forget left part of the answer on disk')
         self.assertIsNotNone(self.cache.lookup('GET', IMAGE), 'forget dropped another answer')
 
     def test_binary_bodies_round_trip(self):

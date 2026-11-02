@@ -86,6 +86,8 @@ class Registry(unittest.TestCase):
             self.assertTrue(any(word in b for b in bad), (word, bad))
         zero = gwt_reader.spec_problems({'controls': [{'argv': ['--surname', 'Smith'], 'min_count': 0}]})
         self.assertTrue(any('each control' in b for b in zero), 'a canary with a minimum of 0 rows proves nothing')
+        empty = gwt_reader.spec_problems({'controls': [{'argv': [], 'min_count': 3}]})
+        self.assertTrue(any('each control' in b for b in empty), 'a canary with no search options is not a search')
 
 
 class Classify(unittest.TestCase):
@@ -180,6 +182,7 @@ class FamilySearch(Base):
             {'labelId': 'EXT_DATA_ORIG', 'text': '{not json'},                  # unreadable: skipped, no crash
             {'labelId': 'EXT_DATA', 'text': json.dumps({'EVENT_PLACE_ALT_ORIG': ['Villazul']})},  # not text: skipped
             {'labelId': 'BIRTH_PLACE_ORIG', 'text': 'Lejos'},                   # a person's place, not the event's
+            {'labelId': 'EVENT_PLACE_ORIG', 'value': {'type': 'Place'}},        # not text: skipped
             {'labelId': 'EVENT_PLACE_ORIG', 'value': 'Villazul'}]}]}            # repeated: listed once
         self.assertEqual(gwt_read.place_orig(g), ['Villazul', 'San Bartolo', 'Ermita de Ruvel',
                                                   'Parroquia de Santa Oria, Villazul', 'Caserío Alto'])

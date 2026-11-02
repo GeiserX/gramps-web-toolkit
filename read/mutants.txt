@@ -68,3 +68,6 @@ gwt_read.py | undo()      # a canary that was stopped proved nothing either: the
 gwt_reader.py | if verdict == 'blocked' and on_403 is not None | if on_403 is not None | only a 403 is asked whether it is restricted: a 429 on a record stays a wall, even with --control-ark
 gwt_reader.py | and isinstance(c.get('min_count'), int) and c['min_count'] > 0): | and isinstance(c.get('min_count'), int)): | a canary must want at least one row: a minimum of 0 passes on any page and proves nothing
 gwt_read.py | return v if isinstance(v, str) and v else None | return v | place_orig keeps only text from the JSON fields, never a list or a number
+gwt_reader.py | if not (isinstance(c, dict) and isinstance(c.get('argv'), list) and c['argv'] | if not (isinstance(c, dict) and isinstance(c.get('argv'), list) | a canary must name at least one search option: an empty search is not a canary
+gwt_read.py | if not isinstance(t, str) or not t: | if not t: | place_orig keeps only text, never an object a field holds
+gwt_read.py | R.cache.store = store | pass | a void forgets only the answers its search cached, never the canaries' own

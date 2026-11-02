@@ -1,6 +1,6 @@
 """Tests for canary controls: `gwt-read <source> control` and `search --controls before|after|both`. Invented pages,
 a fake transport, a fake gate: no request leaves this machine. Run: cd read && python3 -m pytest -q test_controls.py"""
-import contextlib, io, json
+import contextlib, io, json, os
 
 from test_gwt_read import Base, FakeGate, FakeNet, CAPTCHA, persona
 from test_registry import fixture, with_template
@@ -87,6 +87,13 @@ class Controls(Base):
         self.assertEqual([r[0] for r in rows].count('removed'), 2)
         code, _, _ = self.search(net, gate)      # the same search again, without controls
         self.assertEqual((code, len(net.requests)), (0, 3), 'the voided "none" was served from the cache')
+
+    def test_a_void_run_forgets_only_what_the_search_cached(self):
+        gate = FakeGate()
+        code, _, _ = self.search(FakeNet(gate, (200, NONE), (200, ONE)), gate, '--controls', 'after')
+        self.assertEqual(code, gwt_reader.EXIT_WALL)
+        kept = [n for _, _, names in os.walk(self.cache) for n in names if n.endswith('.json')]
+        self.assertEqual(len(kept), 1, 'the void also forgot the canary\'s own answer, or kept the search\'s')
 
     def test_a_stopped_canary_after_also_leaves_no_files_and_no_cached_none(self):
         gate = FakeGate()
