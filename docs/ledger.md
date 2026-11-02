@@ -184,7 +184,7 @@ gwt-ledger request due [--on YYYY-MM-DD]       # open requests whose next_date h
 gwt-ledger costs --by payer                    # or archive, person; one line per currency, never summed across them
 ```
 
-Statuses: `planned`, `sent` (the default), `answered`, `paid`, `closed`, `refused`. A `closed` or `refused` request is never due. `update` on an id that does not exist exits 2.
+Statuses: `planned`, `sent` (the default), `answered`, `paid`, `closed`, `refused`. A `closed` or `refused` request is never due. `update` on an id that does not exist exits 2. The file is plain TSV you may edit by hand: a cost that is not a number (`12,50`) is left out of `costs`, and a date that is not `YYYY-MM-DD` is left out of `due --ics`, each with a note on stderr.
 
 ### Calendar
 

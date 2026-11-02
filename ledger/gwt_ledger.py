@@ -324,7 +324,7 @@ def amount(value):
         raise argparse.ArgumentTypeError('not a number: %r' % value)
     if not d.is_finite() or d < 0:
         raise argparse.ArgumentTypeError('not a cost: %r' % value)
-    return str(d)
+    return format(d, 'f')  # 1e3 is stored as 1000
 
 
 NOT_PROOF = frozenset('no n false 0 none fail failed void short blocked'.split())
@@ -377,7 +377,8 @@ def add_request(path, row):
         fcntl.flock(f, fcntl.LOCK_EX)
         try:
             f.seek(0)
-            ids = [l.split('\t', 1)[0] for l in f.read().splitlines()]
+            lines = f.read().splitlines()
+            ids = [l.split('\t', 1)[0] for l in lines[1 if lines and lines[0].startswith('id\t') else 0:]]
             if row.get('id'):  # an update: the request must exist
                 if row['id'] not in ids:
                     return None
@@ -812,8 +813,13 @@ def main(argv=None):
             col = {'person': 'person_key'}.get(args.by, args.by)
             for r in reqs:
                 if r['cost']:
+                    try:
+                        cost = decimal.Decimal(r['cost'])
+                    except decimal.InvalidOperation:  # a hand edit such as 12,50: say so, never guess
+                        sys.stderr.write('gwt-ledger: %s: cost %r is not a number, left out\n' % (r['id'], r['cost']))
+                        continue
                     t = totals[(r[col] or '-', r['currency'].upper() or '-')]
-                    t[0] += decimal.Decimal(r['cost'])
+                    t[0] += cost
                     t[1] += 1
             for (who, cur), (total, n) in sorted(totals.items()):
                 print('%s\t%s\t%s\t%d' % (who, cur, total, n))  # never summed across currencies
@@ -873,7 +879,14 @@ def main(argv=None):
                                    'person: %s; channel: %s; thread: %s; sent: %s; cost: %s %s; payer: %s; %s' % (
                                        r['person_label'] or r['person_key'], r['channel'], r['thread'] or '-',
                                        r['sent'] or '-', r['cost'] or '-', r['currency'], r['payer'] or '-', r['note'])))
-            sys.stdout.write(ics(sorted(events, key=lambda e: e[1])))
+            good = []
+            for e in events:
+                try:
+                    datetime.date.fromisoformat(e[1])
+                    good.append(e)
+                except ValueError:  # a hand-edited date; `due` still lists the row
+                    sys.stderr.write('gwt-ledger: next_date %r is not YYYY-MM-DD, left out of the calendar\n' % e[1])
+            sys.stdout.write(ics(sorted(good, key=lambda e: e[1])))
             return 0
         on = args.on or today
         due = [(1.0, r) for r in rows if r['next_date'] and r['next_date'] <= on]

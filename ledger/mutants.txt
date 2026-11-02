@@ -26,3 +26,5 @@ gwt_ledger.py | if same(row) in seen: | if False: | importing the same file twic
 gwt_ledger.py | out = {gid} | {k for k in by_prefix.get(gid, ()) if k.startswith(gid + '-')} if gid else set() | out = {gid} if gid else set() | coverage counts a person key that starts with <gramps-id>- for that person
 gwt_ledger.py | if name and names[name] == 1: | if name: | coverage never gives one namesake the other's rows
 gwt_ledger.py | if unmatched: | if False: | coverage says how many ledger keys match nobody, so an empty matrix is not read as not searched
+gwt_ledger.py | ids = [l.split('\t', 1)[0] for l in lines[1 if lines and lines[0].startswith('id\t') else 0:]] | ids = [l.split('\t', 1)[0] for l in lines] | request update refuses the header word id
+gwt_ledger.py | return format(d, 'f')  # 1e3 is stored as 1000 | return str(d)  # 1e3 is stored as 1000 | a cost of 1e3 is stored as 1000

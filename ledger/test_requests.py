@@ -104,6 +104,23 @@ class RequestsTest(unittest.TestCase):
                                  *extra)[0], 2, extra)
         self.assertFalse(os.path.exists(os.path.join(self.dir.name, 'requests.tsv')))
 
+    def test_hand_edits_never_crash_costs_or_the_calendar(self):
+        rid = self.request('--cost', '1e3', '--currency', 'eur', '--next-date', '2030-01-01')
+        with open(os.path.join(self.dir.name, 'requests.tsv'), encoding='utf-8') as f:
+            self.assertIn('\t1000\t', f.read())  # 1e3 stored as 1000
+        with open(os.path.join(self.dir.name, 'requests.tsv'), 'a', encoding='utf-8') as f:
+            f.write('rq-9\tx\t\tArchive\temail\t\t\t2030-13-01\t12,50\tEUR\t\tsent\t\t2026-01-01\n')
+        code, out = run(*self.base, 'costs')
+        self.assertEqual((code, out), (0, '-\tEUR\t1000\t1\n'))
+        code, out = run(*self.base, 'due', '--ics')
+        self.assertEqual(code, 0)
+        self.assertEqual(out.count('BEGIN:VEVENT'), 1)
+        self.assertIn('UID:%s@gwt-ledger' % rid, out)
+
+    def test_update_refuses_the_header_word_as_an_id(self):
+        self.request()
+        self.assertEqual(run(*self.base, 'request', 'update', 'id', '--status', 'closed')[0], 2)
+
 
 if __name__ == '__main__':
     unittest.main()
