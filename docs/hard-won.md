@@ -80,9 +80,9 @@ Format: what happened, why, and the rule.
 
 **What happened.** In the same partial clone, a few `git grep <rev>`, `git archive` and `git log -p` runs each fetched most of the tree's history, and each left a pack of several gigabytes. Gigabyte-sized log files committed to the repo made every such fetch bigger.
 
-**Why.** Git fetches a missing object the moment a command needs it, unless lazy fetching is off. Turning it off makes those commands fail at once instead (`GIT_NO_LAZY_FETCH`, git 2.45: https://github.com/git/git/blob/ebdc087dc99d68bb340c282b2ba5f722def28d19/Documentation/git.adoc).
+**Why.** Git fetches a missing object the moment a command needs it, unless lazy fetching is off. Turning it off makes every command that needs a missing blob fail at once instead, `checkout`, `switch`, `pull` and `rebase` included (`GIT_NO_LAZY_FETCH`, git 2.45: https://github.com/git/git/blob/ebdc087dc99d68bb340c282b2ba5f722def28d19/Documentation/git.adoc).
 
-**Rule.** Export `GIT_NO_LAZY_FETCH=1` in every agent's environment, and fetch on purpose (lesson 56). `gwt-rawstore doctor` reports a partial clone where it is not set ([rawstore.md](rawstore.md#repo-health-doctor)).
+**Rule.** Export `GIT_NO_LAZY_FETCH=1` in every agent's environment, and fetch on purpose: after each `git fetch`, run the batch prefetch of lesson 56 before a `checkout`, `switch`, `pull` or `rebase`, or they fail with "could not fetch ... from promisor remote". `gwt-rawstore doctor` warns when more than 100 promisor packs were written in the last day, which means something is still lazy fetching ([rawstore.md](rawstore.md#repo-health-doctor)).
 
 ### 56. Reading fresh files one `git show` at a time made a pack per read
 
@@ -90,11 +90,12 @@ Format: what happened, why, and the rule.
 
 **Why.** In a partial clone, each read of a blob that is not local is its own fetch, and each fetch writes its own pack. Git 2.55 batches the fetches of `git grep` and `git cherry` (https://github.com/git/git/blob/ebdc087dc99d68bb340c282b2ba5f722def28d19/Documentation/RelNotes/2.55.0.adoc), not a `git show` of one path.
 
-**Rule.** Read a fresh file over the forge's raw HTTP URL, or fetch every missing blob in one batch after each `git fetch`. One batch is one pack:
+**Rule.** Read a fresh file over the forge's raw HTTP URL, or fetch every missing blob in one batch after each `git fetch`. One batch is one pack. The test for an empty list matters: `fetch --stdin` with no input fetches every branch of the remote.
 
 ```sh
-git ls-tree -r origin/main -- <paths> | awk '{print $3}' |
-  GIT_NO_LAZY_FETCH=1 git cat-file --batch-check | awk '$2 == "missing" {print $1}' |
+missing=$(git ls-tree -r origin/main -- <paths> | awk '{print $3}' |
+  GIT_NO_LAZY_FETCH=1 git cat-file --batch-check | awk '$2 == "missing" {print $1}')
+[ -z "$missing" ] || printf '%s\n' "$missing" |
   git -c fetch.negotiationAlgorithm=noop fetch -q origin --no-tags --no-write-fetch-head \
       --recurse-submodules=no --filter=blob:none --stdin
 ```
@@ -105,7 +106,7 @@ git ls-tree -r origin/main -- <paths> | awk '{print $3}' |
 
 **Why.** Git looks for an object in each pack's index in turn; a multi-pack-index makes it one lookup. In a partial clone the packs from the server carry a `.promisor` marker, which tells git that the objects they point to may be missing on purpose. On git 2.54, `git multi-pack-index repack --batch-size=0` followed by `expire` merged ten promisor packs into one pack with no marker, and `git fsck` then reported the missing blobs as errors. `git repack --geometric=2 -d` kept the markers; before git 2.53 it did not work with promisor packs (https://github.com/git/git/blob/ebdc087dc99d68bb340c282b2ba5f722def28d19/Documentation/RelNotes/2.53.0.adoc).
 
-**Rule.** In a partial clone, merge packs only with `git repack --geometric=2 -d`, on git 2.53 or newer, in the foreground, on a quiet disk and never while a backup runs; then `git multi-pack-index write`. Never `git multi-pack-index repack` or `git maintenance run --task=incremental-repack` there. `gwt-rawstore doctor` warns at 500 packs and at 50 packs with no multi-pack-index.
+**Rule.** In a partial clone, merge packs only with `git repack --geometric=2 -d`, on git 2.53 or newer, in the foreground, on a quiet disk and never while a backup runs; then `git multi-pack-index write`. Never `git multi-pack-index repack` or `git maintenance run --task=incremental-repack` there. `gwt-rawstore doctor` warns at 500 packs and when more than 50 packs are outside the multi-pack-index.
 
 ## Gramps Web
 

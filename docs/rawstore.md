@@ -81,21 +81,21 @@ The tests run against an in-process S3 stub that, like Garage, refuses a body th
 gwt-rawstore doctor [--repo PATH] [--json] [--max-packs 500] [--max-tmp-gb 1] [--max-binary-gb 1]
 ```
 
-A read-only check of how a research repo uses the disk, for repos that many agents read and commit to. It needs no store configuration. Each finding prints the command that fixes it. Exit status 0 when nothing is wrong, 1 when something is, 2 when it cannot run (no such folder, not a git work tree, no git).
+A read-only check of how a research repo uses the disk, for repos that many agents read and commit to. It needs no store configuration. Each finding says what to do; where that is a command, the `fix:` line is the command alone, paths quoted, ready to paste. Exit status 0 when nothing is wrong, 1 when something is, 2 when it cannot run (no such folder, not a git work tree, no git).
 
 | Check | A finding when | Fix it prints |
 |---|---|---|
-| `packs` | more than `--max-packs` packs | `git repack --geometric=2 -d && git multi-pack-index write`, in the foreground, never while a backup runs; in a partial clone on git older than 2.53, upgrade git first |
-| `multi-pack-index` | more than 50 packs and no multi-pack-index | `git multi-pack-index write` |
-| `lazy-fetch` | a partial clone (a `partialclonefilter`, `extensions.partialclone` or a `.promisor` pack) and `GIT_NO_LAZY_FETCH` is not set | `export GIT_NO_LAZY_FETCH=1` in every agent's environment |
-| `binaries` | the binaries git tracks (by extension, sized from the work tree) add up to more than `--max-binary-gb` | `gwt-rawstore migrate <folder> --remove` for the three biggest folders |
-| `scratch` | `tmp/`, `temp/`, `scratch/` or `.tmp/` at the top of the work tree holds more than `--max-tmp-gb` | move scratch out of the repo |
-| `cache` | a `.cache` folder at the top or one level down, or a `GWT_*_DIR` / `GWT_*_CACHE` variable pointing inside the work tree | keep caches under `~/.cache` |
-| `time-machine` | macOS only: `.git`, a scratch or cache folder, or a big binary folder over `--max-tmp-gb` that `tmutil isexcluded` says is backed up | `tmutil addexclusion <path>` (for `.git`, only once the remote has every commit) |
+| `packs` | more than `--max-packs` packs | `git repack --geometric=2 -d && git multi-pack-index write`; the message says to run it in the foreground, never while a backup runs, and in a partial clone on git older than 2.53 to upgrade git first |
+| `multi-pack-index` | more than 50 packs outside the multi-pack-index (none written, or written before they arrived; the count comes from its header) | `git multi-pack-index write` |
+| `lazy-fetch` | more than 100 promisor packs written in the last 24 hours: something is lazy fetching one object at a time | `export GIT_NO_LAZY_FETCH=1`, in every agent's environment |
+| `binaries` | the binaries git tracks (by extension, sized from the work tree) add up to more than `--max-binary-gb` | `gwt-rawstore migrate <folder> --remove` for the three biggest folders, then commit the `rawstore.tsv` files |
+| `scratch` | `tmp/`, `temp/`, `scratch/` or `.tmp/` at the top of the work tree holds more than `--max-tmp-gb` | none to paste: the message says to move scratch out of the repo |
+| `cache` | a `.cache` folder at the top or one level down, or a folder named by `GWT_FSCACHE_DIR`, `GWT_GATE_DIR`, `GWT_MH_LOCK_DIR` or any `GWT_*_CACHE` inside the work tree, holds more than `--max-tmp-gb` (`GWT_LEDGER_DIR` is meant to be committed and is not checked) | none to paste: the message says to keep caches under `~/.cache` |
+| `time-machine` | macOS only: `.git`, a scratch or cache folder, or a big binary folder over `--max-tmp-gb` that `tmutil isexcluded` says is backed up | `tmutil addexclusion <path>`; for `.git`, only once the remote has every commit |
 
-It also prints `gc.auto` and `maintenance.auto` as information. On Linux the Time Machine check is skipped with a note.
+It also prints as information `gc.auto` and `maintenance.auto`, and, in a quiet partial clone, whether `GIT_NO_LAZY_FETCH` is set in the shell running doctor; neither is a finding. A relative cache variable is looked up from the current folder and from the top of the repo. On Linux the Time Machine check is skipped with a note.
 
-It never fetches. It runs only `git version`, `rev-parse`, `count-objects -v`, `config --get`, `ls-files` and `tmutil isexcluded`, never a command that reads an object, and starts every git with `GIT_NO_LAZY_FETCH=1` as well. A binary outside a sparse checkout is skipped, not read from the object store. Why these checks: [hard-won lessons 7, 8 and 55 to 57](hard-won.md#git-and-disk).
+It never fetches. It runs only `git version`, `rev-parse`, `count-objects -v`, `config --get`, `config --get-regexp`, `ls-files` and `tmutil isexcluded`, never a command that reads an object, and starts every git with `GIT_NO_LAZY_FETCH=1` as well. A binary outside a sparse checkout is skipped, not read from the object store. Why these checks: [hard-won lessons 7, 8 and 55 to 57](hard-won.md#git-and-disk).
 
 ```sh
 python3 -m unittest rawstore/test_doctor.py

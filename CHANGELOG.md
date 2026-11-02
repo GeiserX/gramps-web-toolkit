@@ -8,7 +8,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Added
 
-- `gwt-rawstore doctor [--repo PATH] [--json]` checks how a research repo uses the disk and prints the fix for each finding: too many packs (`--max-packs`, default 500), no multi-pack-index over 50 packs, a partial clone with lazy fetching on, tracked binaries over `--max-binary-gb` (default 1), scratch or cache folders inside the work tree over `--max-tmp-gb` (default 1), and on macOS big folders Time Machine still backs up. It is read-only and never fetches. Exit 0 clean, 1 findings, 2 cannot run. Hard-won lessons 55 to 57 explain the partial-clone rules behind it.
+- `gwt-rawstore doctor [--repo PATH] [--json]` checks how a research repo uses the disk and prints the fix for each finding: too many packs (`--max-packs`, default 500), more than 50 packs outside the multi-pack-index, more than 100 promisor packs written in a day (lazy fetching), tracked binaries over `--max-binary-gb` (default 1), scratch or cache folders inside the work tree over `--max-tmp-gb` (default 1), and on macOS big folders Time Machine still backs up. It is read-only and never fetches. Exit 0 clean, 1 findings, 2 cannot run. Hard-won lessons 55 to 57 explain the partial-clone rules behind it.
 
 ## [0.3.0] - 2026-10-31
 

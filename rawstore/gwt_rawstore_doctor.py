@@ -1,12 +1,14 @@
 """gwt-rawstore doctor: a read-only health check of a research repo's disk use.
 
-It reports what makes a repo that many agents read and commit to slow down the machine: too many packs, no
-multi-pack-index, lazy fetching left on in a partial clone, binaries tracked in git, big scratch and cache folders
-inside the work tree, and, on macOS, Time Machine backing all of it up. Each finding comes with the command that
-fixes it. Exit status 0 when nothing is wrong, 1 when something is, 2 when it cannot run.
+It reports what makes a repo that many agents read and commit to slow down the machine: too many packs, packs
+outside the multi-pack-index, promisor packs piling up from lazy fetches, binaries tracked in git, big scratch and
+cache folders inside the work tree, and, on macOS, Time Machine backing all of it up. Each finding says what to do,
+and where that is a command, its fix is the command alone. Exit status 0 when nothing is wrong, 1 when something
+is, 2 when it cannot run.
 
-It never fetches. It runs only `git version`, `rev-parse`, `count-objects -v`, `config --get`, `ls-files` and, on
-macOS, `tmutil isexcluded`; it reads no object, and every git it starts has GIT_NO_LAZY_FETCH=1 as a second guard.
+It never fetches. It runs only `git version`, `rev-parse`, `count-objects -v`, `config --get`, `config --get-regexp`,
+`ls-files` and, on macOS, `tmutil isexcluded`; it reads no object, and every git it starts has GIT_NO_LAZY_FETCH=1 as
+a second guard.
 """
 import json, os, re, shlex, struct, subprocess, sys, time
 
