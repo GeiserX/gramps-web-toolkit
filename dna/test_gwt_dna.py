@@ -237,12 +237,13 @@ class Identity(unittest.TestCase):
         self.assertTrue(D.close_cm(200.0, 150.0))   # 50 cM apart, within 30 % of 200
         self.assertFalse(D.close_cm(8.0, 18.0))     # small matches: common names repeat, the cM says nothing
         self.assertFalse(D.close_cm(14.0, 24.0))
+        self.assertFalse(D.close_cm(15.0, 12.0))     # within 30 %, but below 20 cM a name proves nothing
         self.assertTrue(D.close_cm(25.0, 21.0))
         self.assertFalse(D.close_cm(200.0, 20.0))
         self.assertFalse(D.close_cm(None, 20.0))
 
     def test_a_small_namesake_match_on_another_site_is_another_person(self):
-        p, n = marked("I0052", "Tom", "Sample", "myheritage", "D-5", 8.0)   # FTDNA's Tom Sample shares 41.5 cM
+        p, n = marked("I0052", "Tom", "Sample", "myheritage", "D-5", 15.0)
         snap = write_tree(self.d.name, tree([p], [n]))
         with tempfile.TemporaryDirectory() as d:
             f = os.path.join(d, "m.csv")
