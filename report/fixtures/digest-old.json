@@ -1,0 +1,308 @@
+{
+ "format": "gwt-apply-snapshot/1",
+ "tree": "example",
+ "taken": "2026-01-01T00:00:00+00:00",
+ "objects": {
+  "Person": [
+   {
+    "handle": "hI1",
+    "gramps_id": "I1",
+    "gender": 0,
+    "private": false,
+    "primary_name": {
+     "first_name": "Nora",
+     "surname_list": [
+      {
+       "surname": "Gale",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [],
+    "parent_family_list": [
+     "hF1"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hI2",
+    "gramps_id": "I2",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Otto",
+     "surname_list": [
+      {
+       "surname": "Gale",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hF1"
+    ],
+    "parent_family_list": [
+     "hF2"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hI3",
+    "gramps_id": "I3",
+    "gender": 0,
+    "private": false,
+    "primary_name": {
+     "first_name": "Rita",
+     "surname_list": [
+      {
+       "surname": "Pine",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hF1"
+    ],
+    "parent_family_list": [
+     "hF4"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hI4",
+    "gramps_id": "I4",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Ugo",
+     "surname_list": [
+      {
+       "surname": "Gale",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hF3"
+    ],
+    "parent_family_list": [
+     "hF2"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hI5",
+    "gramps_id": "I5",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Paul",
+     "surname_list": [
+      {
+       "surname": "Gale",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hF2"
+    ],
+    "parent_family_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hI6",
+    "gramps_id": "I6",
+    "gender": 0,
+    "private": false,
+    "primary_name": {
+     "first_name": "Mia",
+     "surname_list": [
+      {
+       "surname": "Reed",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hF3"
+    ],
+    "parent_family_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hI10",
+    "gramps_id": "I10",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Gus",
+     "surname_list": [
+      {
+       "surname": "Pine",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hF4"
+    ],
+    "parent_family_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   }
+  ],
+  "Family": [
+   {
+    "handle": "hF1",
+    "gramps_id": "F1",
+    "father_handle": "hI2",
+    "mother_handle": "hI3",
+    "child_ref_list": [
+     {
+      "ref": "hI1",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     }
+    ],
+    "event_ref_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [],
+    "private": false
+   },
+   {
+    "handle": "hF2",
+    "gramps_id": "F2",
+    "father_handle": "hI5",
+    "mother_handle": null,
+    "child_ref_list": [
+     {
+      "ref": "hI2",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     },
+     {
+      "ref": "hI4",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     }
+    ],
+    "event_ref_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [],
+    "private": false
+   },
+   {
+    "handle": "hF3",
+    "gramps_id": "F3",
+    "father_handle": "hI4",
+    "mother_handle": "hI6",
+    "child_ref_list": [],
+    "event_ref_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [],
+    "private": false
+   },
+   {
+    "handle": "hF4",
+    "gramps_id": "F4",
+    "father_handle": "hI10",
+    "mother_handle": null,
+    "child_ref_list": [
+     {
+      "ref": "hI3",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     }
+    ],
+    "event_ref_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [],
+    "private": false
+   }
+  ],
+  "Event": [],
+  "Citation": [],
+  "Media": [],
+  "Note": [],
+  "Tag": [],
+  "Place": [
+   {
+    "handle": "hP1",
+    "gramps_id": "P1",
+    "name": {
+     "value": "Greenford"
+    }
+   }
+  ],
+  "Source": [
+   {
+    "handle": "hS1",
+    "gramps_id": "S1",
+    "title": "Greenford parish register"
+   }
+  ],
+  "Repository": []
+ }
+}

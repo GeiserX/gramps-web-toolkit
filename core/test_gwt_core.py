@@ -9,7 +9,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 for sub in ("apply", "check", "fetch", "ledger", "gate", "fscache", "queue", "leads", "rank", "importxl",
-            "rawstore", "myheritage", "read"):
+            "rawstore", "myheritage", "read", "report"):
     sys.path.insert(0, os.path.join(ROOT, sub))
 
 from gwt_core import cli, version  # noqa: E402
@@ -32,11 +32,14 @@ class Dispatcher(unittest.TestCase):
         for name in cli.TOOLS:
             self.assertIn("  " + name + " ", out)
 
+    # a mutant run (run_tests.py --mutants) copies the tree without .git, and nothing is installed there
+    @unittest.skipUnless(os.path.exists(os.path.join(ROOT, ".git")), "needs a git checkout")
     def test_version(self):
         code, out, _ = run(["--version"])
         self.assertEqual((code, out.strip()), (0, "gwt " + version()))
         self.assertNotEqual(version(), "unknown")
 
+    @unittest.skipUnless(os.path.exists(os.path.join(ROOT, ".git")), "needs a git checkout")
     def test_checkout_version_comes_from_git(self):
         # Run from a clone with nothing installed: the version names the commit, as hatch-vcs does in a build.
         import subprocess

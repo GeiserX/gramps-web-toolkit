@@ -410,3 +410,11 @@ missing=$(git ls-tree -r origin/main -- <paths> | awk '{print $3}' |
 **Why.** The client retried 429 and 5xx answers but not network errors, so one page that timed out ended a 15-minute read. It is the read side of lesson 48.
 
 **Rule.** Every request of a long read retries network errors with a growing wait, the same as a 5xx; `gwt-check` tries each request 6 times. On a loaded server, read with small pages and one request at a time (`--pagesize 100 --workers 1`), save the dump, and run the checks on the file.
+
+### 53. A restricted record looked like a block, and a skeleton page looked like "no results"
+
+**What happened.** Some FamilySearch records and film images answer 403 to every account that is not at an affiliate library. Lanes read each such 403 as a block, and every lane on the account paused for 20 minutes, several times in one day. Elsewhere, a newspaper site under a soft block answered HTTP 200 with its empty results skeleton, and a reader logged each search as zero results with exit 0: a batch of negatives that proved nothing.
+
+**Why.** A 403 alone does not say whether the account or the record is refused. A page alone does not say whether the site looked and found nothing, or never looked.
+
+**Rule.** Before a 403 reaches the gate, read what the refusal says, and read a record the account is known to see: if that one answers, the 403 is about the first record, and it is logged as `restricted` (a gate denial, no pause), not as a block. If the control read fails for any reason, the 403 stays a block ([gwt-read](read.md#a-403-for-one-record-restricted-or-blocked) does this for indexed records; it reads no images). Every reader names the marks of a page with rows and the site's own words for "nothing found"; any other page is a STOP. Run each source's canary searches before and after a batch, and treat the batch as void when one comes back short ([canary controls](read.md#canary-controls)).
