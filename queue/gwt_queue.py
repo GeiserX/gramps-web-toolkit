@@ -26,8 +26,9 @@ import argparse, collections, datetime, fcntl, json, os, re, sys, unicodedata, u
 COLUMNS = ('id', 'person_key', 'person_label', 'kind', 'source', 'query', 'priority', 'status',
            'lane', 'claimed_at', 'done_at', 'result', 'evidence', 'tries', 'next_at', 'note', 'token',
            'lease_until', 'dedupe_key')
-RESULTS = ('hit', 'none', 'partial', 'blocked', 'denied')  # same words as gwt-ledger
-SEARCHED = ('hit', 'none', 'partial')  # results of a search that ran
+RESULTS = ('hit', 'none', 'partial', 'blocked', 'denied', 'restricted', 'paid', 'in-person', 'out-of-coverage',
+           'unproven')  # same words as gwt-ledger
+SEARCHED = ('hit', 'none', 'partial', 'out-of-coverage')  # results of a search that ran, as in gwt-ledger
 KINDS = ('search', 'sweep', 'verify', 'followup')
 STATUS = ('open', 'claimed', 'done', 'failed')
 DEFAULT_LEASE_MINUTES = 120
