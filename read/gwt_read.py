@@ -167,15 +167,21 @@ def record_candidates(doc, ark):
     return _with_place_orig(gwt_rank.gedcomx_rows(wrapped), wrapped)
 
 
-# A 403 for one record is not always a block: a record or image the custodian restricts answers 403 to every
-# account of this access level. FamilySearch names the access in Themis permissions; without ThemisPrmAnyone
-# the record is restricted.
+# A 403 for one record is not always a block: a record the custodian restricts answers 403 to every account of
+# this access level. FamilySearch says so for one artifact in the 403 body ("Access to artifact denied"); when a
+# body names Themis permissions instead, a set without ThemisPrmAnyone means the same. Both are best effort:
+# --control-ark is the check that holds whatever the body says.
 _THEMIS = re.compile(r'ThemisPrm[A-Za-z]+')
+_ARTIFACT_DENIED = 'access to artifact denied'
 
 
 def access_of(body):
-    """'restricted' when a 403 body names the record's permissions and none is ThemisPrmAnyone, else None."""
-    perms = set(_THEMIS.findall((body or b'').decode('utf-8', 'replace')))
+    """'restricted' when a 403 body refuses this one artifact, or names its permissions and none is
+    ThemisPrmAnyone; else None."""
+    text = (body or b'').decode('utf-8', 'replace')
+    if _ARTIFACT_DENIED in text.lower():
+        return 'restricted'
+    perms = set(_THEMIS.findall(text))
     return 'restricted' if perms and 'ThemisPrmAnyone' not in perms else None
 
 

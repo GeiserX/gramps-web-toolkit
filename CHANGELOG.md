@@ -9,7 +9,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 ### Added
 
 - `gwt-read <source> control` runs the source's canary searches (public, neutral queries with a known minimum of rows) without the cache, and exits 3 with a `void` line when one reads less. `search --controls before|after|both` runs them around one search: a short canary before means no search, after means the run is void. Each source declares the marks of a page with rows and the site's own "nothing found" words; `gwt_reader.classify()` calls any other page `unknown`, a STOP. Sources now come from one registry (`gwt_reader.SOURCE_MODULES`, `read/_template.py`, [gwt-read sources](https://geiserx.github.io/gramps-web-toolkit/sources/)), and `run_tests.py --mutants` also reads `<pkg>/mutants.d/*.txt`. Existing commands, options and output are unchanged.
-- `gwt-read familysearch record`: a 403 whose answer names the record's permissions without `ThemisPrmAnyone`, or a 403 while the `--control-ark` record still answers, is `restricted` (exit 5, an envelope with `access: restricted`), and the gate is not told. A plain 403 with no `--control-ark` is still a block.
+- `gwt-read familysearch record`: a 403 whose answer says `Access to artifact denied` or names the record's permissions without `ThemisPrmAnyone`, or a 403 while the `--control-ark` record still answers, is `restricted` (exit 5, an envelope with `access: restricted`), and the gate only logs it as a denial. A plain 403 with no `--control-ark`, or one whose control read fails, is still a block.
 - `gwt-read familysearch` candidates carry `place_orig`, the event place as the index typed it, when the record has one.
 
 ### Fixed

@@ -140,6 +140,17 @@ def fs_entry(ark, given, surname, orig=None, principal=True):
     return {'id': ark, 'content': {'gedcomx': g}}
 
 
+class DenyGate(FakeGate):
+    """FakeGate that records a permission refusal instead of failing on it."""
+
+    def __init__(self, paused=False):
+        super().__init__(paused)
+        self.denials = []
+
+    def denied(self, lane, what):
+        self.denials.append(what)
+
+
 class FamilySearch(Base):
     def test_candidates_keep_place_orig_role_and_principal(self):
         doc = {'results': 2, 'entries': [fs_entry('QZZ7-AAA', 'Ana', 'Zorvalo', 'San Bartolo, Villazul'),
@@ -160,16 +171,24 @@ class FamilySearch(Base):
         self.assertEqual(json.load(open(lines['candidates']))['candidates'][0]['place_orig'],
                          ['Villazul, parroquia de San Bartolo'])
 
-    def test_a_restricted_record_is_a_result_and_the_gate_never_hears(self):
-        gate = FakeGate()
+    def test_a_restricted_record_is_a_result_the_gate_only_logs(self):
+        gate = DenyGate()
         body = b'{"errors":[{"message":"no access","permissions":"ThemisPrmAffiliate,ThemisPrmFhlc"}]}'
         code, lines, text = self.run_fs(['record', '1:1:QZZ9-RRR'], FakeNet(gate, (403, body)), gate)
         self.assertEqual(code, gwt_reader.EXIT_RESTRICTED, text)
         self.assertEqual((gate.hits, gate.blocks), ([], []))
+        self.assertEqual(len(gate.denials), 1, 'the refusal left no trace in the gate log')
+        self.assertIn('1:1:QZZ9-RRR', gate.denials[0])
         self.assertTrue(lines['results'].startswith('restricted'))
         env = json.load(open(lines['evidence']))
         self.assertEqual((env['access'], env['permissions']), ('restricted', ['ThemisPrmAffiliate', 'ThemisPrmFhlc']))
         self.assertEqual(json.load(open(lines['candidates'])), {'candidates': []})
+
+    def test_artifact_denied_in_the_403_body_is_restricted(self):
+        gate = DenyGate()
+        body = b'{"errors":[{"code":403,"message":"Access to artifact denied."}]}'
+        code, _, text = self.run_fs(['record', '1:1:QZZ9-RRR'], FakeNet(gate, (403, body)), gate)
+        self.assertEqual((code, gate.hits, gate.blocks, len(gate.denials)), (gwt_reader.EXIT_RESTRICTED, [], [], 1), text)
 
     def test_a_403_open_to_anyone_is_still_a_block(self):
         gate = FakeGate()
@@ -182,7 +201,7 @@ class FamilySearch(Base):
         self.assertEqual((code, gate.blocks, len(gate.hits), self.out_files()), (gwt_reader.EXIT_WALL, [24], 1, []))
 
     def test_a_403_whose_control_record_answers_is_restricted(self):
-        gate = FakeGate()
+        gate = DenyGate()
         net = FakeNet(gate, (403, b'forbidden'), (200, json.dumps(RECORD).encode()))
         code, _, text = self.run_fs(['--control-ark', '1:1:QZZ1-AAA', 'record', '1:1:QZZ9-RRR'], net, gate)
         self.assertEqual(code, gwt_reader.EXIT_RESTRICTED, text)
@@ -196,7 +215,7 @@ class FamilySearch(Base):
         self.assertEqual((code, gate.blocks, len(gate.hits), self.out_files()), (gwt_reader.EXIT_WALL, [24], 1, []))
 
     def test_a_cached_control_proves_nothing_so_it_is_read_again(self):
-        gate = FakeGate()
+        gate = DenyGate()
         net = FakeNet(gate, (200, json.dumps(RECORD).encode()), (403, b'forbidden'), (200, json.dumps(RECORD).encode()))
         self.run_fs(['record', '1:1:QZZ1-AAA'], net, gate)
         code, _, _ = self.run_fs(['--control-ark', '1:1:QZZ1-AAA', 'record', '1:1:QZZ9-RRR'], net, gate)

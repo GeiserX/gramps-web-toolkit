@@ -271,8 +271,8 @@ class Reader:
     def get(self, url, headers=None, expect=None, refresh=False, page=None, on_403=None):
         """(status, headers, body, from_cache) for a 2xx answer the site really gave; raises Stop otherwise.
         `expect` checks a JSON answer, `page` an HTML one (see classify_answer). `on_403(body)` is asked about a
-        403 before the gate hears of it: 'restricted' raises Restricted with no gate call at all; anything else
-        is a block, as without it."""
+        403 before the gate blocks: 'restricted' only logs it as a denial (gate.denied: no pause, no block) and raises
+        Restricted; anything else is a block, as without it."""
         state = {}
 
         def gated(method, u, h, data):
@@ -286,6 +286,7 @@ class Reader:
         status, rh, body = self.cache.fetch('GET', url, headers or {}, None, gated, refresh=refresh)
         verdict = state.get('verdict', 'ok')
         if verdict == 'blocked' and on_403 is not None and on_403(state['body']) == 'restricted':
+            self.gate.denied(self.lane, 'HTTP 403 %s' % url[:120])     # logged; no pause, no block
             raise Restricted('restricted: HTTP 403 at %s is about this record\'s access, not a block; no gate hit' % url,
                              state['status'], state['body'])
         if verdict != 'ok':

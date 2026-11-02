@@ -49,3 +49,5 @@ gwt_read.py | c = run_controls(src, src['_search_parser'], a, R, 'before') | c =
 gwt_read.py | if when in ('after', 'both') and code in (EXIT_OK, EXIT_EMPTY): | if False: | --controls after runs the canaries after the search and voids it when one is short
 gwt_read.py | if lab.startswith('EVENT_PLACE') and lab.endswith('_ORIG') | if lab.startswith('EVENT_PLACE') | place_orig keeps only the place as the index typed it, not the standard place
 gwt_read.py | if bad or src['id'] in out: | if bad: | a source module cannot take an id another source already has
+gwt_read.py | if _ARTIFACT_DENIED in text.lower(): | if False: | a FamilySearch 403 saying "Access to artifact denied" is that record's access ("restricted"), not a 24 h block
+gwt_reader.py | self.gate.denied(self.lane, 'HTTP 403 %s' % url[:120])     # logged; no pause, no block | pass | a restricted record is still logged in the gate log as a denial, with no pause

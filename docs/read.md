@@ -46,7 +46,7 @@ Every request goes the same way (the INSEE source makes none). A fresh answer in
 | HTTP 429, a captcha or block page | pauses every lane (20 min) and triples the gap | 3 |
 | HTTP 200 with an empty body, a page that is not JSON from a JSON site, or a page without the record text from a page site (an empty frame, an Imperva block inside an iframe, the site's own error page) | read as a block: pauses every lane | 3 |
 | HTTP 401, or a sign-in page | pauses every lane; get a fresh token | 4 |
-| HTTP 403 for one FamilySearch record whose access is restricted (see [restricted records](#a-403-for-one-record-restricted-or-blocked)) | writes the envelope with `access: restricted` and no candidates; the gate is not told | 5 |
+| HTTP 403 for one FamilySearch record whose access is restricted (see [restricted records](#a-403-for-one-record-restricted-or-blocked)) | writes the envelope with `access: restricted` and no candidates; the gate only logs it as a denial (no pause, no block) | 5 |
 | JSON of an unexpected shape, or another HTTP error | nothing saved, the gate is not told | 1 |
 | the gate is paused | no request at all | 6 |
 
@@ -112,11 +112,13 @@ These numbers are fixed in `gwt-read` (`FS_PACE`); `gwt gate --dir ~/.cache/gwt-
 
 ### A 403 for one record: restricted or blocked
 
-A 403 is a block by default, and it parks the account's gate for a day. Some records and images are refused to every account of an access level, though (an affiliate-only film, for one), and treating that 403 as a block paused every lane for nothing. So a 403 on `record` is checked before the gate hears of it:
+A 403 is a block by default, and it parks the account's gate for a day. Some records are refused to every account of an access level, though, and treating that 403 as a block paused every lane for nothing. So a 403 on `record` (an indexed record, a `1:1:` ark) is checked before the gate blocks:
 
-1. When the answer names the record's permissions (`ThemisPrm...`) and none of them is `ThemisPrmAnyone`, the record is restricted. No other request is made.
-2. Otherwise, with `--control-ark` set, that control record is read again, without the cache, through the gate. If it answers, the account and the IP are fine, so the 403 was about this record: restricted. If the control is refused too, that is a block, and the gate is blocked as before.
-3. Without `--control-ark`, a 403 with no permissions in it is a block, as before.
+1. When the answer says `Access to artifact denied`, or names the record's permissions (`ThemisPrm...`) and none of them is `ThemisPrmAnyone`, the record is restricted. No other request is made. This reads the 403 body, so it is best effort: the wording is FamilySearch's to change.
+2. Otherwise, with `--control-ark` set, that control record is read again, without the cache, through the gate. If it answers, the account and the IP are fine, so the 403 was about this record: restricted. If the control is refused too, or its read fails in any other way (a 5xx, an answer of the wrong shape, a 429, a paused gate), the first 403 stays a block, and the gate is blocked as before. This is the dependable check: set it.
+3. Without `--control-ark`, a 403 that says neither is a block, as before.
+
+`--control-ark` must be a `1:1:` record ark other than the one you read; anything else exits 64. A restricted record is logged in the gate log as a denial (`gwt gate denied`), which pauses nothing. `gwt-read` reads no images, so a 403 on a film image is outside this check.
 
 A restricted record exits 5, writes an envelope with `access: restricted`, the permissions it named and an empty candidates file, and prints `results	restricted ...`. Log it as restricted, never as "none": someone with the right access can still read it. A 403 on a search is always a block. Pick a control record your account has read before, and never one that is restricted itself.
 
