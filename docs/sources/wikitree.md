@@ -12,7 +12,7 @@ gwt read wikitree control
 ```
 
 - `search` needs `--given` or `--surname`. `--surname` matches the surname at birth or the current one. With `--born` or `--died` the search keeps only profiles that have the dates (`dateInclude=both`); without it, WikiTree also returns every profile with no date at all.
-- `record` takes a WikiTree ID (`Smith-1234`) or its profile URL. With `--ancestors N` (1 to 10) one request reads the profile and N generations of its ancestors.
+- `record` takes a WikiTree ID (`Smith-1234`) or its profile URL, as typed or as a browser copies it (percent-encoded). With `--ancestors N` (1 to 10) one request reads the profile and N generations of its ancestors.
 
 ## Public profiles only
 
@@ -20,7 +20,7 @@ Every call sends `appId=gramps-web-toolkit`, as WikiTree asks of every client. T
 
 ## What a candidate is
 
-One public profile: `id` the WikiTree ID, the given and middle names, the surnames at birth and current, birth and death events (year and place as typed; an unknown date `0000-00-00` is no year), `sex`, the dates as written, `url` (`https://www.wikitree.com/wiki/<ID>`), and `living: true` when WikiTree marks the person living. With `--ancestors`, a parent who is also in the answer and public is listed as a `father` or `mother` relative. A private parent is never named.
+One public profile: `id` the WikiTree ID, the given and middle names, the surnames at birth and current, birth and death events (year and place as typed; an unknown date `0000-00-00` is no year), `sex`, the dates as written, `url` (`https://www.wikitree.com/wiki/<ID>`), and `living: true` when WikiTree marks the person living. With `--ancestors`, a parent who is also in the answer and public is listed as a `father` or `mother` relative. A private parent is never named. Only the asked profile is the principal, and it comes first; every other profile has role `ancestor`, is not a principal, and carries its `generation` (1 a parent, 2 a grandparent).
 
 ## When it stops
 

@@ -149,6 +149,26 @@ def candidates(people):
     return pub, len(people) - len(pub)
 
 
+def mark_ancestors(cands, people, subject_id):
+    """With --ancestors, only the asked profile is the principal; it goes first, and every other profile is an
+    `ancestor`, not principal, with its `generation` (1 a parent, 2 a grandparent) counted through Father/Mother."""
+    by_id = {p.get('Id'): p for p in people}
+    if subject_id not in by_id:
+        return cands        # the answer does not say which profile was asked: leave the rows as they are
+    gen, todo = {subject_id: 0}, [subject_id]
+    while todo:
+        p = by_id.get(todo.pop(0)) or {}
+        for parent in (p.get('Father'), p.get('Mother')):
+            if parent and parent in by_id and parent not in gen:
+                gen[parent] = gen[p.get('Id')] + 1
+                todo.append(parent)
+    name_gen = {by_id[i].get('Name'): g for i, g in gen.items()}
+    for c in cands:
+        if name_gen.get(c['id']) != 0:
+            c.update(role='ancestor', principal=False, generation=name_gen.get(c['id']))
+    return sorted(cands, key=lambda c: not c['principal'])
+
+
 def add_search_args(sp):
     sp.add_argument('--given', default='')
     sp.add_argument('--surname', default='', help='surname at birth or current')
@@ -201,6 +221,9 @@ def record(a, R):
     people = (list(d['people'].values()) if isinstance(d.get('people'), dict) else d.get('people') or []) \
         if 'people' in d else [d['profile']] if v == 'hits' else []
     cands, withheld = candidates(people)
+    if a.ancestors and 'people' in d:
+        asked = (d.get('resultByKey') or {}).get(key) or {}
+        cands = mark_ancestors(cands, people, asked.get('Id') if isinstance(asked, dict) else None)
     _write(a, url, doc, v, cands, withheld, cached, status, [SOURCE, key, a.ancestors])
     print('results\t%d public profiles, %d private withheld%s' % (len(cands), withheld, ' (cache)' if cached else ''),
           flush=True)

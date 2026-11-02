@@ -145,6 +145,18 @@ class Record(Run):
                          'a private mother is named nowhere')
         self.assertEqual(json.load(open(lines['evidence']))['withheld'], 1)
 
+    def test_the_asked_profile_is_the_principal_and_its_ancestors_are_not(self):
+        gate = FakeGate()
+        code, lines, text = self.run_wt(['record', 'Zorvalo-12', '--ancestors', '1'],
+                                        FakeNet(gate, (200, fx('people.json'))), gate)
+        self.assertEqual(code, 0, text)
+        subject, father = json.load(open(lines['candidates']))['candidates']
+        self.assertEqual((subject['id'], subject['role'], subject['principal']), ('Zorvalo-12', 'profile', True))
+        self.assertEqual((father['id'], father['role'], father['principal'], father['generation']),
+                         ('Zorvalo-5', 'ancestor', False, 1))
+        self.assertEqual(gwt_wikitree.mark_ancestors([{'id': 'X-1', 'principal': True}], [], None),
+                         [{'id': 'X-1', 'principal': True}], 'an answer without resultByKey')
+
     def test_an_invalid_id_is_the_sites_own_none(self):
         gate = FakeGate()
         code, lines, text = self.run_wt(['record', 'Zorvalo-99999'], FakeNet(gate, (200, fx('invalid.json'))), gate)
