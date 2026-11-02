@@ -1034,6 +1034,55 @@ class CatalogueTest(unittest.TestCase):
         self.assertEqual((p.returncode, p.stdout), (2, ''))
         self.assertIn('no built-in catalogue QQ', p.stderr)
 
+    def test_a_row_named_at_two_levels_is_one_hint_and_its_coverage_ignores_case(self):
+        T = self.tree()  # invented: a birth in Paris, Seine, France; the Paris row matches Paris and Seine
+        T['places']['vil'] = {'handle': 'vil', 'name': {'value': 'Paris'}, 'placeref_list': [{'ref': 'se'}]}
+        got = self.rows(T, 'builtin:fr')[('I2', 'birth-uncited')]
+        self.assertEqual(got['where']['archive'], 'Archives de Paris')  # coverage_places Paris fits the folded paris
+        self.assertNotIn('Archives de Paris', [h['archive'] for h in got.get('also', [])])  # listed once
+        self.assertNotIn('outside', got)
+
+    def test_a_several_country_row_is_never_refused_as_a_namesake(self):
+        d = self.catalogue(self.row(match='Gipuzkoa', level='region', archive='Cross-border index'), name='XX')
+        with open(os.path.join(d, 'ZZ.tsv'), 'w', encoding='utf-8') as f:
+            f.write('\t'.join(L.CATALOGUE_COLUMNS) + '\n' + self.row(archive='Exampleland register') + '\n')
+        T = self.tree()
+        T['places']['es']['name']['value'] = 'Exampleland'
+        got = self.rows(T, 'builtin:zz,xx', d)[('I2', 'birth-uncited')]
+        self.assertEqual(got['where']['archive'], 'Cross-border index')
+
+    def test_a_private_event_gets_no_catalogue_hint(self):
+        T = self.tree()
+        T['places']['es']['name']['value'] = 'Exampleland'
+        cat = L.load_catalogue('builtin:zz', self.catalogue(self.row()))
+        self.assertTrue(L.catalogue_hints(T, T['events']['eb2'], T['people']['fa'], cat)[0])  # positive control
+        T['events']['eb2']['private'] = True
+        self.assertEqual(L.catalogue_hints(T, T['events']['eb2'], T['people']['fa'], cat), ([], []))
+
+    def test_the_queue_note_names_a_hint_shared_by_two_gaps_once(self):
+        T = self.tree()
+        T['places']['es']['name']['value'] = 'Exampleland'
+        T['events']['ed2'] = event('ed2', 'Death', 1920, place='vil', cites=())
+        T['people']['fa']['event_ref_list'].append({'ref': 'ed2', 'role': 'Primary'})
+        d = self.catalogue(self.row(archive='Archive A'), self.row(archive='Archive B'))
+        rows = L.leads(T, 'I1', L.DEFAULT_KINDS, 1925, catalogue=L.load_catalogue('builtin:zz', d))[0]
+        task = next(L.queue_task(g) for g in L.group_by_person(rows) if g['person'] == 'I2' and g['task'] == 'verify')
+        self.assertEqual(task['note'].split(' | ')[1].count('archive='), 2, task['note'])  # A and B, each once
+
+    def test_the_shipped_catalogue_is_found_beside_an_installed_module(self):
+        import shutil
+        d = os.path.join(self.td.name, 'site')
+        os.makedirs(d)
+        shutil.copy(os.path.join(HERE, 'gwt_leads.py'), d)
+        shutil.copytree(os.path.join(HERE, 'archives'), os.path.join(d, 'gwt_leads_archives'))  # the wheel's name
+        path = os.path.join(self.td.name, 'dump.json')
+        with open(path, 'w') as f:
+            json.dump(as_dump(self.tree()), f)
+        p = subprocess.run([sys.executable, os.path.join(d, 'gwt_leads.py'), path, '--archives', 'builtin:es',
+                            '--format', 'json', '--include-living'], capture_output=True, text=True)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn('Euskadi Artxiboa', p.stdout)
+
     # --- gwt-leads archives probe ---
 
     def probe(self, answers, *lines, robots=(200, '')):
@@ -1064,8 +1113,9 @@ class CatalogueTest(unittest.TestCase):
 
     def test_probe_falls_back_to_get_and_honours_robots(self):
         url = 'https://b.example/search'
-        failed, tested, calls, _, _ = self.probe({('HEAD', url): (405, ''), ('GET', url): (200, '')}, self.row(url=url))
-        self.assertEqual((failed, tested, calls[-1]), (0, ['2026-11-02'], ('GET', url)))
+        failed, tested, calls, slept, _ = self.probe({('HEAD', url): (405, ''), ('GET', url): (200, '')},
+                                                     self.row(url=url))
+        self.assertEqual((failed, tested, calls[-1], slept), (0, ['2026-11-02'], ('GET', url), [2, 2, 2]))
         failed, tested, calls, _, out = self.probe({url: (200, '')}, self.row(url=url),
                                                    robots=(200, 'User-agent: *\nDisallow: /search\n'))
         self.assertEqual((failed, tested, len(calls)), (1, [''], 1))  # no request to a path robots.txt forbids

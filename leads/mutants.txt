@@ -75,3 +75,9 @@ gwt_leads.py | key=lambda r: CATALOGUE_ACCESS.index(r['access'])): | key=lambda 
 gwt_leads.py | if not world:  # Yad Vashem's years say nothing about an 1890 death | if True: | a world row whose years miss the event is no hint and is never listed outside
 gwt_leads.py | OSError, ValueError, http.client.HTTPException) as exc: | OSError, ValueError) as exc: | a server that answers a broken status line is a failed url, not a probe crash
 gwt_leads.py | why = 'robots.txt %s' % (status if status is not None else text[:80]) | pass | a robots.txt that errors prints its status, so it never reads as a real Disallow
+gwt_leads.py | if code != 'XX' and row['match_level'] in ('region', 'place'): | if row['match_level'] in ('region', 'place'): | a several-country (XX) row is never refused as a namesake of another country
+gwt_leads.py | if id(row) not in seen: | if True: | a row whose names match two levels of the place (Paris, Seine) is one hint, not two
+gwt_leads.py | cover = [fold(c) for c in row['coverage_places'] | cover = [c for c in row['coverage_places'] | coverage_places match the place whatever its case or accents
+gwt_leads.py | if not ev or ev.get('private', False) is True: | if not ev: | a private event never gets a catalogue hint
+gwt_leads.py | if w not in wheres: | if True: | a hint shared by two gaps of one task is named once in its queue note
+gwt_leads.py | for name in ('archives', 'gwt_leads_archives'): | for name in ('archives',): | the catalogue is found beside an installed module, where the wheel puts it as gwt_leads_archives
