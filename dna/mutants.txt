@@ -1,0 +1,21 @@
+# file | exact text | replacement | what the guard protects
+gwt_dna.py |             if len(cands) == 1: |             if False: | a match already in the tree from another site, same name and a close cM, is pointed at, never made twice
+gwt_dna.py | if s != site and close_cm(cm, c)} | if s != site} | a namesake from another site with a far cM is another person, not the same one
+gwt_dna.py |             elif len(cands) > 1: |             elif False: | two close candidates from other sites are reported as ambiguous
+gwt_dna.py |     return abs(a - b) <= max(CROSS_CM_ABS, CROSS_CM_REL * max(a, b)) |     return abs(a - b) <= CROSS_CM_ABS | two sites' cM for one match may differ by up to 30 percent
+gwt_dna.py | if not target and (site, mid) in tree["marks"]: | if False: | a rerun or a second kit of the same site points at the person the first import made
+gwt_dna.py |         if ref == tested: |         if False: | the tested person found as a match gets no association to themself
+gwt_dna.py |             if same: |             if False: | a new match person who shares a name with someone in the tree is waived as a namesake by name, so preflight lets it through
+gwt_dna.py |             made_names.setdefault(fold(f"{first} {surname}"), []).append(f"key:{pkey}") |             pass | two new matches with one name in a run name each other as namesakes
+gwt_dna.py |             while mid in matches: |             while False: | two matches with one name and no id are two people, never one overwritten
+gwt_dna.py |         elif len(named) > 1: |         elif False: | segments of a name two matches share are held back, never given to a new third match
+gwt_dna.py |         n = n.split("@")[0] |         pass | an e-mail used as a display name keeps only its local part
+gwt_dna.py |     n = " ".join(LONG_NUMBER.sub(" ", n).split()) |     n = " ".join(n.split()) | a phone or identity number inside a display name never reaches the tree
+gwt_dna.py | "surnames": " ".join(re.sub(r"\([^)]*\)", " ", cell(r, "surnames")).split()), | "surnames": cell(r, "surnames"), | the place a site prints next to an ancestral surname never reaches the tree
+gwt_dna.py |     "surnames": ["ancestral surnames", "ancestral names"], |     "surnames": ["ancestral surnames", "ancestral names", "contact", "country", "email"], | contact, country and e-mail columns are never read
+gwt_dna.py |         if cur and len(cur) + len(g) > size: |         if cur and len(cur) > size: | a file never holds more than --batch ops
+gwt_dna.py |             if os.path.exists(n) and not a.force: |             if False: | --out and --report are never overwritten without --force
+gwt_dna.py |         raise BadInput(f"--tested {tested}: not in the snapshot") |         pass | a tested person who is not in the snapshot stops the run
+gwt_dna.py | SEGMENT_HEADER = "Chromosome,Start Location,End Location,Centimorgans,Matching SNPs" | SEGMENT_HEADER = "Chr,Start,End,cM,SNPs" | the segment note is the string Gramps Web was seen to accept
+gwt_dna.py | rows = sorted(segs, key=lambda s: (CHROM_ORDER.get(s["chromosome"], 99), s["chromosome"], s["start"])) | rows = segs | segments are written in chromosome order, X after 22
+gwt_dna.py | rows[0].count(",") < 3 or any(re.fullmatch | rows[0].count(",") < 3 or False and any(re.fullmatch | the offline reader refuses a table whose header is numbers, as Gramps Web reads it in a fixed order
