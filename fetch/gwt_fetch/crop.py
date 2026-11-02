@@ -8,11 +8,12 @@ is the source's. Never overwrites; re-running skips finished pieces. Needs Pillo
 from __future__ import annotations
 
 import io
+import os
 import re
 import sys
 from pathlib import Path
 
-from .store import Store, sha256_file
+from .store import COLUMNS, Store, sha256_file
 
 
 def parse_box(text: str) -> tuple[int, int, int, int]:
@@ -89,6 +90,15 @@ def pieces(args, size):
     return [half(size, args.half)]
 
 
+def _ours(folder: Path) -> bool:
+    """True when folder has no manifest.tsv, or one with gwt-fetch's columns."""
+    m = folder / "manifest.tsv"
+    if not m.exists():
+        return True
+    with open(m, encoding="utf-8") as f:
+        return f.readline().rstrip("\r\n").split("\t") == COLUMNS
+
+
 def run(args, client=None) -> int:
     try:
         from PIL import Image
@@ -100,15 +110,20 @@ def run(args, client=None) -> int:
         src = Path(name)
         if not src.is_file():
             raise SystemExit(f"gwt-fetch crop: no such file {src}")
-        store = Store(src.parent)
-        row = store.rows.get(src.name, {})
+        out = Path(args.out) if getattr(args, "out", None) else src.parent
+        if not _ours(out):
+            raise SystemExit(f"gwt-fetch crop: {out / 'manifest.tsv'} has other columns than gwt-fetch's; "
+                             f"write the pieces to another folder with --out DIR")
+        row = Store(src.parent).rows.get(src.name, {}) if _ours(src.parent) else {}
+        store = Store(out)
+        here = src.name if out.resolve() == src.parent.resolve() else os.path.relpath(src, out)
         src_sha = sha256_file(src)
         with Image.open(src) as im:
             im.load()
             for cut, (x, y, w, h) in pieces(args, im.size):
                 stem = f"{src.stem}_{cut}"
                 label = f"crop {x},{y},{w},{h} of {src.name} sha256:{src_sha}"
-                url = f"{row.get('image_url') or src.name}#xywh={x},{y},{w},{h}"
+                url = f"{row.get('image_url') or here}#xywh={x},{y},{w},{h}"
                 if store.done(stem, label, url, row.get("manifest_url", "")):
                     continue
                 piece = im.crop((x, y, x + w, y + h))

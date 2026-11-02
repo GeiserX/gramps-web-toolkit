@@ -17,3 +17,4 @@ gwt_fetch/crop.py | ox, oy = round((x1 - x0) * overlap), round((y1 - y0) * overl
 gwt_fetch/crop.py | if args.max and max(piece.size) > args.max: | if False: | --max shrinks a piece to its longest side
 gwt_fetch/crop.py | label = f"crop {x},{y},{w},{h} of {src.name} sha256:{src_sha}" | label = f"crop {x},{y},{w},{h} of {src.name}" | a piece's row names its source's sha256
 gwt_fetch/crop.py |         return 2 |         return 0 | without Pillow, crop exits 2 instead of claiming success
+gwt_fetch/crop.py |         if not _ours(out): |         if False: | crop never appends its rows to a manifest.tsv another tool wrote

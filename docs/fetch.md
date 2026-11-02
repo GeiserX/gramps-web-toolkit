@@ -9,7 +9,7 @@ Python 3.11 or newer with `requests`. Run it as [`fetch/gwt-fetch`](https://gith
 ```
 gwt-fetch iiif URL [--pages 1-5,9] [--labels REGEX] [--native] [--out DIR] [--list]
 gwt-fetch iiif --image-base URL/info.json [--pages 1-20] [--out DIR] [--list]
-gwt-fetch crop IMG [...] (--box x,y,w,h [--from-size WxH] | --grid 2x3 [--overlap 10%] | --half left|right) [--max 1600]
+gwt-fetch crop IMG [...] (--box x,y,w,h [--from-size WxH] | --grid 2x3 [--overlap 10%] | --half left|right) [--max 1600] [--out DIR]
 gwt-fetch digibib URL [--pages ...] [--out DIR] [--list]
 gwt-fetch gazeta search (--text WORDS | --title WORDS) [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--limit N]
 gwt-fetch gazeta fetch BOE-A-YYYY-N [...] [--out DIR]
@@ -91,7 +91,7 @@ $ gwt-fetch crop /tmp/reg/0012_f12.jpg --grid 2x3 --overlap 10%
 ...
 ```
 
-Pieces are named `<original>_box-x-y-w-h.jpg`, `<original>_grid2x3-r1c2.jpg` or `<original>_left.jpg`. Each gets a row in the same folder's `manifest.tsv`, with the same columns as a download: `label` is `crop x,y,w,h of <original> sha256:<original's sha256>`, `image_url` is the original's URL from its own row (or its file name) with `#xywh=x,y,w,h` in the original's pixels, and `manifest_url` is the original's. Like a download, a piece is never overwritten, and re-running skips finished ones.
+Pieces are named `<original>_box-x-y-w-h.jpg`, `<original>_grid2x3-r1c2.jpg` or `<original>_left.jpg`. Each gets a row in the same folder's `manifest.tsv`, with the same columns as a download: `label` is `crop x,y,w,h of <original> sha256:<original's sha256>`, `image_url` is the original's URL from its own row (or its file name) with `#xywh=x,y,w,h` in the original's pixels, and `manifest_url` is the original's. Like a download, a piece is never overwritten, and re-running skips finished ones. If that folder's `manifest.tsv` was written by another tool (other columns), `crop` refuses to add to it; `--out DIR` writes the pieces and their rows to another folder, and `image_url` then names the original by its path from there.
 
 `crop` needs Pillow: `pipx install 'gramps-web-toolkit[crop]'`, or `pip install Pillow` beside a clone. Without it, `crop` prints how to install it and exits 2.
 

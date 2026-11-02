@@ -65,6 +65,7 @@ def parser() -> argparse.ArgumentParser:
                    help="the --box was measured on an image of this size (a preview); scale it to the real image")
     s.add_argument("--overlap", default="0%", help="with --grid, how far each tile reaches into its neighbours, e.g. 10%%")
     s.add_argument("--max", type=int, help="shrink each piece so its longest side is at most this many pixels")
+    s.add_argument("--out", help="write pieces and their manifest.tsv rows here (default: beside each image)")
 
     s = sub.add_parser("geo", help="geocode Spanish places through CartoCiudad; prints TSV with INE codes")
     s.add_argument("places", nargs="+")

@@ -14,7 +14,7 @@ Image = pytest.importorskip("PIL.Image")
 
 def args(images, **kw):
     base = dict(images=[str(i) for i in images], box=None, grid=None, half=None, from_size=None,
-                overlap="0%", max=None)
+                overlap="0%", max=None, out=None)
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -124,3 +124,29 @@ def test_box_to_the_preview_edge_stays_inside_the_page(tmp_path):
     assert crop.run(args([p], box="150,0,750,110", from_size="900x110")) == 0
     out = tmp_path / "wide_box-822-0-4107-600.jpg"
     assert size(out) == (4107, 600)
+
+
+@pytest.mark.parametrize("header", ["archivo\tURL\tqué es", "file\turl\twhat"])
+def test_a_foreign_manifest_is_never_written_to(tmp_path, header):
+    """A manifest.tsv another tool wrote: crop refuses it, and --out puts the pieces somewhere clean."""
+    p = tmp_path / "scan.png"
+    Image.new("L", (300, 200)).save(p)
+    theirs = tmp_path / "manifest.tsv"
+    theirs.write_text(header + "\nscan.png\thttps://a.example/1\tpage\n", encoding="utf-8")
+    before = theirs.read_bytes()
+    with pytest.raises(SystemExit, match="--out"):
+        crop.run(args([p], half="left"))
+    assert theirs.read_bytes() == before and not list(tmp_path.glob("scan_*"))
+    out = tmp_path / "pieces"
+    assert crop.run(args([p], half="left", out=str(out))) == 0
+    assert theirs.read_bytes() == before
+    row = rows(out / "manifest.tsv")[0]
+    assert row["file"] == "scan_left.jpg" and row["image_url"] == "../scan.png#xywh=0,0,150,200"
+
+
+def test_out_keeps_the_source_row(page, tmp_path):
+    out = tmp_path / "pieces"
+    assert cli.main(["crop", str(page), "--half", "left", "--out", str(out)]) == 0
+    row = rows(out / "manifest.tsv")[0]
+    assert row["image_url"] == "https://img.example/iiif/2/A/full/max/0/default.jpg#xywh=0,0,2000,3000"
+    assert row["manifest_url"] == "https://img.example/manifest"
