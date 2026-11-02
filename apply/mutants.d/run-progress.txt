@@ -1,1 +1,2 @@
 gwt_apply/snapshot.py | print(f"snapshot: GET /{ns}/ page {page} ({len(rows)} {cls} so far)", file=sys.stderr, flush=True) | pass | a whole-tree read names each page before it reads it, so gwt-run can say where a read hung
+gwt_apply/snapshot.py | "read_started": int(started.timestamp()), "objects": objects} | "objects": objects} | a snapshot records when its read began, so the gate of gwt-run does not guess it an hour back
