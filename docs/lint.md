@@ -42,7 +42,7 @@ exit 2: a rule had nothing to check (1 finding from 3 rules)
 Options on the command line win over `lint.toml`. Folders in `lint.toml` are read relative to the file. All names and IDs below are invented.
 
 ```toml
-rules = ["scope", "protect", "living", "overlap", "weak", "absent", "count"]  # default: all of them
+rules = ["scope", "protect", "living", "overlap", "weak", "count"]  # default: all of them
 
 [scope]
 roots = ["I0001"]                    # --root
@@ -144,14 +144,6 @@ The op's own `tag` counts on ops that make an object, an `add_tag` of the weak t
 | `weak-inert-tag` | an op that makes no object has a `tag`; `gwt-apply` only tags what an op makes, so that tag lands nowhere. Use an `add_tag` op |
 
 Nothing to check: no weak tag.
-
-### absent
-
-| Code | When |
-|---|---|
-| `absent-no-expect` | a `detach` or `remove_tag` without `expect`. Without it, removing something that is not there reads as done |
-
-`expect` (`present` or `absent`) on these ops needs a `gwt-apply` that accepts it (https://github.com/GeiserX/gramps-web-toolkit/pull/174); until then, run lint without this rule (`--rules`) on lists you will apply.
 
 ### count
 

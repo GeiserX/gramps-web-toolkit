@@ -36,7 +36,6 @@ gwt_lint/rules_tree.py |                 if refs_ and all(c == "ChildRef" and pr
 gwt_lint/rules_tree.py |             return tag in {view.tree.tag_names.get(t) for t in obj.get("tag_list") or []} |             return False | an object the snapshot already tags weak needs no new tag
 gwt_lint/rules_tree.py |             if (cls, ref) in tagged: |             if False: | an add_tag of the weak tag in the same list counts
 gwt_lint/rules_tree.py |     return isinstance(conf, int) and not isinstance(conf, bool) and conf <= 1 |     return isinstance(conf, int) and not isinstance(conf, bool) and conf < 1 | confidence 1 is weak too
-gwt_lint/rules_tree.py | and "expect" not in op] | and False] | a detach or remove_tag without expect is absent-no-expect
 gwt_lint/rules_tree.py | not (len(w) == 4 and 1000 <= int(w) < 2200) | True | a year next to the word tree is not a count
 gwt_lint/rules_tree.py | <= 8 for i in trees for j in nums | <= 5 for i in trees for j in nums | a count a few words from the word tree is still a count
 gwt_lint/rules_tree.py |         words = [fold(w) for w in ctx.section("count").get("words") or TREE_WORDS] |         words = [fold(w) for w in TREE_WORDS] | [count] words in the config replace the built-in words

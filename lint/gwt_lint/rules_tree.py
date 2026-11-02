@@ -7,7 +7,6 @@
              any new text
     overlap  no object another open list touches; no update repeated from an applied list
     weak     an op that makes a weak claim carries the weak tag; a tag on an op that makes nothing is inert
-    absent   a detach or remove_tag says what it expects
     count    no new text that counts what the tree holds («the tree has 40 people named ...»)
 """
 from __future__ import annotations
@@ -468,26 +467,6 @@ def _low(conf) -> bool:
     return isinstance(conf, int) and not isinstance(conf, bool) and conf <= 1
 
 
-class Absent(Rule):
-    name = "absent"
-    codes = {"absent-no-expect": "a detach or remove_tag without `expect`, so removing nothing looks like done"}
-
-    def check(self, ctx):
-        out = [self.finding("absent-no-expect", op, f"{op['op']} has no expect", "add \"expect\": \"present\" "
-                            "(or \"absent\" when nothing there is fine)")
-               for op in ctx.ops if op["op"] in ("detach", "remove_tag") and "expect" not in op]
-        n = sum(op["op"] in ("detach", "remove_tag") for op in ctx.ops)
-        return out or [f"{n} detach or remove_tag ops, each with expect" if n else "no detach or remove_tag ops"]
-
-    def mutate(self, ctx):
-        gid = _first_gid(ctx)
-        if not gid:
-            return None
-        op = {"op": "remove_tag", "key": "lint-prove-absent", "ruling": "prove", "target": {"person": gid},
-              "name": "prove", "_line": len(ctx.ops) + 1}
-        return Mutant(ctx.ops + [op], "absent-no-expect")
-
-
 class Count(Rule):
     name = "count"
     codes = {"count-in-text": "new text counts what the tree holds, which goes stale as soon as another list lands"}
@@ -516,4 +495,4 @@ class Count(Rule):
         return Mutant(ctx.ops + [op], "count-in-text")
 
 
-RULES = [Scope, Protect, Living, Overlap, Weak, Absent, Count]
+RULES = [Scope, Protect, Living, Overlap, Weak, Count]

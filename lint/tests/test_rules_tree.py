@@ -33,7 +33,7 @@ def lint(name, rule, *extra, config=CONFIG):
     return code, codes, res
 
 
-RULES = ["scope", "protect", "living", "overlap", "weak", "absent", "count"]
+RULES = ["scope", "protect", "living", "overlap", "weak", "count"]
 
 
 @pytest.mark.parametrize("rule", RULES)
@@ -51,7 +51,6 @@ EXPECTED = {
                "living-id": ["n-ana-id"]},
     "overlap": {"overlap-open": ["n-elena-2"], "overlap-applied": ["u-luis-birth-again"]},
     "weak": {"weak-untagged": ["p-ana-3", "c-machine", "u-c1"], "weak-inert-tag": ["u-luis"]},
-    "absent": {"absent-no-expect": ["d-n2"]},
     "count": {"count-in-text": ["n-ana", "e-luis"]},
 }
 

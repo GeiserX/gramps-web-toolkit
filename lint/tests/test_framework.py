@@ -50,30 +50,31 @@ def test_prove_fails_when_a_rule_stops_detecting(rule, monkeypatch):
 
 
 def test_prove_fails_when_the_mutant_fires_only_what_the_list_already_fires():
-    rule = F.registry()["absent"]
-    ops = [{"op": "detach", "key": "d", "_line": 1, "target": {"person": "I1"}, "object": {"note": "N2"}}]
+    rule = F.registry()["count"]
+    ops = [{"op": "add_note", "key": "n", "_line": 1, "text": "The tree has 12 people named Vega.",
+            "attach": [{"person": "I1"}]}]
     ctx = F.Context(ops, F.Tree.load(os.path.join(FIX, "tree.json")))
 
     class Same(type(rule)):
         def mutate(self, ctx):
-            return F.Mutant(list(ctx.ops), "absent-no-expect")
+            return F.Mutant(list(ctx.ops), "count-in-text")
     passed, line = F.prove(Same(), ctx)
     assert not passed and "(1 on the list, 1 on the mutant" in line
 
 
 def test_prove_fails_when_the_mutant_fires_another_code():
-    rule = F.registry()["absent"]
+    rule = F.registry()["count"]
 
     class Other(type(rule)):
-        codes = {**type(rule).codes, "absent-other": "x"}
+        codes = {**type(rule).codes, "count-other": "x"}
 
         def mutate(self, ctx):
             m = super().mutate(ctx)
-            return F.Mutant(m.ops, "absent-other")
+            return F.Mutant(m.ops, "count-other")
     ctx = F.Context([{"op": "add_tag", "key": "t", "_line": 1, "target": {"person": "I1"}, "name": "x"}],
                     F.Tree.load(os.path.join(FIX, "tree.json")))
     passed, line = F.prove(Other(), ctx)
-    assert not passed and "fired absent-no-expect" in line
+    assert not passed and "fired count-in-text" in line
 
 
 def test_prove_fails_when_the_rule_has_nothing_to_check_on_its_mutant():
@@ -97,20 +98,20 @@ def test_nothing_to_check_wins_over_findings():
 
 
 def test_text_output_prints_codes_and_the_exit_line():
-    code, out, _ = run([os.path.join(FIX, "absent-finding.jsonl"), "--snapshot", os.path.join(FIX, "tree.json"),
-                        "--rules", "absent,count"])
+    code, out, _ = run([os.path.join(FIX, "count-finding.jsonl"), "--snapshot", os.path.join(FIX, "tree.json"),
+                        "--rules", "count,living"])
     assert code == 1
-    assert "absent-no-expect   op 'd-n2' line 1: detach has no expect" in out
-    assert out.rstrip().endswith("exit 1: findings (1 finding from 2 rules)")
+    assert "count-in-text      op 'n-ana' line 1: counts what the tree holds" in out
+    assert out.rstrip().endswith("exit 1: findings (2 findings from 2 rules)")
 
 
 def test_rules_from_the_config_and_unknown_rules(tmp_path):
     cfg = tmp_path / "lint.toml"
-    cfg.write_text('rules = ["absent"]\n')
-    code, out, _ = run([os.path.join(FIX, "absent-finding.jsonl"), "--snapshot", os.path.join(FIX, "tree.json"),
+    cfg.write_text('rules = ["count"]\n')
+    code, out, _ = run([os.path.join(FIX, "count-finding.jsonl"), "--snapshot", os.path.join(FIX, "tree.json"),
                         "--config", str(cfg), "--json"])
-    assert code == 1 and [r["rule"] for r in json.loads(out)["rules"]] == ["absent"]
-    code, _, err = run(EXAMPLE + ["--rules", "absent,nope"])
+    assert code == 1 and [r["rule"] for r in json.loads(out)["rules"]] == ["count"]
+    code, _, err = run(EXAMPLE + ["--rules", "count,nope"])
     assert code == 2 and "no rule nope" in err
 
 
@@ -151,3 +152,14 @@ def test_the_wrapper_runs_from_a_clone():
     r = subprocess.run([sys.executable, os.path.join(LINT, "gwt-lint"), "--prove"] + EXAMPLE,
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_the_default_run_never_asks_for_a_field_gwt_apply_refuses(tmp_path):
+    # `expect` on detach and remove_tag is refused by gwt-apply until it accepts it, so no rule may demand it
+    lst = tmp_path / "detach.jsonl"
+    lst.write_text('{"op": "detach", "key": "d", "ruling": "R-1", "target": {"person": "I1"}, '
+                   '"object": {"note": "N2"}}\n')
+    code, out, _ = run([str(lst), "--snapshot", os.path.join(FIX, "tree.json"), "--config",
+                        os.path.join(FIX, "lint.toml")])
+    assert code == 0, out
+    assert "expect" not in out
