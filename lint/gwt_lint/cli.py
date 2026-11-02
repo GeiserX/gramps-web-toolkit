@@ -18,10 +18,10 @@ def _ids(values):
 
 
 SECTIONS = ("scope", "protect", "living", "overlap", "weak", "count")
-NAME_LISTS = {None: ("rules",), "scope": ("roots",), "protect": ("ids", "locales"), "weak": ("machine_sources",),
+NAME_LISTS = {None: ("rules",), "scope": ("roots",), "protect": ("ids", "locales"), "weak": ("tag", "machine_sources"),
               "count": ("words",)}  # settings that name things: a list, or one name as a bare string
 NUMBERS = {"living": ("years", "this_year")}
-TEXTS = {"overlap": ("open", "applied"), "weak": ("tag",)}
+TEXTS = {"overlap": ("open", "applied")}
 
 
 def load_config(path) -> dict:
@@ -72,7 +72,8 @@ def build_parser():
     ap.add_argument("--protect", action="append", help="protect: a protected person's Gramps ID (repeat or comma)")
     ap.add_argument("--open", metavar="DIR", help="overlap: the folder of open lists to compare with")
     ap.add_argument("--applied", metavar="DIR", help="overlap: the folder of applied lists")
-    ap.add_argument("--weak-tag", help="weak: the tag a weak claim must carry")
+    ap.add_argument("--weak-tag", action="append",
+                    help="weak: a weak tag (repeat or comma-separate); any tag whose name holds one counts")
     ap.add_argument("--prove", action="store_true",
                     help="run every rule on its own mutant of the list; exit 1 unless each fires its own code")
     ap.add_argument("--json", action="store_true", help="one JSON object on stdout")
@@ -112,11 +113,10 @@ def _main(args):
         return _fail(args, "give a LIST and --snapshot DUMP")
     try:
         cfg = load_config(args.config)
-        for key, sec, field in (("root", "scope", "roots"), ("protect", "protect", "ids")):
+        for key, sec, field in (("root", "scope", "roots"), ("protect", "protect", "ids"), ("weak_tag", "weak", "tag")):
             if getattr(args, key):
                 cfg.setdefault(sec, {})[field] = _ids(getattr(args, key))
-        for key, sec, field in (("open", "overlap", "open"), ("applied", "overlap", "applied"),
-                                ("weak_tag", "weak", "tag")):
+        for key, sec, field in (("open", "overlap", "open"), ("applied", "overlap", "applied")):
             if getattr(args, key):
                 cfg.setdefault(sec, {})[field] = getattr(args, key)
         names = _ids([args.rules]) if args.rules else cfg.get("rules") or list(rules)

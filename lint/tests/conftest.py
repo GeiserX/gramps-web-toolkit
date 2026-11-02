@@ -3,4 +3,5 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path[:0] = [os.path.dirname(HERE)] + [os.path.join(os.path.dirname(os.path.dirname(HERE)), d) for d in ("core", "apply")]
+ROOT = os.path.dirname(os.path.dirname(HERE))
+sys.path[:0] = [os.path.dirname(HERE)] + [os.path.join(ROOT, d) for d in ("core", "apply")]

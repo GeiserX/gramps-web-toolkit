@@ -61,7 +61,7 @@ open = "lists/open"                  # --open: lists not applied yet
 applied = "lists/applied"            # --applied: lists already applied
 
 [weak]
-tag = "weak"                         # --weak-tag
+tag = ["weak", "hipotesis"]          # --weak-tag; the first is the one a fix suggests
 machine_sources = ["S0042"]          # sources whose citations come from a machine index
 
 [count]
@@ -136,10 +136,10 @@ Nothing to check: neither `--open` nor `--applied`, or a folder that does not ex
 An op that makes a weak claim must carry the weak tag:
 
 - an `add_person` with `allow_namesake`;
-- an `add_citation` with `confidence` 0 or 1, or of a source in `machine_sources`;
+- an `add_citation` with `confidence` 0 or 1 (`1.0` and `true` count, as `gwt-apply` stores them as 1), or of a source in `machine_sources`;
 - an `update_citation` that lowers `confidence` to 0 or 1.
 
-The op's own `tag` counts on ops that make an object, an `add_tag` of the weak tag on the same object in the list counts, and so does the tag already on the object in the snapshot. A citation whose every target is a child_ref marked `[probable]` (by `link_child` with `probable`, an `add_note` starting with `[probable]` in the list, or a note already on the link) needs no tag: a child_ref cannot carry tags, and the mark is how a doubtful link is shown. A `link_child` with `probable` carries its own mark.
+A tag counts as weak when its name, with case and accents folded, holds one of the weak tags, the same test [gwt-report](report.md) uses, so `r7-weak` or `Hipótesis` count for `weak` and `hipotesis`. The op's own `tag` counts on ops that make an object, an `add_tag` of the weak tag on the same object in the list counts, and so does the tag already on the object in the snapshot. A citation whose every target is a child_ref marked `[probable]` (by `link_child` with `probable`, an `add_note` starting with `[probable]` in the list, or a note already on the link) needs no tag: a child_ref cannot carry tags, and the mark is how a doubtful link is shown. A `link_child` with `probable` carries its own mark.
 
 | Code | When |
 |---|---|

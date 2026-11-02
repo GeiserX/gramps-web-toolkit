@@ -33,9 +33,11 @@ gwt_lint/rules_tree.py |             if tags_of(op) and not creates(op): |      
 gwt_lint/rules_tree.py |             if kind == "add_person" and op.get("allow_namesake"): |             if False: | a namesake kept apart needs the weak tag
 gwt_lint/rules_tree.py | (_low(op.get("confidence")) or str(op.get("source")) in machine) | (_low(op.get("confidence"))) | a citation of a machine-index source needs the weak tag
 gwt_lint/rules_tree.py |                 if refs_ and all(c == "ChildRef" and probable(*r) for c, r in refs_): |                 if False: | a weak citation on a [probable] child_ref needs no tag
-gwt_lint/rules_tree.py |             return tag in {view.tree.tag_names.get(t) for t in obj.get("tag_list") or []} |             return False | an object the snapshot already tags weak needs no new tag
+gwt_lint/rules_tree.py |             return any(weak(view.tree.tag_names.get(t)) for t in obj.get("tag_list") or []) |             return False | an object the snapshot already tags weak needs no new tag
 gwt_lint/rules_tree.py |             if (cls, ref) in tagged: |             if False: | an add_tag of the weak tag in the same list counts
-gwt_lint/rules_tree.py |     return isinstance(conf, int) and not isinstance(conf, bool) and conf <= 1 |     return isinstance(conf, int) and not isinstance(conf, bool) and conf < 1 | confidence 1 is weak too
+gwt_lint/rules_tree.py |     return isinstance(conf, (int, float)) and conf in (0, 1) |     return isinstance(conf, (int, float)) and conf in (0,) | confidence 1 is weak too
+gwt_lint/rules_tree.py |     return isinstance(conf, (int, float)) and conf in (0, 1) |     return isinstance(conf, int) and not isinstance(conf, bool) and conf in (0, 1) | confidence 1.0 or true is weak, as gwt-apply stores int(...)
+gwt_lint/rules_tree.py | any(w and w in fold(name) for w in folded) | any(w == fold(name) for w in folded) | any tag whose name holds a weak tag counts, as in gwt-report
 gwt_lint/rules_tree.py | not (len(w) == 4 and 1000 <= int(w) < 2200) | True | a year next to the word tree is not a count
 gwt_lint/rules_tree.py | <= 8 for i in trees for j in nums | <= 5 for i in trees for j in nums | a count a few words from the word tree is still a count
 gwt_lint/rules_tree.py |         words = [fold(w) for w in ctx.section("count").get("words") or TREE_WORDS] |         words = [fold(w) for w in TREE_WORDS] | [count] words in the config replace the built-in words

@@ -241,3 +241,20 @@ def test_living_judges_an_event_moved_onto_someone_who_may_be_living():
            {"op": "move_event", "key": "mv-ok", "event": "E8d", "from": {"person": "I8"}, "to": {"person": "I4"}}]
     ctx = F.Context([dict(o, _line=1) for o in ops], F.Tree.load(TREE), {"living": {"this_year": 2026}})
     assert [(f.code, f.key) for f in T.Living().check(ctx)] == [("living-date", "mv"), ("living-place", "mv")]
+
+
+def test_weak_reads_confidence_the_way_gwt_apply_stores_it():
+    # gwt-apply accepts 1.0 and true and stores int(...) = 1
+    ops = [{"op": "update_citation", "key": k, "citation": "C1", "set": {"confidence": v}}
+           for k, v in (("u-float", 1.0), ("u-true", True), ("u-high", 3.0))]
+    ctx = F.Context([dict(o, _line=1) for o in ops], F.Tree.load(TREE), {"weak": {"tag": ["weak"]}})
+    assert [(f.code, f.key) for f in T.Weak().check(ctx)] == [("weak-untagged", "u-float"), ("weak-untagged", "u-true")]
+
+
+def test_weak_counts_any_tag_whose_name_holds_a_weak_tag_like_gwt_report():
+    ops = [{"op": "add_person", "key": "p", "first_name": "Hugo", "surname": "Vega", "allow_namesake": True,
+            "namesake_reason": "r", "tag": "r7-Weak"},
+           {"op": "add_person", "key": "q", "first_name": "Ana", "surname": "Vega", "allow_namesake": True,
+            "namesake_reason": "r", "tag": "hipótesis"}]
+    ctx = F.Context([dict(o, _line=1) for o in ops], F.Tree.load(TREE), {"weak": {"tag": ["weak", "hipotesis"]}})
+    assert T.Weak().check(ctx) == []

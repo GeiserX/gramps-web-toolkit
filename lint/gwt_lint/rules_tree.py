@@ -416,12 +416,17 @@ class Weak(Rule):
 
     def check(self, ctx):
         sec = ctx.section("weak")
-        tag = sec.get("tag")
-        if not tag:
+        names = sec.get("tag") or []
+        names = [names] if isinstance(names, str) else names
+        if not names:
             raise NothingToCheck("no weak tag: give --weak-tag or [weak] tag")
+        tag, folded = names[0], [fold(n) for n in names]
+
+        def weak(name):  # like gwt-report: a tag whose folded name holds a weak tag's folded name
+            return isinstance(name, str) and any(w and w in fold(name) for w in folded)
         machine = {str(s) for s in sec.get("machine_sources") or []}
         view = ctx.view
-        tagged = {(c, r) for op in ctx.ops if op["op"] == "add_tag" and op.get("name") == tag
+        tagged = {(c, r) for op in ctx.ops if op["op"] == "add_tag" and weak(op.get("name"))
                   for c, r in attach_targets(op)}
         marked = set()  # child_refs (family, child) with a [probable] mark in the list
         for op in ctx.ops:
@@ -435,7 +440,7 @@ class Weak(Rule):
                 return True
             h = view.resolve(ref, cls)
             obj = view.tree.handles.get(cls, {}).get(h) or {}
-            return tag in {view.tree.tag_names.get(t) for t in obj.get("tag_list") or []}
+            return any(weak(view.tree.tag_names.get(t)) for t in obj.get("tag_list") or [])
 
         def probable(fam, child):
             if (fam, child) in marked:
@@ -448,7 +453,7 @@ class Weak(Rule):
 
         out = []
         for op in ctx.ops:
-            kind, own = op["op"], tag in tags_of(op)
+            kind, own = op["op"], any(weak(t) for t in tags_of(op))
             if tags_of(op) and not creates(op):
                 out.append(self.finding("weak-inert-tag", op, f"{kind} makes no object, so its tag "
                                         f"{', '.join(tags_of(op))} lands nowhere", "use an add_tag op"))
@@ -471,6 +476,7 @@ class Weak(Rule):
 
     def mutate(self, ctx):
         tag = ctx.section("weak").get("tag") or "weak"
+        tag = tag if isinstance(tag, str) else tag[0]
         op = {"op": "add_person", "key": "lint-prove-weak", "ruling": "prove", "first_name": "Prove",
               "surname": "Weak", "allow_namesake": True, "namesake_reason": "prove", "namesake_of": [],
               "_line": len(ctx.ops) + 1}
@@ -478,7 +484,8 @@ class Weak(Rule):
 
 
 def _low(conf) -> bool:
-    return isinstance(conf, int) and not isinstance(conf, bool) and conf <= 1
+    """Confidence 0 or 1 as gwt-apply reads it: it accepts 1.0 and true and stores int(...)."""
+    return isinstance(conf, (int, float)) and conf in (0, 1)
 
 
 class Count(Rule):
