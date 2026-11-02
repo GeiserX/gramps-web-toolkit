@@ -61,6 +61,7 @@ dev-mode-dirs = ["apply", "check", "fetch", "core", "ledger", "gate", "fscache",
 "ledger/gwt_ledger.py" = "gwt_ledger.py"
 "ledger/sources.tsv" = "gwt_ledger_sources.tsv"
 "gate/gwt_gate.py" = "gwt_gate.py"
+"gate/profiles.tsv" = "gwt_gate_profiles.tsv"
 "fscache/gwt_fscache.py" = "gwt_fscache.py"
 "queue/gwt_queue.py" = "gwt_queue.py"
 "leads/gwt_leads.py" = "gwt_leads.py"
