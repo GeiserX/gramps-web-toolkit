@@ -6,7 +6,7 @@ gwt_gate.py | if parked: | if False: | while the gate is parked for a person, wa
 gwt_gate.py | s['human'] = None | pass | clear ends a parking for a person too
 gwt_gate.py | if reminded: | if False: | wait-clear sends one reminder after the timeout, then gives up with the gate still parked
 gwt_gate.py | argv = [w.format(**fields) for w in shlex.split(self.notify_cmd)] | argv = shlex.split(self.notify_cmd.format(**fields)) | each notify word is filled in alone, so text from the site never splits into extra words or commands
-gwt_gate.py | 'mtime': _mtime(session), 'why': what} | 'mtime': _mtime(session), 'why': what}; s['gap'] = min(self.ceil, s['gap'] * 3) | an expired session never slows the pace: auth-expired leaves the gap alone
+gwt_gate.py | 'mtime': _mtime(path), 'why': what} | 'mtime': _mtime(path), 'why': what}; s['gap'] = min(self.ceil, s['gap'] * 3) | an expired session never slows the pace: auth-expired leaves the gap alone
 gwt_gate.py | auth = s.get('auth', {}).get(account) if account else None | auth = next(iter(s.get('auth', {}).values()), None) | auth-expired parks only the lanes of that account
 gwt_gate.py | if _mtime(auth['session']) != auth['mtime']: | if False: | a parked account resumes on its own once its session file changes
 gwt_gate.py | if self.per_hour and len(recent) >= self.per_hour: | if False: | a per-hour cap refuses the next request in the hour
