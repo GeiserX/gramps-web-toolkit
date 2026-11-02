@@ -608,6 +608,7 @@ class CoverageTest(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
         d = self.dir.name
+        self.namesake = False
         self.path, self.dump, self.sources = (os.path.join(d, n) for n in ('buscado.tsv', 'tree.json', 'cols.txt'))
         # An invented family: Ana (I1) is the child of Pedro (I2) and Juana (I3); Luis (I4) is unrelated.
         tree = {'people': [person('h1', 'I1', 'Ana', 'Zorvalo', ['e1'], 'f1'),
@@ -616,6 +617,7 @@ class CoverageTest(unittest.TestCase):
                 'families': [{'handle': 'f1', 'father_handle': 'h2', 'mother_handle': 'h3',
                               'child_ref_list': [{'ref': 'h1'}]}],
                 'events': [event('e1', 'Birth', 1850), event('e2', 'Birth', 1810), event('e3', 'Death', 1880)]}
+        self.tree = tree
         write(self.dump, json.dumps({'objects': tree}))
         write(self.sources, 'fs\nmatchid\nboe\n')
         write(self.path, '\t'.join(L.COLUMNS) + '\n' + ''.join('\t'.join(r) + '\n' for r in (
@@ -640,6 +642,24 @@ class CoverageTest(unittest.TestCase):
         self.assertEqual(rows['I1'], ['hit', 'n/a', '-'])  # matchid starts in 1970; born 1850, Ana's life ends by 1960
         self.assertEqual(rows['I2'], ['-', 'n/a', 'blocked'])  # logged under his name, and under an alias of boe
         self.assertEqual(rows['I3'], ['-', '-', 'due'])    # no dates: never n/a; the row's next_date has passed
+
+    def test_a_key_that_starts_with_the_gramps_id_counts_for_that_person(self):
+        with open(self.path, 'a', encoding='utf-8') as f:
+            f.write('i4-luis-gil-1901\tLuis\tfs\tq\t2026-01-01\thit\t\t\t\t\n')
+        self.assertEqual({r[0]: r[2:] for r in self.matrix()[1:]}['I4'], ['hit', '-', '-'])
+
+    def test_a_name_two_people_share_matches_neither(self):
+        self.tree['people'].append(person('h5', 'I5', 'Pedro', 'Zorvalo'))  # a namesake of I2
+        write(self.dump, json.dumps({'objects': self.tree}))
+        rows = {r[0]: r[2:] for r in self.matrix()[1:]}
+        self.assertEqual((rows['I2'][2], rows['I5'][2]), ('-', '-'))  # the pedro-zorvalo row could be either
+
+    def test_ledger_keys_that_match_nobody_are_counted_on_stderr(self):
+        with open(self.path, 'a', encoding='utf-8') as f:
+            f.write('someone-else\t\tboe\tq\t2026-01-01\thit\t\t\t\t\n')
+        code, err = fail('--ledger', self.path, 'coverage', '--dump', self.dump, '--sources', self.sources)
+        self.assertEqual(code, 0)
+        self.assertIn('1 of 4 person keys of the ledger match nobody', err)
 
     def test_whole_tree_without_root(self):
         self.assertEqual([r[0] for r in self.matrix()[1:]], ['I1', 'I2', 'I3', 'I4'])

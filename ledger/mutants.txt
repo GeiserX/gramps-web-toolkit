@@ -23,3 +23,6 @@ gwt_ledger.py | if key(ref) in NOT_PROOF or not normalize(ref): | if False: | --
 gwt_ledger.py | checked[control] = control_problem(control) | checked[control] = None | import-tsv checks each row's control like add
 gwt_ledger.py | control = clean(v.get('control')) or clean(args.control_ok) | control = clean(v.get('control')) | import-tsv --control-ok vouches for the rows with no control
 gwt_ledger.py | if same(row) in seen: | if False: | importing the same file twice adds nothing
+gwt_ledger.py | out = {gid} | {k for k in by_prefix.get(gid, ()) if k.startswith(gid + '-')} if gid else set() | out = {gid} if gid else set() | coverage counts a person key that starts with <gramps-id>- for that person
+gwt_ledger.py | if name and names[name] == 1: | if name: | coverage never gives one namesake the other's rows
+gwt_ledger.py | if unmatched: | if False: | coverage says how many ledger keys match nobody, so an empty matrix is not read as not searched

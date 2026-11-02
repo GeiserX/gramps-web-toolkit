@@ -516,16 +516,40 @@ def coverage(args, reg, rows, err):
     else:
         order = sorted(ix.people, key=lambda h: str(ix.people[h].get('gramps_id') or ''))
     groups = collections.defaultdict(list)
+    by_prefix = collections.defaultdict(set)  # `i0042` -> {`i0042-ana-zorvalo`, ...}: keys that start with an id
     for r in rows:
-        groups[(key(r['person_key']), reg.canon(r['source']))].append(r)
+        k = key(r['person_key'])
+        groups[(k, reg.canon(r['source']))].append(r)
+        by_prefix[k.split('-', 1)[0]].add(k)
+
+    def label_of(p):
+        name = p.get('primary_name') or {}
+        surname = ' '.join(s.get('surname', '') for s in name.get('surname_list') or [])
+        return ' '.join(filter(None, [name.get('first_name', ''), surname]))
+
+    names = collections.Counter(key(label_of(p)) for p in ix.people.values())
+
+    def keys_of(p):
+        """A person's ledger keys: their Gramps id, any key that starts with `<id>-`, and their name as a slug
+        when no one else in the tree has it, so namesakes never show each other's rows."""
+        gid, name = key(p.get('gramps_id') or ''), key(label_of(p))
+        out = {gid} | {k for k in by_prefix.get(gid, ()) if k.startswith(gid + '-')} if gid else set()
+        if name and names[name] == 1:
+            out.add(name)
+        return out
+
+    matched = set().union(*(keys_of(p) for p in ix.people.values())) if ix.people else set()
+    unmatched = {k for k, _ in groups if k} - matched
+    if unmatched:
+        sys.stderr.write('gwt-ledger: %d of %d person keys of the ledger match nobody in the dump; they are matched '
+                         'by Gramps id, by a key that starts with <id>-, or by a name only one person has\n'
+                         % (len(unmatched), len({k for k, _ in groups if k})))
     today = datetime.date.today().isoformat()
     sys.stdout.write('\t'.join(['id', 'name'] + cols) + '\n')
     for h in order:
         p = ix.people[h]
-        name = p.get('primary_name') or {}
-        surname = ' '.join(s.get('surname', '') for s in name.get('surname_list') or [])
-        label = ' '.join(filter(None, [name.get('first_name', ''), surname]))
-        keys = {k for k in (key(p.get('gramps_id') or ''), key(label)) if k}
+        label = label_of(p)
+        keys = keys_of(p)
         lo, hi = life_years(rules, ix, p)
         cells = []
         for c in cols:
