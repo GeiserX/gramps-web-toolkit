@@ -615,7 +615,8 @@ LEGACY = (
      'record': cmd_pares_record},
     {'id': 'genae', 'help': 'Genae, a volunteer index of parish baptisms, marriages and burials; public',
      'pace': gwt_genae.PACE, 'cache_rules': GENAE_RULES,
-     'controls': [{'argv': ['--given', 'Manuel', '--surname', 'Rodríguez'], 'min_count': 5}],
+     # the site's robots.txt disallows its search pages for every robot: no automated searches beyond the user's own
+     'controls': [],      # no canary on genae
      'result_markers': [r'data-registro-tipo='],
      'negative_markers': [r'data-aviso-cobertura="[^"]*\S', r'<tbody id="filas-\w+">\s*</tbody>'],
      'site_args': _site_args('GWT_GENAE_USER_AGENT', '~/.cache/gwt-gate-genae'), 'build': _default_build,

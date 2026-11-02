@@ -82,6 +82,12 @@ class Controls(Base):
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             gwt_read.parser().parse_args(['insee', 'control'])
 
+    def test_genae_adds_no_canary_searches(self):
+        # genae.org's robots.txt disallows its search pages: no automated canary there
+        for argv in (['genae', 'control'], ['genae', 'search', '--surname', 'X', '--controls', 'both', '--out', 'o']):
+            with self.subTest(argv[1]), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                gwt_read.parser().parse_args(argv)
+
 
 class Legacy(Base):
     def test_familysearch_control_counts_rows_of_its_public_canary(self):

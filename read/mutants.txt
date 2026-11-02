@@ -55,3 +55,4 @@ gwt_read.py | if e.verdict == 'blocked': | if True: | a 403 whose control read f
 gwt_read.py | except Paused: | except ZeroDivisionError: | a 403 whose control read meets a paused gate stays a 24 h block, never an exit 6 that records nothing
 gwt_read.py | if control and ark_id(control) in (None, ark): | if False: | a --control-ark that is not a 1:1 record ark, or is the record itself, exits 64 instead of being ignored
 gwt_read.py | if e.verdict == 'blocked': | if False: | a control that is refused too blocks the gate once, not twice (a second hit would triple the gap again)
+gwt_read.py | 'controls': [],      # no canary on genae | 'controls': [{'argv': ['--surname', 'X'], 'min_count': 5}], | genae gets no automated canary searches: its robots.txt disallows the search pages

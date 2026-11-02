@@ -65,12 +65,12 @@ gwt read boe search --name "Ana Zorvalo Quemada" --controls both --out runs/   #
 control	control	--given Cristóbal --surname Colón	25 read, want at least 10	ok
 ```
 
-`--controls before|after|both` on `search` runs the canaries around that search. A short canary before the search means no search; a short canary after it makes the run void (exit 3), so a lane never logs its zero as "none". To bracket a batch, run `control` before the first search and after the last one: a canary costs one search (two on PARES), so do not add it to every search.
+`--controls before|after|both` on `search` runs the canaries around that search. A short canary before the search means no search; a short canary after it makes the run void (exit 3), so a lane never logs its zero as "none". To bracket a batch, run `control` before the first search and after the last one: a canary costs one search, which is two requests on PARES (the search form, then the search), so do not add it to every search.
 
 | Source | Canary | Minimum rows |
 |---|---|---|
 | `pares` | `--given Cristóbal --surname Colón` (a surname alone is too broad: the site answers "too many results") | 10 |
-| `genae` | `--given Manuel --surname Rodríguez` | 5 |
+| `genae` | none: the site's robots.txt disallows its search pages for every robot, so gwt-read adds no automated searches there | |
 | `boe` | `--name "Manuel Rodríguez"` | 10 |
 | `familysearch` | `--surname Smith` | 10 |
 | `insee` | none: it reads files you downloaded, offline | |
@@ -215,7 +215,7 @@ Each row becomes a candidate. A baptism gives the child with the parents' first 
 
 A page that is not the block asked for (an empty frame, the search form, a captcha) is a STOP: nothing written, nothing cached, every lane pauses. A block the site answers with its notice that no books are indexed for those years in that place is a real answer with no rows.
 
-Genae publishes no terms for scripted use, and its robots.txt disallows `/buscar/` for crawlers. The reader keeps to a person's pace: one search of four requests a minute at most, each answer cached for a week, and it never pages. Genae rows are an index made by volunteers: a hit is a lead, and the act or the image behind it is the evidence.
+Genae publishes no terms for scripted use, and its robots.txt disallows `/buscar/` for crawlers. The reader keeps to a person's pace: one search of four requests a minute at most, each answer cached for a week, and it never pages. For the same reason Genae has no canary: `gwt read genae control` and `--controls` do not exist, so a Genae zero carries no proof the site could have answered. Genae rows are an index made by volunteers: a hit is a lead, and the act or the image behind it is the evidence.
 
 ## BOE and Gaceta de Madrid
 
