@@ -1,0 +1,46 @@
+gwt_geocode.py |             if d is not None and d > limit: |             if False: | a church, building or street further than its limit from its town falls back to the town's point
+gwt_geocode.py | limit = STREET_KM if kind == 'street' else | limit = SPOT_KM if kind == 'street' else | a street must lie within 2 km of its town, not the 5 km of a church
+gwt_geocode.py | return len(short) >= 2 and long_[-len(short):] == short and | return len(short) >= 2 and set(short) <= set(long_) and | a parish never matches a modern namesake that only shares its words (San Ejemplo is not San Ejemplo Obrero)
+gwt_geocode.py | (len(a) >= 3 and a[1:] == b[1:]) | False | Iglesia de San Ejemplo and Parroquia de San Ejemplo are one church: only the head word differs
+gwt_geocode.py | short != rules.fold(town).split() | True | a spot named after its town never takes a result that is only the town's name
+gwt_geocode.py |             if c['kind'] != want: |             if False: | a town of the same name is never the point of a church, and a church never the point of a town
+gwt_geocode.py |         if gid in self.overrides: |         if False: | an overrides row always wins over every provider
+gwt_geocode.py |             if h not in self.used: |             if False: | a container (a place no event uses) never gets a point written
+gwt_geocode.py | if kind in ('spot', 'street') and not ref: | if False: | a spot with no town above it gets no point, since nothing checks its distance
+gwt_geocode.py | if ctx['cc'] and c['cc'] and c['cc'] != ctx['cc']: | if False: | a result in another country than the hierarchy's is refused
+gwt_geocode.py | if ref is None and any( | if False and any( | two far namesakes with no town above to choose by give no answer, never the first one
+gwt_geocode.py | return any(mine & name_forms(n) for n in names if n) | return True | a town must carry the place's name, not a longer one (Saint-Exemple is not Saint-Exemple-sur-Mer)
+gwt_geocode.py | if have and (not self.recheck or h not in self.used): | if have and (h not in self.used): | a point already in the tree is kept, and no provider asked about it, unless --recheck
+gwt_geocode.py | if r['match'] == 'town-centroid':  # a hand-placed spot | if False:  # a hand-placed spot | --recheck never replaces a spot's own point in the tree with its town's point
+gwt_geocode.py | else MOVE_KM): | else 0.0): | --recheck ignores a move of a few metres, so a re-run is not a wall of noise ops
+gwt_geocode.py | PACE = {'nominatim.openstreetmap.org': 1.1} | PACE = {'nominatim.openstreetmap.org': 0.5} | Nominatim gets at most one request a second
+gwt_geocode.py |             if os.path.exists(p): |             if False: | a repeated question is answered from the disk cache, not the provider
+gwt_geocode.py | and (c['group'] is None or c['group'] != first['group']) for _, c in ok[1:]): | for _, c in ok[1:]): | a town's point and its municipality's centroid with one INE code are one place, not two namesakes
+gwt_geocode.py | ok.sort(key=lambda dc: (dc[0], dc[1]['rank'])) | ok.sort(key=lambda dc: (dc[0], -dc[1]['rank'])) | a town's own point is preferred to its municipality's centroid
+gwt_geocode.py | r['name'].split(',')[0] | r['name'] | a CartoCiudad toponym is named by its address up to the comma
+gwt_geocode.py | if cc is None and self.ptype(top) == 'Country': | if False: | a place under a country with no known code is never searched worldwide, so a namesake abroad cannot win
+gwt_geocode.py |         if self.unreadable_point(h):  # |         if False:  # | a point the tree holds in degrees and minutes is never overwritten, even with --recheck
+gwt_geocode.py | if t in LOCAL and self.town_above(h) is None: | if False: | a parish or farm with no town above is looked up as the settlement, not left unresolved as a spot
+gwt_geocode.py | if t in LOCAL and self.town_above(h) is None: | if t in LOCAL: | a parish under a town is its church, a spot, never a second town
+gwt_geocode.py | if exc.code == 403: | if False: | a host that blocks us (403) gets no more requests this run, and the note says to check --contact
+gwt_geocode.py | if final or self.failed[host] >= self.GIVE_UP: | if final: | a host that fails three questions in a row is given up, not asked once per place for hours
+gwt_geocode.py | except (OSError, http.client.HTTPException) as exc: | except (urllib.error.URLError,) as exc: | a reset or dropped connection is retried, not a crash that loses the whole run
+gwt_geocode.py | if isinstance(why, ssl.SSLError) or attempt == 2: | if attempt == 2: | a certificate error fails at once, it is not retried with 15 s of sleep per place
+gwt_geocode.py | data = json.loads(body) if body.strip() else None | data = json.loads(body) | an empty answer (CartoCiudad's 204) is no answer, not three retries
+gwt_geocode.py | except (OSError, ValueError):  # a damaged cache file | except ():  # a damaged cache file | a damaged cache file is asked again, not a crash on every later run
+gwt_geocode.py | raise BadInput('--out: %s' % exc) | raise | an --out that cannot be written stops with exit 2 before any request
+gwt_geocode.py | return 3 | return 0 | a run where no provider answered a single request exits 3, not 0
+gwt_geocode.py | ODD_ANSWER = (KeyError, IndexError, TypeError, AttributeError, ValueError) | ODD_ANSWER = (ZeroDivisionError,) | a provider answer in a shape it never documented is a note on that place, not a crash that loses the run
+gwt_geocode.py | encoding='utf-8-sig') as f:  # Excel | encoding='utf-8') as f:  # Excel | an overrides file saved with a byte-order mark still has its first row applied
+gwt_geocode.py | if any(not isinstance(e.get('place') or '', str) for e in events): | if False: | an event whose place is not a handle is a bad snapshot (exit 2), not a traceback
+gwt_geocode.py | ' '.join(str(r[c]).split()) | str(r[c]).replace('\t', ' ') | a line break in a place name or note never splits a report row in two
+gwt_geocode.py | for f in mine or feats: | for f in feats: | the BAN answers whose context names the place's département are kept, so a namesake commune elsewhere is not a tie
+gwt_geocode.py | q = ('%s %s' % (ctx['name'], dept)).strip() | q = ctx['name'] | the BAN is asked with the département, so the right commune is among its five answers
+gwt_geocode.py |             if other: |             if False: | a spot left at its town's point says which nearby answer was refused for its name
+gwt_geocode.py | self.failed[host] = 0 | self.failed[host] = self.failed.get(host, 0) | a host is given up after three failed questions in a row, not three over the whole run
+gwt_geocode.py | if exc.code not in self.RETRY or attempt == 2: | if attempt == 2: | a 404 or other plain error fails at once, it is not retried with sleeps
+gwt_geocode.py | + self.cc_errors.get(rules.fold(self.pname(top)), []))} | + [])} | the unknown-country note says which provider error kept the code from being known
+gwt_geocode.py | self.ok += 1  # a provider answered | self.ok += 0  # a provider answered | one answer from a provider is enough for exit 0
+gwt_geocode.py | self.ok += 1  # an earlier answer counts | self.ok += 0  # an earlier answer counts | an answer from the cache counts, so a warm re-run with one provider down is not exit 3
+gwt_geocode.py | if self.ptype(a) in ('Department', 'Province')), None)} | if self.ptype(a) in ('Department',)), None)} | the BAN is asked with the Province when the tree has no Department
+gwt_geocode.py | if d is not None and (other is None or d < other[0]): | if d is not None: | the note names the nearest answer refused for its name, not the last one

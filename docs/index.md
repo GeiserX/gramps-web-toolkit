@@ -60,7 +60,9 @@ The toolkit works for genealogy in any country. `gwt-spanish-poller` and some `g
 - [gwt-check](check.md): reads the whole tree and reports orphans, dangling links, broken pointers, likely duplicates, dates that contradict each other and what changed.
 - [gwt-import-excel](import-excel.md): turns a research workbook into a change list for review.
 - [gwt-leads](leads.md): reads a tree dump offline and ranks its gaps as queue tasks.
+- [Archives catalogue](archives.md): where records are kept in about 80 countries, for `gwt-leads --archives builtin:CC`.
 - [gwt-report](report.md): how two people are related, in English, Spanish and French, and what is new since the family was last told.
+- [gwt-geocode](geocode.md): coordinates for the places events use, in any country, as a change list for gwt-apply.
 
 ## Research tools
 
