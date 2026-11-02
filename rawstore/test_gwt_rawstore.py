@@ -296,6 +296,8 @@ class GitTest(Base):
         self.assertIn('D  raw/r1/0000.jpg', status)
         self.assertNotIn('??', status)
         self.assertEqual(open(os.path.join(folder, '.gitignore')).read(), '*.jpg\n')  # one line for 3 files
+        # git no longer shows a new scan saved there, so the run says how to store one
+        self.assertTrue(any('gwt-rawstore put --remove' in l for l in self.stdout), self.stdout)
         self.git('commit', '-qm', 'evict')
         self.assertEqual(self.git('show', 'HEAD~1:raw/r1/0001.jpg'), 'scan 1')
         self.assertEqual(R.verify(self.store, [folder], deep=True, log=self.log), 0)

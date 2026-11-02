@@ -413,6 +413,8 @@ def migrate(store, folder, prefix='', remove=False, jobs=4, log=print, evict=Fal
     git('add', '--sparse', '--', '.gitignore', cwd=folder)
     log('%s %d files in %d folders; review with git status, then commit'
         % ('evicted' if evict else 'untracked', len(files), len(by_folder)))
+    log('git now ignores new %s files under %s; store them with gwt-fetch --rawstore or gwt-rawstore put --remove %s'
+        % (', '.join(sorted({os.path.splitext(f)[1] for f in files})), folder, folder))
     return 0
 
 

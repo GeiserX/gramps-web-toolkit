@@ -124,7 +124,9 @@ A research repo that commits every scanned page slows every `git status`, commit
 
 1. New downloads: `gwt-fetch iiif URL --out raw/<folder> --rawstore`. Each image goes to the bucket and is deleted locally once the bucket confirms it; a later run of the same command skips it.
 2. Images already committed: on a full clone (a server is a good place), `gwt-rawstore migrate raw --evict`, review `git status`, commit. History is not rewritten.
-3. On a laptop with a sparse checkout (non-cone mode), add `!/raw/` to `.git/info/sparse-checkout` and run `git sparse-checkout reapply`. The manifests stay readable with `git show HEAD:raw/<folder>/rawstore.tsv`, and `gwt-rawstore get <sha256>` fetches any one image when you need to read it.
+3. Pull that commit on the laptop. Git deletes the untracked images there and keeps the manifests, so no sparse-checkout rule is needed; `gwt-rawstore get <path|sha256>` fetches any one image when you need to read it.
+
+After the migration git ignores new images in those folders, so a scan saved without `--rawstore` is neither committed nor stored; sweep with `gwt-rawstore put --remove raw`.
 
 ## Rate-limit gates
 
