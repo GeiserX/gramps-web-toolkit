@@ -38,9 +38,11 @@ gwt_lint/rules_tree.py |             if (cls, ref) in tagged: |             if F
 gwt_lint/rules_tree.py |     return isinstance(conf, (int, float)) and conf in (0, 1) |     return isinstance(conf, (int, float)) and conf in (0,) | confidence 1 is weak too
 gwt_lint/rules_tree.py |     return isinstance(conf, (int, float)) and conf in (0, 1) |     return isinstance(conf, int) and not isinstance(conf, bool) and conf in (0, 1) | confidence 1.0 or true is weak, as gwt-apply stores int(...)
 gwt_lint/rules_tree.py | any(w and w in fold(name) for w in folded) | any(w == fold(name) for w in folded) | any tag whose name holds a weak tag counts, as in gwt-report
-gwt_lint/rules_tree.py | not (len(w) == 4 and 1000 <= int(w) < 2200) | True | a year next to the word tree is not a count
-gwt_lint/rules_tree.py | <= 8 for i in trees for j in nums | <= 5 for i in trees for j in nums | a count a few words from the word tree is still a count
-gwt_lint/rules_tree.py |         words = [fold(w) for w in ctx.section("count").get("words") or TREE_WORDS] |         words = [fold(w) for w in TREE_WORDS] | [count] words in the config replace the built-in words
+gwt_lint/rules_tree.py | and not (len(w.strip("()[].,;:!?")) == 4 | and not (False | a year next to the word tree is not a count
+gwt_lint/rules_tree.py | for j in nums if abs(i - j) <= 8] | for j in nums if abs(i - j) <= 5] | a count a few words from the word tree is still a count
+gwt_lint/rules_tree.py |         words = {fold(w) for w in ctx.section("count").get("words") or TREE_WORDS} |         words = {fold(w) for w in TREE_WORDS} | [count] words in the config replace the built-in words
+gwt_lint/rules_tree.py | if words & set(fold(w).split())] | if any(fold(w).startswith(x) for x in words)] | a surname or place that starts with a tree word is no tree
+gwt_lint/rules_tree.py | if BARE_NUMBER.fullmatch(w) | if any(c.isdigit() for c in w) | the digits of a date or an ID are no count
 gwt_lint/cli.py |                 cfg.setdefault(sec, {})[field] = _ids(getattr(args, key)) |                 pass | --root and --protect reach the rules
 gwt_lint/framework.py | errors = validate([op for _, op in numbered]) if check else [] | errors = [] | a list gwt-apply would refuse exits 2, never lints clean
 gwt_lint/framework.py |     if isinstance(data, (list, dict)): |     if False: | a JSON array or {"ops": [...]} list is read like gwt-apply reads it

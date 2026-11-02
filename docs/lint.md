@@ -154,7 +154,7 @@ Nothing to check: no weak tag.
 
 | Code | When |
 |---|---|
-| `count-in-text` | new text has a number within eight words of the word "tree" in any of the locales (or a `[count] words` entry): «el árbol tiene 263 personas con este apellido». Such a count is wrong as soon as another list lands. A four-digit number from 1000 to 2199 is read as a year, not a count |
+| `count-in-text` | new text has a number within eight words of the word "tree" in any of the locales (or a `[count] words` entry): «el árbol tiene 263 personas con este apellido». Such a count is wrong as soon as another list lands. The tree word must be a whole word (`Baumann` or `Treeside` is no tree, and neither is the plural `trees`), and the number must stand alone, so the digits of `12-03-1850` or of an ID are no count. A four-digit number from 1000 to 2199 is read as a year. The finding quotes the words that fired |
 
 ## Proving the rules
 

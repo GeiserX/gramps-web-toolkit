@@ -22,6 +22,7 @@ from .framework import (MERGED, PROBABLE, Mutant, NothingToCheck, Rule, attach_t
 
 UPDATED = {"update_person": "Person", "update_family": "Family"}  # update_event has its own codes
 LINEAGE = {"", "Birth", "Unknown", "Adopted"}  # parent links that carry blood; Stepchild, Foster, Sponsored do not
+BARE_NUMBER = re.compile(r"[(\[]?\d+[)\].,;:!?]?")
 QUOTE = re.compile(r"«[^»]+»|“[^”]+”|\"[^\"]+\"")
 # The word "tree" in each locale of gwt_core; [count] words in lint.toml replaces it
 TREE_WORDS = ["tree", "árbol", "arbre", "albero", "árvore", "stammbaum", "baum", "stamboom", "zuhaitz", "árbore",
@@ -493,15 +494,21 @@ class Count(Rule):
     codes = {"count-in-text": "new text counts what the tree holds, which goes stale as soon as another list lands"}
 
     def check(self, ctx):
-        words = [fold(w) for w in ctx.section("count").get("words") or TREE_WORDS]
+        words = {fold(w) for w in ctx.section("count").get("words") or TREE_WORDS}
         out = []
         for op in ctx.ops:
             for t in texts(op):
-                toks = fold(t).split()
-                trees = [i for i, w in enumerate(toks) if any(w.startswith(x) for x in words)]
-                nums = [i for i, w in enumerate(toks) if w.isdigit() and not (len(w) == 4 and 1000 <= int(w) < 2200)]
-                if any(abs(i - j) <= 8 for i in trees for j in nums):
-                    out.append(self.finding("count-in-text", op, f"counts what the tree holds: {t[:60]!r}",
+                raw = t.split()
+                # whole words only, so Baumann or Treeside is no tree; a number only when it stands alone, so the
+                # digits of 12-03-1850 or of an ID are no count
+                trees = [i for i, w in enumerate(raw) if words & set(fold(w).split())]
+                nums = [i for i, w in enumerate(raw) if BARE_NUMBER.fullmatch(w)
+                        and not (len(w.strip("()[].,;:!?")) == 4 and 1000 <= int(w.strip("()[].,;:!?")) < 2200)]
+                near = [(i, j) for i in trees for j in nums if abs(i - j) <= 8]
+                if near:
+                    i, j = min(near, key=lambda p: abs(p[0] - p[1]))
+                    span = " ".join(raw[min(i, j):max(i, j) + 1])
+                    out.append(self.finding("count-in-text", op, f"counts what the tree holds: {span!r}",
                                             "write what the record says, or name the dated snapshot"))
         return out
 

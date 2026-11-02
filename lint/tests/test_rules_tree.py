@@ -279,3 +279,21 @@ def test_no_field_gwt_apply_takes_is_forgotten():
     for op, (required, optional) in SPECS.items():
         for f in sorted((required | optional) - NOT_TEXT):
             assert f in F.TEXT_FIELDS.get(op, ()) or f in F.LABELS, (op, f)
+
+
+@pytest.mark.parametrize("text", ["Hans Baumann had 3 sons.", "Lived at Treeside 12 with her aunt.",
+                                  "Arboleda 4, the family farm.", "Baptised 12-03-1850; the tree gives the same day.",
+                                  "Felled trees on folio 23 of the survey."])
+def test_count_matches_whole_words_and_bare_numbers_only(text):
+    # a surname or place that starts with a tree word, a plural, or a date split into digits is not a count
+    ctx = F.Context([{"op": "add_note", "key": "n", "_line": 1, "text": text, "attach": [{"person": "I1"}]}],
+                    F.Tree.load(TREE), {})
+    assert T.Count().check(ctx) == []
+
+
+def test_count_quotes_the_words_that_fired():
+    text = "Seen in the parish book. Today the tree has 12 people named Vega, all from the same village."
+    ctx = F.Context([{"op": "add_note", "key": "n", "_line": 1, "text": text, "attach": [{"person": "I1"}]}],
+                    F.Tree.load(TREE), {})
+    [f] = T.Count().check(ctx)
+    assert "'tree has 12'" in f.message
