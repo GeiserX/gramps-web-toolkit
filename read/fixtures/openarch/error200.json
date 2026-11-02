@@ -1,0 +1,5 @@
+{
+ "error_code": 11,
+ "error_description": "Missing required archive",
+ "request": "https://api.openarch.nl/1.1/records/show.json?archive=&identifier=&lang=en"
+}

@@ -1,0 +1,24 @@
+{
+ "Person": {
+  "@pid": "Person1",
+  "PersonName": {
+   "PersonNameFirstName": "Hendrik",
+   "PersonNameLastName": "Velderhoek"
+  }
+ },
+ "Event": {
+  "@eid": "Event1",
+  "EventType": "other:Handtekening",
+  "EventDate": {
+   "Year": "1878"
+  }
+ },
+ "RelationEP": {
+  "PersonKeyRef": "Person1",
+  "EventKeyRef": "Event1",
+  "RelationType": "other:Ondertekenaar"
+ },
+ "Source": {
+  "SourceType": "other:Verzoekschrift"
+ }
+}

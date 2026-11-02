@@ -1,0 +1,26 @@
+{
+ "version": "1x7o",
+ "session_context": {
+  "session_key": "guest",
+  "client_characterization": {
+   "client_ip": "203.0.113.7:sra",
+   "client_useragent": "gramps-web-toolkit (+https://github.com/GeiserX/gramps-web-toolkit):sua"
+  },
+  "is_guest": true
+ },
+ "request": {},
+ "response": {
+  "header": {
+   "succeeded": true
+  },
+  "body": {
+   "hits": {
+    "total": 0,
+    "returned": 0,
+    "hits": []
+   },
+   "aggregations": {}
+  },
+  "hit_schema": {}
+ }
+}

@@ -1,0 +1,10 @@
+# Mutations the wikitree tests must catch (format: see read/mutants.txt).
+gwt_wikitree.py | return API + '?' + urllib.parse.urlencode(list(params) + [('appId', APP_ID), ('fields', FIELDS)]) | return API + '?' + urllib.parse.urlencode(list(params) + [('fields', FIELDS)]) | every WikiTree call names the app with appId, as WikiTree asks
+gwt_wikitree.py | return isinstance(p, dict) and p.get('Privacy_IsAtLeastPublic') is True | return isinstance(p, dict) | a private WikiTree profile never becomes a candidate
+gwt_wikitree.py | return 'unknown'    # an error status, or the result container renamed: a STOP | return 'none' | a WikiTree answer whose container changed is unknown, a STOP, never "none"
+gwt_wikitree.py | if n == 0 and not d['matches']: | if not d['matches']: | a count above zero with no rows is unknown, never "none"
+gwt_wikitree.py | if isinstance(d.get('status'), str) and 'invalid' in d['status'].lower(): | if False: | the site's own "Invalid WikiTree ID" is "none" (exit 2), not a STOP
+gwt_wikitree.py | ('ancestors', max(1, min(int(ancestors), 10))) | ('ancestors', max(1, int(ancestors))) | --ancestors never asks for more than 10 generations
+gwt_wikitree.py | return y or None | return y | an unknown WikiTree date (0000-00-00) is no year, never year 0
+gwt_wikitree.py | if other: | if True: | a parent who is private, or not in the answer, is never listed as a relative
+gwt_wikitree.py | q.append(('dateInclude', 'both'))   # else WikiTree also returns every profile with no date at all | pass | --born and --died keep only profiles with the dates; without dateInclude=both WikiTree returns undated ones too

@@ -190,9 +190,9 @@ def write_manifest(path, rows):
 class Stop(Exception):
     """An answer that must end the run: nothing is saved as a result. exit_code is the process exit."""
 
-    def __init__(self, msg, exit_code=EXIT_ERROR, verdict=None):
+    def __init__(self, msg, exit_code=EXIT_ERROR, verdict=None, status=None):
         super().__init__(msg)
-        self.exit_code, self.verdict = exit_code, verdict
+        self.exit_code, self.verdict, self.status = exit_code, verdict, status
 
 
 # Bot walls, rate pages and captchas (Imperva/Incapsula, Cloudflare, Akamai, hCaptcha, reCAPTCHA), and the
@@ -299,7 +299,7 @@ class Reader:
                 self.gate.hit(self.lane, what)
             elif tell == 'dead':
                 self.gate.dead(self.lane, what)
-            raise Stop('%s (HTTP %s at %s)' % (why, state['status'], url), code, verdict)
+            raise Stop('%s (HTTP %s at %s)' % (why, state['status'], url), code, verdict, state['status'])
         return status, rh, body, 'status' not in state
 
 
@@ -312,7 +312,8 @@ class Reader:
 
 # Every module beside gwt_read that holds a source, in the order `gwt-read --help` lists them. A module with a
 # SPEC is a source by itself; the older ones (pares, genae, boe, insee) are declared in gwt_read.LEGACY.
-SOURCE_MODULES = ('gwt_pares', 'gwt_genae', 'gwt_boe', 'gwt_insee')
+SOURCE_MODULES = ('gwt_pares', 'gwt_genae', 'gwt_boe', 'gwt_insee',
+                  'gwt_openarch', 'gwt_wikitree', 'gwt_archiveorg', 'gwt_matchid')
 
 SPEC_KEYS = {'id': str, 'help': str, 'pace': dict, 'cache_rules': tuple, 'controls': list,
              'result_markers': list, 'negative_markers': list}
@@ -354,3 +355,21 @@ def classify(page, spec):
 def page_check(spec):
     """The `page` predicate for Reader.get: true for 'hits' and 'none', false for 'unknown'."""
     return lambda page: classify(page, spec) != 'unknown'
+
+
+# ---------------------------------------------------------------- open APIs: a server error is the service down
+
+
+def get_api(R, url, headers=None, expect=None, refresh=False, page=None):
+    """R.get for an open JSON API. A 5xx or no answer at all (a timeout, a refused connection) is the service down,
+    not an error in this one request: it becomes a wall (exit 3, the gate hears a hit), so a lane pauses and never
+    logs the search as "none" or moves on as if it had been read. Other answers are as R.get gives them."""
+    try:
+        return R.get(url, headers, expect=expect, refresh=refresh, page=page)
+    except Stop as e:
+        if e.verdict == 'http' and (e.status == 0 or 500 <= (e.status or 0) < 600):
+            what = 'HTTP %s %s' % (e.status, url[:120])
+            R.gate.hit(R.lane, what)
+            raise Stop('the service is down or not answering, read as a block, never as no results; every lane on '
+                       'this source pauses (HTTP %s at %s)' % (e.status, url), EXIT_WALL, 'wall', e.status) from None
+        raise

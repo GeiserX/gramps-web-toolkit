@@ -1,0 +1,13 @@
+# Mutations the openarch tests must catch (format: see read/mutants.txt).
+gwt_openarch.py | PACE = {'start': 2.0, 'floor': 2.0, 'ceil': 120.0} | PACE = {'start': 2.0, 'floor': 0.5, 'ceil': 120.0} | Open Archives is never asked faster than one request every 2 s
+gwt_openarch.py | if not isinstance(doc, dict) or 'error_code' in doc or not isinstance(doc.get('response'), dict): | if not isinstance(doc, dict) or not isinstance(doc.get('response'), dict): | an error the API answers with HTTP 200 is a STOP, never zero results
+gwt_openarch.py | if n == 0 and not docs: | if not docs: | a count above zero with no rows (a changed answer) is unknown, never "none"
+gwt_openarch.py | return 'unknown'    # an error answer, or the result container renamed: a STOP | return 'none' | an answer whose container changed is unknown, a STOP, never "none"
+gwt_openarch.py | return '%s/%s:%s' % (WEB, archive, uuid) | return '%s/%s:%s/en' % (WEB, archive, uuid) | a candidate's URL is the record's citation URL, https://www.openarchieven.nl/{archive}:{uuid}
+gwt_openarch.py | return r in PRINCIPAL or (r in CHILD and kind == 'birth') | return r in PRINCIPAL or r in CHILD | a child named in a marriage record is not its principal
+gwt_openarch.py | return r in PRINCIPAL or (r in CHILD and kind == 'birth') | return r in PRINCIPAL | the child of a birth or baptism record is its principal
+gwt_openarch.py | return x if isinstance(x, list) else [] if x is None else [x] | return x or [] | a record with one person (A2A gives an object, not a list) is read
+gwt_openarch.py | ('number_show', max(1, min(int(count), 100))) | ('number_show', max(1, int(count))) | a search never asks for more than the API's 100 rows
+gwt_openarch.py | ('start', max(0, min(int(start), 10000))) | ('start', max(0, int(start))) | a search never asks for a start the API refuses (over 10000)
+gwt_openarch.py | return page.lstrip('\ufeff').startswith('0 HEAD') | return bool(page) | an HTML page at a GEDCOM URL is a STOP, never saved as the record's GEDCOM
+gwt_openarch.py |         if p.get('Profession'): | if False: | a record's occupation reaches the candidate
