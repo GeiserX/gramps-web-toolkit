@@ -19,3 +19,5 @@ gwt_gate.py | if any(v is not None and v < 1 for v in (per_hour, burst)) or cool
 gwt_gate.py | if any(v is not None and v < 1 for v in (rows[r['host'].lower()]['per_hour'], | if False and any(v is not None and v < 1 for v in (rows[r['host'].lower()]['per_hour'], | a profiles row with a per_hour or burst below 1 is refused
 gwt_gate.py | path = os.path.abspath(os.path.expanduser(session)) | path = os.path.expanduser(session) | a relative session path is stored whole, so a lane in another directory does not unpark the account
 gwt_gate.py | s['auth'] = {} | pass | clear releases an expired account too, since a sign-in may never rewrite the watched file
+gwt_gate.py | ('cloudflare', ('cf-chl', 'cf_chl_opt', '<title>just a moment...</title>')), | ('cloudflare', ('cf-chl', 'cf_chl_opt', '/cdn-cgi/challenge-platform', '<title>just a moment...</title>')), | an ordinary page that loads Cloudflare's script is not called a wall
+gwt_gate.py | except OSError as exc:  # exit 1 means | except ZeroDivisionError as exc:  # exit 1 means | challenge on a file it cannot read exits 2, never 1 (no wall)

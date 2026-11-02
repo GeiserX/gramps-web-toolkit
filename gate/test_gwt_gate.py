@@ -444,8 +444,10 @@ class HumanAuthProfileTest(unittest.TestCase):
         self.assertEqual(G.challenge(page('imperva.html')), 'imperva')
         self.assertEqual(G.challenge(page('imperva_es.html').decode()), 'hcaptcha')
         self.assertEqual(G.challenge('', 'https://validate.perfdrive.com/?ssa=1'), 'perfdrive')
-        self.assertEqual(G.challenge('<script src="/cdn-cgi/challenge-platform/h/b/orchestrate"></script>'),
-                         'cloudflare')
+        self.assertEqual(G.challenge('<script>window._cf_chl_opt={cvId: "3"};</script>'), 'cloudflare')
+        # Cloudflare puts this script on ordinary pages too, so on its own it is no wall
+        self.assertIsNone(G.challenge('<ul><li>Record 1, 1890</li></ul>'
+                                      '<script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script>'))
         self.assertEqual(G.challenge('<title>Just a moment...</title>'), 'cloudflare')
         self.assertEqual(G.challenge('<div class="g-recaptcha" data-sitekey="x"></div>'), 'recaptcha')
         self.assertIsNone(G.challenge('<p>Fill in the captcha field of our contact form.</p>'))
@@ -489,6 +491,11 @@ class CliHumanProfileTest(unittest.TestCase):
             code, _, err = self.cli(*flags, 'wait', 'a')
             self.assertEqual(code, 2, flags)  # never a traceback, never a silent "no limit"
             self.assertIn('must be', err)
+
+    def test_challenge_on_a_file_it_cannot_read_exits_2_not_1(self):
+        code, out, err = self.cli('challenge', os.path.join(self.tmp.name, 'missing.html'))
+        self.assertEqual((code, out), (2, ''))  # 1 means "no wall": a missing page must never read as that
+        self.assertIn('missing.html', err)
 
     def test_auth_expired_and_eta(self):
         session = os.path.join(self.tmp.name, 'tok')

@@ -26,7 +26,8 @@ As a CLI (the state lives in --dir, so every process pointed at the same dir sha
                                     with --account A park, the gap stays; they resume when FILE changes
     gwt-gate eta <n>                seconds n more requests take at the current pace, caps and pause
     gwt-gate challenge [FILE]       name the bot wall (perfdrive, imperva, cloudflare, hcaptcha, recaptcha)
-                                    in a saved answer; exit 0 when one is found, 1 when none
+                                    in a saved answer; exit 0 when one is found, 1 when none, 2 when
+                                    the file cannot be read
 
 As a module:
 
@@ -341,7 +342,8 @@ def _mtime(path):
 CHALLENGES = (
     ('perfdrive', ('validate.perfdrive.com', 'perfdrive.com/', 'shieldsquare')),
     ('imperva', ('_incapsula_resource', 'incapsula incident')),
-    ('cloudflare', ('cf-chl', 'cf_chl_opt', '/cdn-cgi/challenge-platform', '<title>just a moment...</title>')),
+    # not /cdn-cgi/challenge-platform: Cloudflare loads that script on ordinary pages too
+    ('cloudflare', ('cf-chl', 'cf_chl_opt', '<title>just a moment...</title>')),
     ('hcaptcha', ('hcaptcha.com', 'class="h-captcha"')),
     ('recaptcha', ('google.com/recaptcha', 'class="g-recaptcha"')),
 )
@@ -450,7 +452,11 @@ def main(argv=None):
     sub.add_parser('challenge').add_argument('file', nargs='?', default='-', help='a saved answer; - for stdin')
     a = p.parse_args(argv)
     if a.cmd == 'challenge':
-        body = sys.stdin.buffer.read() if a.file == '-' else open(a.file, 'rb').read()
+        try:
+            body = sys.stdin.buffer.read() if a.file == '-' else open(a.file, 'rb').read()
+        except OSError as exc:  # exit 1 means "no wall", so a page that cannot be read must not end that way
+            print(f'gwt-gate: {exc}', file=sys.stderr)
+            return 2
         vendor = challenge(body)
         print(vendor or 'none')
         return 0 if vendor else 1

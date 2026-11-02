@@ -51,7 +51,7 @@ gate/gwt-gate wait-clear --probe 'curl -fsS -o /dev/null https://records.example
 
 ### Which wall is it?
 
-`challenge(body, url)` names the bot wall in an answer: `perfdrive` (Radware), `imperva` (Incapsula), `cloudflare`, `hcaptcha` or `recaptcha`, or `None`. A reader calls it on every answer it did not expect. A page that only uses the word "captcha" is not a wall. From a shell, `gwt-gate challenge saved.html` (or `-` for stdin) prints the vendor and exits 0, or prints `none` and exits 1.
+`challenge(body, url)` names the bot wall in an answer: `perfdrive` (Radware), `imperva` (Incapsula), `cloudflare`, `hcaptcha` or `recaptcha`, or `None`. A reader calls it on every answer it did not expect. A page that only uses the word "captcha" is not a wall, and neither is an ordinary page that loads Cloudflare's `/cdn-cgi/challenge-platform` script. A reCAPTCHA or hCaptcha widget does count, so call it on answers you did not expect, not on a results page that also carries a form with a captcha. From a shell, `gwt-gate challenge saved.html` (or `-` for stdin) prints the vendor and exits 0, prints `none` and exits 1, or exits 2 when it cannot read the file.
 
 ## One account signed out
 
@@ -133,7 +133,7 @@ gate/gwt-gate human my-lane 'hCaptcha' --url URL   # park every lane, notify a p
 gate/gwt-gate wait-clear --probe 'CMD'    # end the parking when CMD exits 0; exit 5 if it never does
 gate/gwt-gate auth-expired my-lane --account A --session FILE   # park one account until FILE changes, exit 4
 gate/gwt-gate eta 40                # seconds 40 more requests take
-gate/gwt-gate challenge page.html   # imperva, cloudflare, ... or none (exit 1)
+gate/gwt-gate challenge page.html   # imperva, cloudflare, ... or none (exit 1); exit 2 if unreadable
 ```
 
 | Flag | Environment | Default |
