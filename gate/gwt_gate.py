@@ -38,7 +38,8 @@ As a module:
     challenge(body, url)                       # 'imperva', 'cloudflare', ... or None
 
 Per-host limits a site publishes (robots.txt Crawl-delay, an API's stated rate) live in profiles.tsv:
---profile HOST applies one, so no lane goes faster than the site asks.
+--profile HOST applies one. Only calls made with the profile count against it, so every process on the
+gate dir must pass the same --profile.
 
 Settings come from flags, then GWT_GATE_* variables, then the defaults below. Standard library only.
 """
