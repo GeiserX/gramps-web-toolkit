@@ -56,3 +56,8 @@ gwt_read.py | except Paused: | except ZeroDivisionError: | a 403 whose control r
 gwt_read.py | if control and ark_id(control) in (None, ark): | if False: | a --control-ark that is not a 1:1 record ark, or is the record itself, exits 64 instead of being ignored
 gwt_read.py | if e.verdict == 'blocked': | if False: | a control that is refused too blocks the gate once, not twice (a second hit would triple the gap again)
 gwt_read.py | 'controls': [],      # no canary on genae | 'controls': [{'argv': ['--surname', 'X'], 'min_count': 5}], | genae gets no automated canary searches: its robots.txt disallows the search pages
+gwt_read.py | a.refresh = True    # the canaries prove the site works now, so the search they bracket is read now too | pass | a search bracketed by canaries is read fresh, never a cached zero the canaries say nothing about
+gwt_read.py | if before.get(name) != mtime: | if True: | a voided search removes only the files it wrote, never the other files in --out
+gwt_read.py | os.remove(os.path.join(folder, name)) | pass | a voided search leaves no envelope or candidates file that reads as "none"
+gwt_read.py | cache.forget(method, url, headers, data) | pass | a voided search leaves no cached answer, so the next run asks the site again
+gwt_read.py | if when in ('after', 'both') and code in (EXIT_OK, EXIT_EMPTY): | if when in ('after', 'both'): | the after-canaries run only when the search ended with rows or none, never after a STOP

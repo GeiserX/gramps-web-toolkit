@@ -134,6 +134,15 @@ class FSCacheTest(unittest.TestCase):
         self.assertEqual(self.cache.fetch('GET', RECORD, None, None, fake)[2], b'new')
         self.assertEqual(len(fake.calls), 2)
 
+    def test_forget_drops_one_answer(self):
+        fake = Fake()
+        self.cache.fetch('GET', RECORD, None, None, fake)
+        self.cache.fetch('GET', IMAGE, None, None, fake)
+        self.assertTrue(self.cache.forget('GET', RECORD))
+        self.assertFalse(self.cache.forget('GET', RECORD))
+        self.assertIsNone(self.cache.lookup('GET', RECORD))
+        self.assertIsNotNone(self.cache.lookup('GET', IMAGE), 'forget dropped another answer')
+
     def test_binary_bodies_round_trip(self):
         png = bytes(range(256)) * 40
         fake = Fake({IMAGE: (200, png)})

@@ -78,6 +78,39 @@ class Controls(Base):
         self.assertEqual(code, gwt_reader.EXIT_WALL)
         self.assertEqual(rows[-1][0], 'void')
 
+    def test_a_void_run_leaves_no_files_and_no_cached_none(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, NONE), (200, ONE), (200, RESULTS))
+        code, rows, _ = self.search(net, gate, '--controls', 'after')
+        self.assertEqual(code, gwt_reader.EXIT_WALL)
+        self.assertEqual(self.out_files(), [], 'a voided search left files that read as "none"')
+        self.assertEqual([r[0] for r in rows].count('removed'), 2)
+        code, _, _ = self.search(net, gate)      # the same search again, without controls
+        self.assertEqual((code, len(net.requests)), (0, 3), 'the voided "none" was served from the cache')
+
+    def test_a_void_run_keeps_other_files_in_the_folder(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, RESULTS), (200, NONE), (200, ONE))
+        self.run_src(['search', '--surname', 'Other', '--out', self.out], net, gate)
+        kept = self.out_files()
+        code, _, _ = self.search(net, gate, '--controls', 'after')
+        self.assertEqual((code, self.out_files()), (gwt_reader.EXIT_WALL, kept))
+
+    def test_controls_read_the_search_fresh_not_from_the_cache(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, NONE), (200, NONE), (200, RESULTS))
+        self.search(net, gate)
+        code, rows, text = self.search(net, gate, '--controls', 'after')
+        self.assertEqual((code, len(net.requests)), (gwt_reader.EXIT_EMPTY, 3), text)
+        self.assertNotIn('(cache)', text)
+
+    def test_after_canaries_skip_a_search_that_stopped(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, CAPTCHA))
+        code, rows, _ = self.search(net, gate, '--controls', 'after')
+        self.assertEqual((code, len(net.requests)), (gwt_reader.EXIT_WALL, 1))
+        self.assertNotIn('control', [r[0] for r in rows])
+
     def test_an_offline_source_has_no_control(self):
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             gwt_read.parser().parse_args(['insee', 'control'])

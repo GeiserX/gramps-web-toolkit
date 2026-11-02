@@ -65,7 +65,7 @@ gwt read boe search --name "Ana Zorvalo Quemada" --controls both --out runs/   #
 control	control	--given Cristóbal --surname Colón	25 read, want at least 10	ok
 ```
 
-`--controls before|after|both` on `search` runs the canaries around that search. A short canary before the search means no search; a short canary after it makes the run void (exit 3), so a lane never logs its zero as "none". To bracket a batch, run `control` before the first search and after the last one: a canary costs one search, which is two requests on PARES (the search form, then the search), so do not add it to every search.
+`--controls before|after|both` on `search` runs the canaries around that search, and reads the search itself without the cache, since the canaries only prove the site works now. A short canary before the search means no search. A short canary after it makes the run void (exit 3): the envelope and candidates files the search wrote are removed (one `removed` line each), and so are the answers it cached, so nothing on disk reads as "none" and the next run asks the site again. To bracket a batch, run `control` before the first search and after the last one: a canary costs one search, which is two requests on PARES (the search form, then the search), so do not add it to every search.
 
 | Source | Canary | Minimum rows |
 |---|---|---|

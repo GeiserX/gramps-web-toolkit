@@ -696,9 +696,10 @@ def _canary(src, sp, ctl, a, R):
     return n, code
 
 
-def run_controls(src, sp, a, R, when='control'):
+def run_controls(src, sp, a, R, when='control', undo=None):
     """Run every canary of the source. Prints one `control` line each; EXIT_OK when every one reads at least its
-    minimum, else EXIT_WALL with a `void` line: a run bracketed by a short canary proves nothing."""
+    minimum, else EXIT_WALL with a `void` line (after `undo()`, which removes what the bracketed search left): a run
+    bracketed by a short canary proves nothing."""
     short = 0
     for ctl in src['controls']:
         n, code = _canary(src, sp, ctl, a, R)
@@ -707,6 +708,8 @@ def run_controls(src, sp, a, R, when='control'):
         out('control\t%s\t%s\t%d read, want at least %d\t%s' % (when, ' '.join(ctl['argv']), n, ctl['min_count'],
                                                                'ok' if ok else 'SHORT'))
     if short:
+        if undo:
+            undo()
         out('void\t%s: %d of %d canaries read less than their minimum; read nothing here as "no results"'
             % (src['id'], short, len(src['controls'])))
         return gwt_reader.EXIT_WALL
@@ -759,17 +762,42 @@ def main(argv=None, urlopen=None, gate=None, srcs=None):
         return _run(R, cmd, a)
 
     def bracketed(a, R):
+        a.refresh = True    # the canaries prove the site works now, so the search they bracket is read now too
         if when in ('before', 'both'):
             c = run_controls(src, src['_search_parser'], a, R, 'before')
             if c:
                 return c
-        code = cmd(a, R)
+        files, stored = _listing(a.out), []
+        store = R.cache.store
+        R.cache.store = lambda *s: stored.append(s[:4]) or store(*s)
+        try:
+            code = cmd(a, R)
+        finally:
+            R.cache.store = store
         if when in ('after', 'both') and code in (EXIT_OK, EXIT_EMPTY):
-            c = run_controls(src, src['_search_parser'], a, R, 'after')
+            c = run_controls(src, src['_search_parser'], a, R, 'after', lambda: _undo(a.out, files, R.cache, stored))
             if c:
                 return c
         return code
     return _run(R, bracketed, a)
+
+
+def _listing(folder):
+    """{file name: mtime} of a folder, empty when it does not exist yet."""
+    try:
+        return {e.name: e.stat().st_mtime_ns for e in os.scandir(folder) if e.is_file()}
+    except OSError:
+        return {}
+
+
+def _undo(folder, before, cache, stored):
+    """A void run leaves nothing that reads as "none": the files the search wrote and the answers it cached go."""
+    for name, mtime in _listing(folder).items():
+        if before.get(name) != mtime:
+            os.remove(os.path.join(folder, name))
+            out('removed\t%s' % os.path.join(folder, name))
+    for method, url, headers, data in stored:
+        cache.forget(method, url, headers, data)
 
 
 def _run(R, cmd, a):
