@@ -176,6 +176,28 @@ Format: what happened, why, and the rule.
 
 **Rule.** Use a shared ledger ([`ledger/`](https://github.com/GeiserX/gramps-web-toolkit/tree/main/ledger)). Check it before every search, append to it after, negatives included.
 
+### 53. The image number you typed was not the image on screen
+
+**What happened.** A handwritten index gave act 412 for a baptism. A lane typed 412 into the scan viewer's image-number box, the URL changed to image 412, and the lane cited it. The screen still showed image 380, and act 412 was on image 97, so the citation pointed at the wrong page twice over.
+
+**Why.** A URL or a number box shows what was asked for, not what loaded, and an index's act number and folio count acts and leaves, not viewer images.
+
+**Rule.** After any move in a viewer (image-number box, URL parameter, arrow or filmstrip), read the image reference shown on screen before you cite it. Use an index's act number and folio to find the act, never as the image number. Put the images you looked at in the ledger query as a range, such as `book 12 images 40-85`, so a later check matches the same images ([ledger.md](ledger.md)).
+
+### 54. An empty search page is not a negative until you know the search ran
+
+**What happened.** A search filtered to 1850-1860 came back empty and the lane logged `none`; the same search without the date filter found the act, because the OCR had not read the year on that page. Another lane read a results table that was still loading and logged its empty frame as `none`. A third site, while throttling, answered with a normal page, HTTP 200 and zero results.
+
+**Why.** A search that did not really run looks the same as one that found nothing.
+
+**Rule.**
+
+- When a date-filtered search comes back empty, run it once without the filter before logging `none`.
+- Wait for real rows or the site's own "no results" message. A page still loading, a signed-out page, or a filter the site ignored (rows from outside it) is not a negative.
+- Before and after each batch, run a query you know returns a hit. If that control comes back empty, every empty answer between the two runs is `blocked`.
+- Search each spelling you would accept as the person, and log each as its own ledger row.
+- Anything you could not settle is `blocked`, not `none` (lesson 3). A captcha, challenge or throttling notice is a `gwt-gate hit`, and an account or IP block is `gwt-gate block` ([gate.md](gate.md)).
+
 ## Spanish civil registry (DICIREG) and e-notifications
 
 ### 27. One request per applicant, person and certificate type, every 7 days, across all offices
