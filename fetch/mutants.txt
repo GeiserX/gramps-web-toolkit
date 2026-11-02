@@ -44,3 +44,6 @@ gwt_fetch/iiif.py |     if store.done(stem, label, url, source): |     if False:
 gwt_fetch/iiif.py |         if marker == 0xFF:  # fill byte |         if False: | fill bytes before a JPEG marker do not hide the image's width
 gwt_fetch/iiif.py |     if data[:2] != b"\xff\xd8": |     if False: | a file that is not a JPEG is never read as one
 gwt_fetch/crop.py |                 if store.done(stem, label, url, row.get("manifest_url", "")): |                 if False: | a piece on disk without a row gets its row back and is not cut again
+gwt_fetch/iiif.py |         if data[i] != 0xFF: |         if False: | a byte that is not a marker ends the JPEG header read instead of being taken for one
+gwt_fetch/iiif.py | if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7: | if marker == 0xD8: | a restart marker, which has no length, is stepped over before the frame
+gwt_fetch/iiif.py | marker not in (0xC4, 0xC8, 0xCC): | True: | a Huffman table before the frame is not read as the frame, so its bytes are never taken for the width

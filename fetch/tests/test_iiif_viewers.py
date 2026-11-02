@@ -249,6 +249,17 @@ def test_pixel_width_reads_jpeg_and_png_headers():
         assert iiif.pixel_width(buf.getvalue()) == 777
 
 
+def test_pixel_width_skips_segments_that_are_not_a_frame():
+    sof = jpeg(3904)[2 + 18:]
+    # a Huffman table (0xC4) before the frame is not read as one, though its code sits in the SOF range
+    dht = b"\xff\xc4\x00\x0b" + b"\x00\x01\x01\x01\x01\x00\x00\x00\x00"
+    assert iiif.pixel_width(b"\xff\xd8" + dht + sof) == 3904
+    # a restart marker has no length to skip
+    assert iiif.pixel_width(b"\xff\xd8\xff\xd0" + sof) == 3904
+    # a byte that is not a marker ends the read, even when a frame-like marker code follows
+    assert iiif.pixel_width(b"\xff\xd8\x00" + sof[1:]) is None
+
+
 def test_iiif_without_a_url_or_image_base_stops_with_a_message():
     with pytest.raises(SystemExit, match="give a manifest or viewer URL"):
         iiif.run(ns(url=None), FakeClient({}))
