@@ -37,7 +37,7 @@ Each place is looked up by its own name and the names above it, through a chain 
 | `geonames-dump` | any country | A GeoNames dump file you download yourself from https://download.geonames.org/export/dump/ (a country file such as `IT.zip`, or `cities500.zip` for the world's towns), passed with `--geonames FILE`, read offline. Without `--geonames` it is skipped. |
 | `nominatim` | anywhere | OpenStreetMap's geocoder, https://nominatim.openstreetmap.org. At most one request a second, as its usage policy asks; `--contact` adds your e-mail address to the User-Agent. |
 
-Every answer is cached on disk (`--cache`, default `~/.cache/gwt-geocode`), so a second run asks nothing again. `--no-cache` asks again.
+Every answer is cached on disk (`--cache`, default `~/.cache/gwt-geocode`), so a second run asks nothing again. `--no-cache` asks again. A dropped connection, a timeout, 429 and 5xx are tried three times. A provider that blocks the tool (HTTP 403, usually a missing or made-up `--contact` for Nominatim) or fails three questions in a row gets no more requests that run; stderr says so once, and each place's note names the error.
 
 The country decides which providers apply. It is read from the top place of the hierarchy when its type is `Country`: a two-letter name is taken as the code, then the GeoNames dump and Nominatim are asked. When none of them knows the name, no place under that country is looked up, so a namesake in another country can never win; the report says so, and you give the code with `--country Ruritania=rr`.
 
@@ -75,7 +75,7 @@ The report on stdout has one row per event place, then the containers that have 
 | `distance_km` | For a spot, how far its point is from its town |
 | `lat`, `long`, `note` | The point, and what was refused on the way |
 
-A line on stderr counts the ops and each kind of match. The exit code is 0, or 2 for a snapshot or overrides file in the wrong shape.
+A line on stderr counts the ops and each kind of match. The exit code is 0; 2 for a snapshot or overrides file in the wrong shape, or an `--out` that cannot be written (checked before any request); 3 when no provider answered a single request.
 
 ## Related tools
 

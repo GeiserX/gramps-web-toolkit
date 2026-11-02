@@ -21,9 +21,11 @@ Rules:
   - a result in another country than the hierarchy's is refused;
   - an --overrides row (gramps_id, lat, long, note) always wins.
 Output: update_place ops with lat and long on --out, and a TSV report on stdout, one row per event place and per
-container place that has a point. Exit 2 on a bad input file. Standard library only.
+container place that has a point. Exit 2 on a bad input file or an --out that cannot be written, 3 when no provider
+answered a single request. Standard library only.
 """
-import argparse, gzip, hashlib, io, json, math, os, sys, time, urllib.error, urllib.parse, urllib.request, zipfile
+import argparse, gzip, hashlib, http.client, io, json, math, os, ssl, sys, time, urllib.error, urllib.parse, \
+    urllib.request, zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 try:
@@ -146,9 +148,13 @@ def load_overrides(path):
 # ---- transport ---------------------------------------------------------------------------------------------------
 
 class Http:
-    """GET JSON with a User-Agent, a pace per host and an on-disk cache. Nominatim's policy: one request a second."""
+    """GET JSON with a User-Agent, a pace per host and an on-disk cache. Nominatim's policy: one request a second.
+    A dropped connection, a timeout, 429 and 5xx are tried three times; anything else fails at once. A host that
+    blocks us (403) or fails three questions in a row gets no more requests this run."""
     PACE = {'nominatim.openstreetmap.org': 1.1}
     DEFAULT_PACE = 0.5
+    RETRY = (429, 500, 502, 503, 504)
+    GIVE_UP = 3
 
     def __init__(self, cache_dir=None, contact='', clock=time.monotonic, sleep=time.sleep, opener=None):
         self.cache_dir, self.clock, self.sleep = cache_dir, clock, sleep
@@ -156,6 +162,9 @@ class Http:
         self.opener = opener or urllib.request.urlopen
         self.last = {}
         self.requests = 0
+        self.ok = 0          # questions a provider answered
+        self.failed = {}     # host -> questions it failed
+        self.dead = {}       # host -> why it gets no more requests
 
     def _cache_path(self, url):
         return os.path.join(self.cache_dir, hashlib.sha256(url.encode()).hexdigest()[:32] + '.json')
@@ -166,9 +175,14 @@ class Http:
         if self.cache_dir:
             p = self._cache_path(url)
             if os.path.exists(p):
-                with open(p, encoding='utf-8') as f:
-                    return json.load(f)
+                try:
+                    with open(p, encoding='utf-8') as f:
+                        return json.load(f)
+                except (OSError, ValueError):  # a damaged cache file: ask again, the answer replaces it
+                    pass
         host = urllib.parse.urlsplit(url).hostname
+        if host in self.dead:
+            raise ProviderError(self.dead[host])
         for attempt in range(3):
             wait = self.last.get(host, -1e9) + self.PACE.get(host, self.DEFAULT_PACE) - self.clock()
             if wait > 0:
@@ -178,15 +192,23 @@ class Http:
             try:
                 req = urllib.request.Request(url, headers={'User-Agent': self.ua, 'Accept': 'application/json'})
                 with self.opener(req, timeout=60) as r:
-                    data = json.load(r)
+                    body = r.read()
+                data = json.loads(body) if body.strip() else None  # 204, no content: no answer
                 break
             except urllib.error.HTTPError as exc:
-                if exc.code not in (429, 500, 502, 503, 504) or attempt == 2:
-                    raise ProviderError('%s answered %s' % (host, exc.code))
-            except (urllib.error.URLError, TimeoutError, ValueError) as exc:
-                if attempt == 2:
-                    raise ProviderError('%s: %s' % (host, exc))
+                if exc.code == 403:
+                    self._fail(host, '%s answered 403: it blocks this client; check --contact' % host, final=True)
+                if exc.code not in self.RETRY or attempt == 2:
+                    self._fail(host, '%s answered %s' % (host, exc.code))
+            except (OSError, http.client.HTTPException) as exc:  # URLError, a reset, a dropped connection, a timeout
+                why = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+                if isinstance(why, ssl.SSLError) or attempt == 2:  # a certificate does not fix itself in 5 s
+                    self._fail(host, '%s: %s' % (host, why or type(exc).__name__))
+            except ValueError:
+                self._fail(host, '%s answered something that is not JSON' % host)
             self.sleep(5 * (attempt + 1))
+        self.ok += 1
+        self.failed[host] = 0
         if self.cache_dir:
             os.makedirs(self.cache_dir, exist_ok=True)
             p = self._cache_path(url)
@@ -194,6 +216,14 @@ class Http:
                 json.dump(data, f, ensure_ascii=False)
             os.replace(p + '.tmp', p)
         return data
+
+
+    def _fail(self, host, why, final=False):
+        self.failed[host] = self.failed.get(host, 0) + 1
+        if final or self.failed[host] >= self.GIVE_UP:
+            self.dead[host] = why + '; no more requests to it this run'
+            print('gwt-geocode: %s' % self.dead[host], file=sys.stderr)
+        raise ProviderError(why)
 
 
 def cand(lat, lon, kind, names, provider, confidence='', cc='', group=None, rank=0):
@@ -647,6 +677,10 @@ def main(argv=None, http=None):
     try:
         places, events = load_snapshot(a.snapshot)
         overrides = load_overrides(a.overrides) if a.overrides else {}
+        try:  # before any request: a long run must not end on a typo in --out
+            out = open(a.out, 'w', encoding='utf-8')
+        except OSError as exc:
+            raise BadInput('--out: %s' % exc)
         http = http or Http(None if a.no_cache else a.cache, a.contact)
         g = Geocoder(places, events, build_providers(names, http, a.geonames), overrides, a.recheck,
                      countries, a.lang)
@@ -654,7 +688,7 @@ def main(argv=None, http=None):
     except BadInput as exc:
         print('gwt-geocode: %s' % exc, file=sys.stderr)
         return 2
-    with open(a.out, 'w', encoding='utf-8') as f:
+    with out as f:
         for op in ops:
             f.write(json.dumps({**op, 'ruling': a.ruling}, ensure_ascii=False) + '\n')
     print('\t'.join(COLUMNS))
@@ -665,6 +699,9 @@ def main(argv=None, http=None):
         count[r['match']] = count.get(r['match'], 0) + 1
     print('gwt-geocode: %d ops to %s; %s' % (len(ops), a.out, ', '.join('%s %d' % kv for kv in sorted(count.items()))),
           file=sys.stderr)
+    if getattr(http, 'requests', 0) and not getattr(http, 'ok', 1):
+        print('gwt-geocode: no provider answered a single request; the notes say why', file=sys.stderr)
+        return 3
     return 0
 
 

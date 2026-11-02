@@ -1,6 +1,6 @@
 """Tests for gwt-geocode. An invented tree, recorded-shape provider answers with invented places, a fake transport:
 no request ever leaves this machine. Run: cd geocode && python3 -m pytest -q"""
-import contextlib, io, json, os, sys, tempfile, unittest
+import contextlib, http.client, io, json, os, ssl, sys, tempfile, unittest, urllib.error
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -337,6 +337,111 @@ class Transport(unittest.TestCase):
         self.assertEqual(len(seen), 1)
         self.assertIn('someone@example.org', seen[0])
         self.assertIn('github.com/GeiserX/gramps-web-toolkit', seen[0])
+
+
+class Resp(io.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def scripted(*answers):
+    """An opener that raises or returns each answer in turn (the last one repeats), and counts its calls."""
+    calls = []
+
+    def opener(req, timeout):
+        calls.append(req.full_url)
+        a = answers[min(len(calls), len(answers)) - 1]
+        if isinstance(a, BaseException):
+            raise a
+        return Resp(a)
+    return opener, calls
+
+
+def quiet_http(opener, cache=None):
+    return G.Http(cache, clock=lambda: 1e6, sleep=lambda s: None, opener=opener)
+
+
+class Failures(unittest.TestCase):
+    def http_error(self, code):
+        return urllib.error.HTTPError(G.Nominatim.URL, code, 'x', {}, None)
+
+    def test_a_dropped_connection_is_retried(self):
+        opener, calls = scripted(http.client.RemoteDisconnected('closed'), b'[{"x": 1}]')
+        self.assertEqual(quiet_http(opener).get_json(G.Nominatim.URL, {'q': 'a'}), [{'x': 1}])
+        self.assertEqual(len(calls), 2)
+
+    def test_a_reset_mid_body_is_retried(self):
+        opener, calls = scripted(ConnectionResetError(54, 'reset'), http.client.IncompleteRead(b''), b'[]')
+        self.assertEqual(quiet_http(opener).get_json(G.Nominatim.URL, {'q': 'a'}), [])
+        self.assertEqual(len(calls), 3)
+
+    def test_a_block_stops_every_later_request_to_that_host(self):
+        opener, calls = scripted(self.http_error(403))
+        h = quiet_http(opener)
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            for q in 'abc':
+                with self.assertRaises(G.ProviderError) as cm:
+                    h.get_json(G.Nominatim.URL, {'q': q})
+        self.assertEqual(len(calls), 1)
+        self.assertIn('--contact', str(cm.exception))
+        self.assertEqual(err.getvalue().count('nominatim.openstreetmap.org'), 1)
+
+    def test_a_host_that_keeps_failing_is_given_up(self):
+        opener, calls = scripted(urllib.error.URLError('no route'))
+        h = quiet_http(opener)
+        with contextlib.redirect_stderr(io.StringIO()):
+            for q in 'abcdefgh':
+                with self.assertRaises(G.ProviderError):
+                    h.get_json(G.Nominatim.URL, {'q': q})
+        self.assertEqual(len(calls), 9)  # three questions of three tries each, then none
+
+    def test_a_certificate_error_is_not_retried(self):
+        for exc in (urllib.error.URLError(ssl.SSLCertVerificationError('self-signed certificate')),
+                    ssl.SSLCertVerificationError('self-signed certificate')):
+            opener, calls = scripted(exc)
+            with self.assertRaises(G.ProviderError):
+                quiet_http(opener).get_json(G.Nominatim.URL, {'q': 'a'})
+            self.assertEqual(len(calls), 1)
+
+    def test_a_page_that_is_not_json_is_not_retried(self):
+        opener, calls = scripted(b'<html>busy</html>')
+        with self.assertRaises(G.ProviderError):
+            quiet_http(opener).get_json(G.Nominatim.URL, {'q': 'a'})
+        self.assertEqual(len(calls), 1)
+
+    def test_an_empty_answer_is_no_answer(self):
+        # CartoCiudad's /find answers 204 with no body for an unknown id
+        opener, calls = scripted(b'')
+        self.assertIsNone(quiet_http(opener).get_json(G.Nominatim.URL, {'q': 'a'}))
+        self.assertEqual(len(calls), 1)
+
+    def test_a_damaged_cache_file_is_asked_again(self):
+        opener, calls = scripted(b'[1]')
+        with tempfile.TemporaryDirectory() as d:
+            h = quiet_http(opener, d)
+            url = G.Nominatim.URL + '?q=a'
+            with open(h._cache_path(url), 'w') as f:
+                f.write('')
+            self.assertEqual(h.get_json(G.Nominatim.URL, {'q': 'a'}), [1])
+        self.assertEqual(len(calls), 1)
+
+    def test_no_provider_answering_exits_3(self):
+        opener, calls = scripted(urllib.error.URLError('no route'))
+        with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(io.StringIO()), \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            code = G.main(['--snapshot', TREE, '--out', os.path.join(d, 'c.jsonl'), '--no-cache'],
+                          http=quiet_http(opener))
+        self.assertEqual(code, 3)
+        self.assertIn('no provider answered', err.getvalue())
+
+    def test_an_out_file_that_cannot_be_written_stops_before_any_request(self):
+        http = FakeHttp()
+        with tempfile.TemporaryDirectory() as d, contextlib.redirect_stderr(io.StringIO()):
+            code = G.main(['--snapshot', TREE, '--out', os.path.join(d, 'nope', 'c.jsonl'), '--no-cache'], http=http)
+        self.assertEqual((code, http.calls), (2, []))
 
 
 class BadInputs(unittest.TestCase):

@@ -22,3 +22,11 @@ gwt_geocode.py | if cc is None and self.ptype(top) == 'Country': | if False: | a
 gwt_geocode.py |         if self.unreadable_point(h):  # |         if False:  # | a point the tree holds in degrees and minutes is never overwritten, even with --recheck
 gwt_geocode.py | if t in LOCAL and self.town_above(h) is None: | if False: | a parish or farm with no town above is looked up as the settlement, not left unresolved as a spot
 gwt_geocode.py | if t in LOCAL and self.town_above(h) is None: | if t in LOCAL: | a parish under a town is its church, a spot, never a second town
+gwt_geocode.py | if exc.code == 403: | if False: | a host that blocks us (403) gets no more requests this run, and the note says to check --contact
+gwt_geocode.py | if final or self.failed[host] >= self.GIVE_UP: | if final: | a host that fails three questions in a row is given up, not asked once per place for hours
+gwt_geocode.py | except (OSError, http.client.HTTPException) as exc: | except (urllib.error.URLError,) as exc: | a reset or dropped connection is retried, not a crash that loses the whole run
+gwt_geocode.py | if isinstance(why, ssl.SSLError) or attempt == 2: | if attempt == 2: | a certificate error fails at once, it is not retried with 15 s of sleep per place
+gwt_geocode.py | data = json.loads(body) if body.strip() else None | data = json.loads(body) | an empty answer (CartoCiudad's 204) is no answer, not three retries
+gwt_geocode.py | except (OSError, ValueError):  # a damaged cache file | except ():  # a damaged cache file | a damaged cache file is asked again, not a crash on every later run
+gwt_geocode.py | raise BadInput('--out: %s' % exc) | raise | an --out that cannot be written stops with exit 2 before any request
+gwt_geocode.py | return 3 | return 0 | a run where no provider answered a single request exits 3, not 0
