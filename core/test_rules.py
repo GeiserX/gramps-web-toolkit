@@ -27,10 +27,18 @@ class Tree:
         self.n += 1
         return f"{kind}{self.n:04d}"
 
-    def event(self, kind, year):
+    def event(self, kind, year, **date):
         h = self._h("e")
-        self.snap["events"].append({"handle": h, "type": kind, "date": {"dateval": [0, 0, year, False]}})
+        self.snap["events"].append({"handle": h, "type": kind, "date": {"dateval": [0, 0, year, False], **date}})
         return {"ref": h, "role": "Primary"}
+
+    def dated(self, kind, **date):
+        """A person whose only event is `kind` with this Gramps date."""
+        p = self.person()
+        h = self._h("e")
+        self.snap["events"].append({"handle": h, "type": kind, "date": date})
+        p["event_ref_list"].append({"ref": h, "role": "Primary"})
+        return p
 
     def person(self, born=None, died=None, baptised=None):
         p = {"handle": self._h("p"), "event_ref_list": [], "family_list": [], "parent_family_list": [],
@@ -159,6 +167,37 @@ class Living(unittest.TestCase):
         p = t.person()
         self.assertEqual(t.living(p), (True, "no-dates", None))
         self.assertEqual(t.living(p, undated=False), (False, "no-dates", None))
+
+    def test_an_uncertain_birth_is_read_by_its_latest_year(self):
+        # cutoff 1916: a range or span that ends after it may be someone born in 1930
+        t = Tree()
+        rng = t.dated("Birth", modifier=rules.MOD_RANGE, dateval=[0, 0, 1900, False, 0, 0, 1930, False])
+        self.assertEqual(t.living(rng), (True, "born-1930", 1930))
+        span = t.dated("Birth", modifier=rules.MOD_SPAN, dateval=[0, 0, 1905, False, 0, 0, 1925, False])
+        self.assertEqual(t.living(span), (True, "born-1925", 1925))
+        old = t.dated("Birth", modifier=rules.MOD_RANGE, dateval=[0, 0, 1800, False, 0, 0, 1810, False])
+        self.assertEqual(t.living(old), (False, "born-1810", 1810))
+
+    def test_born_after_gives_no_upper_bound(self):
+        t = Tree()
+        late = t.dated("Birth", modifier=rules.MOD_AFTER, dateval=[0, 0, 1920, False])
+        self.assertEqual(t.living(late, undated=False), (True, "born-after-1920", None))
+        # «aft 1911» may be 1950: it never makes anyone not living by itself
+        self.assertEqual(t.living(t.dated("Birth", modifier=rules.MOD_AFTER, dateval=[0, 0, 1911, False]))[0], True)
+
+    def test_other_calendars_read_through_sortval(self):
+        # Islamic 1400 and Persian 1359 are 1979/1980 CE: living, though their dateval years are below 1916
+        t = Tree()
+        islamic = t.dated("Birth", calendar=4, dateval=[1, 1, 1400, False], sortval=rules._sdn(1979, 11, 21))
+        self.assertEqual(t.living(islamic), (True, "born-1979", 1979))
+        persian = t.dated("Birth", calendar=5, dateval=[1, 1, 1359, False], sortval=rules._sdn(1980, 3, 21))
+        self.assertEqual(t.living(persian), (True, "born-1980", 1980))
+        hebrew = t.dated("Birth", calendar=2, dateval=[1, 1, 5600, False], sortval=rules._sdn(1839, 9, 9))
+        self.assertEqual(t.living(hebrew), (False, "born-1839", 1839))
+
+    def test_a_short_dateval_is_undated(self):
+        t = Tree()
+        self.assertEqual(t.living(t.dated("Birth", dateval=[0, 0])), (True, "no-dates", None))
 
     def test_apply_snapshot_shape_and_index(self):
         t = Tree()

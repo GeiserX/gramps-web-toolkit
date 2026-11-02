@@ -15,3 +15,7 @@ gwt_core/rules.py | y + gap | y | a sibling is born up to `gap` years apart
 gwt_core/rules.py | bound, reason = min(bounds) | bound, reason = max(bounds) | the tightest bound from relatives decides
 gwt_core/rules.py | if w not in particles | if True | a locale's particles are dropped from a folded name
 gwt_core/rules.py | if ID_CHECKS[kind](m.group(0))] | ] | an identity number counts only with a right check digit
+gwt_core/rules.py | return first + max(dv[6] - dv[2], 0) | return first | a range or span birth is read by its last year, or someone born in 1930 passes as not living
+gwt_core/rules.py | if d.get("modifier") == MOD_AFTER: | if False: | «after Y» has no end, so it is never an upper bound on the birth year
+gwt_core/rules.py | if after and max(after) >= cutoff: | if False: | born after a year inside the window is living
+gwt_core/rules.py | if not d.get("calendar"): | if True: | a date in another calendar is read through sortval, or an Islamic 1400 passes as 1400 CE

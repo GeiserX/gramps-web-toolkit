@@ -225,6 +225,35 @@ def _s(v) -> str:
     return (v.get("string") or "") if isinstance(v, dict) else (v or "")
 
 
+def _first_year(date: dict | None) -> int:
+    """The Gregorian year a date starts in; 0 when undated."""
+    d = date or {}
+    dv = d.get("dateval") or []
+    if len(dv) < 3 or not dv[2]:
+        return 0
+    if not d.get("calendar"):
+        return dv[2]
+    # Julian, Hebrew, French Republican, Persian, Islamic, Swedish: the year from the serial day number
+    sv = d.get("sortval") or 0
+    return datetime.date.fromordinal(sv - 1721425).year if sv > 1721425 else 0
+
+
+def latest_year(date: dict | None) -> int | None:
+    """The latest Gregorian year a Gramps date can fall in: the end of a range or span, the year itself for
+    the rest. 0 when undated, None for «after Y», which has no end. Every living bound is read this way, so an
+    uncertain date can only make a person more likely living, never less."""
+    d = date or {}
+    first = _first_year(d)
+    if not first:
+        return 0
+    if d.get("modifier") == MOD_AFTER:
+        return None
+    dv = d.get("dateval") or []
+    if d.get("modifier") in (MOD_RANGE, MOD_SPAN) and len(dv) >= 7 and dv[6]:
+        return first + max(dv[6] - dv[2], 0)
+    return first
+
+
 class Index:
     """A snapshot's people, families and events by handle, and who is in a DNA association. Build it once when
     asking about many people; possibly_living() builds one per call when given a raw snapshot.
@@ -248,17 +277,17 @@ class Index:
                 if _s(r.get("rel")).strip().casefold() == "dna":
                     self.dna |= {h, r.get("ref")}
 
-    def own_events(self, p: dict, types: set[str]) -> list[tuple[str, int]]:
-        """(type, year) of the person's own events of these types; year 0 when undated."""
+    def own_events(self, p: dict, types: set[str]) -> list[tuple[str, int | None, int]]:
+        """(type, latest year, first year) of the person's own events of these types; see latest_year()."""
         out = []
         for r in p.get("event_ref_list") or []:
             e = self.events.get(r.get("ref"))
             if e and _s(r.get("role")) in ("", "Primary") and _s(e.get("type")) in types:
-                out.append((_s(e.get("type")), ((e.get("date") or {}).get("dateval") or [0, 0, 0])[2]))
+                out.append((_s(e.get("type")), latest_year(e.get("date")), _first_year(e.get("date"))))
         return out
 
     def birth_year(self, p: dict | None) -> int:
-        years = [y for _, y in self.own_events(p, BIRTH_TYPES) if y] if p else []
+        years = [y for _, y, _ in self.own_events(p, BIRTH_TYPES) if y] if p else []
         return min(years) if years else 0
 
     def children(self, p: dict) -> list[dict]:
@@ -280,7 +309,8 @@ def possibly_living(person: dict, snapshot: dict | Index, *, years: int = LIVING
     evidence the reason names, or None. In order:
 
     1. a death, burial or cremation of their own: not living («death-recorded»);
-    2. a dated birth, baptism or christening of their own: living if less than `years` ago («born-1950»);
+    2. a dated birth, baptism or christening of their own: living if less than `years` ago («born-1950»), read
+       by its latest year (the end of a range or span); «after Y» with Y less than `years` ago is living;
     3. in a DNA association, either end: living («dna-match»), since a match is a person who took a test;
     4. relatives' dates: a child born Y means born by Y-14, a grandchild Y-28, a marriage Y-14, a sibling Y+`gap`;
        the tightest bound decides, living if it is less than `years` ago («child-born-1990»);
@@ -292,10 +322,14 @@ def possibly_living(person: dict, snapshot: dict | Index, *, years: int = LIVING
     end = ix.own_events(person, END_TYPES)
     if end:
         return False, f"{end[0][0].lower()}-recorded", None
-    own = sorted((y, t) for t, y in ix.own_events(person, BIRTH_TYPES) if y)
+    births = ix.own_events(person, BIRTH_TYPES)
+    own = sorted((y, t) for t, y, _ in births if y)
     if own:
         y, t = own[0]
         return y >= cutoff, f"{'born' if t == 'Birth' else 'baptised'}-{y}", y
+    after = [first for _, y, first in births if y is None]
+    if after and max(after) >= cutoff:
+        return True, f"born-after-{max(after)}", None
     if person.get("handle") in ix.dna:
         return True, "dna-match", None
     bounds = []
@@ -308,7 +342,7 @@ def possibly_living(person: dict, snapshot: dict | Index, *, years: int = LIVING
     for fh in person.get("family_list") or []:
         for r in (ix.families.get(fh) or {}).get("event_ref_list") or []:
             e = ix.events.get(r.get("ref")) or {}
-            if _s(e.get("type")) == "Marriage" and (y := ((e.get("date") or {}).get("dateval") or [0, 0, 0])[2]):
+            if _s(e.get("type")) == "Marriage" and (y := latest_year(e.get("date"))):
                 bounds.append((y - PARENT_AGE, f"married-{y}"))
     for fh in person.get("parent_family_list") or []:
         for c in (ix.families.get(fh) or {}).get("child_ref_list") or []:
