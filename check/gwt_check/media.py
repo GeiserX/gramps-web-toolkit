@@ -35,17 +35,32 @@ DUP_BITS = 20       # bits apart at most for two images on one citation to be th
 AFTER_READ = {"media-file-missing", "media-tiny", "media-uniform", "media-dup-page"}
 
 
+def _mime(o: dict) -> str:
+    """The stored MIME type, or the one its file name gives when none is stored."""
+    return (o.get("mime") or mimetypes.guess_type(o.get("path") or "")[0] or "").lower()
+
+
 def non_viewable(o: dict) -> str | None:
     """The MIME type of a media object Gramps Web shows only as an icon, or None."""
-    mime = (o.get("mime") or mimetypes.guess_type(o.get("path") or "")[0] or "").lower()
+    mime = _mime(o)
     if mime.startswith(NON_VIEWABLE_PREFIXES) or mime in NON_VIEWABLE:
         return mime
     return None
 
 
 def is_image(o: dict) -> bool:
-    mime = (o.get("mime") or "").lower()
-    return mime.startswith("image/") or mime == "application/pdf"
+    return _mime(o).startswith(("image/", "application/pdf"))
+
+
+def _hash(got: dict) -> int | None:
+    """The dHash a status carries, or None when it has none or a malformed one (a hand-edited dump)."""
+    h = got.get("dhash")
+    if not isinstance(h, str) or len(h) != HASH_SIDE * HASH_SIDE // 4:
+        return None
+    try:
+        return int(h, 16)
+    except ValueError:
+        return None
 
 
 def tone_share(hist: list[int]) -> float:
@@ -159,14 +174,15 @@ def media_checks(T: dict, status: dict, out, in_scope, info: dict, label) -> Non
         gid = o.get("gramps_id") or h
         mime = non_viewable(o)
         if mime:
-            out.add("media-non-viewable", gid, f"{mime}: shown as an icon; put its text in a Transcript note "
-                                               "(gwt-apply add_transcription), then detach it")
+            fix = ("put its text in a Transcript note (gwt-apply add_transcription), then detach it"
+                   if mime.startswith(NON_VIEWABLE_PREFIXES) else "unpack or convert it to an image or PDF, or detach it")
+            out.add("media-non-viewable", gid, f"{mime}: shown as an icon; {fix}")
         if got.get("file_missing"):
             out.add("media-file-missing", gid, f"no file on the server for {o.get('path') or 'its path'}: "
                                                "upload it again, or detach it")
-        if "w" in got and max(got["w"], got["h"]) < MIN_SIDE:
+        if isinstance(got.get("w"), int) and isinstance(got.get("h"), int) and max(got["w"], got["h"]) < MIN_SIDE:
             out.add("media-tiny", gid, f"{got['w']}x{got['h']} px: replace it with the full image, or detach it")
-        if got.get("tone", 0) >= UNIFORM_SHARE:
+        if isinstance(got.get("tone"), (int, float)) and got["tone"] >= UNIFORM_SHARE:
             out.add("media-uniform", gid, f"{got['tone']:.0%} of it is one tone: a blank, grey or failed image; "
                                           "replace it, or detach it")
     if unchecked:
@@ -176,7 +192,7 @@ def media_checks(T: dict, status: dict, out, in_scope, info: dict, label) -> Non
     # the same page twice on one citation: near thumbnails, different files (the same file is dup-media)
     for c in T["citations"].values():
         refs = [r.get("ref") for r in c.get("media_list") or [] if isinstance(r, dict)]
-        hashed = [(h, int(S[h]["dhash"], 16)) for h in dict.fromkeys(refs) if h in M and "dhash" in S[h]]
+        hashed = [(h, _hash(S[h])) for h in dict.fromkeys(refs) if h in M and _hash(S[h]) is not None]
         for i, (a, ha) in enumerate(hashed):
             for b, hb in hashed[i + 1:]:
                 if M[a].get("checksum") and M[a].get("checksum") == M[b].get("checksum"):
@@ -187,8 +203,8 @@ def media_checks(T: dict, status: dict, out, in_scope, info: dict, label) -> Non
                 if bits <= DUP_BITS:
                     pair = ",".join(sorted((label("media", a), label("media", b)), key=_id_order))
                     out.add("media-dup-page", f"{c.get('gramps_id') or c['handle']} {pair}",
-                            f"{bits} of {HASH_SIDE * HASH_SIDE} bits apart: the same page twice; "
-                            "detach one from the citation")
+                            f"{bits} of {HASH_SIDE * HASH_SIDE} bits apart: may be the same page twice, though pages "
+                            "of one printed form can look alike; compare them before detaching one")
 
 
 def _id_order(gid: str):

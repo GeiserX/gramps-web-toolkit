@@ -109,7 +109,7 @@ gwt_check/media.py | if not in_scope("media", h): | if False: | a run is not bla
 gwt_check/media.py | if "file_missing" not in got: | if False: | media the server was never asked about are counted
 gwt_check/media.py | max(got["w"], got["h"]) < MIN_SIDE: | min(got["w"], got["h"]) < MIN_SIDE: | tiny is the longer side, so a long thin strip is not tiny
 gwt_check/media.py | got["h"]) < MIN_SIDE: | got["h"]) <= MIN_SIDE: | an image of exactly MIN_SIDE px is not tiny
-gwt_check/media.py | if got.get("tone", 0) >= UNIFORM_SHARE: | if got.get("tone", 0) > UNIFORM_SHARE: | a share of exactly UNIFORM_SHARE is uniform
+gwt_check/media.py | got["tone"] >= UNIFORM_SHARE: | got["tone"] > UNIFORM_SHARE: | a share of exactly UNIFORM_SHARE is uniform
 gwt_check/media.py | if M[a].get("checksum") and M[a].get("checksum") == M[b].get("checksum"): | if False: | the same file twice is dup-media, not a same-page pair
 gwt_check/media.py | if not (in_scope("media", a) or in_scope("media", b)): | if False: | a same-page pair needs one side in scope
 gwt_check/media.py | if bits <= DUP_BITS: | if bits < DUP_BITS: | two images exactly DUP_BITS apart are the same page
@@ -121,3 +121,5 @@ gwt_check/client.py | if status in none_on: | if False: | a status the caller ex
 gwt_check/media.py | unread += bool(got.get("unread")) | unread += 0 | thumbnails --download could not read are counted in the report
 gwt_check/cli.py | if hasattr(args, "download"): | if True: | only check and dump ask the server which media files are missing
 gwt_check/media.py | except ApiError as exc: | except ImportError as exc: | a failing list of missing files is a note, not the end of the check
+gwt_check/media.py | return _mime(o).startswith(( | return (o.get("mime") or "").lower().startswith(( | an image with no MIME stored is measured by its file name
+gwt_check/media.py | if mime.startswith(NON_VIEWABLE_PREFIXES) else | if True else | an archive or JSON file is not told to go into a Transcript note

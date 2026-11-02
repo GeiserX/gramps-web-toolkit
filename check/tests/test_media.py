@@ -58,6 +58,17 @@ def test_non_viewable_by_mime_or_file_name(mime, path, want):
     assert media.non_viewable({"mime": mime, "path": path}) == want
 
 
+@pytest.mark.parametrize("mime,path,want", [
+    ("image/jpeg", "a.jpg", True),
+    ("application/pdf", "a.pdf", True),
+    ("", "escaneos/acta.jpg", True),     # no MIME stored: read from the file name, as non_viewable does
+    ("", "notas/acta.txt", False),
+    ("text/plain", "a.jpg", False),
+])
+def test_is_image_by_mime_or_file_name(mime, path, want):
+    assert media.is_image({"mime": mime, "path": path}) is want
+
+
 def test_tone_share_counts_the_window_around_the_top_tone():
     hist = [0] * 256
     hist[128] = 90
@@ -82,6 +93,20 @@ def test_a_text_file_is_non_viewable_and_suggests_a_transcript():
     d = _tree({"mime": "text/plain", "path": "ejemplo/acta.txt"})
     findings, _ = checks.run_checks(Tree(d, media_status=d[media.STATUS]))
     assert "add_transcription" in next(f["detail"] for f in findings if f["check"] == "media-non-viewable")
+
+
+@pytest.mark.parametrize("mime,path", [("application/x-tar", "ejemplo/fotos.tar"), ("application/json", "ejemplo/a.json")])
+def test_an_archive_or_json_file_is_not_told_to_become_a_transcript(mime, path):
+    d = _tree({"mime": mime, "path": path})
+    findings, _ = checks.run_checks(Tree(d, media_status=d[media.STATUS]))
+    detail = next(f["detail"] for f in findings if f["check"] == "media-non-viewable")
+    assert "add_transcription" not in detail and "unpack or convert" in detail
+
+
+def test_a_malformed_measure_in_a_dump_is_skipped_not_a_crash():
+    d = _tree(_measured(dhash="zz" * 32), _measured(dhash="0f"), _measured(w="40", h=None, tone="1"))
+    found, _ = _found(d)
+    assert found == set()
 
 
 def test_a_missing_file_is_found_and_an_unread_one_is_counted():
@@ -131,6 +156,14 @@ def _bits_apart(n):
 def test_the_same_page_twice_on_one_citation(bits, dup):
     found, _ = _found(_tree(_measured(dhash=_bits_apart(bits))))
     assert (("media-dup-page", "C0001 O0001,O0050") in found) is dup
+
+
+def test_a_same_page_pair_asks_to_compare_before_detaching():
+    # pages of one printed register or form can hash alike, so the finding is a lead, not a verdict
+    d = _tree(_measured(dhash="0f" * 32))
+    findings, _ = checks.run_checks(Tree(d, media_status=d[media.STATUS]))
+    detail = next(f["detail"] for f in findings if f["check"] == "media-dup-page")
+    assert "may be the same page" in detail and "compare them" in detail
 
 
 def test_near_images_on_two_citations_are_not_a_pair():
@@ -284,10 +317,13 @@ def _page(seed, shift=0, size=(1200, 1600)):
 
 
 def _thumb(img):
+    """The thumbnail as Gramps Web sends it: AVIF (PNG where this Pillow cannot write AVIF)."""
+    from PIL import features
+
     img = img.copy()
     img.thumbnail((media.THUMB, media.THUMB))
     buf = io.BytesIO()
-    img.save(buf, format="PNG")
+    img.save(buf, format="AVIF" if features.check("avif") else "PNG")
     return buf.getvalue()
 
 
