@@ -5,10 +5,13 @@ Several tools answer the same questions: may this person still be alive, are the
 It is a Python module, not a command. New tools import it; existing tools move to it one pull request at a time, so until a tool's page says it uses these rules, it still uses its own copy.
 
 ```python
+import gzip, json
 from gwt_core.rules import possibly_living, fold, read_date, dedication, find_ids, Index
 
-ix = Index(snapshot)                    # a `gwt-check dump` or a gwt-apply snapshot, loaded as JSON
-possibly_living(person, ix)             # (True, "child-born-1990", 1976)
+snapshot = json.load(gzip.open("tree.json.gz"))  # what `gwt-check dump tree.json.gz` wrote
+ix = Index(snapshot)                    # build once, then ask about every person
+person = snapshot["objects"]["people"][0]
+possibly_living(person, ix)             # e.g. (True, "child-born-1990", 1976)
 fold("Bermúdez de Castro", "es")        # "vermudez castro"
 read_date("12 de marzo de 1890", "es")  # a Gramps Date dict for 1890-03-12
 dedication("N.ª S.ª del Rosario", "es") # "nuestra senora del rosario"
@@ -44,7 +47,9 @@ Other evidence, each the latest year the person can have been born. A relative's
 
 Only the person's own events count for the first two rules (role `Primary`, or no role): a godparent at a 2001 baptism was not born in 2001. A DNA match is a person who took a test, so a match with no dates counts as living even with `undated=False`; a recorded date still wins over the association.
 
-`snapshot` is a `gwt-check dump` (`{"people": [...], "families": [...], "events": [...]}`), a gwt-apply snapshot (`{"objects": {"Person": [...], ...}}`), or the same maps keyed by handle. Asking about many people, build `Index(snapshot)` once and pass it instead.
+`snapshot` is a `gwt-check dump` (`{"objects": {"people": [...], "families": [...], "events": [...]}}`), a gwt-apply snapshot (`{"objects": {"Person": [...], ...}}`), the inner maps alone, or the same maps keyed by handle. Asking about many people, build `Index(snapshot)` once and pass it: given a raw snapshot, every call builds its own index, which on a tree of 20,000 people turns a fraction of a second into minutes.
+
+A tool that prints a list of possibly living people should group it by reason. In a tree with many DNA matches, `dna-match` can be most of the list and bury the people the rule inferred from dates.
 
 ## Folding names
 
@@ -54,7 +59,7 @@ Only the person's own events count for the first two rules (role `Primary`, or n
 
 `read_date(text)` reads gwt-apply's date grammar and returns the same Gramps Date dict as gwt-apply: `1890`, `1890-03-12`, `abt 1890`, `bef 1890-03`, `est 1890`, `bet 1880 and 1890`, `from 1880 to 1890`. Anything else raises `DateError`, so a date is never stored as text.
 
-With a locale, the date may also be written out: `12 de marzo de 1890` (es), `March 12th, 1890` (en), `le 1er août 1801` (fr), `12. März 1890` (de), `die 3 mensis Ianuarii anno Domini 1701` (la), `7bre 1750` (es, the old abbreviation for September). An `abt`, `bef` or `aft` in front still works. A written date must have exactly one month word, a year of three or four digits and at most one day; anything more is refused.
+With a locale, the date may also be written out: `12 de marzo de 1890` (es), `March 12th, 1890` (en), `le 1er août 1801` (fr), `12. März 1890` (de), `die 3 mensis Ianuarii anno Domini 1701` (la), `7bre 1750` (es, the old abbreviation for September). An `abt`, `bef` or `aft` in front still works. A written date must have exactly one month word, a year of three or four digits and at most one day from 1 to 31; anything more is refused. Not read yet, and refused rather than guessed: numeric forms such as `12/03/1890` and `12-III-1890`, a day in words (`primero de enero`), and `1.º de marzo`. A note may be in a neighbouring language, so a caller that does not know it tries each likely locale in turn (`es`, then `gl`, then `pt`).
 
 ## Locale tables
 

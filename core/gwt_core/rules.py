@@ -197,7 +197,7 @@ def _written(text: str, locale: str) -> str:
     if len(months) != 1 or months[0] is None or len(toks) - len(nums) != 1 or not nums or len(nums) > 2:
         raise DateError(f"unreadable date {text!r}")
     year = nums[-1]
-    if len(year) < 3 or (len(nums) == 2 and len(nums[0]) > 2):
+    if len(year) < 3 or (len(nums) == 2 and (len(nums[0]) > 2 or not int(nums[0]))):
         raise DateError(f"unreadable date {text!r}")
     return f"{year}-{months[0]:02d}" + (f"-{int(nums[0]):02d}" if len(nums) == 2 else "")
 
@@ -278,15 +278,15 @@ class Index:
     """A snapshot's people, families and events by handle, and who is in a DNA association. Build it once when
     asking about many people; possibly_living() builds one per call when given a raw snapshot.
 
-    Takes a `gwt-check dump` ({"people": [...], "families": [...], "events": [...]}), a gwt-apply snapshot
-    ({"objects": {"Person": [...], ...}}), or the same maps keyed by handle."""
+    Takes a `gwt-check dump` ({"objects": {"people": [...], "families": [...], "events": [...]}}), a gwt-apply
+    snapshot ({"objects": {"Person": [...], ...}}), the inner maps alone, or the same maps keyed by handle."""
 
     def __init__(self, snapshot: dict):
-        objs = snapshot.get("objects", snapshot)
+        objs = snapshot.get("objects") or snapshot
 
         def by_handle(*names):
             rows = next((objs[n] for n in names if objs.get(n) is not None), [])
-            return dict(rows) if isinstance(rows, dict) else {o["handle"]: o for o in rows}
+            return dict(rows) if isinstance(rows, dict) else {o["handle"]: o for o in rows if o.get("handle")}
 
         self.people = by_handle("people", "Person")
         self.families = by_handle("families", "Family")
@@ -294,7 +294,7 @@ class Index:
         self.dna: set[str] = set()
         for h, p in self.people.items():
             for r in p.get("person_ref_list") or []:
-                if _s(r.get("rel")).strip().casefold() == "dna":
+                if _s(r.get("rel")).strip().casefold() == "dna" and r.get("ref"):
                     self.dna |= {h, r.get("ref")}
 
     def own_events(self, p: dict, types: set[str] | None) -> list[tuple[str, int | None, int]]:

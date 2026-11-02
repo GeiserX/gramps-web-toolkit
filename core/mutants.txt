@@ -24,3 +24,5 @@ gwt_core/rules.py | self.own_events(p, None) if y] | self.own_events(p, BIRTH_TY
 gwt_core/rules.py | for sh in ix.handles(person.get("family_list"), "parents"): | for sh in (): | a spouse born in Y bounds the person at Y + gap
 gwt_core/rules.py | for ph in ix.handles(person.get("parent_family_list"), "parents"): | for ph in (): | a parent born in Y bounds the child at Y + PARENT_MAX_AGE
 gwt_core/rules.py | re.compile(rx, re.ASCII) | re.compile(rx) | Arabic-Indic or fullwidth digits are not an identity number, and must not crash the check
+gwt_core/rules.py | == "dna" and r.get("ref"): | == "dna": | a DNA association with no ref must not make a person with no handle a match
+gwt_core/rules.py | (len(nums[0]) > 2 or not int(nums[0])) | len(nums[0]) > 2 | day 0 is refused, not read as a month-only date

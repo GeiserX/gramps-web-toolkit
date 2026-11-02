@@ -241,6 +241,14 @@ class Living(unittest.TestCase):
         self.assertEqual(possibly_living(p, ix, this_year=YEAR)[1], "child-born-1990")
 
 
+    def test_odd_snapshot_shapes(self):
+        # an empty "objects", a row with no handle, a DNA association with no ref: no crash, no false match
+        self.assertEqual(rules.Index({"objects": None}).people, {})
+        self.assertEqual(rules.Index({"people": [{"gramps_id": "X"}, {"handle": "a"}]}).people, {"a": {"handle": "a"}})
+        loner = {"person_ref_list": [{"rel": "DNA"}]}
+        self.assertEqual(possibly_living(loner, {"people": [loner]}, undated=False), (False, "no-dates", None))
+
+
 class Fold(unittest.TestCase):
     def test_plain(self):
         self.assertEqual(rules.fold("  María-José  ÁLVAREZ, n.º 3 "), "maria jose alvarez n o 3")
@@ -293,7 +301,7 @@ class Dates(unittest.TestCase):
 
     def test_written_dates_refused(self):
         for text in ["12 de marzo", "31 de febrero de 1890", "12 de marzo y abril de 1890", "marzo de 90",
-                     "123 de marzo de 1890"]:
+                     "123 de marzo de 1890", "0 de marzo de 1890"]:
             with self.assertRaises(rules.DateError, msg=text):
                 rules.read_date(text, "es")
 
