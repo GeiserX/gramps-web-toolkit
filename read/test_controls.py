@@ -104,12 +104,6 @@ class Controls(Base):
         self.assertEqual((code, len(net.requests)), (gwt_reader.EXIT_EMPTY, 3), text)
         self.assertNotIn('(cache)', text)
 
-    def test_after_canaries_skip_a_search_that_stopped(self):
-        gate = FakeGate()
-        net = FakeNet(gate, (200, CAPTCHA))
-        code, rows, _ = self.search(net, gate, '--controls', 'after')
-        self.assertEqual((code, len(net.requests)), (gwt_reader.EXIT_WALL, 1))
-        self.assertNotIn('control', [r[0] for r in rows])
 
     def test_an_offline_source_has_no_control(self):
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
@@ -134,6 +128,16 @@ class Legacy(Base):
         self.assertEqual(code, 0, o.getvalue())
         self.assertIn('q.surname=Smith', net.requests[0].full_url)
         self.assertIn('12 read, want at least 10\tok', o.getvalue())
+
+    def test_after_canaries_skip_a_search_that_did_not_run(self):
+        gate = FakeGate()
+        net = FakeNet(gate)
+        o = io.StringIO()
+        with contextlib.redirect_stdout(o), contextlib.redirect_stderr(io.StringIO()):
+            code = gwt_read.main(['pares', '--cache-dir', self.cache, '--lane', 't', 'search', '--controls', 'after',
+                                  '--out', self.out], urlopen=net, gate=gate)
+        self.assertEqual((code, len(net.requests)), (gwt_read.EXIT_USAGE, 0), o.getvalue())
+        self.assertNotIn('control', o.getvalue())
 
     def test_boe_control_with_two_rows_is_void(self):
         gate = FakeGate()
