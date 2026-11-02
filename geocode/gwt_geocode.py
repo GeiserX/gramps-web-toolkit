@@ -577,7 +577,7 @@ class Geocoder:
         kind = ctx['kind']
         want = 'spot' if kind == 'street' else kind
         limit = STREET_KM if kind == 'street' else SPOT_KM if kind == 'spot' else LOCALITY_KM
-        ok = []
+        ok, other = [], None  # other: the nearest spot refused for its name, for the note
         for c in found:
             if c['kind'] != want:
                 continue
@@ -586,6 +586,9 @@ class Geocoder:
                 continue
             if want == 'spot':
                 if not any(same_ending(ctx['name'], n, ctx['lang'], ctx['town']) for n in c['names']):
+                    d = km((c['lat'], c['lon']), ref) if ref else None
+                    if d is not None and (other is None or d < other[0]):
+                        other = (d, c)
                     continue
             elif not same_name(ctx['name'], c['names']):
                 continue
@@ -596,6 +599,9 @@ class Geocoder:
                 continue
             ok.append((d or 0.0, c))
         if not ok:
+            if other:
+                notes.append('%s: nearest by another name is «%s», %.1f km from %s'
+                             % (other[1]['provider'], other[1]['names'][0], other[0], ctx['town']))
             return None
         ok.sort(key=lambda dc: (dc[0], dc[1]['rank']))
         first = ok[0][1]

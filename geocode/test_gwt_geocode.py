@@ -84,6 +84,11 @@ class Spots(unittest.TestCase):
         # «Parroquia de San Ejemplo Obrero» is 0.8 km away, but it is not «Iglesia de San Ejemplo»
         self.assertNotEqual(self.rows['P9004']['lat'], '40.007200')
 
+    def test_the_note_names_the_nearest_answer_refused_for_its_name(self):
+        # so the user can tell a namesake from nothing at all, and decide on an overrides row
+        self.assertIn('nominatim: nearest by another name is «Parroquia de San Ejemplo Obrero», 0.8 km',
+                      self.rows['P9004']['note'])
+
     def test_a_spot_near_its_town_gets_its_own_point(self):
         r = self.rows['P9005']
         self.assertEqual((r['match'], r['provider'], r['distance_km']), ('own-point', 'nominatim', '1.2'))
