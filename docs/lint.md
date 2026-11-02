@@ -15,13 +15,15 @@ gwt-lint --list-rules
 
 The snapshot is a `gwt-check dump` or a `gwt-apply --save-snapshot` file, plain or gzipped. Take it right before you lint: a list judged against an old tree is judged wrongly.
 
+The list may be JSON Lines, a JSON array or `{"ops": [...]}`, the shapes `gwt-apply` reads. Before any rule runs, `gwt-lint` runs `gwt-apply`'s own check of how each op is written, so a list `gwt-apply` would refuse exits 2 instead of linting clean.
+
 ## Exit codes
 
 | Exit | Meaning |
 |---|---|
 | 0 | every rule looked and found nothing |
 | 1 | at least one finding |
-| 2 | a rule had nothing to check (a missing setting, a root the snapshot does not have), or the list, snapshot or config cannot be read |
+| 2 | a rule had nothing to check (a missing setting, a root the snapshot does not have), the list, snapshot or config cannot be read, or `gwt-apply` would refuse the list |
 
 2 wins over 1. A run where one rule did not look is not a clean run, whatever the other rules found, so a missing `--root` can never pass as "no scope findings".
 
@@ -35,11 +37,11 @@ living: ok
 exit 2: a rule had nothing to check (1 finding from 3 rules)
 ```
 
-`-v` adds each rule's notes, such as the blood path of every person in scope (`I11 (Mario Ruiz): I1 > child I6 > spouse I11`). `--json` prints one object: `exit`, and per rule its `status` (`ok`, `findings` or `nothing`), the `reason` for `nothing`, its `info` notes and its `findings`, each with `rule`, `code`, `key`, `line`, `message` and `fix`.
+`-v` adds each rule's notes, such as the blood path of every person in scope (`I11 (Mario Ruiz): I1 > child I6 > spouse I11`). `--json` prints one object: `exit`, and per rule its `status` (`ok`, `findings` or `nothing`), the `reason` for `nothing`, its `info` notes and its `findings`, each with `rule`, `code`, `key`, `line`, `message` and `fix`. When the run cannot start (an unreadable input, a bad setting), `--json` prints `{"list", "exit": 2, "error"}`.
 
 ## Settings
 
-Options on the command line win over `lint.toml`. Folders in `lint.toml` are read relative to the file. All names and IDs below are invented.
+Options on the command line win over `lint.toml`. Folders in `lint.toml` are read relative to the file. A setting that takes a list of names also takes one name as a plain string (`roots = "I0001"`); a setting of the wrong type exits 2. All names and IDs below are invented.
 
 ```toml
 rules = ["scope", "protect", "living", "overlap", "weak", "count"]  # default: all of them

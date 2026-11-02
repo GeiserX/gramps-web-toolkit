@@ -40,3 +40,8 @@ gwt_lint/rules_tree.py | not (len(w) == 4 and 1000 <= int(w) < 2200) | True | a 
 gwt_lint/rules_tree.py | <= 8 for i in trees for j in nums | <= 5 for i in trees for j in nums | a count a few words from the word tree is still a count
 gwt_lint/rules_tree.py |         words = [fold(w) for w in ctx.section("count").get("words") or TREE_WORDS] |         words = [fold(w) for w in TREE_WORDS] | [count] words in the config replace the built-in words
 gwt_lint/cli.py |                 cfg.setdefault(sec, {})[field] = _ids(getattr(args, key)) |                 pass | --root and --protect reach the rules
+gwt_lint/framework.py | errors = validate([op for _, op in numbered]) if check else [] | errors = [] | a list gwt-apply would refuse exits 2, never lints clean
+gwt_lint/framework.py |     if isinstance(data, (list, dict)): |     if False: | a JSON array or {"ops": [...]} list is read like gwt-apply reads it
+gwt_lint/cli.py |                 where[key] = v = [v] |                 pass | one name in lint.toml may be a bare string
+gwt_lint/cli.py |         return _fail(args, f"{type(e).__name__}: {e}") |         raise | an unexpected error exits 2, never 1 (findings)
+gwt_lint/cli.py |     if getattr(args, "json", False): |     if False: | --json prints an input error as JSON on stdout too

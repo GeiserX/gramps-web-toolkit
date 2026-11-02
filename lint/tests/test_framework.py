@@ -163,3 +163,52 @@ def test_the_default_run_never_asks_for_a_field_gwt_apply_refuses(tmp_path):
                         os.path.join(FIX, "lint.toml")])
     assert code == 0, out
     assert "expect" not in out
+
+
+def test_a_json_array_or_ops_object_list_is_read_like_gwt_apply_reads_it(tmp_path):
+    op = {"op": "add_note", "key": "n", "ruling": "R-1", "text": "Witness at the wedding.", "attach": [{"person": "I1"}]}
+    for name, body in (("arr.json", [op]), ("obj.json", {"ops": [op]})):
+        lst = tmp_path / name
+        lst.write_text(json.dumps(body))
+        code, out, err = run([str(lst), "--snapshot", os.path.join(FIX, "tree.json"), "--rules", "scope", "--root", "I1"])
+        assert code == 0, (name, out, err)
+
+
+def test_a_list_gwt_apply_would_refuse_exits_2(tmp_path):
+    lst = tmp_path / "bad.jsonl"
+    lst.write_text('{"op": "add_note", "key": "n", "ruling": "R-1", "text": "x", "attach": [{"person": "I1"}], '
+                   '"colour": "red"}\n')
+    code, _, err = run([str(lst), "--snapshot", os.path.join(FIX, "tree.json"), "--rules", "count"])
+    assert code == 2 and "unknown fields ['colour']" in err
+
+
+def test_unreadable_bytes_and_bad_settings_exit_2_not_1(tmp_path):
+    latin = tmp_path / "latin.jsonl"
+    latin.write_bytes(b'{"op": "add_note", "key": "n", "ruling": "R", "text": "Jos\xe9", "attach": []}\n')
+    assert run([str(latin), "--snapshot", os.path.join(FIX, "tree.json")])[0] == 2
+    gz = tmp_path / "cut.json.gz"
+    gz.write_bytes(b"\x1f\x8b\x08\x00garbage")
+    assert run([EXAMPLE[0], "--snapshot", str(gz)])[0] == 2
+    for bad in ('[living]\nyears = "ninety"\n', '[weak]\ntag = ["weak", 3]\n', 'overlap = "x"\n',
+                '[protect]\nids = ["I10"]\nlocales = ["xx"]\n'):
+        cfg = tmp_path / "lint.toml"
+        cfg.write_text(bad)
+        code, out, err = run([os.path.join(FIX, "count-clean.jsonl"), "--snapshot", os.path.join(FIX, "tree.json"),
+                              "--config", str(cfg)])
+        assert code == 2, (bad, out, err)
+
+
+def test_a_one_name_setting_may_be_a_bare_string(tmp_path):
+    cfg = tmp_path / "lint.toml"
+    cfg.write_text('rules = "scope"\n[scope]\nroots = "I1"\n')
+    code, out, err = run([os.path.join(FIX, "scope-clean.jsonl"), "--snapshot", os.path.join(FIX, "tree.json"),
+                          "--config", str(cfg)])
+    assert code == 0, out + err
+
+
+def test_json_output_reports_an_input_error_on_stdout(tmp_path):
+    empty = tmp_path / "empty.jsonl"
+    empty.write_text("\n")
+    code, out, _ = run([str(empty), "--snapshot", os.path.join(FIX, "tree.json"), "--json"])
+    doc = json.loads(out)
+    assert code == 2 and doc["exit"] == 2 and "no ops" in doc["error"]

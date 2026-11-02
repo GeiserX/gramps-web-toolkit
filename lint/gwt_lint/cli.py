@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import tomllib
 from pathlib import Path
@@ -16,15 +17,39 @@ def _ids(values):
     return [i.strip() for v in values or [] for i in v.split(",") if i.strip()]
 
 
+SECTIONS = ("scope", "protect", "living", "overlap", "weak", "count")
+NAME_LISTS = {None: ("rules",), "scope": ("roots",), "protect": ("ids", "locales"), "weak": ("machine_sources",),
+              "count": ("words",)}  # settings that name things: a list, or one name as a bare string
+NUMBERS = {"living": ("years", "this_year")}
+TEXTS = {"overlap": ("open", "applied"), "weak": ("tag",)}
+
+
 def load_config(path) -> dict:
-    """lint.toml; folder settings are read relative to the file."""
+    """lint.toml, its types checked; folder settings are read relative to the file."""
     if not path:
         return {}
     try:
         with open(path, "rb") as fh:
             cfg = tomllib.load(fh)
-    except (OSError, tomllib.TOMLDecodeError) as e:
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as e:
         raise F.InputError(f"{path}: {e}") from None
+    for sec in SECTIONS:
+        if sec in cfg and not isinstance(cfg[sec], dict):
+            raise F.InputError(f"{path}: {sec} is a [{sec}] section")
+    for sec, keys in NAME_LISTS.items():
+        where = cfg if sec is None else cfg.get(sec) or {}
+        for key in keys:
+            v = where.get(key)
+            if isinstance(v, str):
+                where[key] = v = [v]
+            if v is not None and not (isinstance(v, list) and all(isinstance(x, str) for x in v)):
+                raise F.InputError(f"{path}: {key} is a list of names")
+    for table, kind, what in ((NUMBERS, int, "a whole number"), (TEXTS, str, "a text")):
+        for sec, keys in table.items():
+            for key in keys:
+                v = (cfg.get(sec) or {}).get(key)
+                if v is not None and (not isinstance(v, kind) or isinstance(v, bool)):
+                    raise F.InputError(f"{path}: [{sec}] {key} is {what}")
     base = Path(path).resolve().parent
     for key in ("open", "applied"):
         v = (cfg.get("overlap") or {}).get(key)
@@ -57,7 +82,25 @@ def build_parser():
 
 
 def main(argv=None):
+    """Any error the run did not expect exits 2 with one line, never 1, which means findings."""
     args = build_parser().parse_args(argv)
+    try:
+        return _main(args)
+    except BrokenPipeError:
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())  # the reader left: say nothing more
+        return 2
+    except Exception as e:  # noqa: BLE001 - the backstop: a crash must not read as findings
+        return _fail(args, f"{type(e).__name__}: {e}")
+
+
+def _fail(args, message):
+    if getattr(args, "json", False):
+        print(json.dumps({"list": args.list, "exit": 2, "error": message}, ensure_ascii=False, indent=1))
+    print(f"gwt-lint: {message}", file=sys.stderr)
+    return 2
+
+
+def _main(args):
     rules = F.registry()
     if args.list_rules:
         for r in rules.values():
@@ -66,8 +109,7 @@ def main(argv=None):
                 print(f"  {code:<18} {what}")
         return 0
     if not args.list or not args.snapshot:
-        print("gwt-lint: give a LIST and --snapshot DUMP", file=sys.stderr)
-        return 2
+        return _fail(args, "give a LIST and --snapshot DUMP")
     try:
         cfg = load_config(args.config)
         for key, sec, field in (("root", "scope", "roots"), ("protect", "protect", "ids")):
@@ -80,16 +122,13 @@ def main(argv=None):
         names = _ids([args.rules]) if args.rules else cfg.get("rules") or list(rules)
         unknown = [n for n in names if n not in rules]
         if unknown:
-            print(f"gwt-lint: no rule {', '.join(unknown)}; rules: {', '.join(rules)}", file=sys.stderr)
-            return 2
+            return _fail(args, f"no rule {', '.join(unknown)}; rules: {', '.join(rules)}")
         ops = F.read_list(args.list)
         tree = F.Tree.load(args.snapshot)
     except F.InputError as e:
-        print(f"gwt-lint: {e}", file=sys.stderr)
-        return 2
+        return _fail(args, str(e))
     if not ops:
-        print(f"gwt-lint: {args.list} has no ops", file=sys.stderr)
-        return 2
+        return _fail(args, f"{args.list} has no ops")
     ctx = F.Context(ops, tree, cfg, path=args.list, records=args.records)
     if args.prove:
         return _prove(ctx, [rules[n] for n in names], args.json)

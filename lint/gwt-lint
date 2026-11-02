@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import os, sys
 here = os.path.dirname(os.path.realpath(__file__))
-sys.path[:0] = [here, os.path.join(os.path.dirname(here), "core")]
+sys.path[:0] = [here] + [os.path.join(os.path.dirname(here), d) for d in ("core", "apply")]
 from gwt_lint.cli import main
 sys.exit(main())

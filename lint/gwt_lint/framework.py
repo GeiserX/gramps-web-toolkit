@@ -17,9 +17,11 @@ import gzip
 import importlib
 import json
 import os
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from gwt_apply.ops import validate
 from gwt_core.rules import DateError, Index, read_date
 
 RULE_MODULES = ["gwt_lint.rules_tree"]
@@ -114,29 +116,46 @@ def _read_json(path):
         if raw[:2] == b"\x1f\x8b":
             raw = gzip.decompress(raw)
         return json.loads(raw)
-    except (OSError, ValueError) as e:
+    except (OSError, ValueError, EOFError, zlib.error) as e:  # ValueError covers bad JSON and bad UTF-8
         raise InputError(f"{path}: {e}") from None
 
 
-def read_list(path) -> list[dict]:
-    """The ops of a JSON Lines change list; each gets `_line`, its line number."""
+def read_list(path, check=True) -> list[dict]:
+    """The ops of a change list in any shape gwt-apply reads (JSON Lines, a JSON array, or {"ops": [...]}),
+    each with `_line`: its line in JSON Lines, its place in the array otherwise. A list gwt-apply would refuse
+    is an InputError, so a malformed list can never lint clean; `check=False` (other open lists, still being
+    written) skips that."""
     try:
         text = Path(path).read_text(encoding="utf-8")
-    except OSError as e:
+    except (OSError, UnicodeDecodeError) as e:
         raise InputError(f"{path}: {e}") from None
-    ops = []
-    for n, line in enumerate(text.splitlines(), 1):
-        if not line.strip():
-            continue
-        try:
-            op = json.loads(line)
-        except ValueError as e:
-            raise InputError(f"{path}:{n}: not JSON: {e}") from None
+    try:
+        data = json.loads(text)
+    except ValueError:
+        data = None
+    if isinstance(data, (list, dict)):
+        ops = data["ops"] if isinstance(data, dict) and "ops" in data else [data] if isinstance(data, dict) else data
+        if not isinstance(ops, list):
+            raise InputError(f"{path}: ops is not a list")
+        numbered = list(enumerate(ops, 1))
+    else:
+        numbered = []
+        for n, line in enumerate(text.splitlines(), 1):
+            if not line.strip():
+                continue
+            try:
+                numbered.append((n, json.loads(line)))
+            except ValueError as e:
+                raise InputError(f"{path}:{n}: not JSON: {e}") from None
+    for n, op in numbered:
         if not isinstance(op, dict) or not isinstance(op.get("op"), str):
             raise InputError(f"{path}:{n}: not an op (an object with an `op` field)")
+    errors = validate([op for _, op in numbered]) if check else []
+    if errors:
+        raise InputError(f"{path}: gwt-apply would refuse this list:\n  " + "\n  ".join(errors))
+    for n, op in numbered:
         op["_line"] = n
-        ops.append(op)
-    return ops
+    return [op for _, op in numbered]
 
 
 def read_lists(folder, skip=None) -> dict[str, list[dict]]:
@@ -145,7 +164,7 @@ def read_lists(folder, skip=None) -> dict[str, list[dict]]:
     if not d.is_dir():
         raise NothingToCheck(f"no folder {folder}")
     skip = os.path.realpath(skip) if skip else None
-    return {p.name: read_list(p) for p in sorted(d.glob("*.jsonl")) if os.path.realpath(p) != skip}
+    return {p.name: read_list(p, check=False) for p in sorted(d.glob("*.jsonl")) if os.path.realpath(p) != skip}
 
 
 def text_of(v) -> str:
