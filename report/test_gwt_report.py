@@ -347,6 +347,10 @@ class DigestTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn('are they swapped?', err)
         self.assertNotIn('swapped', run('digest', '--from', OLD, '--to', NEW)[2])
+        del data['tree']  # a dump that names no tree is not a different tree
+        with open(other, 'w', encoding='utf-8') as fh:
+            json.dump(data, fh)
+        self.assertEqual(run('digest', '--from', OLD, '--to', other)[0], 0)
 
     def test_told_needs_audience(self):
         with redirect_stderr(io.StringIO()):
