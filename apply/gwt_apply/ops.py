@@ -697,6 +697,7 @@ class Applier:
         self._flushing = False
         self._unlink_notes: dict[str, list[str]] = {}  # op key -> link marks unlink_child still has to delete
         self._lost = False
+        self._list_deletes: set[tuple[str, str]] = set()  # (class, ref) of every object a delete op of the list takes
         client.touch = self._touch
 
     # -- references -------------------------------------------------------
@@ -883,6 +884,7 @@ class Applier:
         return results
 
     def _run(self, ops: list[dict], results: list[Result]) -> None:
+        self._list_deletes = {_delete_object(op["object"]) for op in ops if op.get("op") == "delete"}
         for op in ops:
             res = Result(op["key"], op["op"], op["ruling"])
             self._op_tags = list(dict.fromkeys(t for t in [self.run_tag, *_tag_names(op.get("tag"))] if t))
@@ -1598,6 +1600,10 @@ class Applier:
         """Take a note, citation or media reference off a target. The object stays in the tree (an orphan
         that gwt-check lists), so nothing is lost and attach_existing can put it back."""
         ocls, oref, lst = _parse_object(op["object"])
+        if self.verify and (ocls, oref) in self._list_deletes and self._find(ocls, oref) is None:
+            # detach, then delete: once the list has landed, the object is gone, so there is nothing to detach
+            self._absent(op, f"{ocls} {oref} is gone (a delete op of this list takes it)")
+            return
         handle = self.resolve(ocls, oref)
         cls, ref = _parse_target(op["target"])
         target, carrier, label = self.holder(cls, ref)

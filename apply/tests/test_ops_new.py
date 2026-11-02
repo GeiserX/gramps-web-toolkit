@@ -340,6 +340,10 @@ def test_delete_refuses_an_object_something_points_at(fake):
     ops = [{"op": "detach", "key": "x", "ruling": R, "target": {"person": "I0001"}, "object": {"note": "N0001"}}, op]
     assert [r.status for r in run(fake, ops, dry_run=True)] == ["done", "done"]
     assert [r.status for r in run(fake, ops)] == ["done", "done"] and "held" not in fake.store["notes"]
+    # --verify of that list: the detach finds the note gone because the delete took it, and that is the list landed
+    assert [r.status for r in run(fake, ops, verify=True)] == ["skip", "skip"]
+    # without the delete in the list, a note that is not there is still a conflict
+    assert run(fake, ops[:1], verify=True)[0].status == "conflict"
 
 
 def test_revert_makes_a_deleted_object_again_from_the_log_alone(fake, tmp_path):
