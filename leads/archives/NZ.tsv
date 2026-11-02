@@ -1,0 +1,3 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+New Zealand|Aotearoa|Nueva Zelanda|Nouvelle-Zélande|Neuseeland	country	DigitalNZ (Papers Past)	Newspapers with family notices	press,birth,marriage,death	1839-1999		https://api.digitalnz.org/records.json?text={given}+{surname}	online			2026-11-02	Works without a key at low volume
+New Zealand|Aotearoa|Nueva Zelanda|Nouvelle-Zélande|Neuseeland	country	NZ BDM Historical Records	Births 100, marriages 80, deaths 50 years closed	birth,marriage,death	1848-	1848	https://www.bdmhistoricalrecords.dia.govt.nz/	online			2026-11-02	

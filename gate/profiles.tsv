@@ -1,0 +1,13 @@
+# Limits sites publish themselves: a robots.txt Crawl-delay or an API's stated rate. One row per host.
+# per_hour: at most that many requests in any hour. burst, cooldown_s: at most burst requests in any
+# cooldown_s seconds (a Crawl-delay of D is burst 1, cooldown_s D). fresh_profile: yes when the site wants a
+# new browser profile for every query (the gate cannot do that for you: plan the run for it).
+# Every row cites its source in notes. Only add a limit the site publishes; a limit you met is a hard-won note.
+host	per_hour	burst	cooldown_s	fresh_profile	notes
+geneteka.genealodzy.pl		1	120	no	robots.txt Crawl-delay: 120 (checked 2026-11-02) https://geneteka.genealodzy.pl/robots.txt
+www.digitalarkivet.no		1	5	no	robots.txt Crawl-delay: 5 (checked 2026-11-02) https://www.digitalarkivet.no/robots.txt
+www.jerseyheritage.org		1	10	no	robots.txt Crawl-delay: 10 (checked 2026-11-02) https://www.jerseyheritage.org/robots.txt
+www.jewishgen.org		1	2	no	robots.txt Crawl-delay: 2 (checked 2026-11-02) https://www.jewishgen.org/robots.txt
+www.bibliotecanacionaldigital.gob.cl		1	2	no	robots.txt Crawl-delay: 2 (checked 2026-11-02) https://www.bibliotecanacionaldigital.gob.cl/robots.txt
+www.loc.gov		20	60	no	JSON/YAML API: 20 requests per minute, 1 hour block when exceeded (checked 2026-11-02) https://www.loc.gov/apis/json-and-yaml/working-within-limits/
+nominatim.openstreetmap.org		1	1	no	usage policy: an absolute maximum of 1 request per second (checked 2026-11-02) https://operations.osmfoundation.org/policies/nominatim/

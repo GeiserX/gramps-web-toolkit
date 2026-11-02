@@ -1,0 +1,3 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Hungary|Magyarország|Hungría|Ungarn|Hongrie	country	Hungaricana	County archives, cadastral maps, census 1828	census,land,directory,other	1700-1950	1895	https://library.hungaricana.hu/	browser	challenge			Probe: answered a script with HTTP 403 on 2026-11-02 (a bot check or a block); a browser may still get in
+Hungary|Magyarország|Hungría|Ungarn|Hongrie	country	MACSE	Parish register indexes	birth,marriage,death	1700-1900		https://macse.hu/	paid	disallow			Probe: robots.txt forbids scripts there (checked 2026-11-02)

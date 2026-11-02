@@ -1,0 +1,4 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Luxembourg|Luxemburg|Lëtzebuerg|Luxemburgo	country	Matricula: Luxembourg	Parish registers (images)	birth,marriage,death	1600-1923	1796	https://data.matricula-online.eu/en/luxemburg/	browser	disallow			Civil registration from 1796 is on FamilySearch. Probe: answered a script with HTTP 404 on 2026-11-02
+Luxembourg|Luxemburg|Lëtzebuerg|Luxemburgo	country	eluxemburgensia (BnL)	Newspapers (OCR)	press	1841-1950		https://eluxemburgensia.lu/	online			2026-11-02	
+Luxembourg|Luxemburg|Lëtzebuerg|Luxemburgo	country	Archives nationales de Luxembourg	Notarial, state, emigration	notarial,migration,other	1795-1950		https://anlux.public.lu/	online	ok		2026-11-02	

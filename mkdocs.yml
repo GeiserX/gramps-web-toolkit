@@ -135,6 +135,7 @@ nav:
       - gwt-check: check.md
       - gwt-import-excel: import-excel.md
       - gwt-leads: leads.md
+      - Archives catalogue: archives.md
       - gwt-report: report.md
   - Research tools:
       - gwt-queue: queue.md

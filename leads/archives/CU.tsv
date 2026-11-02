@@ -1,0 +1,4 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Cuba|Kuba	country	Archivo Nacional de Cuba	Registro Civil from 1885, parish, immigration	birth,marriage,death,migration	1500-	1885	https://www.arnac.cu/	letter				Probe: robots.txt did not answer a script on 2026-11-02 (TLS error, timeout or server error), so the probe skipped it
+Cuba|Kuba	country	Digital Library of the Caribbean	Diario de la Marina and Caribbean press	press	1700-1960		https://dloc.com/	online			2026-11-02	
+Cuba|Kuba	country	CRL Digital Collections	Diario de la Marina, gazettes	press	1899-1909		https://digitalcollections.crl.edu/	browser			2026-11-02	
