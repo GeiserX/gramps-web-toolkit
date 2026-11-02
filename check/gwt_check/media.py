@@ -3,8 +3,8 @@
 
 What the server says about each media object's file is kept beside the objects, in the dump under STATUS, so a
 saved dump carries it and an offline check of that dump reports the same findings. The objects themselves stay
-as the server sent them: gwt-apply writes objects from a dump back to the server. Pillow is optional: without it the image kinds are skipped
-with a note, never a crash.
+as the server sent them: gwt-apply writes objects from a dump back to the server. Pillow is optional: without
+it the image kinds are skipped with a note, never a crash.
 """
 
 from __future__ import annotations
@@ -131,8 +131,8 @@ def annotate(client, objects: dict, status: dict | None = None, *, download: boo
     try:
         import PIL  # noqa: F401
     except ImportError:
-        print("gwt-check: --download needs Pillow (pip install pillow); media-tiny, media-uniform and "
-              "media-dup-page skipped", file=sys.stderr)
+        print("gwt-check: --download needs Pillow (pipx inject gramps-web-toolkit pillow, or pip install pillow "
+              "beside gwt-check); media-tiny, media-uniform and media-dup-page skipped", file=sys.stderr)
         return status
     todo = [o for o in media if is_image(o) and not status[o["handle"]].get("file_missing")]
     def one(o):
@@ -175,7 +175,8 @@ def media_checks(T: dict, status: dict, out, in_scope, info: dict, label) -> Non
         mime = non_viewable(o)
         if mime:
             fix = ("put its text in a Transcript note (gwt-apply add_transcription), then detach it"
-                   if mime.startswith(NON_VIEWABLE_PREFIXES) else "unpack or convert it to an image or PDF, or detach it")
+                   if mime.startswith(NON_VIEWABLE_PREFIXES) else
+                   "unpack or convert it to an image or PDF, or detach it")
             out.add("media-non-viewable", gid, f"{mime}: shown as an icon; {fix}")
         if got.get("file_missing"):
             out.add("media-file-missing", gid, f"no file on the server for {o.get('path') or 'its path'}: "
