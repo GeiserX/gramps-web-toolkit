@@ -183,7 +183,9 @@ class Http:
             if os.path.exists(p):
                 try:
                     with open(p, encoding='utf-8') as f:
-                        return json.load(f)
+                        data = json.load(f)
+                    self.ok += 1  # an earlier answer counts: a warm re-run with one provider down still answered
+                    return data
                 except (OSError, ValueError):  # a damaged cache file: ask again, the answer replaces it
                     pass
         host = urllib.parse.urlsplit(url).hostname
@@ -213,7 +215,7 @@ class Http:
             except ValueError:
                 self._fail(host, '%s answered something that is not JSON' % host)
             self.sleep(5 * (attempt + 1))
-        self.ok += 1
+        self.ok += 1  # a provider answered
         self.failed[host] = 0
         if self.cache_dir:
             os.makedirs(self.cache_dir, exist_ok=True)

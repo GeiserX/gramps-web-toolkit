@@ -79,7 +79,7 @@ The report on stdout has one row per event place, then the containers that have 
 | `distance_km` | For a spot, how far its point is from its town |
 | `lat`, `long`, `note` | The point, and what was refused on the way |
 
-A line on stderr counts the ops and each kind of match. The exit code is 0; 2 for a snapshot or overrides file in the wrong shape, or an `--out` that cannot be written (checked before any request); 3 when no provider answered a single request.
+A line on stderr counts the ops and each kind of match. The exit code is 0; 2 for a snapshot or overrides file in the wrong shape, or an `--out` that cannot be written (checked before any request); 3 when no provider answered a single request (an answer from the cache counts).
 
 ## Related tools
 

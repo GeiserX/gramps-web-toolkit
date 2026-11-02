@@ -439,6 +439,58 @@ class Failures(unittest.TestCase):
             self.assertEqual(h.get_json(G.Nominatim.URL, {'q': 'a'}), [1])
         self.assertEqual(len(calls), 1)
 
+    def test_a_404_is_not_retried(self):
+        opener, calls = scripted(self.http_error(404))
+        with self.assertRaises(G.ProviderError):
+            quiet_http(opener).get_json(G.Nominatim.URL, {'q': 'a'})
+        self.assertEqual(len(calls), 1)
+
+    def test_an_answer_between_failures_resets_the_count(self):
+        # «three questions in a row»: fail, fail, answer, fail, fail leaves the host alive
+        def opener(req, timeout):
+            calls.append(req.full_url)
+            if 'q=ok' in req.full_url:
+                return Resp(b'[]')
+            raise urllib.error.URLError('no route')
+        calls = []
+        h = quiet_http(opener)
+        with contextlib.redirect_stderr(io.StringIO()):
+            for q in ('a', 'b', 'ok', 'c', 'd'):
+                try:
+                    h.get_json(G.Nominatim.URL, {'q': q})
+                except G.ProviderError:
+                    pass
+        self.assertEqual((len(calls), h.dead), (13, {}))
+
+    def test_one_answer_is_enough_for_exit_0(self):
+        opener, calls = scripted(b'[]', urllib.error.URLError('no route'))
+        with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(io.StringIO()), \
+                contextlib.redirect_stderr(io.StringIO()):
+            code = G.main(['--snapshot', TREE, '--out', os.path.join(d, 'c.jsonl'), '--no-cache'],
+                          http=quiet_http(opener))
+        self.assertEqual(code, 0)
+
+    def test_a_cached_answer_counts_as_an_answer(self):
+        # a warm re-run where the provider is down for the one new question still answered from the cache
+        opener, calls = scripted(b'[1]', urllib.error.URLError('no route'))
+        with tempfile.TemporaryDirectory() as d:
+            quiet_http(opener, d).get_json(G.Nominatim.URL, {'q': 'a'})
+            h = quiet_http(opener, d)
+            self.assertEqual(h.get_json(G.Nominatim.URL, {'q': 'a'}), [1])
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(G.ProviderError):
+                h.get_json(G.Nominatim.URL, {'q': 'b'})
+        self.assertEqual((h.requests, h.ok), (3, 1))
+
+    def test_the_unknown_country_note_names_the_provider_error(self):
+        opener, calls = scripted(self.http_error(403))
+        with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(io.StringIO()) as out, \
+                contextlib.redirect_stderr(io.StringIO()):
+            G.main(['--snapshot', TREE, '--out', os.path.join(d, 'c.jsonl'), '--no-cache',
+                    '--providers', 'nominatim'], http=quiet_http(opener))
+        row = next(line for line in out.getvalue().splitlines() if line.startswith('P9051\t'))
+        self.assertIn('--country Ruritania=CC', row)
+        self.assertIn('nominatim: nominatim.openstreetmap.org answered 403', row)
+
     def test_no_provider_answering_exits_3(self):
         opener, calls = scripted(urllib.error.URLError('no route'))
         with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(io.StringIO()), \
@@ -478,6 +530,49 @@ class OddAnswers(unittest.TestCase):
         self.assertIn('cartociudad: unexpected answer', rows['P9003'])
         self.assertIn('nominatim: unexpected answer', rows['P9003'])
         self.assertIn('ban: unexpected answer', rows['P9022'])
+
+
+def in_memory(places, events, providers, **kw):
+    """A Geocoder over a tree built in the test: places as (handle, gramps_id, name, type, parent, lat, long)."""
+    P = {h: {'handle': h, 'gramps_id': g, 'name': {'value': n}, 'place_type': t,
+             'placeref_list': [{'ref': par}] if par else [], 'lat': la, 'long': lo}
+         for h, g, n, t, par, la, lo in places}
+    return G.Geocoder(P, [{'handle': 'e%d' % i, 'place': h} for i, h in enumerate(events)], providers, **kw)
+
+
+class Spot:
+    """A provider that answers every spot question with the given candidates."""
+    name = 'fake'
+
+    def __init__(self, found):
+        self.found = found
+
+    def applies(self, ctx):
+        return True
+
+    def search(self, ctx):
+        return self.found
+
+
+class Choices(unittest.TestCase):
+    def test_ban_reads_a_province_when_there_is_no_department(self):
+        http = FakeHttp()
+        g = in_memory([('c', 'X1', 'France', 'Country', None, '', ''),
+                       ('p', 'X2', 'Provence Exemple', 'Province', 'c', '', ''),
+                       ('v', 'X3', 'Villexemple', 'Town', 'p', '', '')], ['v'], [G.Ban(http)],
+                      countries={'France': 'fr'})
+        g.run()
+        self.assertEqual(http.calls[0][1]['q'], 'Villexemple Provence Exemple')
+
+    def test_the_note_names_the_nearest_of_several_refused_answers(self):
+        near = G.cand(40.0045, -3.0, 'spot', ['Ermita Cercana'], 'fake')  # 0.5 km, listed first
+        far = G.cand(40.027, -3.0, 'spot', ['Ermita Lejana'], 'fake')   # 3.0 km, listed last
+        g = in_memory([('c', 'X1', 'ES', 'Country', None, '', ''),
+                       ('v', 'X2', 'Villaejemplo', 'Town', 'c', '40.0', '-3.0'),
+                       ('k', 'X3', 'Iglesia de San Foo', 'Church', 'v', '', '')], ['k'], [Spot([near, far])])
+        rows, _ = g.run()
+        note = next(r['note'] for r in rows if r['gramps_id'] == 'X3')
+        self.assertIn('«Ermita Cercana», 0.5 km', note)
 
 
 class BadInputs(unittest.TestCase):
