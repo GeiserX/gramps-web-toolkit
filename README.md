@@ -32,6 +32,7 @@ The toolkit works for genealogy in any country. One module, `spanish-poller`, is
 - `gwt-spanish-poller` (Spain only): watches Spanish civil-registry requests and the DEHú inbox read-only, and flags cases that vanish
 - `ocr-bench`: scores OCR, HTR and LLM readings of the same pages on how many names they recover
 - `gwt-report`: names how two people are related (in English, Spanish and French) with their common ancestors and implex, and lists what is new in the tree since the family was last told, with links
+- `gwt-import-gedcom`: turns a GEDCOM file into a gwt-apply change list for review, holding anyone already in the tree; also audits a GEDCOM and splits one into separate trees
 
 ## Quick start
 

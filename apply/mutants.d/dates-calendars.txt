@@ -1,0 +1,11 @@
+# Julian, French Republican and text-only dates (apply/tests/test_dates_calendars.py). file | text | replacement | why
+gwt_apply/dates.py | last = 30 if month < 13 else (6 if (year + 1) % 4 == 0 else 5) | last = 30 if month < 13 else 6 | a French year has six extra days only in years 3, 7, 11...
+gwt_apply/dates.py | leap = year % 4 == 0 and (calendar == CAL_JULIAN or year % 100 != 0 or year % 400 == 0) | leap = year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) | 1700-02-29 exists in the Julian calendar
+gwt_apply/dates.py | return (year * 1461) // 4 + (month - 1) * 30 + day + 2375474 | return (year * 1461) // 4 + (month - 1) * 30 + day + 2375475 | an XII 1 Vendemiaire is 1803-09-24
+gwt_apply/dates.py | return (year * 1461) // 4 + (month * 153 + 2) // 5 + day - 32083 | return (year * 1461) // 4 + (month * 153 + 2) // 5 + day - 32045 | a Julian date sorts on the Gregorian day it fell on
+gwt_apply/dates.py | if calendar == CAL_FRENCH and month and not year: | if False: | the French Republican calendar starts in year 1
+gwt_apply/dates.py | words = _AN.sub(lambda m: str(_roman(m.group(1))), " ".join(words)).split() | pass | a French year in Roman numerals («an XII») is read
+gwt_apply/dates.py | if raw[:5].lower() == "text:": | if False: | a text-only date is kept when the writer says text:
+gwt_apply/dates.py | if not raw[5:].strip(): | if False: | a text-only date needs its text
+gwt_apply/dates.py | text = (date.get("text") or "") if date.get("modifier") == MOD_TEXTONLY else "" | text = "" | two text-only dates with other texts are two dates
+gwt_apply/dates.py | date.get("calendar") or CAL_GREGORIAN, text) | CAL_GREGORIAN, text) | the same numbers in two calendars are two dates
