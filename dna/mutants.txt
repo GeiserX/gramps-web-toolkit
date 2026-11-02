@@ -18,4 +18,3 @@ gwt_dna.py |             if os.path.exists(n) and not a.force: |             if 
 gwt_dna.py |         raise BadInput(f"--tested {tested}: not in the snapshot") |         pass | a tested person who is not in the snapshot stops the run
 gwt_dna.py | SEGMENT_HEADER = "Chromosome,Start Location,End Location,Centimorgans,Matching SNPs" | SEGMENT_HEADER = "Chr,Start,End,cM,SNPs" | the segment note is the string Gramps Web was seen to accept
 gwt_dna.py | rows = sorted(segs, key=lambda s: (CHROM_ORDER.get(s["chromosome"], 99), s["chromosome"], s["start"])) | rows = segs | segments are written in chromosome order, X after 22
-gwt_dna.py | rows[0].count(",") < 3 or any(re.fullmatch | rows[0].count(",") < 3 or False and any(re.fullmatch | the offline reader refuses a table whose header is numbers, as Gramps Web reads it in a fixed order

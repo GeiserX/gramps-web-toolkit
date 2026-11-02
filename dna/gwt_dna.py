@@ -257,12 +257,11 @@ def _fmt(x) -> str:
 
 def parse_like_gramps_web(text: str) -> list[dict]:
     """The segments Gramps Web reads from a note (gramps_webapi/api/dna.py, parse_raw_dna_match_string, for a
-    comma-separated table with a header): what the DNA view will show. Used to check every note before it ships.
+    comma-separated table with a header row, which every note from here has): what the DNA view will show. Used to check every note before it ships.
     https://github.com/gramps-project/gramps-web-api/blob/77263b895c1d476dae9a655587956ec798536776/gramps_webapi/api/dna.py"""
     rows = text.strip().split("\n")
-    if len(rows) < 2 or rows[0].count(",") < 3 or any(re.fullmatch(r"\d[\d.,]*", c.strip())
-                                                       for c in rows[0].split(",")):
-        return []  # Gramps Web reads a table without a header in a fixed order; a note from here always has one
+    if len(rows) < 2 or rows[0].count(",") < 3:
+        return []
     head = [c.lower().strip() for c in rows[0].split(",")]
     taken: list[int] = []
 
