@@ -103,8 +103,8 @@ gwt_check/public.py | if not rep["rows"]: | if False: | a clean comparison says 
 gwt_check/media.py | or mimetypes.guess_type(o.get("path") or "")[0] or "").lower() | or "").lower() | a media object with no MIME stored is judged by its file name
 gwt_check/media.py | return sum(hist[max(0, top - TONE_WINDOW):top + TONE_WINDOW + 1]) / total | return sum(hist[max(0, top - TONE_WINDOW):top + TONE_WINDOW]) / total | the tone window reaches as far above the top tone as below it
 gwt_check/media.py | (a > b) | (a < b) | the dHash bit is set where the left neighbour is brighter
-gwt_check/media.py | "file_missing": o["handle"] in missing} | "file_missing": False} | a file the server lists as missing is marked missing
-gwt_check/media.py | todo = [o for o in media if is_image(o) and not status[o["handle"]]["file_missing"]] | todo = list(media) | no thumbnail is asked for a missing file or one that is not an image
+gwt_check/media.py | got["file_missing"] = o["handle"] in missing | got["file_missing"] = False | a file the server lists as missing is marked missing
+gwt_check/media.py | todo = [o for o in media if is_image(o) and not status[o["handle"]].get("file_missing")] | todo = list(media) | no thumbnail is asked for a missing file or one that is not an image
 gwt_check/media.py | if not in_scope("media", h): | if False: | a run is not blamed for old media
 gwt_check/media.py | if "file_missing" not in got: | if False: | media the server was never asked about are counted
 gwt_check/media.py | max(got["w"], got["h"]) < MIN_SIDE: | min(got["w"], got["h"]) < MIN_SIDE: | tiny is the longer side, so a long thin strip is not tiny
@@ -119,3 +119,5 @@ gwt_check/media.py | "pagesize": random.randrange(1, 2**62)}) | "pagesize": 1}) 
 gwt_check/media.py | NO_THUMB = frozenset(range(400, 500)) - {401, 429} | {501} | NO_THUMB = frozenset({404, 413, 415}) | a thumbnail the server cannot make (422, 501) is counted, not the end of the run
 gwt_check/client.py | if status in none_on: | if False: | a status the caller expects answers None instead of ending the run
 gwt_check/media.py | unread += bool(got.get("unread")) | unread += 0 | thumbnails --download could not read are counted in the report
+gwt_check/cli.py | if hasattr(args, "download"): | if True: | only check and dump ask the server which media files are missing
+gwt_check/media.py | except ApiError as exc: | except ImportError as exc: | a failing list of missing files is a note, not the end of the check

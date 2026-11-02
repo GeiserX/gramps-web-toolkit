@@ -330,3 +330,24 @@ def test_a_thumbnail_the_server_cannot_make_is_counted_not_the_end_of_the_run(ca
     assert status["hO0002"] == status["hO0003"] == {"file_missing": False, "unread": True}
     assert sum(p == "/media/hO0003/thumbnail/256" for p, _ in client.calls) == 1  # a 501 is not tried again
     assert "1 thumbnail(s) measured, 2 the server would not give" in capsys.readouterr().err
+
+
+def test_only_check_and_dump_ask_for_missing_files(monkeypatch, capsys):
+    server = _serve(monkeypatch, _bare())
+    assert main(["repos"]) == 0, capsys.readouterr().err
+    assert not [q for _, q in server.calls if "filemissing" in q]
+
+
+def test_a_failing_list_of_missing_files_is_a_note_not_the_end_of_the_check(monkeypatch, tmp_path, capsys):
+    import urllib.error
+
+    def broken_storage(server, t, q):  # media storage that errors: an S3 list failure answers 500
+        if "filemissing" in q:
+            raise urllib.error.HTTPError("", 500, "Internal Server Error", {}, io.BytesIO(b"{}"))
+    _serve(monkeypatch, _bare(), broken_storage)
+    import gwt_check.client as clientmod
+    monkeypatch.setattr(clientmod, "backoff", lambda attempt: 0)  # its five retries, without the waits
+    report = str(tmp_path / "r.json")
+    assert main(["check", "--json", report]) == 0
+    assert "list of missing files failed" in capsys.readouterr().err
+    assert json.load(open(report))["info"]["media files not checked"] == 1

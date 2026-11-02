@@ -15,6 +15,8 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 
+from .client import ApiError
+
 # dump key: {media handle: {"file_missing": bool}} from a live read, plus "w", "h", "tone", "dhash" with --download
 STATUS = "media_status"
 
@@ -97,10 +99,18 @@ def annotate(client, objects: dict, status: dict | None = None, *, download: boo
     media = list(media.values()) if isinstance(media, dict) else media
     # Gramps Web caches a list answer until the tree changes, and deleting a file changes nothing in the tree: a
     # pagesize it ignores without `page`, new on every call, keeps a cached answer from before the deletion out
-    _, rows = client.get("/media/", {"filemissing": 1, "keys": "handle", "pagesize": random.randrange(1, 2**62)})
-    missing = {r["handle"] for r in rows}
+    try:
+        _, rows = client.get("/media/", {"filemissing": 1, "keys": "handle", "pagesize": random.randrange(1, 2**62)})
+        missing = {r["handle"] for r in rows}
+    except ApiError as exc:  # media storage that fails (an S3 list, a slow share) must not end a tree check
+        print(f"gwt-check: media files not checked, the server's list of missing files failed: {exc}", file=sys.stderr)
+        missing = None
     old = status or {}
-    status = {o["handle"]: {**(old.get(o["handle"]) or {}), "file_missing": o["handle"] in missing} for o in media}
+    status = {}
+    for o in media:
+        got = status[o["handle"]] = {k: v for k, v in (old.get(o["handle"]) or {}).items() if k != "file_missing"}
+        if missing is not None:
+            got["file_missing"] = o["handle"] in missing
     if not download:
         return status
     try:
@@ -109,7 +119,7 @@ def annotate(client, objects: dict, status: dict | None = None, *, download: boo
         print("gwt-check: --download needs Pillow (pip install pillow); media-tiny, media-uniform and "
               "media-dup-page skipped", file=sys.stderr)
         return status
-    todo = [o for o in media if is_image(o) and not status[o["handle"]]["file_missing"]]
+    todo = [o for o in media if is_image(o) and not status[o["handle"]].get("file_missing")]
     def one(o):
         got = status[o["handle"]]
         _, data = client.get(f"/media/{o['handle']}/thumbnail/{THUMB}", {}, raw=True, none_on=NO_THUMB)

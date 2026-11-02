@@ -107,8 +107,9 @@ def live_dump(args, settled=None, seed: Tree | None = None) -> dict:
             else:
                 raise BadInput(f"the tree kept changing: {moved} object(s) still moving after {PASSES} passes")
             data["passes"] = n
-        data[media.STATUS] = media.annotate(client, data["objects"], seed.media_status if seed is not None else None,
-                                            download=getattr(args, "download", False), workers=args.workers)
+        if hasattr(args, "download"):  # check and dump; links, cites, fill-places and repos never use it
+            data[media.STATUS] = media.annotate(client, data["objects"], seed.media_status if seed else None,
+                                                download=args.download, workers=args.workers)
     except ApiError as exc:
         raise BadInput(str(exc)) from exc
     print(f"read tree {client.tree} in {time.monotonic() - t0:.0f} s, {client.requests} requests",
@@ -502,7 +503,7 @@ def main(argv: list[str] | None = None) -> int:
             data = live_dump(args, settled, seed)
             if args.save_dump:
                 save(data, args.save_dump)
-            tree = Tree(data["objects"], source="live tree", media_status=data[media.STATUS])
+            tree = Tree(data["objects"], source="live tree", media_status=data.get(media.STATUS))
         t1 = time.monotonic()
         report = run(tree)
         if not args.tree and "passes" in data:
