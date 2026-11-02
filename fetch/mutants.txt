@@ -8,3 +8,5 @@ gwt_fetch/cli.py | and not getattr(args, "list", False) | and True | --list with
 gwt_fetch/cli.py | if rawstore and bucket is None: | if False: | a missing bucket config stops the run before any download
 gwt_fetch/store.py | if len(r) == 4 and | if len(r) >= 1 and | a short line in rawstore.tsv does not crash the run
 gwt_fetch/cli.py | to_bucket(args.out, bucket, prefix, log=print) | to_bucket(args.out, bucket, "", log=print) | --rawstore stores under the configured GWT_RAWSTORE_PREFIX, like gwt-rawstore put
+gwt_fetch/store.py | r[0] != "sha256" and "/" | "/" | the header line of rawstore.tsv is not taken for a file
+gwt_fetch/store.py | and "/" not in r[3]} | } | a rawstore.tsv row for a file in a subfolder does not count as this folder's file

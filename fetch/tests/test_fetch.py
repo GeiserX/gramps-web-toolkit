@@ -468,3 +468,12 @@ def test_rawstore_keeps_the_configured_key_prefix(tmp_path, monkeypatch):
     monkeypatch.setattr(iiif, "run", scan_once)
     assert cli.main(["iiif", "https://m/manifest", "--out", str(tmp_path), "--rawstore"]) == 0
     assert [k.split("/")[0] for k in bucket.objects] == ["archive"]   # same keys as `gwt-rawstore put`
+
+
+def test_store_ignores_the_rawstore_header_and_rows_from_subfolders(tmp_path):
+    with open(tmp_path / "rawstore.tsv", "w", encoding="utf-8") as f:
+        f.write("sha256\tsize\tkey\tpath\n")
+        f.write(f"{'a' * 64}\t1\tk/0001_a.jpg\tsub/0001_a.jpg\n")   # a file in a subfolder, not this one
+    s = Store(tmp_path)
+    assert s.find("path") is None
+    assert s.find("sub/0001_a") is None
