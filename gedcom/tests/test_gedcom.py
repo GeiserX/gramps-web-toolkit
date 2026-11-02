@@ -429,6 +429,9 @@ def test_split_writes_each_roots_blood_relatives_with_spouse_stubs(tmp_path):
     assert [r.val("TITL") for r in one.sources] == [r.val("TITL") for r in two.sources] == ["Padrón 1850"]
     assert not [r for r in two.individuals if r.val("NAME") in ("Ramón /Navarro/", "Carmen /Soler/")]
     assert {r["root"]: r["shared_with_other_roots"] for r in rows} == {"@I1@": 2, "@I5@": 2}
+    # the parents are blood relatives reached through the root, not stubs
+    assert {r["root"]: (r["people"], r["spouse_stubs"], r["families"]) for r in rows} == {
+        "@I1@": (3, 1, 2), "@I5@": (3, 1, 2)}
     assert one.problems == [] and one.declared == "UTF-8"
     with pytest.raises(FileExistsError):
         split_mod.split(g, ["@I1@"], str(tmp_path))

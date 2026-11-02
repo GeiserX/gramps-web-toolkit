@@ -74,7 +74,13 @@ Writes `trees/I1.ged` and `trees/I40.ged`, in UTF-8. A root's tree is everyone w
 
 `--root @I1@` on an import does the same cut and imports only that tree.
 
+## Record GEDCOMs
+
+Some archive sites export one record as a GEDCOM 7 file: Open Archives gives one at `https://www.openarchieven.nl/<archive>:<uuid>/gedcom`. Such a file holds the names, sexes and family links of the people in the record, but no event, date or source, so everyone in it reads as maybe living and is held. Check the record, then import it with `--allow-living`, and cite the record with an `add_citation` of your own. Blank lines in these files are skipped.
+
 ## Limits
+
+- An `OCCU`, `RELI` or `EDUC` with a value becomes an event of that type with the value as its description. Gramps Web's own importer makes some of them person attributes instead.
 
 - Media (`OBJE`) is counted, not imported: a GEDCOM holds file paths, not files. Add them with `add_media`.
 - Hebrew, Islamic and other calendars are kept as text.
