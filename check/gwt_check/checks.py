@@ -755,7 +755,7 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
                     f"{len(ids)} people: {', '.join(ids[:5])}{', ...' if len(ids) > 5 else ''}; "
                     f"main component ({lowest[main]}) has {len(comps[main])}")
 
-    media_checks(T, out, in_scope, info, label)
+    media_checks(T, tree.media_status, out, in_scope, info, label)
     dated_checks(T, out, info)
     return out.items, info
 

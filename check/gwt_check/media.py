@@ -1,8 +1,9 @@
 """Media that Gramps Web cannot show: files it draws as a grey icon, files missing on the server, and, with
 `--download`, images too small to read, mostly one tone, or the same page twice on one citation.
 
-What the server says about each media object is kept on the object under KEY, so a saved dump carries it and an
-offline check of that dump reports the same findings. Pillow is optional: without it the image kinds are skipped
+What the server says about each media object's file is kept beside the objects, in the dump under STATUS, so a
+saved dump carries it and an offline check of that dump reports the same findings. The objects themselves stay
+as the server sent them: gwt-apply writes objects from a dump back to the server. Pillow is optional: without it the image kinds are skipped
 with a note, never a crash.
 """
 
@@ -17,7 +18,8 @@ from io import BytesIO
 
 from .client import NETWORK_ERRORS, TRIES, USER_AGENT, ApiError, backoff
 
-KEY = "gwt_media"  # {"file_missing": bool} from a live read; "w", "h", "tone", "dhash" with --download
+# dump key: {media handle: {"file_missing": bool}} from a live read, plus "w", "h", "tone", "dhash" with --download
+STATUS = "media_status"
 
 # Gramps Web draws a thumbnail for images and PDFs. These others it shows as a grey icon that opens nothing useful
 NON_VIEWABLE_PREFIXES = ("text/", "message/")
@@ -117,33 +119,34 @@ def _fetch(client, path: str) -> bytes | None:
     raise ApiError(f"GET {path}: gave up after {TRIES} tries")
 
 
-def annotate(client, objects: dict, *, download: bool = False, workers: int = 4) -> None:
-    """Put what the server says about each media object under KEY: whether its file is missing (one request,
-    GET /api/media/?filemissing=1), and with `download` the measures of its thumbnail."""
+def annotate(client, objects: dict, status: dict | None = None, *, download: bool = False,
+             workers: int = 4) -> dict:
+    """What the server says about each media object, {handle: {...}}: whether its file is missing (one request,
+    GET /api/media/?filemissing=1), and with `download` the measures of its thumbnail. Measures in `status`, from
+    an earlier dump, stay until measured again."""
     media = objects.get("media") or []
     media = list(media.values()) if isinstance(media, dict) else media
     # Gramps Web caches a list answer until the tree changes, and deleting a file changes nothing in the tree: a
     # pagesize it ignores without `page`, new on every call, keeps a cached answer from before the deletion out
     _, rows = client.get("/media/", {"filemissing": 1, "keys": "handle", "pagesize": random.randrange(1, 2**62)})
     missing = {r["handle"] for r in rows}
-    for o in media:
-        # measures an earlier --download left on an object read from a saved dump stay until measured again
-        o[KEY] = {**(o.get(KEY) or {}), "file_missing": o["handle"] in missing}
+    old = status or {}
+    status = {o["handle"]: {**(old.get(o["handle"]) or {}), "file_missing": o["handle"] in missing} for o in media}
     if not download:
-        return
+        return status
     try:
         import PIL  # noqa: F401
     except ImportError:
         print("gwt-check: --download needs Pillow (pip install pillow); media-tiny, media-uniform and "
               "media-dup-page skipped", file=sys.stderr)
-        return
-    todo = [o for o in media if is_image(o) and not o[KEY]["file_missing"]]
+        return status
+    todo = [o for o in media if is_image(o) and not status[o["handle"]]["file_missing"]]
     def one(o):
         data = _fetch(client, f"/media/{o['handle']}/thumbnail/{THUMB}")
         if data is None:
             return False
         try:
-            o[KEY].update(measure(data))
+            status[o["handle"]].update(measure(data))
         except Exception:  # noqa: BLE001 - Pillow raises many kinds on a file it cannot read
             return False
         return True
@@ -153,15 +156,17 @@ def annotate(client, objects: dict, *, download: bool = False, workers: int = 4)
     print(f"gwt-check: {len(todo) - unread} thumbnail(s) measured" + (
         f", {unread} the server would not give or Pillow could not read (an AVIF thumbnail needs Pillow 11.3 "
         "or newer)" if unread else ""), file=sys.stderr)
+    return status
 
 
-def media_checks(T: dict, out, in_scope, info: dict, label) -> None:
-    """The media kinds, on what the tree's media objects carry. Single-object kinds report media in scope; a
-    same-page pair needs one side in scope."""
+def media_checks(T: dict, status: dict, out, in_scope, info: dict, label) -> None:
+    """The media kinds, on the tree's media objects and what the server said about them (`status`). Single-object
+    kinds report media in scope; a same-page pair needs one side in scope."""
     M = T["media"]
+    S = {h: status.get(h) if isinstance(status.get(h), dict) else {} for h in M}
     unchecked = 0
     for h, o in M.items():
-        got = o.get(KEY) or {}
+        got = S[h]
         if "file_missing" not in got:
             unchecked += 1
         if not in_scope("media", h):
@@ -184,8 +189,7 @@ def media_checks(T: dict, out, in_scope, info: dict, label) -> None:
     # the same page twice on one citation: near thumbnails, different files (the same file is dup-media)
     for c in T["citations"].values():
         refs = [r.get("ref") for r in c.get("media_list") or [] if isinstance(r, dict)]
-        hashed = [(h, int(M[h][KEY]["dhash"], 16)) for h in dict.fromkeys(refs)
-                  if h in M and "dhash" in (M[h].get(KEY) or {})]
+        hashed = [(h, int(S[h]["dhash"], 16)) for h in dict.fromkeys(refs) if h in M and "dhash" in S[h]]
         for i, (a, ha) in enumerate(hashed):
             for b, hb in hashed[i + 1:]:
                 if M[a].get("checksum") and M[a].get("checksum") == M[b].get("checksum"):

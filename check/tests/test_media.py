@@ -13,22 +13,25 @@ from gwt_check import checks, media, selftest
 from gwt_check.cli import main
 from gwt_check.tree import Tree
 
-KEY = media.KEY
+KEY = "status"  # in `_tree`'s fields: what the server said about that media object, kept beside the objects
 
 
 def _tree(*extra, citation="C0001"):
     """The self-test's clean tree plus media objects `extra` (dicts of fields), all on one citation."""
     d = selftest.clean_tree()
+    d[media.STATUS] = {"hO0001": _measured(dhash="0f" * 32)[KEY]}
     for n, fields in enumerate(extra, 50):
+        fields = dict(fields)
+        d[media.STATUS][f"hO00{n}"] = fields.pop(KEY, {"file_missing": False})
         m = {**copy.deepcopy(d["media"][0]), "handle": f"hO00{n}", "gramps_id": f"O00{n}",
-             "checksum": f"{n:032x}", KEY: {"file_missing": False}, **fields}
+             "checksum": f"{n:032x}", **fields}
         d["media"].append(m)
         next(c for c in d["citations"] if c["gramps_id"] == citation)["media_list"].append({"ref": m["handle"], "rect": []})
     return d
 
 
 def _found(d, scope=None):
-    findings, info = checks.run_checks(Tree(d), scope)
+    findings, info = checks.run_checks(Tree(d, media_status=d[media.STATUS]), scope)
     return {(f["check"], f["key"]) for f in findings if f["check"].startswith("media-")}, info
 
 
@@ -75,7 +78,8 @@ def test_dhash_sets_a_bit_where_the_left_neighbour_is_brighter():
 def test_a_text_file_is_non_viewable_and_suggests_a_transcript():
     found, _ = _found(_tree({"mime": "text/plain", "path": "ejemplo/acta.txt"}))
     assert found == {("media-non-viewable", "O0050")}
-    findings, _ = checks.run_checks(Tree(_tree({"mime": "text/plain", "path": "ejemplo/acta.txt"})))
+    d = _tree({"mime": "text/plain", "path": "ejemplo/acta.txt"})
+    findings, _ = checks.run_checks(Tree(d, media_status=d[media.STATUS]))
     assert "add_transcription" in next(f["detail"] for f in findings if f["check"] == "media-non-viewable")
 
 
@@ -86,9 +90,9 @@ def test_a_missing_file_is_found_and_an_unread_one_is_counted():
 
 
 def test_annotate_keeps_earlier_measures():
-    d = selftest.clean_tree()
-    media.annotate(FakeClient(missing={"hO0001"}), d)
-    assert d["media"][0][KEY]["file_missing"] is True and d["media"][0][KEY]["dhash"] == "0f" * 32
+    d = _tree()
+    status = media.annotate(FakeClient(missing={"hO0001"}), d, d.pop(media.STATUS))
+    assert status["hO0001"]["file_missing"] is True and status["hO0001"]["dhash"] == "0f" * 32
 
 
 def test_a_tree_read_with_every_file_checked_has_no_note():
@@ -145,10 +149,7 @@ def test_scope_old_media_are_not_blamed_on_a_run():
 
 def _bare():
     """The clean tree as a server sends it: nothing measured yet."""
-    d = selftest.clean_tree()
-    for m in d["media"]:
-        m.pop(KEY, None)
-    return d
+    return selftest.clean_tree()
 
 
 class FakeClient:
@@ -181,8 +182,7 @@ class FakeClient:
 def test_annotate_marks_missing_files_in_one_request():
     d = _bare()
     client = FakeClient(missing={"hO0001"})
-    media.annotate(client, d)
-    assert d["media"][0][KEY] == {"file_missing": True} and len(client.calls) == 1
+    assert media.annotate(client, d) == {"hO0001": {"file_missing": True}} and len(client.calls) == 1
 
 
 def test_each_missing_file_list_is_a_new_request_to_the_server_cache():
@@ -198,9 +198,9 @@ def test_download_without_pillow_is_skipped_with_a_note(monkeypatch, capsys):
     monkeypatch.setitem(sys.modules, "PIL", None)  # import PIL raises ImportError
     d = _bare()
     client = FakeClient()
-    media.annotate(client, d, download=True)
+    status = media.annotate(client, d, download=True)
     assert "needs Pillow" in capsys.readouterr().err
-    assert d["media"][0][KEY] == {"file_missing": False} and len(client.calls) == 1
+    assert status == {"hO0001": {"file_missing": False}} and len(client.calls) == 1
 
 
 def test_download_with_a_tree_file_is_bad_input(tmp_path, capsys):
@@ -224,12 +224,23 @@ def _serve(monkeypatch, d, write=None):
 
 
 def test_a_live_check_reports_a_missing_file(monkeypatch, tmp_path, capsys):
-    _serve(monkeypatch, selftest.clean_tree())
+    _serve(monkeypatch, _bare())
     report, dump = str(tmp_path / "r.json"), str(tmp_path / "d.json")
     assert main(["check", "--json", report, "--save-dump", dump]) == 1, capsys.readouterr().err
     assert {(f["check"], f["key"]) for f in json.load(open(report))["new"]} == {("media-file-missing", "O0001")}
     # the saved dump carries it, so an offline check of it says the same
     assert main(["check", dump]) == 1
+
+
+def test_a_dump_keeps_media_objects_as_the_server_sent_them(monkeypatch, tmp_path):
+    # gwt-apply writes objects from a dump back to the server, which rejects (or stores) a key it does not know
+    d = _bare()
+    _serve(monkeypatch, d)
+    dump = str(tmp_path / "d.json")
+    assert main(["dump", dump]) == 0
+    saved = json.load(open(dump))
+    assert [set(m) for m in saved["objects"]["media"]] == [set(m) for m in d["media"]]
+    assert saved[media.STATUS] == {"hO0001": {"file_missing": True}}
 
 
 def test_a_missing_file_survives_a_read_that_settled_while_someone_wrote(monkeypatch, tmp_path):
@@ -239,7 +250,7 @@ def test_a_missing_file_survives_a_read_that_settled_while_someone_wrote(monkeyp
             p = server.data["people"][-1]
             p["primary_name"]["first_name"] += "x"
             server.tick(p)
-    _serve(monkeypatch, selftest.clean_tree(), busy)
+    _serve(monkeypatch, _bare(), busy)
     report = str(tmp_path / "r.json")
     assert main(["check", "--json", report]) == 1
     r = json.load(open(report))
@@ -301,7 +312,7 @@ def test_download_measures_the_thumbnails_and_counts_what_it_could_not_read(caps
     second = {**copy.deepcopy(d["media"][0]), "handle": "hO0002", "gramps_id": "O0002"}
     d["media"].append(second)
     client = FakeClient(thumbs={"hO0001": _thumb(_page(1))})
-    media.annotate(client, d, download=True, workers=2)
-    assert d["media"][0][KEY]["w"] == 192 and "dhash" in d["media"][0][KEY]
-    assert set(second[KEY]) == {"file_missing"}  # 404: nothing measured
+    status = media.annotate(client, d, download=True, workers=2)
+    assert status["hO0001"]["w"] == 192 and "dhash" in status["hO0001"]
+    assert set(status["hO0002"]) == {"file_missing"}  # 404: nothing measured
     assert "1 thumbnail(s) measured, 1 the server would not give" in capsys.readouterr().err

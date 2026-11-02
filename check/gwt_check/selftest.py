@@ -9,7 +9,7 @@ from __future__ import annotations
 import copy
 
 from . import compare
-from .media import KEY as MEDIA_KEY
+from .media import STATUS
 from .tree import Tree
 
 
@@ -50,9 +50,7 @@ def clean_tree() -> dict:
                          text={"_class": "StyledText", "string": f"Nota inventada {i}", "tags": []})
                    for i in (1, 2)]
     d["media"].append(_base("O0001", path="ejemplo/acta-0001.jpg", mime="image/jpeg", desc="Acta inventada",
-                            checksum="0" * 32, date=_date(), attribute_list=[], citation_list=[], note_list=[],
-                            **{MEDIA_KEY: {"file_missing": False, "w": 256, "h": 192, "tone": 0.6,
-                                           "dhash": "0f" * 32}}))
+                            checksum="0" * 32, date=_date(), attribute_list=[], citation_list=[], note_list=[]))
     d["citations"] += [
         _base("C0001", source_handle="hS0001", page="folio 1", confidence=2, date=_date(),
               attribute_list=[], media_list=[_ref("hO0001", rect=[])], note_list=["hN0002"]),
@@ -242,38 +240,41 @@ def p_living_media(d):
     _sensitive_media(d, "O0090", "I0090", (2001, 5, 2), "Pasaporte de Nuria")
 
 
-def _new_media(d, gid, citation, **kw):
-    """A new media object, its own file, attached to `citation`; what the server said goes in `kw[MEDIA_KEY]`."""
+def _new_media(d, gid, citation, status, **kw):
+    """A new media object, its own file, attached to `citation`; what the server said about it is `status`."""
     m = {**copy.deepcopy(d["media"][0]), "handle": "h" + gid, "gramps_id": gid, "path": f"ejemplo/{gid}.jpg",
          "checksum": f"{int(gid[1:]):032x}", **kw}
     d["media"].append(m)
+    # what the server said about it goes beside the objects, as in a dump gwt-check saved
+    d.setdefault(STATUS, {})[m["handle"]] = status
     _get(d, "citations", citation)["media_list"].append(_ref(m["handle"], rect=[]))
     return m
 
 
 def p_media_non_viewable(d):
-    _new_media(d, "O0081", "C0002", path="ejemplo/transcripcion.txt", mime="text/plain",
-               **{MEDIA_KEY: {"file_missing": False}})
+    _new_media(d, "O0081", "C0002", {"file_missing": False}, path="ejemplo/transcripcion.txt",
+               mime="text/plain")
 
 
 def p_media_file_missing(d):
-    _new_media(d, "O0082", "C0002", **{MEDIA_KEY: {"file_missing": True}})
+    _new_media(d, "O0082", "C0002", {"file_missing": True})
 
 
 def p_media_tiny(d):
-    _new_media(d, "O0083", "C0002", **{MEDIA_KEY: {"file_missing": False, "w": 40, "h": 40, "tone": 0.5,
-                                                   "dhash": "00" * 32}})
+    _new_media(d, "O0083", "C0002", {"file_missing": False, "w": 40, "h": 40, "tone": 0.5,
+                                     "dhash": "00" * 32})
 
 
 def p_media_uniform(d):
-    _new_media(d, "O0084", "C0002", **{MEDIA_KEY: {"file_missing": False, "w": 256, "h": 192, "tone": 0.995,
-                                                   "dhash": "ff" * 32}})
+    _new_media(d, "O0084", "C0002", {"file_missing": False, "w": 256, "h": 192, "tone": 0.995,
+                                     "dhash": "ff" * 32})
 
 
 def p_media_dup_page(d):
     # one bit away from O0001's hash, on O0001's citation
-    _new_media(d, "O0085", "C0001", **{MEDIA_KEY: {"file_missing": False, "w": 256, "h": 192, "tone": 0.6,
-                                                   "dhash": "0f" * 31 + "0e"}})
+    d.setdefault(STATUS, {})["hO0001"] = {"file_missing": False, "w": 256, "h": 192, "tone": 0.6, "dhash": "0f" * 32}
+    _new_media(d, "O0085", "C0001", {"file_missing": False, "w": 256, "h": 192, "tone": 0.6,
+                                     "dhash": "0f" * 31 + "0e"})
 
 
 def p_place_no_coords(d):
@@ -616,7 +617,7 @@ def _run(data: dict, clean: dict):
     from .cli import check  # late import: cli imports this module for the selftest command
 
     base = Tree(copy.deepcopy(clean), source="clean synthetic tree")
-    report = check(Tree(data, source="planted synthetic tree"), since=base, root="I0001")
+    report = check(Tree(data, source="planted synthetic tree", media_status=data.get(STATUS)), since=base, root="I0001")
     got = {(f["check"], f["key"]) for f in report["findings"]}
     no_place = report["info"].get("events without place, in scope", [])
     # events without place is a count, not a finding: compare it with the clean tree's
