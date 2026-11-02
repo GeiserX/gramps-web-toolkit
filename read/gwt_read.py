@@ -797,7 +797,12 @@ def main(argv=None, urlopen=None, gate=None, srcs=None):
         finally:
             R.cache.store = store
         if when in ('after', 'both') and code in (EXIT_OK, EXIT_EMPTY):
-            c = run_controls(src, src['_search_parser'], a, R, 'after', lambda: _undo(a.out, files, R.cache, stored))
+            undo = lambda: _undo(a.out, files, R.cache, stored)
+            try:
+                c = run_controls(src, src['_search_parser'], a, R, 'after', undo)
+            except (gwt_reader.Stop, Paused):
+                undo()      # a canary that was stopped proved nothing either: the run is void all the same
+                raise
             if c:
                 return c
         return code

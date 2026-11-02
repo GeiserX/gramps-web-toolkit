@@ -88,6 +88,15 @@ class Controls(Base):
         code, _, _ = self.search(net, gate)      # the same search again, without controls
         self.assertEqual((code, len(net.requests)), (0, 3), 'the voided "none" was served from the cache')
 
+    def test_a_stopped_canary_after_also_leaves_no_files_and_no_cached_none(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, NONE), (200, CAPTCHA), (200, RESULTS))
+        code, rows, _ = self.search(net, gate, '--controls', 'after')
+        self.assertEqual((code, len(gate.hits)), (gwt_reader.EXIT_WALL, 1))
+        self.assertEqual(self.out_files(), [], 'a search whose after-canary was stopped left files that read as "none"')
+        code, _, _ = self.search(net, gate)      # the same search again, without controls
+        self.assertEqual((code, len(net.requests)), (0, 3), 'the unproven "none" was served from the cache')
+
     def test_a_void_run_keeps_other_files_in_the_folder(self):
         gate = FakeGate()
         net = FakeNet(gate, (200, RESULTS), (200, NONE), (200, ONE))

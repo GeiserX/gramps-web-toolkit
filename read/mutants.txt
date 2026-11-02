@@ -64,3 +64,4 @@ gwt_read.py | if when in ('after', 'both') and code in (EXIT_OK, EXIT_EMPTY): | 
 gwt_read.py | if lab in ('EVENT_PARISH_ORIG', 'CP_MAR_PLACE_ORIG') or | if lab in () or | place_orig keeps the parish and the marriage place a collection types in their own fields
 gwt_read.py | if lab in _PLACE_IN_JSON and t.lstrip().startswith('{'): | if False: | place_orig reads the typed place some collections keep only inside EXT_DATA or FS_UNSUPPORTED JSON
 gwt_read.py | if t and t not in found: | if t: | place_orig lists each typed place once, even when the record repeats it
+gwt_read.py | undo()      # a canary that was stopped proved nothing either: the run is void all the same | pass | a search whose after-canary hits a block or a captcha leaves no file or cached answer that reads as "none"
