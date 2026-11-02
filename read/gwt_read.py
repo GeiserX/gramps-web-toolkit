@@ -126,16 +126,37 @@ def is_record(doc):
     return isinstance(doc, dict) and isinstance(doc.get('persons'), list)
 
 
+# Fields that hold a JSON object in their text, and the key in it that holds the event place as typed: some
+# collections keep the typed place only there.
+_PLACE_IN_JSON = {'EXT_DATA': 'EVENT_PLACE_ALT_ORIG', 'EXT_DATA_ORIG': 'EVENT_PLACE_ALT_ORIG',
+                  'FS_UNSUPPORTED': 'EVENT_PLACE_SUP'}
+
+
+def _typed_place(lab, t):
+    """The typed place one field holds, or None."""
+    if not isinstance(t, str) or not t:
+        return None
+    if lab in ('EVENT_PARISH_ORIG', 'CP_MAR_PLACE_ORIG') or (lab.startswith('EVENT_PLACE') and lab.endswith('_ORIG')):
+        return t
+    if lab in _PLACE_IN_JSON and t.lstrip().startswith('{'):
+        try:
+            v = json.loads(t).get(_PLACE_IN_JSON[lab])
+        except (ValueError, AttributeError):
+            return None
+        return v if isinstance(v, str) and v else None
+    return None
+
+
 def place_orig(gedcomx):
-    """The place of the record's event as the index typed it: every EVENT_PLACE..._ORIG field (the parish and town
-    as written, which the standard place often drops), in the order found."""
+    """The place of the record's event as the index typed it, in the order found: every EVENT_PLACE..._ORIG field
+    (the parish and town as written, which the standard place often drops), EVENT_PARISH_ORIG and CP_MAR_PLACE_ORIG,
+    and the typed place some collections keep inside the JSON text of EXT_DATA, EXT_DATA_ORIG or FS_UNSUPPORTED."""
     found = []
 
     def walk(o):
         if isinstance(o, dict):
-            lab = str(o.get('labelId', ''))
-            t = o.get('text') or o.get('value')
-            if lab.startswith('EVENT_PLACE') and lab.endswith('_ORIG') and isinstance(t, str) and t and t not in found:
+            t = _typed_place(str(o.get('labelId', '')), o.get('text') or o.get('value'))
+            if t and t not in found:
                 found.append(t)
             for v in o.values():
                 walk(v)

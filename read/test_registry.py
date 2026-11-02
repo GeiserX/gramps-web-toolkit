@@ -163,6 +163,20 @@ class FamilySearch(Base):
         self.assertNotIn('place_orig', c2, 'a record without the field is written as before')
         self.assertEqual((c1['role'], c1['principal']), ('Principal', True))
 
+    def test_place_orig_reads_every_field_that_holds_the_typed_place(self):
+        g = {'persons': [{'fields': [
+            {'labelId': 'EVENT_PLACE_ORIG', 'text': 'Villazul'},
+            {'labelId': 'EVENT_PLACE', 'text': 'Nortia'},                      # the standard place: not typed
+            {'labelId': 'EVENT_PARISH_ORIG', 'text': 'San Bartolo'},
+            {'labelId': 'CP_MAR_PLACE_ORIG', 'text': 'Ermita de Ruvel'},
+            {'labelId': 'EXT_DATA', 'text': json.dumps({'EVENT_PLACE_ALT_ORIG': 'Parroquia de Santa Oria, Villazul'})},
+            {'labelId': 'FS_UNSUPPORTED', 'text': json.dumps({'EVENT_PLACE_SUP': 'Caserío Alto'})},
+            {'labelId': 'EXT_DATA_ORIG', 'text': '{not json'},                  # unreadable: skipped, no crash
+            {'labelId': 'BIRTH_PLACE_ORIG', 'text': 'Lejos'},                   # a person's place, not the event's
+            {'labelId': 'EVENT_PLACE_ORIG', 'value': 'Villazul'}]}]}            # repeated: listed once
+        self.assertEqual(gwt_read.place_orig(g), ['Villazul', 'San Bartolo', 'Ermita de Ruvel',
+                                                  'Parroquia de Santa Oria, Villazul', 'Caserío Alto'])
+
     def test_a_record_keeps_its_place_orig(self):
         doc = dict(RECORD, fields=[{'labelId': 'EVENT_PLACE_ORIG', 'text': 'Villazul, parroquia de San Bartolo'}])
         gate = FakeGate()
