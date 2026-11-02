@@ -1,6 +1,6 @@
 """Tests for `gwt-read matchid`. Answers in fixtures/matchid/ keep the API's shape with invented people and ids; a
 fake transport and a fake gate: no request leaves this machine. Run: cd read && python3 -m pytest -q test_gwt_matchid.py"""
-import contextlib, io, json, os, unittest
+import contextlib, io, json, os, unittest, urllib.parse
 
 from test_gwt_read import Base, FakeGate, FakeNet
 import gwt_matchid  # noqa: E402
@@ -40,6 +40,12 @@ class Classify(unittest.TestCase):
         self.assertEqual(v({'response': {'persons': []}}), 'unknown', 'no count is not a zero count')
         self.assertEqual(v({'response': {'total': 4, 'persons': []}}), 'unknown')
         self.assertEqual(v({'response': {'total': 0.0, 'persons': []}}), 'unknown', 'a count that is not a whole number')
+
+    def test_a_date_range_is_sent_without_spaces(self):
+        # matchID answers HTTP 400 "invalid birthDate value" for "01/01/1900 - 31/12/1910", 200 without the spaces
+        q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(
+            gwt_matchid.search_url(surname='Zorvalo', born='01/01/1900 - 31/12/1910', died='1950 -1960')).query))
+        self.assertEqual((q['birthDate'], q['deathDate']), ('01/01/1900-31/12/1910', '1950-1960'))
 
     def test_the_pace_keeps_to_one_request_a_second_at_most(self):
         self.assertGreaterEqual(gwt_matchid.SPEC['pace']['floor'], 1.0)

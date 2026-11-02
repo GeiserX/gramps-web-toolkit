@@ -10,3 +10,4 @@ gwt_reader.py | if e.verdict == 'http' and (e.status == 0 or 500 <= (e.status or
 gwt_reader.py | if e.verdict == 'http' and (e.status == 0 or 500 <= (e.status or 0) < 600): | if e.verdict == 'http' and 500 <= (e.status or 0) < 600: | no answer at all (a timeout, a refused connection) is a block too
 gwt_reader.py | if e.verdict == 'http' and (e.status == 0 or 500 <= (e.status or 0) < 600): | if e.verdict == 'http' and (e.status == 0 or 400 <= (e.status or 0) < 600): | a 4xx (a bad request, one missing record) stays an error, never a block that pauses every lane
 gwt_reader.py |             R.gate.hit(R.lane, what) | pass | the gate hears about an outage, so every lane on the source pauses
+gwt_matchid.py | return re.sub(r'\s*-\s*', '-', str(v).strip()) if v else '' | return str(v).strip() if v else '' | a date range typed with spaces is sent without them; matchID refuses it with HTTP 400 otherwise

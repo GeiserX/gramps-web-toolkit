@@ -13,7 +13,7 @@ The service has had outages: any 5xx, or no answer, is read as a block (exit 3, 
 results", and any answer of another shape is a STOP. "none" is the API's own count, `total` 0. Each row is the
 principal of one INSEE death record, as in `gwt-read insee`. Standard library only.
 """
-import json, os, sys, urllib.parse, urllib.request
+import json, os, re, sys, urllib.parse, urllib.request
 
 import gwt_reader
 
@@ -50,8 +50,9 @@ SPEC = {
 
 
 def _date(v):
-    """matchID dates: JJ/MM/AAAA, a year AAAA, or a range JJ/MM/AAAA - JJ/MM/AAAA, passed as written."""
-    return str(v).strip() if v else ''
+    """matchID dates: JJ/MM/AAAA, a year AAAA, or a range JJ/MM/AAAA-JJ/MM/AAAA. The API refuses spaces around the
+    range's "-" (HTTP 400), so they are dropped."""
+    return re.sub(r'\s*-\s*', '-', str(v).strip()) if v else ''
 
 
 def search_url(q='', given='', surname='', born='', died='', birth_city='', death_city='', sex='', count=20, page=1):
@@ -115,7 +116,7 @@ def add_search_args(sp):
     sp.add_argument('--q', default='', help='the site\'s free text: "Dupont Jean 1950"')
     sp.add_argument('--given', default='')
     sp.add_argument('--surname', default='')
-    sp.add_argument('--born', default='', help='birth date: a year, JJ/MM/AAAA, or a range "01/01/1900 - 31/12/1910"')
+    sp.add_argument('--born', default='', help='birth date: a year, JJ/MM/AAAA, or a range "01/01/1900-31/12/1910" or "1900-1910"')
     sp.add_argument('--died', default='', help='death date, as --born')
     sp.add_argument('--birth-city', default='')
     sp.add_argument('--death-city', default='')

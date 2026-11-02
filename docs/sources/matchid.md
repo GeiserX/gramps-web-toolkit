@@ -12,7 +12,7 @@ gwt read matchid control
 ```
 
 - A search needs `--surname`, `--given` or `--q`, the site's own free text.
-- `--born` and `--died` take a year, a date as `JJ/MM/AAAA` (day before month), or a range such as `"01/01/1900 - 31/12/1910"`, passed as written.
+- `--born` and `--died` take a year, a date as `JJ/MM/AAAA` (day before month), or a range such as `01/01/1900-31/12/1910` or `1900-1910`. The API refuses spaces around the `-` (HTTP 400), so the reader drops them.
 
 ## The token
 
