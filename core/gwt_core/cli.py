@@ -22,6 +22,7 @@ TOOLS = {  # name: (module with main(argv), one line)
     "mh": ("gwt_mh_cli", "MyHeritage records through a signed-in browser (extra: mh)"),
     "read": ("gwt_read", "FamilySearch and PARES record search and records, slow and cached"),
     "report": ("gwt_report", "how two people are related, and what is new since the family was told"),
+    "geocode": ("gwt_geocode", "coordinates for the places events use, as a gwt-apply change list"),
     "lint": ("gwt_lint.cli", "check a change list against the tree before it is applied, with self-proving rules"),
 }
 

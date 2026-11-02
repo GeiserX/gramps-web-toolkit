@@ -1,0 +1,3 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Brazil|Brasil|Brésil|Brasilien	country	Hemeroteca Digital Brasileira	Newspapers (OCR)	press	1740-		https://memoria.bn.gov.br/	online				Probe: answered a script with HTTP 403 on 2026-11-02 (a bot check or a block); a browser may still get in
+Brazil|Brasil|Brésil|Brasilien	country	Arquivo Nacional (SIAN)	Port of Rio entries, naturalisation	migration,other	1800-1969	1889	https://sian.an.gov.br/	online				Probe: no answer to a script on 2026-11-02

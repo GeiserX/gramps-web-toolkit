@@ -117,8 +117,9 @@ class Client:
         if self.expected_tree and self.tree != self.expected_tree:
             raise ApiError(f"login landed in tree {self.tree!r}, expected {self.expected_tree!r}")
 
-    def get(self, path: str, params: dict) -> tuple[dict, object]:
-        url = f"{self.base}{path}?{urllib.parse.urlencode(params)}"
+    def get(self, path: str, params: dict, *, raw: bool = False, none_on=()) -> tuple[dict, object]:
+        """(headers, the JSON body), or the bytes with `raw`. A status in `none_on` answers None, not tried again."""
+        url = f"{self.base}{path}?{urllib.parse.urlencode(params)}" if params else self.base + path
         last = ""
         for attempt in range(1, TRIES + 1):
             with self._lock:
@@ -135,7 +136,9 @@ class Client:
                     self.sleep(backoff(attempt))
                 continue
             if status == 200:
-                return headers, json.loads(data)
+                return headers, data if raw else json.loads(data)
+            if status in none_on:
+                return headers, None
             if status == 401:
                 last = "HTTP 401"
                 with self._lock:

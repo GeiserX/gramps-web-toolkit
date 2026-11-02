@@ -1,0 +1,41 @@
+{
+ "@context": "http://iiif.io/api/image/2/context.json",
+ "@id": "https://archives.example.fr/iiif/ark:/00000/exemple/f12",
+ "protocol": "http://iiif.io/api/image",
+ "width": 3904,
+ "height": 2900,
+ "sizes": [
+  {
+   "width": 488,
+   "height": 363
+  },
+  {
+   "width": 976,
+   "height": 725
+  }
+ ],
+ "tiles": [
+  {
+   "width": 256,
+   "height": 256,
+   "scaleFactors": [
+    1,
+    2,
+    4,
+    8,
+    16
+   ]
+  }
+ ],
+ "profile": [
+  "http://iiif.io/api/image/2/level1.json",
+  {
+   "formats": [
+    "jpg"
+   ],
+   "qualities": [
+    "default"
+   ]
+  }
+ ]
+}

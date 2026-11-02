@@ -1,0 +1,2 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Romania|Rumania|Rumänien|Roumanie	country	Arhivele Naționale ale României	Civil and parish registers	birth,marriage,death,census	1831-1959	1865	https://arhivelenationale.ro/	in-person				Transylvania from 1895. Probe: robots.txt did not answer a script on 2026-11-02 (TLS error, timeout or server error), so the probe skipped it
