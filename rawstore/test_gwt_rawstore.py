@@ -303,6 +303,28 @@ class GitTest(Base):
         self.assertEqual(R.verify(self.store, [folder], deep=True, log=self.log), 0)
         self.assertTrue(R.get(self.store, os.path.join(folder, '0002.jpg'), os.path.join(self.dir, 'cache')))
 
+    def test_migrate_untracks_names_git_would_read_as_patterns(self):
+        # ':' starts a pathspec magic and '[1]' is a glob; each name must reach git rm as itself
+        for n in (':0001.jpg', 'p [1].jpg', 'p 1.jpg'):
+            self.write('raw/r1/' + n, n.encode())
+        self.git('add', '.')
+        self.git('commit', '-qm', 'raw')
+        self.assertEqual(R.migrate(self.store, os.path.join(self.dir, 'raw/r1'), evict=True, log=self.log), 0)
+        self.assertEqual(self.git('ls-files', 'raw/r1'), 'raw/r1/.gitignore\nraw/r1/rawstore.tsv\n')
+
+    def test_migrate_untracks_in_batches(self):
+        folder = self.commit_scans(5)
+        calls = []
+        real = R.git
+
+        def spy(*a, **kw):
+            calls.append(a)
+            return real(*a, **kw)
+        with mock.patch.object(R, 'GIT_BATCH', 2), mock.patch.object(R, 'git', spy):
+            self.assertEqual(R.migrate(self.store, folder, evict=True, log=self.log), 0)
+        self.assertEqual([len(a) - 4 for a in calls if a[:2] == ('rm', '--cached')], [2, 2, 1])
+        self.assertEqual(self.git('ls-files', 'raw/r1'), 'raw/r1/.gitignore\nraw/r1/notes.md\nraw/r1/rawstore.tsv\n')
+
     def test_migrate_evict_heads_each_file_only_inside_put(self):
         folder = self.commit_scans()
         self.assertEqual(R.migrate(self.store, folder, evict=True, log=self.log), 0)

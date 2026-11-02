@@ -28,6 +28,7 @@ BINARY_EXT = {'.jpg', '.jpeg', '.png', '.gif', '.tif', '.tiff', '.webp', '.bmp',
 EMPTY_SHA = hashlib.sha256(b'').hexdigest()
 CHUNK = 1 << 20
 TRIES, WAIT = 3, 2.0   # put: attempts per file, and seconds before the first retry (doubled each time)
+GIT_BATCH = 1000   # migrate: names per git rm call; tens of thousands of names pass the argument limit
 
 
 def sha256_file(path):
@@ -403,8 +404,8 @@ def migrate(store, folder, prefix='', remove=False, jobs=4, log=print, evict=Fal
         d, name = os.path.split(f)
         by_folder.setdefault(d, []).append(name)
     for d, names in by_folder.items():
-        for i in range(0, len(names), 1000):  # in batches: tens of thousands of names pass the argument limit
-            git('rm', '--cached', '--quiet', '--', *(':(literal)' + n for n in names[i:i + 1000]), cwd=d)
+        for i in range(0, len(names), GIT_BATCH):
+            git('rm', '--cached', '--quiet', '--', *(':(literal)' + n for n in names[i:i + GIT_BATCH]), cwd=d)
         git('add', '--sparse', '--', MANIFEST, cwd=d)
         if evict:
             for n in names:
