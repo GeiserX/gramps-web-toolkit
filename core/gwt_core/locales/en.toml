@@ -50,7 +50,3 @@ pairs = [
   ["SS.", "Saints"],
   ["B.V.M.", "Blessed Virgin Mary"],
 ]
-
-[id_numbers]
-# United States Social Security number: area 000, 666 and 9xx, group 00 and serial 0000 are never issued
-us_ssn = '(?<![0-9])\d{3}-\d{2}-\d{4}(?![0-9])'

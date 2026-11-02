@@ -56,8 +56,3 @@ pairs = [
   ["Sto.", "Santo"],
   ["Sta.", "Santa"],
 ]
-
-[id_numbers]
-# DNI: 8 digits and a check letter; NIE: X, Y or Z, 7 digits and a check letter (mod 23)
-dni = '(?<![A-Za-z0-9])\d{8}[A-Za-z](?![A-Za-z0-9])'
-nie = '(?<![A-Za-z0-9])[XYZxyz]\d{7}[A-Za-z](?![A-Za-z0-9])'

@@ -51,8 +51,3 @@ pairs = [
   ["St.", "Sant"],
   ["Sta.", "Santa"],
 ]
-
-[id_numbers]
-# the Spanish DNI and NIE, which records in Catalan carry too
-dni = '(?<![A-Za-z0-9])\d{8}[A-Za-z](?![A-Za-z0-9])'
-nie = '(?<![A-Za-z0-9])[XYZxyz]\d{7}[A-Za-z](?![A-Za-z0-9])'

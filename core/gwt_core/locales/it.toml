@@ -51,7 +51,3 @@ pairs = [
   ["Sma.", "Santissima"],
   ["N.S.", "Nostra Signora"],
 ]
-
-[id_numbers]
-# codice fiscale: 6 letters, 2 digits, a letter, 2 digits, a letter, 3 digits and a check letter
-cf = '(?<![A-Za-z0-9])[A-Za-z]{6}\d{2}[A-Za-z]\d{2}[A-Za-z]\d{3}[A-Za-z](?![A-Za-z0-9])'

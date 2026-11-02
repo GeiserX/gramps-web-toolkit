@@ -1,6 +1,5 @@
 """Tests for gwt_core.rules on an invented tree. Run: cd core && python3 -m pytest -q"""
 import os
-import re
 import sys
 import tomllib
 import unittest
@@ -315,7 +314,7 @@ class Locales(unittest.TestCase):
             tab = self.raw(code)
             self.assertEqual(tuple(tab), rules.SECTIONS, code)
             self.assertEqual(tab["code"], code)
-            keys = {s: sorted(v) for s, v in tab.items() if isinstance(v, dict) and s != "id_numbers"}
+            keys = {s: sorted(v) for s, v in tab.items() if isinstance(v, dict)}
             if shape is None:
                 shape = keys
             self.assertEqual(keys, shape, f"{code} has different keys from {rules.LOCALES[0]}")
@@ -339,11 +338,9 @@ class Locales(unittest.TestCase):
                     self.assertIn(seen.setdefault(f, n), (n,), f"{code}: {w!r} is month {seen[f]} and {n}")
             self.assertEqual(rules.month(self.raw(code)["months"]["5"][0].upper(), code), 5)
 
-    def test_every_id_kind_has_a_check_and_compiles(self):
+    def test_identity_numbers_live_in_the_code_not_in_a_language(self):
         for code in rules.LOCALES:
-            for kind, rx in self.raw(code)["id_numbers"].items():
-                self.assertIn(kind, rules.ID_CHECKS, code)
-                re.compile(rx)
+            self.assertNotIn("id_numbers", self.raw(code), code)
 
 
 class Dedication(unittest.TestCase):
@@ -359,28 +356,38 @@ class Dedication(unittest.TestCase):
 
 class Ids(unittest.TestCase):
     def test_spanish(self):
-        self.assertEqual(rules.find_ids("DNI 12345678Z", "es"), [("dni", "12345678Z")])
-        self.assertEqual(rules.find_ids("DNI 12345678A", "es"), [])
-        self.assertEqual(rules.find_ids("NIE X1234567L", "es"), [("nie", "X1234567L")])
-        self.assertEqual(rules.find_ids("NIE X1234567A", "es"), [])
-        self.assertEqual(rules.find_ids("foto_20230115B.jpg", "es"), [])
+        self.assertEqual(rules.find_ids("DNI 12345678Z"), [("dni", "12345678Z")])
+        self.assertEqual(rules.find_ids("DNI 12345678A"), [])
+        self.assertEqual(rules.find_ids("NIE X1234567L"), [("nie", "X1234567L")])
+        self.assertEqual(rules.find_ids("NIE X1234567A"), [])
+        self.assertEqual(rules.find_ids("foto_20230115B.jpg"), [])
 
     def test_french_nir(self):
-        self.assertEqual(rules.find_ids("NIR 1 85 05 78 006 084 91", "fr"), [("nir", "1 85 05 78 006 084 91")])
-        self.assertEqual(rules.find_ids("NIR 1 85 05 78 006 084 92", "fr"), [])
-        self.assertEqual(rules.find_ids("2 69 05 2A 006 084 90", "fr"), [("nir", "2 69 05 2A 006 084 90")])
+        self.assertEqual(rules.find_ids("NIR 1 85 05 78 006 084 91"), [("nir", "1 85 05 78 006 084 91")])
+        self.assertEqual(rules.find_ids("NIR 1 85 05 78 006 084 92"), [])
+        self.assertEqual(rules.find_ids("2 69 05 2A 006 084 90"), [("nir", "2 69 05 2A 006 084 90")])
 
     def test_italian_codice_fiscale(self):
-        self.assertEqual(rules.find_ids("CF RSSMRA85T10A562S", "it"), [("cf", "RSSMRA85T10A562S")])
-        self.assertEqual(rules.find_ids("CF RSSMRA85T10A562T", "it"), [])
+        self.assertEqual(rules.find_ids("CF RSSMRA85T10A562S"), [("cf", "RSSMRA85T10A562S")])
+        self.assertEqual(rules.find_ids("CF RSSMRA85T10A562T"), [])
 
     def test_us_ssn(self):
-        self.assertEqual(rules.find_ids("SSN 123-45-6789", "en"), [("us_ssn", "123-45-6789")])
+        self.assertEqual(rules.find_ids("SSN 123-45-6789"), [("us_ssn", "123-45-6789")])
         for bad in ("000-45-6789", "666-45-6789", "900-45-6789", "123-00-6789", "123-45-0000"):
-            self.assertEqual(rules.find_ids(bad, "en"), [], bad)
+            self.assertEqual(rules.find_ids(bad), [], bad)
 
-    def test_no_ids_where_the_locale_has_none(self):
-        self.assertEqual(rules.find_ids("12345678Z", "de"), [])
+    def test_an_id_is_found_whatever_the_language_of_the_text(self):
+        # a DNI in an English note, an SSN in a Spanish one
+        self.assertEqual(rules.find_ids("Her Spanish ID card was 12345678Z."), [("dni", "12345678Z")])
+        self.assertEqual(rules.find_ids("número de la seguridad social 123-45-6789"), [("us_ssn", "123-45-6789")])
+        self.assertEqual(rules.find_ids("DNI 12345678Z, SSN 123-45-6789", kinds=("us_ssn",)),
+                         [("us_ssn", "123-45-6789")])
+
+    def test_only_ascii_digits(self):
+        # Arabic-Indic and fullwidth digits are not an identity number, and never crash the check
+        self.assertEqual(rules.find_ids("RSSMRA٨٥T10A562S"), [])
+        self.assertEqual(rules.find_ids("DNI １２３４５６７８Z"), [])
+        self.assertEqual(rules.find_ids("٠١٢-٤٥-٦٧٨٩"), [])
 
 
 if __name__ == "__main__":

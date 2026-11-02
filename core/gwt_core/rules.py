@@ -7,7 +7,7 @@
                                        also from a written date such as «12 de marzo de 1890»
     load_locale(code)                  one word table from gwt_core/locales/<code>.toml
     dedication(text, locale)           a church name with its abbreviations written out («N.ª S.ª» -> nuestra senora)
-    find_ids(text, locale)             identity numbers whose check digit is right (DNI, NIE, NIR, codice fiscale, SSN)
+    find_ids(text, kinds=None)         identity numbers whose check digit is right (DNI, NIE, NIR, codice fiscale, SSN)
 
 Standard library only (tomllib needs Python 3.11).
 """
@@ -26,7 +26,7 @@ PARENT_AGE = 14      # nobody has a child or marries younger than this
 PARENT_MAX_AGE = 60  # nobody is born to a parent older than this
 
 LOCALES = ("es", "en", "fr", "it", "pt", "de", "nl", "ca", "eu", "gl", "la")
-SECTIONS = ("code", "name", "fold", "months", "dates", "gender", "roles", "events", "dedication", "id_numbers")
+SECTIONS = ("code", "name", "fold", "months", "dates", "gender", "roles", "events", "dedication")
 
 _WORD = re.compile(r"[^\W_]+")
 
@@ -69,7 +69,6 @@ def load_locale(code: str) -> dict:
     tab["_filler"] = frozenset(" ".join(_plain(w)) for w in tab["dates"]["filler"])
     tab["_months"] = {_fold(w, tab["_particles"], tab["_pairs"]): int(n) for n, words in tab["months"].items() for w in words}
     tab["_dedication"] = tuple((" ".join(_plain(a)), " ".join(_plain(b))) for a, b in tab["dedication"]["pairs"])
-    tab["_ids"] = tuple((kind, re.compile(rx)) for kind, rx in tab["id_numbers"].items())
     return tab
 
 
@@ -120,14 +119,30 @@ def _ssn(s: str) -> bool:
     return area not in ("000", "666") and not area.startswith("9") and group != "00" and serial != "0000"
 
 
-ID_CHECKS = {"dni": _dni, "nie": _nie, "nir": _nir, "cf": _cf, "us_ssn": _ssn}
+# An identity number belongs to a country, not to the language of the text around it, so every kind is looked
+# for in every text; the check digit keeps a dated file name such as «20230115B» from passing for one.
+# Patterns match ASCII digits only.
+_EDGE, _END = r"(?<![A-Za-z0-9])", r"(?![A-Za-z0-9])"
+ID_KINDS = {
+    # Spain: DNI, 8 digits and a check letter; NIE, X, Y or Z, 7 digits and a check letter (mod 23)
+    "dni": (_EDGE + r"\d{8}[A-Za-z]" + _END, _dni),
+    "nie": (_EDGE + r"[XYZxyz]\d{7}[A-Za-z]" + _END, _nie),
+    # France: NIR, 13 characters and a 2-digit key, 97 - (number mod 97); Corsica 2A/2B
+    "nir": (_EDGE + r"[12] ?\d{2} ?\d{2} ?(?:\d{2}|2[ABab]) ?\d{3} ?\d{3} ?\d{2}" + _END, _nir),
+    # Italy: codice fiscale, 6 letters, 2 digits, a letter, 2 digits, a letter, 3 digits and a check letter
+    "cf": (_EDGE + r"[A-Za-z]{6}\d{2}[A-Za-z]\d{2}[A-Za-z]\d{3}[A-Za-z]" + _END, _cf),
+    # United States: SSN; area 000, 666 and 9xx, group 00 and serial 0000 are never issued
+    "us_ssn": (r"(?<![0-9])\d{3}-\d{2}-\d{4}(?![0-9])", _ssn),
+}
+_IDS = tuple((kind, re.compile(rx, re.ASCII), check) for kind, (rx, check) in ID_KINDS.items())
 
 
-def find_ids(text: str, locale: str) -> list[tuple[str, str]]:
-    """(kind, number) for each identity number in `text` whose check digit or rules hold."""
+def find_ids(text: str, kinds=None) -> list[tuple[str, str]]:
+    """(kind, number) for each identity number in `text` whose check digit or rules hold; `kinds` limits the
+    search to those kinds."""
     flat = "".join(c for c in unicodedata.normalize("NFD", text or "") if not unicodedata.combining(c))
-    return [(kind, m.group(0)) for kind, rx in load_locale(locale)["_ids"] for m in rx.finditer(flat)
-            if ID_CHECKS[kind](m.group(0))]
+    return [(kind, m.group(0)) for kind, rx, check in _IDS if kinds is None or kind in kinds
+            for m in rx.finditer(flat) if check(m.group(0))]
 
 
 # --- dates ---------------------------------------------------------------------------------------------------

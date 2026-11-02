@@ -12,7 +12,7 @@ possibly_living(person, ix)             # (True, "child-born-1990", 1976)
 fold("Bermúdez de Castro", "es")        # "vermudez castro"
 read_date("12 de marzo de 1890", "es")  # a Gramps Date dict for 1890-03-12
 dedication("N.ª S.ª del Rosario", "es") # "nuestra senora del rosario"
-find_ids("DNI 12345678Z", "es")         # [("dni", "12345678Z")]
+find_ids("DNI 12345678Z")               # [("dni", "12345678Z")]
 ```
 
 ## Who may be living
@@ -69,12 +69,11 @@ With a locale, the date may also be written out: `12 de marzo de 1890` (es), `Ma
 | `roles` | the words for `godparent`, `witness`, `father`, `mother`, `child`, `spouse`, `priest` |
 | `events` | the words for `birth`, `baptism`, `marriage`, `death`, `burial` |
 | `dedication` | `pairs` of a church-name abbreviation and its full words (`N.ª S.ª` and `Nuestra Señora`, `St.` and `Saint`) |
-| `id_numbers` | a regular expression per identity number; may be empty |
 
 Words are written as the records write them, with accents; the code folds both sides before comparing. A month word must name one month only within its file.
 
 `dedication(text, locale)` folds a church name and writes out its abbreviations, whole words only, so `Stoke` stays `stoke`.
 
-`find_ids(text, locale)` returns each identity number whose check digit or issuing rules hold: the Spanish DNI and NIE (`es`, `ca`, `eu`, `gl`), the French NIR (`fr`), the Italian codice fiscale (`it`) and the United States SSN (`en`). A number with a wrong check digit is not reported, so a dated file name such as `20230115B` is not taken for an ID.
+`find_ids(text, kinds=None)` returns each identity number whose check digit or issuing rules hold: the Spanish DNI and NIE, the French NIR, the Italian codice fiscale and the United States SSN. An identity number belongs to a country, not to the language of the text, so every kind is looked for in every text (a DNI in an English note is found); `kinds=("dni", "nie")` limits the search. A number with a wrong check digit is not reported, so a dated file name such as `20230115B` is not taken for an ID. Only ASCII digits count.
 
-To add a language, copy a file, translate every section, add its code to `LOCALES` in `rules.py`, and run `cd core && python3 -m pytest -q`. To add an identity number, add its pattern under `id_numbers` and its check to `ID_CHECKS`.
+To add a language, copy a file, translate every section, add its code to `LOCALES` in `rules.py`, and run `cd core && python3 -m pytest -q`. To add an identity number, add its pattern and its check to `ID_KINDS` in `rules.py`.

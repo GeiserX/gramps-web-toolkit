@@ -14,7 +14,7 @@ gwt_core/rules.py | bounds.append((y - PARENT_AGE, f"married-{y}")) | bounds.app
 gwt_core/rules.py | e[0] + gap, f"sibling- | e[0], f"sibling- | a sibling is born up to `gap` years apart
 gwt_core/rules.py | bound, reason = min(bounds) | bound, reason = max(bounds) | the tightest bound from relatives decides
 gwt_core/rules.py | if w not in particles | if True | a locale's particles are dropped from a folded name
-gwt_core/rules.py | if ID_CHECKS[kind](m.group(0))] | ] | an identity number counts only with a right check digit
+gwt_core/rules.py | if check(m.group(0))] | ] | an identity number counts only with a right check digit
 gwt_core/rules.py | return first + max(dv[6] - dv[2], 0) | return first | a range or span birth is read by its last year, or someone born in 1930 passes as not living
 gwt_core/rules.py | if d.get("modifier") == MOD_AFTER: | if False: | «after Y» has no end, so it is never an upper bound on the birth year
 gwt_core/rules.py | if after and max(after) >= cutoff: | if False: | born after a year inside the window is living
@@ -23,3 +23,4 @@ gwt_core/rules.py | if (e := ix.earliest(person))[0]: | if False: | someone on a
 gwt_core/rules.py | self.own_events(p, None) if y] | self.own_events(p, BIRTH_TYPES) if y] | a relative's death or census year bounds their birth too, not only a birth
 gwt_core/rules.py | for sh in ix.handles(person.get("family_list"), "parents"): | for sh in (): | a spouse born in Y bounds the person at Y + gap
 gwt_core/rules.py | for ph in ix.handles(person.get("parent_family_list"), "parents"): | for ph in (): | a parent born in Y bounds the child at Y + PARENT_MAX_AGE
+gwt_core/rules.py | re.compile(rx, re.ASCII) | re.compile(rx) | Arabic-Indic or fullwidth digits are not an identity number, and must not crash the check
