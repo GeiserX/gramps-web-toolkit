@@ -249,6 +249,60 @@ class Living(unittest.TestCase):
         self.assertEqual(possibly_living({}, {"people": [holder]}, undated=False), (False, "no-dates", None))
 
 
+    def test_the_tightest_own_birth_evidence_wins(self):
+        # a birth «bet 1880 and 1960» and a baptism in 1890: born by 1890, so not living
+        t = Tree()
+        p = t.dated("Birth", modifier=rules.MOD_RANGE, dateval=[0, 0, 1880, False, 0, 0, 1960, False])
+        p["event_ref_list"].append(t.event("Baptism", 1890))
+        self.assertEqual(t.living(p), (False, "baptised-1890", 1890))
+
+    def test_born_after_the_cutoff_year_itself_is_living(self):
+        t = Tree()
+        p = t.dated("Birth", modifier=rules.MOD_AFTER, dateval=[0, 0, YEAR - 110, False])
+        self.assertEqual(t.living(p, undated=False), (True, f"born-after-{YEAR - 110}", None))
+
+    def test_a_range_written_backwards_reads_its_latest_year(self):
+        t = Tree()
+        p = t.dated("Birth", modifier=rules.MOD_RANGE, dateval=[0, 0, 1930, False, 0, 0, 1900, False])
+        self.assertEqual(t.living(p), (True, "born-1930", 1930))
+
+    def test_malformed_dates_do_not_crash(self):
+        # a range with no second date, another calendar with no sortval: read as far as they go, or undated
+        t = Tree()
+        rng = t.dated("Birth", modifier=rules.MOD_RANGE, dateval=[0, 0, 1900, False])
+        self.assertEqual(t.living(rng), (False, "born-1900", 1900))
+        nosort = t.dated("Birth", calendar=4, dateval=[1, 1, 1400, False])
+        self.assertEqual(t.living(nosort), (True, "no-dates", None))
+
+    def test_a_reference_to_a_missing_person_is_skipped(self):
+        t = Tree()
+        p = t.person()
+        f = t.family(p, [t.person(born=1880)])
+        f["child_ref_list"].append({"ref": "gone"})
+        f["mother_handle"] = "gone"
+        self.assertEqual(t.living(p), (False, "child-born-1880", 1866))
+
+    def test_types_and_roles_as_objects(self):
+        # some exports give a type or role as {"string": ...}
+        t = Tree()
+        p = t.person()
+        h = t._h("e")
+        t.snap["events"].append({"handle": h, "type": {"string": "Birth"}, "date": {"dateval": [0, 0, 1880, False]}})
+        p["event_ref_list"].append({"ref": h, "role": {"string": "Primary"}})
+        self.assertEqual(t.living(p), (False, "born-1880", 1880))
+
+    def test_burial_and_cremation_name_themselves(self):
+        t = Tree()
+        self.assertEqual(t.living(t.dated("Burial", dateval=[0, 0, 1990, False])), (False, "burial-recorded", None))
+
+    def test_only_a_marriage_counts_among_family_events(self):
+        t = Tree()
+        p = t.person()
+        f = t.family(p)
+        f["event_ref_list"].append(t.event("Residence", 1800))
+        self.assertEqual(t.living(p, undated=False), (False, "no-dates", None))
+
+
 class Fold(unittest.TestCase):
     def test_plain(self):
         self.assertEqual(rules.fold("  María-José  ÁLVAREZ, n.º 3 "), "maria jose alvarez n o 3")
@@ -301,7 +355,7 @@ class Dates(unittest.TestCase):
 
     def test_written_dates_refused(self):
         for text in ["12 de marzo", "31 de febrero de 1890", "12 de marzo y abril de 1890", "marzo de 90",
-                     "123 de marzo de 1890", "0 de marzo de 1890"]:
+                     "123 de marzo de 1890", "0 de marzo de 1890", "12 13 de marzo de 1890"]:
             with self.assertRaises(rules.DateError, msg=text):
                 rules.read_date(text, "es")
 
@@ -368,6 +422,7 @@ class Ids(unittest.TestCase):
         self.assertEqual(rules.find_ids("DNI 12345678A"), [])
         self.assertEqual(rules.find_ids("NIE X1234567L"), [("nie", "X1234567L")])
         self.assertEqual(rules.find_ids("NIE X1234567A"), [])
+        self.assertEqual(rules.find_ids("NIE Y1234567X, Z1234567R"), [("nie", "Y1234567X"), ("nie", "Z1234567R")])
         self.assertEqual(rules.find_ids("foto_20230115B.jpg"), [])
 
     def test_french_nir(self):
@@ -396,6 +451,10 @@ class Ids(unittest.TestCase):
         self.assertEqual(rules.find_ids("RSSMRA٨٥T10A562S"), [])
         self.assertEqual(rules.find_ids("DNI １２３４５６７８Z"), [])
         self.assertEqual(rules.find_ids("٠١٢-٤٥-٦٧٨٩"), [])
+
+    def test_a_number_inside_a_longer_word_or_number_is_not_an_id(self):
+        for text in ("112345678Z", "12345678ZA", "ref ABC12345678Z", "Perú12345678Z", "1123-45-6789"):
+            self.assertEqual(rules.find_ids(text), [], text)
 
 
 if __name__ == "__main__":

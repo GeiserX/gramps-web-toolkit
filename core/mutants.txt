@@ -26,3 +26,8 @@ gwt_core/rules.py | for ph in ix.handles(person.get("parent_family_list"), "pare
 gwt_core/rules.py | re.compile(rx, re.ASCII) | re.compile(rx) | Arabic-Indic or fullwidth digits are not an identity number, and must not crash the check
 gwt_core/rules.py | == "dna" and r.get("ref"): | == "dna": | a DNA association with no ref must not make a person with no handle a match
 gwt_core/rules.py | (len(nums[0]) > 2 or not int(nums[0])) | len(nums[0]) > 2 | day 0 is refused, not read as a month-only date
+gwt_core/rules.py | y, t = own[0] | y, t = own[-1] | the tightest own birth evidence decides: a baptism in 1890 beats a birth «bet 1880 and 1960»
+gwt_core/rules.py | if after and max(after) >= cutoff: | if after and max(after) > cutoff: | «after Y» with Y exactly `years` ago is still living
+gwt_core/rules.py | return first + max(dv[6] - dv[2], 0) | return first + dv[6] - dv[2] | a range written backwards is read by its larger year
+gwt_core/rules.py | return [h for h in out if h in self.people] | return [h for h in out if h] | a family reference to a person not in the snapshot is skipped, not a crash
+gwt_core/rules.py | _EDGE, _END = r"(?<![A-Za-z0-9])", r"(?![A-Za-z0-9])" | _EDGE, _END = "", "" | digits inside a longer number or word are not an identity number
