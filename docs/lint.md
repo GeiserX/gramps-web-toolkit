@@ -76,7 +76,7 @@ Each rule judges an op on the tree as the list leaves it: the people, families a
 
 ### scope
 
-Every person and family an op touches must be a blood relative of a root, or the spouse of one. Blood is the roots' ancestors and every descendant of those ancestors, through parent links of type Birth, Adopted, Unknown or none. A Stepchild, Foster or Sponsored link is never a blood line, and neither is a marriage: a spouse's brother is out. A family is in scope when one of its parents is a blood relative. An event touches the people and families that list it; a child_ref its child and family; notes, citations, media, places and sources touch nobody.
+Every person and family an op touches must be a blood relative of a root, or the spouse of one. Blood is the roots' ancestors and every descendant of those ancestors, through parent links of type Birth, Adopted, Unknown or none. A Stepchild, Foster or Sponsored link is never a blood line, and neither is a marriage: a spouse's brother is out. A family is in scope when one of its parents is a blood relative. An event touches the people and families that list it; a child_ref its child and family; notes, citations, media, places and sources touch nobody. `namesake_of` and `new_couple_of` name the people and families a new object is *not*, so they touch nobody either (here and in overlap).
 
 | Code | When |
 |---|---|

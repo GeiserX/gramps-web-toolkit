@@ -216,3 +216,19 @@ def test_overlap_ignores_shared_places_and_sources(tmp_path):
     ctx = F.Context([{"op": "add_event", "key": "e", "_line": 1, "person": "I4", "type": "Residence",
                       "place": "P1"}], F.Tree.load(TREE), {"overlap": {"open": str(tmp_path)}})
     assert T.Overlap().check(ctx) == []
+
+
+def test_namesakes_an_op_says_it_is_not_are_not_touched(tmp_path):
+    # namesake_of and new_couple_of name the people and families the new object is NOT, often outside scope
+    ops = [{"op": "add_person", "key": "p", "first_name": "Hugo", "surname": "Vega", "allow_namesake": True,
+            "namesake_reason": "another man of the same name", "namesake_of": ["I7"], "tag": "weak"},
+           {"op": "link_child", "key": "l", "family": "F1", "child": "key:p"},
+           {"op": "add_family", "key": "f", "father": "key:p", "allow_new_couple": True,
+            "new_couple_reason": "a second marriage", "new_couple_of": ["F5"]}]
+    tree = F.Tree.load(TREE)
+    ctx = F.Context([dict(o, _line=1) for o in ops], tree, {"scope": {"roots": ["I1"]}})
+    assert [f for f in T.Scope().check(ctx) if isinstance(f, F.Finding)] == []
+    (tmp_path / "other.jsonl").write_text(json.dumps(
+        {"op": "add_note", "key": "n", "text": "x", "attach": [{"person": "I7"}, {"family": "F5"}]}) + "\n")
+    ctx = F.Context([dict(o, _line=1) for o in ops], tree, {"overlap": {"open": str(tmp_path)}})
+    assert T.Overlap().check(ctx) == []

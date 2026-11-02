@@ -45,3 +45,4 @@ gwt_lint/framework.py |     if isinstance(data, (list, dict)): |     if False: |
 gwt_lint/cli.py |                 where[key] = v = [v] |                 pass | one name in lint.toml may be a bare string
 gwt_lint/cli.py |         return _fail(args, f"{type(e).__name__}: {e}") |         raise | an unexpected error exits 2, never 1 (findings)
 gwt_lint/cli.py |     if getattr(args, "json", False): |     if False: | --json prints an input error as JSON on stdout too
+gwt_lint/framework.py | "enclosed_by": "Place", "children": "Person"} | "enclosed_by": "Place", "children": "Person", "namesake_of": "Person", "new_couple_of": "Family"} | the namesakes an op says it is not are not people or families it touches

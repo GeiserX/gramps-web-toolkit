@@ -38,11 +38,11 @@ CREATES = {"add_person": "Person", "add_event": "Event", "add_family": "Family",
            "add_media": "Media", "add_note": "Note", "add_transcription": "Note"}
 MERGED = {"merge_person": "Person", "merge_family": "Family", "merge_event": "Event",
           "merge_repository": "Repository"}
-# plain fields that name one object (a Gramps ID or key:<key>), by the kind they name
+# plain fields that name one object (a Gramps ID or key:<key>), by the kind they name. namesake_of and
+# new_couple_of are left out: they name the people and families the new object is NOT, so the op does not touch them
 FIELDS = {"person": "Person", "child": "Person", "father": "Person", "mother": "Person", "family": "Family",
           "event": "Event", "citation": "Citation", "note": "Note", "place": "Place", "source": "Source",
-          "repository": "Repository", "enclosed_by": "Place", "children": "Person", "namesake_of": "Person",
-          "new_couple_of": "Family"}
+          "repository": "Repository", "enclosed_by": "Place", "children": "Person"}
 # fields whose value is new free text, per op ("set.text" is the text key inside `set`)
 TEXT_FIELDS = {"add_note": ("text",), "add_transcription": ("text", "margin_reading"),
                "add_event": ("description",), "update_note": ("set.text",), "update_event": ("set.description",),
