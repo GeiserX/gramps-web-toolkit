@@ -10,7 +10,8 @@ import pytest
 
 from fake_api import FakeGrampsWeb, Resp
 from gwt_apply import revert
-from gwt_apply.client import NAMESPACE, Client
+from gwt_apply.client import NAMESPACE, ApiError, Client
+from gwt_apply.dates import parse_date
 from gwt_apply.ops import FAMILYSEARCH, SPECS, Applier, ops_table, stable_handle, validate
 
 R = "ruling-0001"
@@ -138,6 +139,8 @@ def test_update_person_name_parts_and_private(fake, tmp_path):
     op = {"op": "update_person", "key": "u", "ruling": R, "person": "I0001",
           "set": {"call_name": "Anna", "nickname": "Annie", "title": "Dr.", "suffix": "Jr.", "private": True}}
     roundtrip(fake, tmp_path, [op])
+    assert run(fake, [dict(op, key="p", set={"private": True})])[0].status == "done"
+    assert fake.store["people"]["anna"]["private"] is True
     assert validate([dict(op, set={"nickname": 3})]) and validate([dict(op, set={"private": "yes"})])
 
 
@@ -456,3 +459,88 @@ def test_ops_table_lists_every_op_with_its_fields():
     assert set(table) == set(SPECS)
     assert table["delete"] == {"required": ["expect_unreferenced", "object"], "optional": ["expect", "tag"]}
     assert all(set(row) == {"required", "optional"} for row in table.values())
+
+
+# ---- guards a verifier found with no test
+
+
+def test_reorder_refs_refuses_a_ref_the_list_lacks_or_holds_twice(fake):
+    for h in ("e1", "e2"):
+        fake.add("events", {"handle": h, "type": "Residence"})  # E0001, E0002
+    fake.store["people"]["anna"]["event_ref_list"] = [{"ref": "e1", "role": "Primary"}, {"ref": "e1", "role": "Primary"}]
+    op = {"op": "reorder_refs", "key": "r", "ruling": R, "target": {"person": "I0001"}, "list": "event_ref_list",
+          "ref": "E0002", "position": 0}
+    res = run(fake, [op])[0]
+    assert res.status == "conflict" and "has no E0002 in event_ref_list" in res.actions[-1], res.actions
+    res = run(fake, [dict(op, ref="E0001")])[0]
+    assert res.status == "conflict" and "2 times" in res.actions[-1], res.actions
+    assert fake.writes() == []
+
+
+def test_merge_refuses_one_object_twice_and_citations_that_differ(fake):
+    res = run(fake, [{"op": "merge_source", "key": "s", "ruling": R, "winner": "S0001", "loser": "S0001"}])[0]
+    assert res.status == "conflict" and "the same source" in res.actions[-1], res.actions
+    fake.add("citations", {"handle": "c1", "source_handle": "src1", "page": "folio 3"})  # C0001
+    fake.add("citations", {"handle": "c2", "source_handle": "src1", "page": "folio 3", "confidence": 3})  # C0002
+    op = {"op": "merge_citation", "key": "m", "ruling": R, "winner": "C0001", "loser": "C0002"}
+    res = run(fake, [op])[0]
+    assert res.status == "conflict" and "differ in confidence" in res.actions[-1], res.actions
+    fake.store["citations"]["c2"].update(confidence=2, date=parse_date("1890"))
+    res = run(fake, [dict(op, key="n")])[0]
+    assert res.status == "conflict" and "differ in date" in res.actions[-1], res.actions
+    assert fake.writes() == []
+
+
+def test_validate_refuses_a_bad_url_an_id_on_a_place_and_a_force_that_is_not_true(tmp_path):
+    op = {"op": "set_external_id", "key": "x", "ruling": R, "target": {"person": "I0001"}, "system": "WikiTree",
+          "id": "Example-1234"}
+    assert not validate([op]) and not validate([dict(op, url="https://www.wikitree.com/wiki/Example-1234")])
+    assert validate([dict(op, url="www.wikitree.com/wiki/Example-1234")])
+    assert validate([dict(op, target={"place": "P0001"})])
+    scan = tmp_path / "scan.jpg"
+    scan.write_bytes(b"\xff\xd8 a scan")
+    media = {"op": "add_media", "key": "m", "ruling": R, "file": str(scan), "path": "scans/scan.jpg",
+             "attach": [{"person": "I0001"}]}
+    assert not validate([dict(media, force=True)]) and validate([dict(media, force=False)])
+
+
+def test_verify_follows_a_merged_place_to_its_winner(fake):
+    """A list that named the loser still verifies after a merge_place: the merge note leads to the winner."""
+    fake.add("places", {"handle": "dup", "name": {"value": "Springfeld"}, "place_type": "Town"})  # P0002
+    fake.add("events", {"handle": "ev", "type": "Birth"})  # E0001
+    older = [{"op": "update_event", "key": "e", "ruling": R, "event": "E0001", "set": {"place": "P0002"}}]
+    assert run(fake, older)[0].status == "done"
+    assert run(fake, [{"op": "merge_place", "key": "m", "ruling": R, "winner": "P0001", "loser": "P0002"}])[0].status == "done"
+    assert fake.store["events"]["ev"]["place"] == "plc1"
+    res = run(fake, older, verify=True)[0]
+    assert res.status == "skip", res.actions
+
+
+def test_delete_on_a_snapshot_sees_a_reference_an_earlier_op_of_the_list_adds(fake):
+    _note(fake, "orphan", "a note nothing points at yet")  # N0001
+    ops = [{"op": "attach_existing", "key": "a", "ruling": R, "object": {"note": "N0001"}, "attach": [{"person": "I0001"}]},
+           {"op": "delete", "key": "d", "ruling": R, "object": {"note": "N0001"}, "expect_unreferenced": True}]
+    res = Applier(_offline(fake), retries=1, retry_wait=0).run(ops)
+    assert [r.status for r in res] == ["done", "conflict"], [r.actions for r in res]
+    assert "still referenced by person I0001" in res[1].actions[-1], res[1].actions
+
+
+def test_replace_file_names_a_file_the_server_says_changed(fake):
+    """The server's own If-Match check (412), for a file replaced between the op's read and its PUT."""
+    fake.add("media", {"handle": "med", "path": "a.jpg", "checksum": hashlib.md5(b"old").hexdigest(), "mime": "image/jpeg"})
+    with pytest.raises(ApiError, match="it no longer has MD5"):
+        _client(fake).replace_file("med", b"new", "image/jpeg", hashlib.md5(b"another").hexdigest())
+
+
+def test_a_place_merge_stops_trusting_the_snapshot_for_events(fake):
+    """After a place merge, an event read from the snapshot still names the loser; written back, it would point
+    at a place that is gone."""
+    fake.add("places", {"handle": "dup", "name": {"value": "Springfeld"}, "place_type": "Town"})  # P0002
+    fake.add("events", {"handle": "ev", "type": "Birth", "place": "dup"})  # E0001
+    c = _client(fake)
+    c.use_snapshot({"tree": "tree-test", "objects": {cls: list(fake.store[ns].values()) for cls, ns in NAMESPACE.items()
+                                                     if cls != "Tag"}})
+    ops = [{"op": "merge_place", "key": "m", "ruling": R, "winner": "P0001", "loser": "P0002"},
+           {"op": "update_event", "key": "e", "ruling": R, "event": "E0001", "set": {"description": "at home"}}]
+    assert [r.status for r in Applier(c, retries=3, retry_wait=0).run(ops)] == ["done", "done"]
+    assert fake.store["events"]["ev"]["place"] == "plc1"

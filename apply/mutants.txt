@@ -157,3 +157,19 @@ gwt_apply/ops.py | person in {r.get("ref") for r in family.get("child_ref_list")
 gwt_apply/ops.py | return re.sub(r"[\s._-]", "", fold(system)) == "familysearch" | return fold(system) == "familysearch" | set_external_id knows FamilySearch written with a space or a dash
 gwt_apply/ops.py | if cls == "Person" and self._alt_matches(obj.get("primary_name") or {}, cls, {"first_name": "", "surnames": [], **f}): | if False: | add_alternate_name refuses a copy of the primary name
 gwt_apply/ops.py | not (self.verify or self._lost or op["key"] in self.landed): | not (self.verify or self._lost): | a rerun of the same list skips the link its earlier --apply made with attach_existing expect: absent
+gwt_apply/cli.py | or lines[0].get("dry_run"): | : | a dry run's log never counts as an earlier apply of the list
+gwt_apply/cli.py | lambda: _plan_on_snapshot(ops, snap, client, tag=args.tag, landed=landed), | lambda: _plan_on_snapshot(ops, snap, client, tag=args.tag), | the plan on a --snapshot of a rerun skips the removals that landed too
+gwt_apply/cli.py | e.get("event") == "op" and e.get("status") == "done" and e.get("key")} | e.get("event") == "op" and e.get("key")} | only the ops an earlier apply logged as done count as landed
+gwt_apply/ops.py |         if not at: | if False: | reorder_refs refuses a reference the list lacks
+gwt_apply/ops.py | if len(at) > 1: | if False: | reorder_refs refuses a reference the list holds twice
+gwt_apply/ops.py | raise Conflict(f"winner and loser are the same {cls.lower()}") | pass | merge_place, merge_source and merge_citation refuse one object as winner and loser
+gwt_apply/ops.py | ("confidence", w.get("confidence", 2) == l_.get("confidence", 2)), | ("confidence", True), | merge_citation refuses citations of another confidence
+gwt_apply/ops.py | ("date", date_key(w.get("date")) == date_key(l_.get("date")))): | ("date", True)): | merge_citation refuses citations of another date
+gwt_apply/ops.py | if "url" in op and not re.match(r"^https?://\S+$", str(op["url"])): | if False: | validate refuses a set_external_id url that is not http(s)
+gwt_apply/ops.py | if _parse_target(op.get("target"))[0] in ("ChildRef", "PersonRef", "Place"): | if False: | validate refuses an external id on a place or a link
+gwt_apply/ops.py | if "force" in op and op["force"] is not True: | if False: | validate refuses a force that is not true
+gwt_apply/ops.py | m = re.match(r"Merged (Person|Family|Event|Repository|Place|Source|Citation) (\S+) ", | m = re.match(r"Merged (Person|Family|Event|Repository) (\S+) ", | --verify follows a merged place, source or citation to its winner
+gwt_apply/ops.py | self._private(person, s) | pass | update_person sets private
+gwt_apply/client.py | self.unsnapped |= {"Person", "Family", "Note"} if cls in ("Person", "Family", "Event") else set(NAMESPACE) | self.unsnapped |= {"Person", "Family", "Note"} | a place, source or citation merge stops trusting the snapshot for every class
+gwt_apply/client.py |         if r.status_code == 412: | if False: | a file the server says changed (412) is named as such
+gwt_apply/ops.py | found |= {k for k, o in self.c.pending.items() if quoted in json.dumps(o)} | pass | offline, delete sees a reference an earlier op of the list adds

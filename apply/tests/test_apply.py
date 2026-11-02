@@ -4241,3 +4241,32 @@ def test_cli_rerun_of_a_list_whose_removals_landed_is_all_skip(fake, tmp_path, m
     other.write_text("".join(json.dumps(o) + "\n" for o in ops))
     assert main([str(other)]) == 1
     assert "[conflict] d (detach" in capsys.readouterr().out
+
+
+def test_cli_rerun_reads_only_the_done_ops_of_an_earlier_apply(fake, tmp_path, env, capsys):
+    """A dry run's log (planned, never written) and an op an earlier apply logged as a conflict never make an
+    absent removal landed; the plan on a --snapshot reads the same logs as the run."""
+    for h in ("n1", "n2", "n3"):  # N0001-N0003
+        fake.add("notes", {"handle": h, "type": "Research", "format": 0, "text": {"string": h, "tags": []}})
+    fake.store["people"]["anna"]["note_list"] = ["n1", "n3"]
+    det = {"op": "detach", "key": "d", "ruling": R, "target": {"person": "I0001"}, "object": {"note": "N0001"}}
+    p = tmp_path / "dry.jsonl"
+    p.write_text(json.dumps(det) + "\n")
+    log = str(tmp_path / "plan.jsonl")
+    assert main([str(p), "--log", log]) == 0  # a dry run, logged
+    fake.store["people"]["anna"]["note_list"] = ["n3"]  # someone else takes the note off
+    capsys.readouterr()
+    assert main([str(p), "--log", log]) == 1 and "[conflict] d (detach" in capsys.readouterr().out
+    q = tmp_path / "typo.jsonl"
+    q.write_text(json.dumps(dict(det, key="t", object={"note": "N0002"})) + "\n")  # a note Anna never had
+    assert main([str(q), "--apply"]) == 1
+    capsys.readouterr()
+    assert main([str(q), "--apply"]) == 1 and "[conflict] t (detach" in capsys.readouterr().out
+    r = tmp_path / "cleanup.jsonl"
+    r.write_text(json.dumps(dict(det, key="x", object={"note": "N0003"})) + "\n" + json.dumps(
+        {"op": "delete", "key": "y", "ruling": R, "object": {"note": "N0003"}, "expect_unreferenced": True}) + "\n")
+    assert main([str(r), "--apply"]) == 0 and "n3" not in fake.store["notes"]
+    snap = tmp_path / "after.json.gz"
+    assert main(["--save-snapshot", str(snap)]) == 0
+    capsys.readouterr()
+    assert main([str(r), "--snapshot", str(snap), "--apply"]) == 0, capsys.readouterr().out
