@@ -201,6 +201,12 @@ class KinTest(unittest.TestCase):
         code, out, _ = run('kin', KIN, 'A3', 'B3', '--json', '--weak-tag', 'nothing-like-it')
         self.assertEqual(json.loads(out)['relationships'][0]['links']['weak'], 0)
 
+    def test_spanish_and_french_weak_words_are_defaults(self):
+        for name in ('r1-débil', 'Lien faible'):
+            T = copy.deepcopy(self.T)
+            T['tags']['htag1']['name'] = name
+            self.assertEqual(self.kin('A3', 'B3', T)['relationships'][0]['links']['weak'], 1, name)
+
     def test_json_and_lang(self):
         code, out, _ = run('kin', KIN, 'A3', 'B4', '--json')
         data = json.loads(out)

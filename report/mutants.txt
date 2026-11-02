@@ -22,3 +22,4 @@ gwt_report.py |                     if p and new['people'][p].get('private') and
 gwt_report.py | cur, path, seen = todo.popleft() | cur, path, seen = todo.pop() | the ancestor walk goes one generation at a time, so the path cap drops the most distant paths, never a whole side
 gwt_report.py |     if cut: |     if False: | a digest says when kin paths were cut, so a person filed as not blood kin may still be kin
 gwt_report.py | head = '' if fh.read(1) == b'\n' else '\n' | head = '' | a told file edited by hand without a last newline gets one before the new rows, so no id is lost
+gwt_report.py | 'weak', 'debil', 'faible') | 'weak') | a tag named with the Spanish or French word for weak marks a weak link by default

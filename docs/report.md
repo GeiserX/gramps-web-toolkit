@@ -59,7 +59,7 @@ Each child-to-parent link of the path is one of:
 
 | Class | When |
 |---|---|
-| `weak` | The child or the family carries a tag whose name holds `hipotesis`, `hypothes` or `weak` (accents and case ignored). `--weak-tag TEXT` replaces that list; repeat it for several |
+| `weak` | The child or the family carries a tag whose name holds `hipotesis`, `hypothes`, `weak`, `debil` or `faible` (accents and case ignored, so `Hipótesis` and `r1-débil` count). `--weak-tag TEXT` replaces that list; repeat it for several |
 | `probable` | A note on the link (the child_ref) starts with `[probable]`, the mark `gwt-apply link_child` writes with `probable: true` |
 | `confirmed` | A note on the link starts with `[confirmed]` (what `update_child_ref` with `confirm_probable` writes), or a citation on the link has confidence 3 or 4 |
 | `unmarked` | None of these |
