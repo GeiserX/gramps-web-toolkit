@@ -240,7 +240,46 @@ def test_living_judges_an_event_moved_onto_someone_who_may_be_living():
     ops = [{"op": "move_event", "key": "mv", "event": "E8b", "from": {"person": "I8"}, "to": {"person": "I10"}},
            {"op": "move_event", "key": "mv-ok", "event": "E8d", "from": {"person": "I8"}, "to": {"person": "I4"}}]
     ctx = F.Context([dict(o, _line=1) for o in ops], F.Tree.load(TREE), {"living": {"this_year": 2026}})
-    assert [(f.code, f.key) for f in T.Living().check(ctx)] == [("living-date", "mv"), ("living-place", "mv")]
+    found = T.Living().check(ctx)
+    assert [(f.code, f.key) for f in found] == [("living-date", "mv"), ("living-place", "mv")]
+    # the message says the date and place as a person reads them, not as the snapshot stores them
+    assert "exact date 1925-05-01 for I10" in found[0].message and "place P1 for I10" in found[1].message
+
+
+def test_living_judges_the_type_of_a_moved_event():
+    # EM1 is a marriage: moving it onto someone who may be living is a marriage of theirs
+    ops = [{"op": "move_event", "key": "mv", "event": "EM1", "from": {"family": "F1"}, "to": {"person": "I10"}}]
+    ctx = F.Context([dict(o, _line=1) for o in ops], F.Tree.load(TREE), {"living": {"this_year": 2026}})
+    assert "living-marriage" in [f.code for f in T.Living().check(ctx)]
+
+
+def test_living_quote_reads_a_transcription_as_a_quotation():
+    ops = [{"op": "add_transcription", "key": "t", "text": "Born at home.", "margin_reading": "none",
+            "attach": [{"person": "I12"}]}]
+    ctx = F.Context([dict(o, _line=1) for o in ops], F.Tree.load(TREE), {"living": {"this_year": 2026}})
+    assert [f.code for f in T.Living().check(ctx)] == ["living-quote"]
+
+
+def test_a_source_title_is_new_text():
+    ops = [{"op": "add_source", "key": "s", "title": "Census sheet of DNI 12345678Z"}]
+    ctx = F.Context([dict(o, _line=1) for o in ops], F.Tree.load(TREE), {"living": {"this_year": 2026}})
+    assert [f.code for f in T.Living().check(ctx)] == ["living-id"]
+
+
+def test_weak_an_update_citation_tag_tags_nothing_so_it_is_no_weak_tag():
+    # update_citation makes no object, so its own tag lands nowhere: the lowered citation still needs an add_tag
+    ops = [{"op": "update_citation", "key": "u", "citation": "C1", "set": {"confidence": 0}, "tag": "weak"}]
+    ctx = F.Context([dict(o, _line=1) for o in ops], F.Tree.load(TREE), {"weak": {"tag": ["weak"]}})
+    assert sorted(f.code for f in T.Weak().check(ctx)) == ["weak-inert-tag", "weak-untagged"]
+
+
+def test_weak_reads_a_snapshot_tag_whose_name_holds_a_weak_tag():
+    # C2 carries the snapshot's weak tag; renamed r7-Weak it still counts for the weak tag "weak"
+    tree = F.Tree.load(TREE)
+    tree.tag_names["htagweak"] = "r7-Weak"
+    ops = [{"op": "update_citation", "key": "u", "citation": "C2", "set": {"confidence": 0}}]
+    ctx = F.Context([dict(o, _line=1) for o in ops], tree, {"weak": {"tag": ["weak"]}})
+    assert T.Weak().check(ctx) == []
 
 
 def test_weak_reads_confidence_the_way_gwt_apply_stores_it():

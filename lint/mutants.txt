@@ -57,3 +57,14 @@ gwt_lint/framework.py | "add_citation": ("page",), | "add_citation": (), | a cit
 gwt_lint/framework.py |     if before.status == "nothing": |     if False: | --prove fails a rule that has nothing to check under your own settings
 gwt_lint/rules_tree.py | len(next(g for g in m.groups() if g).split()) >= QUOTE_WORDS | len(next(g for g in m.groups() if g).split()) >= 0 | a short quoted title is not a quotation
 gwt_lint/rules_tree.py | op.get("type") == "Transcript" or _quotes | False or _quotes | a Transcript note is a quotation whatever its marks
+gwt_lint/rules_tree.py | else text_of(ev.get("type")) | else "" | a marriage moved onto someone who may be living is a marriage of theirs
+gwt_lint/rules_tree.py | kind == "add_transcription" or op.get("type") | False or op.get("type") | a transcription attached to someone who may be living is a quotation
+gwt_lint/framework.py | "add_source": ("title", "author", "pubinfo") | "add_source": ("author", "pubinfo") | a source title is new text
+gwt_lint/rules_tree.py |                 own = False | pass | an update_citation's own tag lands nowhere, so it is no weak tag
+gwt_lint/rules_tree.py | return any(weak(view.tree.tag_names.get(t)) | return any(view.tree.tag_names.get(t) in names | a snapshot tag whose name holds a weak tag counts
+gwt_lint/framework.py | except (OSError, UnicodeDecodeError) as e: | except OSError as e: | a list that is not UTF-8 is named as unreadable, not caught by the last-resort handler
+gwt_lint/framework.py | except (OSError, ValueError, EOFError, zlib.error) as e: | except (OSError, ValueError) as e: | a cut gzip snapshot is named as unreadable
+gwt_lint/cli.py | if sec in cfg and not isinstance(cfg[sec], dict): | if False: | a rule's setting that is not a section is named
+gwt_lint/cli.py | if v is not None and not (isinstance(v, list) and all(isinstance(x, str) for x in v)): | if False: | a list of names with a non-name in it is named
+gwt_lint/cli.py | if v is not None and (not isinstance(v, kind) or isinstance(v, bool)): | if False: | a number or text setting of the wrong type is named
+gwt_lint/rules_tree.py | shown_date, shown_place = _ymd(date), | shown_date, shown_place = date, | a moved event's date is said as a date, not as the snapshot's object

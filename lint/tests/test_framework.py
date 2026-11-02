@@ -190,12 +190,23 @@ def test_a_list_gwt_apply_would_refuse_exits_2(tmp_path):
 
 
 def test_unreadable_bytes_and_bad_settings_exit_2_not_1(tmp_path):
+    # each is named as what it is, not caught by the last-resort handler (which prints the exception's class)
     latin = tmp_path / "latin.jsonl"
     latin.write_bytes(b'{"op": "add_note", "key": "n", "ruling": "R", "text": "Jos\xe9", "attach": []}\n')
-    assert run([str(latin), "--snapshot", os.path.join(FIX, "tree.json")])[0] == 2
+    code, _, err = run([str(latin), "--snapshot", os.path.join(FIX, "tree.json")])
+    assert code == 2 and err.startswith(f"gwt-lint: {latin}: 'utf-8' codec"), err
     gz = tmp_path / "cut.json.gz"
     gz.write_bytes(b"\x1f\x8b\x08\x00garbage")
-    assert run([EXAMPLE[0], "--snapshot", str(gz)])[0] == 2
+    code, _, err = run([EXAMPLE[0], "--snapshot", str(gz)])
+    assert code == 2 and err.startswith(f"gwt-lint: {gz}: ") and "Error:" not in err, err
+    for bad, said in (('[living]\nyears = "ninety"\n', "[living] years is a whole number"),
+                      ('[weak]\ntag = ["weak", 3]\n', "tag is a list of names"),
+                      ('overlap = "x"\n', "overlap is a [overlap] section")):
+        cfg = tmp_path / "said.toml"
+        cfg.write_text(bad)
+        code, _, err = run([os.path.join(FIX, "count-clean.jsonl"), "--snapshot", os.path.join(FIX, "tree.json"),
+                            "--config", str(cfg)])
+        assert code == 2 and said in err, (bad, err)
     for bad in ('[living]\nyears = "ninety"\n', '[weak]\ntag = ["weak", 3]\n', 'overlap = "x"\n',
                 '[protect]\nids = ["I10"]\nlocales = ["xx"]\n'):
         cfg = tmp_path / "lint.toml"
