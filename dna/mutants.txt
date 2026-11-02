@@ -30,3 +30,5 @@ gwt_dna.py | and names[fold(name)] > 1: | and False: | an --id-map name two matc
 gwt_dna.py | encoding="utf-8-sig") as fh:  # a TSV | encoding="utf-8") as fh:  # a TSV | an --id-map saved with a BOM keeps its first line
 gwt_dna.py |     except (BadInput, OSError) as exc: |     except BadInput as exc: | a missing file or folder is exit 2 and one line, not a traceback
 gwt_dna.py |     text = io.StringIO(text, newline=None).read() |     pass | a CSV with an old Mac's line ends reads
+gwt_dna.py |             if (cm or 0) >= CLOSE_KIN_CM: |             if False: | a new person at close-family cM (often your own kit) is reported, not made silently
+gwt_dna.py | if cm is not None and abs(cm - tree["mark_cm"][(site, mid)]) >= 0.05: | if False: | a re-export whose cM changed is reported, since gwt-apply keeps the old notes

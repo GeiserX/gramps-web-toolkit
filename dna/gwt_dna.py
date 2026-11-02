@@ -39,6 +39,7 @@ except ImportError:  # a clone without an install: the shared core sits beside t
 SITES = {"myheritage": "MyHeritage", "ftdna": "FamilyTreeDNA", "gedmatch": "GEDmatch",
          "livingdna": "Living DNA", "ancestry": "AncestryDNA", "other": "a DNA testing site"}
 BATCH = 1500
+CLOSE_KIN_CM = 1300  # a parent, child, sibling, or one of your own kits: almost always someone already in the tree
 CROSS_CM_MIN, CROSS_CM_REL = 20.0, 0.30  # a name links two sites' matches only from 20 cM up, within 30 %: below
 # that, common names repeat among the many small matches and the cM says nothing, so the match becomes a namesake
 MARK = "gwt-import-dna"
@@ -291,7 +292,7 @@ def load_tree(path: str) -> dict:
     for n in notes:
         t = n.get("text")
         note_text[n.get("handle")] = (t.get("string") if isinstance(t, dict) else t) or ""
-    tree = {"ids": {}, "names": {}, "marks": {}, "marks_by_name": {}}
+    tree = {"ids": {}, "names": {}, "marks": {}, "mark_cm": {}, "marks_by_name": {}}
     for p in people:
         gid = p.get("gramps_id")
         if not gid:
@@ -306,6 +307,7 @@ def load_tree(path: str) -> dict:
             if m:
                 site, mid, cm = m.group(1), m.group(2), float(m.group(3))
                 tree["marks"].setdefault((site, mid), gid)
+                tree["mark_cm"].setdefault((site, mid), cm)
                 tree["marks_by_name"].setdefault(fold(name), []).append((gid, site, cm))
     return tree
 
@@ -349,7 +351,7 @@ def build(matches: dict, tree: dict, *, site: str, tested: str, kit: str, ruling
     for m in matches.values():
         names[fold(m["name"])] = names.get(fold(m["name"]), 0) + 1
     rep = {"matches": len(matches), "new_people": 0, "in_tree": [], "cross_site": [], "cross_ambiguous": [],
-           "self": [], "namesakes": [], "with_segments": 0}
+           "self": [], "namesakes": [], "with_segments": 0, "cm_changed": [], "close_kin_new": []}
     for m in sorted(matches.values(), key=lambda m: (-(m["cm"] or 0), m["id"])):
         mid, name, cm = m["id"], m["name"], m["cm"]
         pkey = f"dna-{site}-{mid}"
@@ -358,6 +360,9 @@ def build(matches: dict, tree: dict, *, site: str, tested: str, kit: str, ruling
         target, how = id_map.get(mid) or id_map.get("name:" + fold(name)), "id-map"
         if not target and (site, mid) in tree["marks"]:
             target, how = tree["marks"][(site, mid)], "same-site"
+            if cm is not None and abs(cm - tree["mark_cm"][(site, mid)]) >= 0.05:  # gwt-apply keeps the old notes
+                rep["cm_changed"].append({"match": mid, "person": target, "was": tree["mark_cm"][(site, mid)],
+                                          "now": cm})
         if not target and name:
             cands = {gid: (s, c) for gid, s, c in tree["marks_by_name"].get(fold(name), []) if s != site and close_cm(cm, c)}
             if len(cands) == 1:
@@ -387,6 +392,8 @@ def build(matches: dict, tree: dict, *, site: str, tested: str, kit: str, ruling
             ops.append(person)
             ref = f"key:{pkey}"
             rep["new_people"] += 1
+            if (cm or 0) >= CLOSE_KIN_CM:
+                rep["close_kin_new"].append({"match": mid, "name": name, "cm": cm})
         if ref == tested:
             rep["self"].append(mid)
             continue
@@ -492,6 +499,14 @@ def main(argv=None):
           f"{rep['with_segments']} with segments; {sum(map(len, files))} ops in {len(names)} file(s)", file=sys.stderr)
     if ignored:
         print(f"columns not read: {', '.join(ignored)}", file=sys.stderr)
+    if rep["close_kin_new"]:
+        print(f"{len(rep['close_kin_new'])} new people share {CLOSE_KIN_CM}+ cM (a close relative or your own kit, "
+              f"most likely already in the tree; --id-map them): "
+              + ", ".join(m["match"] for m in rep["close_kin_new"]), file=sys.stderr)
+    if rep["cm_changed"]:
+        print(f"{len(rep['cm_changed'])} matches changed since the last import; gwt-apply keeps their old notes, "
+              f"so update them by hand (report: cm_changed)", file=sys.stderr)
+    print("DNA matches are living people: apply with --private-new", file=sys.stderr)
     return 0
 
 

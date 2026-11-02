@@ -28,7 +28,7 @@ Every op names the ruling `gwt-import-dna` (change it with `--ruling`). For one 
 - **The summary note.** A Research note on the match person: the site, the tested person and kit (`--kit`, default the tested ID), the shared cM, segments and longest segment, and the site's estimated relationship or generations and ancestral surnames when the file has them. Its first line, `gwt-import-dna site=<site> id=<match> cM=<cM>`, is how a later import finds this person again; leave it as it is.
 - **The segment note.** When segments are known, a note on the association with one segment per line, chromosome order, X after 22. This is the text the DNA view parses. The format is fixed (one header, then whole numbers and a cM per line), and the tests pin it to a string Gramps Web's parser, `POST /api/parsers/dna-match`, was seen to accept, read back with a copy of that parser (`gramps_webapi/api/dna.py`).
 
-The keys hold the site and the match id, so a rerun of the same export produces the same keys and gwt-apply skips everything it already made.
+The keys hold the site, the match id and the kit, so a rerun of the same export produces the same keys and gwt-apply skips everything it already made. That also means a new export of the same site never updates a note: a match whose cM changed is listed under `cm_changed` (and counted on stderr), for you to update by hand. A second kit of the same tester (GEDmatch lets you upload several) needs its own `--kit`, or its notes are skipped as already made.
 
 ## Matches already in the tree
 
@@ -60,10 +60,11 @@ A DNA match took a test, so they are alive ([shared rules](rules.md): a DNA matc
 
 ## Output and report
 
-`--out` is JSON Lines. When the list is longer than `--batch` ops (default 1,500), it is split into `<out>-01.jsonl`, `<out>-02.jsonl`... in order, never splitting a match's ops; apply them in that order, since a namesake of a later file only names earlier ones. With `--force`, a rerun that writes fewer files than the last one removes the old extra files, so none of them gets applied by mistake. `--report FILE` writes JSON with the counts, `in_tree` (and how each was found), `cross_site` (both cM), `cross_ambiguous`, `self`, `namesakes`, and under `columns` each file's columns read and ignored and its `skipped_rows` (rows with neither a name nor an id). Neither file is overwritten without `--force`. Exit 0 on success, 2 on a bad file or option (a missing file or column, a tested ID not in the snapshot). A match id listed twice (the same file passed twice) is read once and listed under `duplicate_ids`.
+`--out` is JSON Lines. When the list is longer than `--batch` ops (default 1,500), it is split into `<out>-01.jsonl`, `<out>-02.jsonl`... in order, never splitting a match's ops; apply them in that order, since a namesake of a later file only names earlier ones. With `--force`, a rerun that writes fewer files than the last one removes the old extra files, so none of them gets applied by mistake. `--report FILE` writes JSON with the counts, `in_tree` (and how each was found), `cross_site` (both cM), `cross_ambiguous`, `self`, `namesakes`, `cm_changed`, `close_kin_new` (new people sharing 1,300 cM or more: a parent, child or sibling, or one of your own kits, so most likely someone already in the tree to put in `--id-map`; also printed on stderr), and under `columns` each file's columns read and ignored and its `skipped_rows` (rows with neither a name nor an id). Neither file is overwritten without `--force`. Exit 0 on success, 2 on a bad file or option (a missing file or column, a tested ID not in the snapshot). A match id listed twice (the same file passed twice) is read once and listed under `duplicate_ids`.
 
 ## Limits
 
 - No harvesting: it reads files you downloaded. A site that offers no download (Living DNA, AncestryDNA) needs a third-party export and `--column`.
+- A name given as one string (`Name`) is split after its first word: `Mary Ann Sample` becomes first name `Mary`, surname `Ann Sample`. Sites that give first and last name apart (FamilyTreeDNA) are split right; fix the others in Gramps.
 - A match is never placed in a family. Research the relationship first, then link the person with gwt-apply.
 - Each site's segments go in their own note, so the DNA view draws a match found on two sites with both sets.

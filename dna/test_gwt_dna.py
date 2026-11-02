@@ -19,6 +19,7 @@ try:
     from gwt_apply.client import Client
     from gwt_apply.dupes import preflight
     from gwt_apply.ops import Applier, validate
+    from gwt_apply.snapshot import load as load_snapshot
 except ImportError:  # gwt-apply needs requests
     FakeGrampsWeb = None
 
@@ -276,6 +277,22 @@ class Identity(unittest.TestCase):
         self.assertFalse([o for o in ops if o["op"] == "add_person" and o["first_name"] == "Ruth"])
         self.assertIn({"match": "D-33CC", "person": "I0070", "by": "same-site"}, rep["in_tree"])
 
+    def test_a_rerun_reports_a_match_whose_cm_changed(self):
+        p, n = marked("I0071", "Ruth", "Example", "myheritage", "D-33CC", 120.0)   # the export now says 130.5
+        snap = write_tree(self.d.name, tree([p], [n]))
+        _, _, rep = run("myheritage", ["myheritage-matches.csv"], snapshot=snap)
+        self.assertEqual(rep["cm_changed"], [{"match": "D-33CC", "person": "I0071", "was": 120.0, "now": 130.5}])
+
+    def test_a_new_person_at_close_family_cm_is_reported(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = os.path.join(d, "m.csv")
+            with open(f, "w") as fh:
+                fh.write("Kit,Name,Total cM\nZZ1,Pat Sample,3400\nZZ2,Kim Sample,1299\n")
+            m, _, _ = D.read_files([f], {})
+        _, rep = D.build(m, D.load_tree(fx("tree.json")), site="gedmatch", tested="I0001", kit="I0001",
+                         ruling="R-1", tag=None, id_map={})
+        self.assertEqual(rep["close_kin_new"], [{"match": "ZZ1", "name": "Pat Sample", "cm": 3400}])
+
     def test_id_map_and_the_tested_person_as_a_match(self):
         ops, _, rep = run("myheritage", ["myheritage-matches.csv"], id_map={"D-11AA": "I0002", "D-33CC": "I0001"})
         self.assertIn("I0002", [o.get("target") for o in ops])
@@ -352,6 +369,7 @@ class Files(unittest.TestCase):
             self.assertEqual(code, 0, err)
             self.assertEqual(sorted(os.listdir(d)), ["c-01.jsonl", "c-02.jsonl", "c-03.jsonl"])
             self.assertIn("columns not read: ", err)
+            self.assertIn("--private-new", err)
             code, err = self.cli(*base, "--tested", "I0001", "--batch", "7")
             self.assertEqual(code, 2)
             self.assertIn("--force", err)
@@ -435,6 +453,10 @@ class EndToEnd(unittest.TestCase):
     def people(self, first, sur):
         return [p for p in self.fake.store["people"].values() if p["primary_name"]["first_name"] == first
                 and p["primary_name"]["surname_list"][0]["surname"] == sur]
+
+    def test_the_fixture_tree_is_a_snapshot_gwt_apply_takes(self):   # so the documented dry run works on it
+        self.assertEqual(sorted(p["gramps_id"] for p in load_snapshot(fx("tree.json"))["objects"]["Person"]),
+                         ["I0001", "I0002"])
 
     def test_myheritage_then_ftdna(self):
         tested = "I0001"
