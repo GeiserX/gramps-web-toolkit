@@ -468,6 +468,16 @@ class RegistryTest(unittest.TestCase):
         self.assertEqual(run(*base, '--control-ok', good)[0], 0)
         self.assertEqual(L.read_rows(self.path)[0]['result'], 'none')
 
+    def test_a_control_path_with_a_typo_is_refused_not_stored_as_a_run_id(self):
+        base = ('--ledger', self.path, 'add', '--person', 'x', '--source', 'boe', '--query', 'q', '--result', 'none')
+        for ref in (os.path.join(self.dir.name, 'boe-contrl.txt'), 'runs/boe-control', 'boe-control.txt', 'no', '-'):
+            code, err = fail(*base, '--control-ok', ref)
+            self.assertEqual(code, 2, ref)
+            self.assertIn('--control-ok', err)
+        self.assertFalse(os.path.exists(self.path))
+        self.assertEqual(run(*base, '--control-ok', 'ci-run-4711')[0], 0)  # a run id: no / and no extension
+        self.assertEqual(L.read_rows(self.path)[0]['control'], 'ci-run-4711')
+
     def test_results_outside_the_enum_are_refused_by_add(self):
         for word in ('found', 'negative', 'nothing'):
             code, _ = fail('--ledger', self.path, 'add', '--person', 'x', '--source', 'boe', '--query', 'q',
@@ -520,6 +530,44 @@ class RegistryTest(unittest.TestCase):
         self.assertEqual([(r['source'], r['result']) for r in rows],
                          [('familysearch', 'hit'), ('gazeta', 'none'), ('bvph', 'unproven')])
         self.assertEqual(rows[0]['agent'], 'import')
+
+    def test_import_checks_each_control_like_add(self):
+        bad = os.path.join(self.dir.name, 'bad.txt')
+        write(bad, 'control\tcontrol\t--name x\t0 read, want at least 3\tSHORT\n')
+        src = os.path.join(self.dir.name, 'old-log.tsv')
+        argv = ('--ledger', self.path, 'import-tsv', src,
+                '--map', 'person_key=who,source=where,query=what,result=outcome,control=proof')
+        for proof in (bad, 'no', 'runs/missing.txt'):
+            write(src, 'who\twhere\twhat\toutcome\tproof\nAna Zorvalo\tboe\tedicto 1902\tnegative\t%s\n' % proof)
+            code, err = fail(*argv)
+            self.assertEqual(code, 2, proof)
+            self.assertIn('line 2: control', err)
+        self.assertFalse(os.path.exists(self.path))
+
+    def test_import_control_ok_vouches_for_a_batch_of_old_nones(self):
+        good = os.path.join(self.dir.name, 'good.txt')
+        write(good, 'control\tcontrol\t--name x\t25 read, want at least 10\tok\n')
+        src = os.path.join(self.dir.name, 'old-log.tsv')
+        write(src, 'who\twhere\twhat\toutcome\nAna Zorvalo\tboe\tedicto 1902\tnegative\n'
+                   'Luis Gil\tboe\tedicto 1903\tfound\n')
+        argv = ('--ledger', self.path, 'import-tsv', src, '--map', 'person_key=who,source=where,query=what,result=outcome')
+        code, out = run(*argv, '--control-ok', good)
+        self.assertEqual(code, 0)
+        self.assertIn('unproven\t0', out)
+        self.assertEqual([(r['result'], r['control']) for r in L.read_rows(self.path)], [('none', good), ('hit', good)])
+        self.assertEqual(run('--ledger', self.path, 'check', '--person', 'ana-zorvalo', '--source', 'boe')[0], 0)
+        self.assertEqual(fail(*argv, '--control-ok', 'runs/typo.txt')[0], 2)
+
+    def test_importing_the_same_file_twice_adds_nothing(self):
+        src = os.path.join(self.dir.name, 'old-log.tsv')
+        write(src, 'who\twhere\twhat\toutcome\twhen\nAna Zorvalo\tfs\tbautismo 1850\tfound\t2026-01-02\n'
+                   'Ana Zorvalo\tfamilysearch\tBautismo, 1850\thit\t2026-01-02\n')
+        argv = ('--ledger', self.path, 'import-tsv', src, '--map', 'person_key=who,source=where,query=what,result=outcome,date=when')
+        self.assertIn('imported\t1', run(*argv)[1])
+        code, out = run(*argv)
+        self.assertIn('imported\t0', out)
+        self.assertIn('skipped\t2', out)
+        self.assertEqual(len(L.read_rows(self.path)), 1)
 
     def test_import_reads_a_file_with_a_byte_order_mark_and_crlf(self):
         src = os.path.join(self.dir.name, 'excel.tsv')

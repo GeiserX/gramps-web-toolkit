@@ -102,7 +102,7 @@ gwt-ledger add --person "Luis Gil" --source boe --query "edicto 1902 Luis Gil" -
   --control-ok runs/boe-control.txt --evidence runs/edicto-1902.json
 ```
 
-`RUN` is either the saved output of [`gwt read <source> control`](read.md#canary-controls) or any run id your own runner gives a control. A file is checked: it must hold at least one `control ... ok` line and no `void` or `SHORT` line, or `add` stops with exit 2 and writes nothing. A run id is stored as given.
+`RUN` is either the saved output of [`gwt read <source> control`](read.md#canary-controls) or any run id your own runner gives a control. A file is checked: it must hold at least one `control ... ok` line and no `void` or `SHORT` line, or `add` stops with exit 2 and writes nothing. A run id is stored as given. A value that looks like a path (it has a `/` or a file extension such as `.txt`) but names no file is a typo, exit 2, never a run id; so are `no`, `-` and other words that prove nothing.
 
 ## Matching
 
@@ -203,7 +203,7 @@ gwt-ledger import-tsv old-log.tsv --agent import \
   --map person_key=who,source=where,query=what,result=outcome,date=when,control=proof
 ```
 
-Sources go through the registry (an unknown one refuses the file unless `--new-source`), results through the synonym map, and a `none` with no `control` column value becomes `unproven`. Every row is checked before anything is written: one bad row (an unknown result or source, a date that is not `YYYY-MM-DD`, an empty query) lists the lines and exits 2 with the ledger untouched. It prints `imported`, `unproven` and one `synonym` line per word it mapped.
+Sources go through the registry (a name close to a known one refuses the file unless `--new-source`), results through the synonym map. A `none` needs a control like on `add`: its own `control` column value, else `--control-ok RUN`, which vouches for every row of the file with no control of its own. Without either it becomes `unproven`, so an old log imported bare counts as not searched until you vouch for it. Every row is checked before anything is written: one bad row (an unknown result, a source close to a known one, a control that is not a passing control run, a date that is not `YYYY-MM-DD`, an empty query) lists the lines and exits 2 with the ledger untouched. A row the ledger already holds (same person, source, query, date and result) is skipped, so importing the same file twice adds nothing. It prints `imported`, `skipped`, `unproven`, one `synonym` line per word it mapped and one `not-in-registry` line per source it kept as a new slug.
 
 ## Traps
 

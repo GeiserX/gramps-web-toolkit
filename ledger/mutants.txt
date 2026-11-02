@@ -18,3 +18,8 @@ gwt_ledger.py | return bool((src['to'] and int(src['to']) < lo) or (src['from'] 
 gwt_ledger.py | if r['status'] not in CLOSED and r['next_date'] and r['next_date'] <= on | if r['next_date'] and r['next_date'] <= on | a closed or refused request is never due
 gwt_ledger.py | t = totals[(r[col] or '-', r['currency'].upper() or '-')] | t = totals[(r[col] or '-', '-')] | costs never add two currencies together
 gwt_ledger.py | .replace(';', '\\;').replace(',', '\\,') | .replace(';', ';').replace(',', ',') | .ics text escapes ; and , (RFC 5545 3.3.11)
+gwt_ledger.py | if '/' in ref or os.sep in ref or re.search(r'\.(txt|tsv|log|out|json)$', ref, re.I): | if False: | a --control-ok path with a typo is refused, never stored as a run id
+gwt_ledger.py | if key(ref) in NOT_PROOF or not normalize(ref): | if False: | --control-ok no (or -) is not a control run
+gwt_ledger.py | checked[control] = control_problem(control) | checked[control] = None | import-tsv checks each row's control like add
+gwt_ledger.py | control = clean(v.get('control')) or clean(args.control_ok) | control = clean(v.get('control')) | import-tsv --control-ok vouches for the rows with no control
+gwt_ledger.py | if same(row) in seen: | if False: | importing the same file twice adds nothing

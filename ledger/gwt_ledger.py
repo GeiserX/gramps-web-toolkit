@@ -327,12 +327,20 @@ def amount(value):
     return str(d)
 
 
+NOT_PROOF = frozenset('no n false 0 none fail failed void short blocked'.split())
+
+
 def control_problem(ref):
     """Why `--control-ok REF` proves nothing, or None. A REF that is a file must be the saved output of
-    `gwt read <source> control`: at least one `ok` control line and no `void` or `SHORT` line."""
+    `gwt read <source> control`: at least one `ok` control line and no `void` or `SHORT` line. A REF that looks
+    like a path but is no file is a typo, never a run id."""
     if not clean(ref):
         return 'an empty --control-ok proves nothing'
+    if key(ref) in NOT_PROOF or not normalize(ref):
+        return '%r is not a control run' % ref
     if not os.path.isfile(ref):
+        if '/' in ref or os.sep in ref or re.search(r'\.(txt|tsv|log|out|json)$', ref, re.I):
+            return 'no such file: %s (a run id has no / and no file extension)' % ref
         return None  # a run id from the caller's own runner, stored as given
     with open(ref, encoding='utf-8', errors='replace') as f:
         lines = f.read().splitlines()
@@ -553,6 +561,15 @@ def import_tsv(args, reg, err):
         return err('%s has no column %s (its header: %s)' % (args.file, ', '.join(missing), ', '.join(header)))
     idx = {col: header.index(src) for col, src in mapping.items()}
     out, problems, mapped, unproven, unregistered = [], [], collections.Counter(), 0, collections.Counter()
+    checked, skipped = {}, 0
+
+    def same(r):  # a row already in the ledger: importing the same file twice adds nothing
+        return (key(r['person_key']), reg.canon(r['source']), normalize(r['query']), r['date'], r['result'])
+
+    try:
+        seen = {same(r) for path in ledger_paths(args.ledger, args.ledger_dir) for r in read_rows(path)}
+    except (OSError, UnicodeDecodeError) as exc:
+        return err('cannot read the ledger: %s' % exc)
     for n, parts in enumerate(lines[1:], 2):
         if not any(p.strip() for p in parts):
             continue
@@ -578,12 +595,24 @@ def import_tsv(args, reg, err):
         except ValueError:
             problems.append('line %d: a date is not YYYY-MM-DD' % n)
             continue
-        if proven(result, v.get('control')) != result:
+        control = clean(v.get('control')) or clean(args.control_ok)
+        if result == 'none' and control:
+            if control not in checked:
+                checked[control] = control_problem(control)
+            if checked[control]:
+                problems.append('line %d: control %s' % (n, checked[control]))
+                continue
+        if proven(result, control) != result:
             result, unproven = 'unproven', unproven + 1
-        out.append({'person_key': key(v.get('person_key', '')), 'person_label': v.get('person_label', ''),
-                    'source': source, 'query': normalize(v['query']), 'date': date, 'result': result,
-                    'evidence': v.get('evidence', ''), 'agent': v.get('agent') or args.agent,
-                    'next_date': next_date, 'control': v.get('control', '')})
+        row = {'person_key': key(v.get('person_key', '')), 'person_label': v.get('person_label', ''),
+               'source': source, 'query': normalize(v['query']), 'date': date, 'result': result,
+               'evidence': v.get('evidence', ''), 'agent': v.get('agent') or args.agent,
+               'next_date': next_date, 'control': control}
+        if same(row) in seen:
+            skipped += 1
+            continue
+        seen.add(same(row))
+        out.append(row)
     if problems:
         for p in problems[:20]:
             sys.stderr.write('gwt-ledger: %s\n' % p)
@@ -596,6 +625,7 @@ def import_tsv(args, reg, err):
     if out:
         add_rows(path, out)
     print('imported\t%d' % len(out))
+    print('skipped\t%d' % skipped)
     print('unproven\t%d' % unproven)
     for m, n in sorted(mapped.items()):
         print('synonym\t%s\t%d' % (m, n))
@@ -669,6 +699,9 @@ def main(argv=None):
                                                  'query=what,result=outcome')
     im.add_argument('--agent', default=os.environ.get('GWT_AGENT', ''), help='for rows with no agent column')
     im.add_argument('--new-source', action='store_true', help='keep sources close to a known name as their own slugs')
+    im.add_argument('--control-ok', default='', metavar='RUN',
+                    help='the control run that vouches for every none of the file with no control of its own; '
+                         'without it those rows are stored as unproven')
     rq = sub.add_parser('request', help='letters, emails and forms sent to archives, with due dates and costs')
     rsub = rq.add_subparsers(dest='rcmd', required=True)
     for name in ('add', 'update'):
