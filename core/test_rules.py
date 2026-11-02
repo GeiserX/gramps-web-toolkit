@@ -199,6 +199,38 @@ class Living(unittest.TestCase):
         t = Tree()
         self.assertEqual(t.living(t.dated("Birth", dateval=[0, 0])), (True, "no-dates", None))
 
+    def test_any_dated_event_of_their_own_bounds_the_birth(self):
+        # someone on an 1851 census was born by 1851
+        t = Tree()
+        self.assertEqual(t.living(t.dated("Census", dateval=[0, 0, 1851, False])), (False, "census-1851", 1851))
+        self.assertEqual(t.living(t.dated("Military Service", dateval=[0, 0, 1990, False])),
+                         (True, "military-service-1990", 1990))
+
+    def test_any_dated_event_of_a_child_bounds_the_parent(self):
+        # a child who died in 1750 was born by 1750, so the parent was born by 1736
+        t = Tree()
+        p = t.person()
+        t.family(p, [t.person(died=1750)])
+        self.assertEqual(t.living(p), (False, "child-death-1750", 1736))
+
+    def test_a_parent_bounds_the_child(self):
+        t = Tree()
+        child = t.person()
+        t.family(t.person(born=1700), [child])
+        self.assertEqual(t.living(child), (False, "parent-born-1700", 1700 + rules.PARENT_MAX_AGE))
+        young = t.person()
+        t.family(t.person(born=1950), [young])
+        self.assertEqual(t.living(young), (True, "parent-born-1950", 1950 + rules.PARENT_MAX_AGE))
+
+    def test_a_spouse_bounds_the_person(self):
+        t = Tree()
+        p = t.person()
+        f = t.family(p)
+        spouse = t.person(born=1800)
+        f["mother_handle"] = spouse["handle"]
+        self.assertEqual(t.living(p), (False, "spouse-born-1800", 1820))
+        self.assertEqual(t.living(p, gap=200), (True, "spouse-born-1800", 2000))
+
     def test_apply_snapshot_shape_and_index(self):
         t = Tree()
         p = t.person()

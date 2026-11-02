@@ -8,10 +8,10 @@ gwt_core/rules.py | _s(r.get("role")) in ("", "Primary") | True | a godparent's 
 gwt_core/rules.py | if person.get("handle") in ix.dna: | if False: | a DNA match with no dates is possibly living
 gwt_core/rules.py | self.dna |= {h, r.get("ref")} | self.dna |= {r.get("ref")} | both ends of a DNA association count, the tester too
 gwt_core/rules.py | .strip().casefold() == "dna" | .strip().casefold() != "" | only a DNA association marks a match, not a godparent one
-gwt_core/rules.py | bounds.append((y - PARENT_AGE, f"child-born-{y}")) | bounds.append((y, f"child-born-{y}")) | a parent was born at least 14 years before the child
-gwt_core/rules.py | y - 2 * PARENT_AGE | y | a grandparent was born at least 28 years before the grandchild (no gap 0 going down)
+gwt_core/rules.py | e[0] - PARENT_AGE, f"child- | e[0], f"child- | a parent was born at least 14 years before the child
+gwt_core/rules.py | e[0] - 2 * PARENT_AGE | e[0] | a grandparent was born at least 28 years before the grandchild (no gap 0 going down)
 gwt_core/rules.py | bounds.append((y - PARENT_AGE, f"married-{y}")) | bounds.append((y, f"married-{y}")) | someone who married was born at least 14 years before
-gwt_core/rules.py | y + gap | y | a sibling is born up to `gap` years apart
+gwt_core/rules.py | e[0] + gap, f"sibling- | e[0], f"sibling- | a sibling is born up to `gap` years apart
 gwt_core/rules.py | bound, reason = min(bounds) | bound, reason = max(bounds) | the tightest bound from relatives decides
 gwt_core/rules.py | if w not in particles | if True | a locale's particles are dropped from a folded name
 gwt_core/rules.py | if ID_CHECKS[kind](m.group(0))] | ] | an identity number counts only with a right check digit
@@ -19,3 +19,7 @@ gwt_core/rules.py | return first + max(dv[6] - dv[2], 0) | return first | a rang
 gwt_core/rules.py | if d.get("modifier") == MOD_AFTER: | if False: | «after Y» has no end, so it is never an upper bound on the birth year
 gwt_core/rules.py | if after and max(after) >= cutoff: | if False: | born after a year inside the window is living
 gwt_core/rules.py | if not d.get("calendar"): | if True: | a date in another calendar is read through sortval, or an Islamic 1400 passes as 1400 CE
+gwt_core/rules.py | if (e := ix.earliest(person))[0]: | if False: | someone on an 1851 census was born by 1851, so is not living
+gwt_core/rules.py | self.own_events(p, None) if y] | self.own_events(p, BIRTH_TYPES) if y] | a relative's death or census year bounds their birth too, not only a birth
+gwt_core/rules.py | for sh in ix.handles(person.get("family_list"), "parents"): | for sh in (): | a spouse born in Y bounds the person at Y + gap
+gwt_core/rules.py | for ph in ix.handles(person.get("parent_family_list"), "parents"): | for ph in (): | a parent born in Y bounds the child at Y + PARENT_MAX_AGE

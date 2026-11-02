@@ -23,6 +23,7 @@ from importlib import resources
 LIVING_YEARS = 110   # no death recorded and born less than this many years ago: possibly living
 SIBLING_GAP = 20     # a sibling is born at most this many years before or after the person
 PARENT_AGE = 14      # nobody has a child or marries younger than this
+PARENT_MAX_AGE = 60  # nobody is born to a parent older than this
 
 LOCALES = ("es", "en", "fr", "it", "pt", "de", "nl", "ca", "eu", "gl", "la")
 SECTIONS = ("code", "name", "fold", "months", "dates", "gender", "roles", "events", "dedication", "id_numbers")
@@ -225,6 +226,10 @@ def _s(v) -> str:
     return (v.get("string") or "") if isinstance(v, dict) else (v or "")
 
 
+def _slug(t: str) -> str:
+    return "-".join(_plain(t)) or "event"
+
+
 def _first_year(date: dict | None) -> int:
     """The Gregorian year a date starts in; 0 when undated."""
     d = date or {}
@@ -277,26 +282,30 @@ class Index:
                 if _s(r.get("rel")).strip().casefold() == "dna":
                     self.dna |= {h, r.get("ref")}
 
-    def own_events(self, p: dict, types: set[str]) -> list[tuple[str, int | None, int]]:
-        """(type, latest year, first year) of the person's own events of these types; see latest_year()."""
+    def own_events(self, p: dict, types: set[str] | None) -> list[tuple[str, int | None, int]]:
+        """(type, latest year, first year) of the person's own events of these types (None: every type)."""
         out = []
         for r in p.get("event_ref_list") or []:
             e = self.events.get(r.get("ref"))
-            if e and _s(r.get("role")) in ("", "Primary") and _s(e.get("type")) in types:
+            if e and _s(r.get("role")) in ("", "Primary") and (types is None or _s(e.get("type")) in types):
                 out.append((_s(e.get("type")), latest_year(e.get("date")), _first_year(e.get("date"))))
         return out
 
-    def birth_year(self, p: dict | None) -> int:
-        years = [y for _, y, _ in self.own_events(p, BIRTH_TYPES) if y] if p else []
-        return min(years) if years else 0
+    def earliest(self, p: dict | None) -> tuple[int, str]:
+        """(year, word) of the person's own event that bounds their birth tightest: they were born by that year.
+        The word is «born» for a birth or baptism, else the event type («death», «census»). (0, "") if none."""
+        dated = [(y, "born" if t in BIRTH_TYPES else _slug(t)) for t, y, _ in self.own_events(p, None) if y] if p else []
+        return min(dated) if dated else (0, "")
 
-    def children(self, p: dict) -> list[dict]:
-        kids = []
-        for fh in p.get("family_list") or []:
-            for c in (self.families.get(fh) or {}).get("child_ref_list") or []:
-                if c.get("ref") in self.people:
-                    kids.append(self.people[c["ref"]])
-        return kids
+    def handles(self, family_handles, key: str) -> list[str]:
+        """The `key` handles (child refs, or father and mother) of these families."""
+        out = []
+        for fh in family_handles or []:
+            f = self.families.get(fh) or {}
+            out += [c.get("ref") for c in f.get("child_ref_list") or []] if key == "child" else \
+                [f.get("father_handle"), f.get("mother_handle")]
+        return [h for h in out if h in self.people]
+
 
 
 BIRTH_TYPES = {"Birth", "Baptism", "Christening"}
@@ -312,8 +321,10 @@ def possibly_living(person: dict, snapshot: dict | Index, *, years: int = LIVING
     2. a dated birth, baptism or christening of their own: living if less than `years` ago («born-1950»), read
        by its latest year (the end of a range or span); «after Y» with Y less than `years` ago is living;
     3. in a DNA association, either end: living («dna-match»), since a match is a person who took a test;
-    4. relatives' dates: a child born Y means born by Y-14, a grandchild Y-28, a marriage Y-14, a sibling Y+`gap`;
-       the tightest bound decides, living if it is less than `years` ago («child-born-1990»);
+    4. other dated evidence, each giving the latest year the person can have been born: any other event of
+       their own in Y gives Y («census-1851»); a child's earliest event in Y gives Y-14, a grandchild's Y-28, a
+       marriage Y-14, a spouse's or sibling's Y+`gap`, a parent's Y+60; the tightest bound decides, living if
+       it is less than `years` ago («child-born-1990», «child-death-1750»);
     5. nothing dated: `undated` («no-dates»).
 
     Only the person's own events count in 1 and 2: a godparent at a 2001 baptism was not born in 2001."""
@@ -332,22 +343,31 @@ def possibly_living(person: dict, snapshot: dict | Index, *, years: int = LIVING
         return True, f"born-after-{max(after)}", None
     if person.get("handle") in ix.dna:
         return True, "dna-match", None
+    me = person.get("handle")
     bounds = []
-    for child in ix.children(person):
-        if y := ix.birth_year(child):
-            bounds.append((y - PARENT_AGE, f"child-born-{y}"))
-        for grandchild in ix.children(child):
-            if y := ix.birth_year(grandchild):
-                bounds.append((y - 2 * PARENT_AGE, f"grandchild-born-{y}"))
+    if (e := ix.earliest(person))[0]:
+        bounds.append((e[0], f"{e[1]}-{e[0]}"))
+    for ch in ix.handles(person.get("family_list"), "child"):
+        child = ix.people[ch]
+        if (e := ix.earliest(child))[0]:
+            bounds.append((e[0] - PARENT_AGE, f"child-{e[1]}-{e[0]}"))
+        for gh in ix.handles(child.get("family_list"), "child"):
+            if (e := ix.earliest(ix.people[gh]))[0]:
+                bounds.append((e[0] - 2 * PARENT_AGE, f"grandchild-{e[1]}-{e[0]}"))
     for fh in person.get("family_list") or []:
         for r in (ix.families.get(fh) or {}).get("event_ref_list") or []:
             e = ix.events.get(r.get("ref")) or {}
             if _s(e.get("type")) == "Marriage" and (y := latest_year(e.get("date"))):
                 bounds.append((y - PARENT_AGE, f"married-{y}"))
-    for fh in person.get("parent_family_list") or []:
-        for c in (ix.families.get(fh) or {}).get("child_ref_list") or []:
-            if c.get("ref") != person.get("handle") and (y := ix.birth_year(ix.people.get(c.get("ref")))):
-                bounds.append((y + gap, f"sibling-born-{y}"))
+    for sh in ix.handles(person.get("family_list"), "parents"):
+        if sh != me and (e := ix.earliest(ix.people[sh]))[0]:
+            bounds.append((e[0] + gap, f"spouse-{e[1]}-{e[0]}"))
+    for ph in ix.handles(person.get("parent_family_list"), "parents"):
+        if (e := ix.earliest(ix.people[ph]))[0]:
+            bounds.append((e[0] + PARENT_MAX_AGE, f"parent-{e[1]}-{e[0]}"))
+    for sh in ix.handles(person.get("parent_family_list"), "child"):
+        if sh != me and (e := ix.earliest(ix.people[sh]))[0]:
+            bounds.append((e[0] + gap, f"sibling-{e[1]}-{e[0]}"))
     if bounds:
         bound, reason = min(bounds)
         return bound >= cutoff, reason, bound

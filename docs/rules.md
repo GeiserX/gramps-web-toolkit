@@ -21,20 +21,26 @@ find_ids("DNI 12345678Z", "es")         # [("dni", "12345678Z")]
 
 | Rule | Result | Reason |
 |---|---|---|
-| A death, burial or cremation of their own | not living | `death-recorded` |
+| A death, burial or cremation of their own | not living | `death-recorded`, `burial-recorded`, `cremation-recorded` |
 | A dated birth, baptism or christening of their own | living if less than `years` ago | `born-1950`, `baptised-1950` |
+| A birth «after Y» with Y less than `years` ago | living | `born-after-1950` |
 | One end of a DNA association (an association whose relation is `DNA`) | living | `dna-match` |
-| Relatives' dates (below) | living if the tightest bound is less than `years` ago | `child-born-1990` |
+| Other dated evidence (below) | living if the tightest bound is less than `years` ago | `census-1851`, `child-born-1990` |
 | Nothing dated | `undated` | `no-dates` |
 
-Bounds from relatives, each the latest year the person can have been born:
+Every date is read by the latest year it allows, so an uncertain date can only make a person more likely living: `bet 1900 and 1930` and `from 1900 to 1930` count as 1930, `abt` and `bef` as the year written, and `aft 1900` gives no upper bound at all (it is living only when 1900 itself is inside the window). A date in another calendar (Julian, Hebrew, Islamic, Persian, French Republican) is read through its `sortval`, so an Islamic 1400 counts as 1979.
 
-| Evidence | Bound |
-|---|---|
-| A child born in Y | Y - 14 |
-| A grandchild born in Y | Y - 28 |
-| A marriage of their own in Y | Y - 14 |
-| A sibling born in Y | Y + `gap` (20) |
+Other evidence, each the latest year the person can have been born. A relative's year is the earliest dated event of theirs, of any type: a child who died in 1750 was born by 1750.
+
+| Evidence | Bound | Reason |
+|---|---|---|
+| Any other dated event of their own in Y (census, residence, occupation, will) | Y | `census-1851` |
+| A child's event in Y | Y - 14 | `child-born-1990`, `child-death-1750` |
+| A grandchild's event in Y | Y - 28 | `grandchild-born-1990` |
+| A marriage of their own in Y | Y - 14 | `married-1905` |
+| A spouse's event in Y | Y + `gap` (20) | `spouse-born-1800` |
+| A sibling's event in Y | Y + `gap` (20) | `sibling-born-1880` |
+| A parent's event in Y | Y + 60 | `parent-born-1700` |
 
 Only the person's own events count for the first two rules (role `Primary`, or no role): a godparent at a 2001 baptism was not born in 2001. A DNA match is a person who took a test, so a match with no dates counts as living even with `undated=False`; a recorded date still wins over the association.
 
