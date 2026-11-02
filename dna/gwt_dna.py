@@ -50,15 +50,15 @@ PLACEHOLDERS = {"private", "<private> <private>", "<private>", "anonymous", "unk
 # folded header -> field. Headers as the sites' own exports write them (MyHeritage, FamilyTreeDNA, GEDmatch),
 # plus the usual third-party spellings. Anything else in the file is ignored and listed in the report.
 MATCH_COLUMNS = {
-    "id": ["dna match id", "match id", "kit", "kit nbr", "kit number", "matched kit", "matchedkit", "match guid",
-           "matchguid", "barcode"],
+    "id": ["dna match id", "match id", "kit", "kit nbr", "kit number", "kit num", "matched kit", "matchedkit",
+           "match guid", "matchguid", "barcode"],
     "name": ["name", "match name", "full name", "display name", "matched name", "matchedname", "username"],
     "first": ["first name"], "middle": ["middle name"], "last": ["last name"],
     "cm": ["shared dna cm", "total cm shared", "shared cm", "shared dna", "total cm", "shared centimorgans",
            "sharedcentimorgans", "dna shared", "dnashared"],
     "segments": ["shared segments", "number of shared segments", "segments", "segment count", "segmentcount"],
     "longest": ["largest segment cm", "largest segment", "longest block", "largest seg", "largest cm",
-                "longest segment", "longestsegment", "sharedsegment"],
+                "longest segment", "longestsegment", "sharedsegment", "largest"],
     "relationship": ["estimated relationship", "relationship range", "relationship", "predicted relationship"],
     "generations": ["gen", "generations"],
     "sex": ["sex", "gender", "matched sex"],
@@ -117,16 +117,14 @@ def read_csv(path: str) -> list[list[str]]:
     return rows
 
 
-def columns(header: list[str], table: dict, overrides: dict, path: str) -> tuple[dict, list[str]]:
-    """field -> column index, and the headers left unread. --column wins; else the first alias found, in order."""
+def columns(header: list[str], table: dict, overrides: dict) -> tuple[dict, list[str]]:
+    """field -> column index, and the headers left unread. --column wins in a file that has its header (a match
+    list and its segment file name their columns differently); else the first alias found, in order."""
     folded = [_hfold(h) for h in header]
     found = {}
     for field, aliases in table.items():
-        if field in overrides:
-            want = _hfold(overrides[field])
-            if want not in folded:
-                raise BadInput(f"{path}: --column {field}={overrides[field]}: no such column; it has {header}")
-            found[field] = folded.index(want)
+        if _hfold(overrides.get(field, "")) in folded:
+            found[field] = folded.index(_hfold(overrides[field]))
             continue
         for a in aliases:
             if a in folded and folded.index(a) not in found.values():
@@ -152,15 +150,15 @@ def match_id(raw_id: str, name: str) -> str:
 
 def read_files(paths: list[str], overrides: dict) -> tuple[dict, list, dict]:
     """(matches by match id, segments as (id or None, folded name, row), report of columns)."""
-    matches, segments, cols, by_name = {}, [], {}, {}
+    matches, segments, cols, by_name, used = {}, [], {}, {}, set()
     for path in paths:
         rows = read_csv(path)
         header, body = rows[0], rows[1:]
         folded = {_hfold(h) for h in header}
-        is_seg = bool(folded & set(SEGMENT_COLUMNS["chromosome"])) or "chromosome" in overrides
+        is_seg = bool(folded & (set(SEGMENT_COLUMNS["chromosome"]) | {_hfold(overrides.get("chromosome", ""))}))
         table = SEGMENT_COLUMNS if is_seg else MATCH_COLUMNS
-        ov = {k: v for k, v in overrides.items() if k in table}
-        found, ignored = columns(header, table, ov, path)
+        found, ignored = columns(header, table, overrides)
+        used |= {k for k, v in overrides.items() if _hfold(v) in folded}
         cols[path] = {"kind": "segments" if is_seg else "matches",
                       "read": {f: header[i] for f, i in found.items()}, "ignored": ignored}
         cell = lambda r, f: r[found[f]].strip() if f in found and found[f] < len(r) else ""
@@ -206,6 +204,8 @@ def read_files(paths: list[str], overrides: dict) -> tuple[dict, list, dict]:
                 matches[mid] = m
             else:
                 by_name.setdefault(mid, []).append(m)
+    for field in sorted(set(overrides) - used):
+        raise BadInput(f"--column {field}={overrides[field]}: no file has that column")
     for base, same in by_name.items():  # two matches with one name and no id are two people, suffixed by cM so
         for n, m in enumerate(sorted(same, key=lambda m: -(m["cm"] or 0)), 1):  # a reordered export keeps them
             mid = base if n == 1 else f"{base}-{n}"

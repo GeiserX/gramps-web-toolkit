@@ -114,6 +114,24 @@ class Reading(unittest.TestCase):
         self.assertEqual(rep["ambiguous"], ["Lee Ward"])
         self.assertFalse([o for o in ops if "lee-ward" in o["key"] and o["key"].endswith("-segments")])
 
+    def test_gedmatch_one_to_many_as_it_downloads_today(self):
+        with tempfile.TemporaryDirectory() as d:
+            a, = self.files(d, a="k2,kit_num,name,sex,shared_cm,largest,gen,x_shared_cm\n"
+                                 "1,ZZ7777777,Kim Sample,F,28.0,18.2,4.1,0\n2,ZZ8888888,,M,15.3,15.3,4.8,0\n")
+            m, _, cols = D.read_files([a], {})
+        self.assertEqual(sorted(m), ["ZZ7777777", "ZZ8888888"])
+        self.assertEqual(m["ZZ7777777"]["longest"], 18.2)
+        self.assertNotIn("skipped_rows", cols[a])
+
+    def test_column_override_reads_the_file_that_has_it_beside_a_segment_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            a, = self.files(d, a="Ref,Name,Total cM\nQQ1,Kim Sample,28\n")
+            m, segs, _ = D.read_files([a, fx("gedmatch-segments.csv")], {"id": "Ref"})
+            self.assertEqual(sorted(m), ["QQ1"])
+            self.assertEqual(len(segs), 3)
+            with self.assertRaises(D.BadInput):
+                D.read_files([a, fx("gedmatch-segments.csv")], {"id": "Nowhere"})
+
     def test_column_override_and_unknown_column(self):
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, "x.csv")

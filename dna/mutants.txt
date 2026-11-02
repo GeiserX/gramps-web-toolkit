@@ -22,3 +22,5 @@ gwt_dna.py |             if os.path.exists(n) and not a.force: |             if 
 gwt_dna.py |         raise BadInput(f"--tested {tested}: not in the snapshot") |         pass | a tested person who is not in the snapshot stops the run
 gwt_dna.py | SEGMENT_HEADER = "Chromosome,Start Location,End Location,Centimorgans,Matching SNPs" | SEGMENT_HEADER = "Chr,Start,End,cM,SNPs" | the segment note is the string Gramps Web was seen to accept
 gwt_dna.py | rows = sorted(segs, key=lambda s: (CHROM_ORDER.get(s["chromosome"], 99), s["chromosome"], s["start"])) | rows = segs | segments are written in chromosome order, X after 22
+gwt_dna.py |         if _hfold(overrides.get(field, "")) in folded: |         if field in overrides: | --column names its column in the file that has it, so a match list and its segment file import together
+gwt_dna.py |     for field in sorted(set(overrides) - used): |     for field in []: | a --column header no file has stops the run

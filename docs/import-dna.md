@@ -42,13 +42,13 @@ Import one site, apply it, take a new snapshot, then import the next site from i
 
 ## Columns
 
-Columns are found by their header, folded (lowercase, no accents or punctuation), so `Shared DNA (cM)` and `shared dna cm` are one. A match list needs a name or id column and a shared cM column; a segment file needs a chromosome, start, end and cM column and a match id or match name column. `--column FIELD=HEADER` names a column for any field, which is how a file from another site or a third-party tool is read (`--site other`, or `livingdna` and `ancestry`, whose own sites offer no match download).
+Columns are found by their header, folded (lowercase, no accents or punctuation), so `Shared DNA (cM)` and `shared dna cm` are one. A match list needs a name or id column and a shared cM column; a segment file needs a chromosome, start, end and cM column and a match id or match name column. `--column FIELD=HEADER` names a column for any field, in each file that has that header (a match list and its segment file can name a field differently, so `--column id=Ref` for the match list leaves the segment file's id column alone; the run stops only when no file has `HEADER`). It is how a file from another site or a third-party tool is read (`--site other`, or `livingdna` and `ancestry`, whose own sites offer no match download).
 
 | Site | Match list headers read | Segment file headers read |
 |---|---|---|
 | `myheritage` | `DNA Match ID`, `Name`, `Shared DNA` (`3.2% (227.6 cM)` reads as 227.6), `Shared segments`, `Largest segment`, `Estimated relationship` | `DNA Match ID`, `Match name`, `Chromosome`, `Start Location`, `End Location`, `Centimorgans`, `SNPs` |
 | `ftdna` | `First Name`, `Middle Name`, `Last Name` (or `Full Name`), `Shared DNA` or `Shared cM`, `Longest Block`, `Relationship Range`, `Ancestral Surnames` | `Match Name`, `Chromosome`, `Start Location`, `End Location`, `Centimorgans`, `Matching SNPs` |
-| `gedmatch` | `Kit`, `Name`, `Sex`, `Total cM`, `Largest Seg`, `Gen` | `MatchedKit`, `MatchedName`, `chr`, `B37Start`, `B37End`, `Segment cM`, `SNPs` |
+| `gedmatch` | `Kit` or `kit_num`, `Name`, `Sex`, `Total cM` or `shared_cm`, `Largest Seg` or `largest`, `Gen` (the one-to-many download, old and current layout) | `MatchedKit`, `MatchedName`, `chr`, `B37Start`, `B37End`, `Segment cM`, `SNPs` |
 
 Fields and every header they accept: `gwt-import-dna --help` lists the fields; the header lists are `MATCH_COLUMNS` and `SEGMENT_COLUMNS` at the top of `dna/gwt_dna.py`. Sites rename columns now and then; when a file stops reading, `--column` fixes it at once, and an issue gets the new header added.
 
