@@ -352,6 +352,20 @@ class HumanAuthProfileTest(unittest.TestCase):
         with self.assertRaises(G.Paused):
             g.wait('a')
 
+    def test_a_probe_that_times_out_counts_as_a_failed_probe(self):
+        g = G.Gate(self.tmp.name, clock=self.clock, sleep=self.capped_sleep)
+        g.human('a', 'captcha')
+        answers = iter([subprocess.TimeoutExpired('probe', 60), subprocess.CompletedProcess('probe', 0)])
+
+        def run(*args, **kwargs):
+            a = next(answers)
+            if isinstance(a, Exception):
+                raise a
+            return a
+        with mock.patch.object(G.subprocess, 'run', run):
+            self.assertTrue(g.wait_clear('probe --check', every=60, timeout=3600))
+        self.assertEqual(self.sleeps, 1)  # a hung probe is retried, never a traceback
+
     def test_wait_clear_stops_at_once_when_someone_cleared_by_hand(self):
         g = G.Gate(self.tmp.name, clock=self.clock, sleep=self.capped_sleep)
         self.assertTrue(g.wait_clear(f'{sys.executable} -I -c "raise SystemExit(1)"'))
@@ -478,7 +492,8 @@ class HumanAuthProfileTest(unittest.TestCase):
         bad = os.path.join(self.tmp.name, 'p.tsv')
         for text in ('host\tper_hour\n', 'host\tper_hour\tburst\tcooldown_s\tfresh_profile\tnotes\nx\t\t2\t\tno\tn\n',
                      'host\tper_hour\tburst\tcooldown_s\tfresh_profile\tnotes\nx\tmany\t\t\tno\tn\n',
-                     'host\tper_hour\tburst\tcooldown_s\tfresh_profile\tnotes\nx\t-3\t\t\tno\tn\n'):
+                     'host\tper_hour\tburst\tcooldown_s\tfresh_profile\tnotes\nx\t-3\t\t\tno\tn\n',
+                     'host\tper_hour\tburst\tcooldown_s\tfresh_profile\tnotes\nx\t\t1\n'):  # a short row
             with open(bad, 'w') as f:
                 f.write(text)
             with self.assertRaises(ValueError):
