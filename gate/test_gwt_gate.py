@@ -428,6 +428,12 @@ class HumanAuthProfileTest(unittest.TestCase):
         g2.wait('a'); g2.wait('a'); g2.wait('a')
         self.assertEqual(self.clock.t, t + 60)  # two in a row, the third waits out the window
 
+    def test_a_burst_alone_keeps_only_its_cooldown_of_history(self):
+        g = self.gate(start=1, floor=1, burst=1, cooldown=1)
+        for _ in range(50):
+            g.wait('a')
+        self.assertLessEqual(len(g._locked(dict)['recent']), 1)  # not an hour of call times rewritten on every call
+
     def test_eta(self):
         g = self.gate(start=10)
         self.assertEqual(g.eta(0), 0)
@@ -495,6 +501,7 @@ class CliHumanProfileTest(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn('no profile for other.example.org', err)
         self.assertEqual(self.cli('--profile', 'www.loc.gov', 'status')[0], 0)  # the shipped file
+        self.assertEqual(self.cli('--profile', 'https://WWW.loc.gov:443/search/?q=x', 'status')[0], 0)  # port dropped
         for flags in (('--per-hour', '0'), ('--burst', '-1', '--cooldown', '5'), ('--cooldown', '-5')):
             code, _, err = self.cli(*flags, 'wait', 'a')
             self.assertEqual(code, 2, flags)  # never a traceback, never a silent "no limit"

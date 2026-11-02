@@ -42,7 +42,7 @@ Per-host limits a site publishes (robots.txt Crawl-delay, an API's stated rate) 
 
 Settings come from flags, then GWT_GATE_* variables, then the defaults below. Standard library only.
 """
-import argparse, fcntl, json, os, shlex, subprocess, sys, time
+import argparse, fcntl, json, os, shlex, subprocess, sys, time, urllib.parse
 
 # Defaults that kept one FamilySearch IP unblocked in 2026: a block came after a few hundred calls at one
 # every 5-6 s, so the start and the floor sit well below that pace.
@@ -104,7 +104,7 @@ class Gate:
         """When the site's own limits (per_hour, burst) next allow a call; 0 when they do not apply."""
         if not (self.per_hour or self.burst):
             return 0, ''
-        keep = max(3600.0, self.cooldown)
+        keep = max(3600.0, self.cooldown) if self.per_hour else self.cooldown  # a burst needs its window only
         s['recent'] = recent = [t for t in s.get('recent', []) if now - t < keep]
         ready, why = 0, ''
         if self.per_hour and len(recent) >= self.per_hour:
@@ -477,7 +477,7 @@ def main(argv=None):
         return 0 if vendor else 1
     limits = {'per_hour': None, 'burst': None, 'cooldown_s': 0.0}
     if a.profile:
-        host = a.profile.split('://', 1)[-1].split('/', 1)[0].lower()
+        host = urllib.parse.urlsplit(a.profile if '://' in a.profile else '//' + a.profile).hostname or ''
         try:
             profiles = load_profiles(a.profiles or None)
         except (OSError, ValueError) as exc:
@@ -485,7 +485,7 @@ def main(argv=None):
             return 2
         if host not in profiles:
             print(f'gwt-gate: no profile for {host} in {a.profiles or default_profiles()}; '
-                  'pass --per-hour/--burst/--cooldown or add a row', file=sys.stderr)
+                  'add a row, or drop --profile and pass --per-hour/--burst/--cooldown', file=sys.stderr)
             return 2
         limits.update(profiles[host])
     per_hour = a.per_hour if a.per_hour is not None else limits['per_hour']

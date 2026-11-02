@@ -24,3 +24,5 @@ gwt_gate.py | except OSError as exc:  # exit 1 means | except ZeroDivisionError 
 gwt_gate.py | elif gate.notice != 0: | elif False: | a notice that fails is said on stderr with exit 1, so a parking nobody heard of is never silent
 gwt_gate.py | [w.format(**fields) for w in shlex.split(a.notify)] | pass | a --notify template that cannot be filled exits 2 before the gate parks
 gwt_gate.py | raise  # no retry can fix a probe that does not exist | rc = None | a probe that cannot run stops wait-clear at once instead of retrying for two timeouts
+gwt_gate.py | if self.per_hour else self.cooldown  # a burst needs | if True else self.cooldown  # a burst needs | a burst alone keeps only its cooldown of call times, not an hour of them
+gwt_gate.py | urllib.parse.urlsplit(a.profile if '://' in a.profile else '//' + a.profile).hostname or '' | a.profile.split('://', 1)[-1].split('/', 1)[0].lower() | a --profile URL with a port or capitals finds its host's row
