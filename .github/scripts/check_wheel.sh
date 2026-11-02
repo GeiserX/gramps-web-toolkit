@@ -13,20 +13,28 @@ cd "$work"
 bin="$work/venv/bin"
 "$bin/gwt" --version
 tools=$("$bin/python" - "$work/venv" <<'PY'
-import importlib, sys
+import importlib, os, sys
 from gwt_core.cli import TOOLS
+import gwt_reader
 # gwt_mh_browser loads only on a real `gwt mh` run (not on --help), so it is listed by name here, and
-# gwt_reader (the shape gwt-mh and gwt-read share) and gwt_pares, gwt_genae, gwt_boe and gwt_insee (gwt-read sources) with it
-for mod in [m for m, _ in TOOLS.values()] + ["gwt_mh", "gwt_mh_browser", "gwt_reader", "gwt_pares", "gwt_genae", "gwt_boe", "gwt_insee"]:
-    f = importlib.import_module(mod).__file__
-    if not f.startswith(sys.argv[1]):
+# gwt_reader (the shape gwt-mh and gwt-read share) with every gwt-read source module its registry names
+venv = os.path.realpath(sys.argv[1])   # macOS: mktemp gives /var/..., Python reports /private/var/...
+for mod in [m for m, _ in TOOLS.values()] + ["gwt_mh", "gwt_mh_browser", "gwt_reader"] + list(gwt_reader.SOURCE_MODULES):
+    f = os.path.realpath(importlib.import_module(mod).__file__)
+    if not f.startswith(venv + os.sep):
         sys.exit(f"{mod} loaded from {f}, not from the installed wheel")
 print(" ".join(TOOLS))
 PY
 )
+sources=$("$bin/python" -c 'import gwt_read; print(" ".join(gwt_read.sources()))')
 for t in $tools; do
   "$bin/gwt" "$t" --help >/dev/null
   "$bin/gwt-$t" --help >/dev/null
   echo "ok   gwt $t --help, gwt-$t --help"
 done
+for s in $sources; do
+  "$bin/gwt" read "$s" --help >/dev/null
+  echo "ok   gwt read $s --help"
+done
 "$bin/gwt" check selftest
+"$bin/python" -c "from gwt_core import rules; [rules.load_locale(c) for c in rules.LOCALES]; print('ok   locales', *rules.LOCALES)"
