@@ -23,3 +23,5 @@ gwt_report.py | cur, path, seen = todo.popleft() | cur, path, seen = todo.pop() 
 gwt_report.py |     if cut: |     if False: | a digest says when kin paths were cut, so a person filed as not blood kin may still be kin
 gwt_report.py | head = '' if fh.read(1) == b'\n' else '\n' | head = '' | a told file edited by hand without a last newline gets one before the new rows, so no id is lost
 gwt_report.py | 'weak', 'debil', 'faible') | 'weak') | a tag named with the Spanish or French word for weak marks a weak link by default
+gwt_report.py | if old['_tree'] and new['_tree'] and old['_tree'] != new['_tree']: | if False: | a digest of two different trees is refused, never thousands of lines of noise
+gwt_report.py | (a.tzinfo is None) == (b.tzinfo is None) and a > b: | False: | an OLD snapshot taken after NEW gets a warning that they may be swapped

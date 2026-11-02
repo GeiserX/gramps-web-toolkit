@@ -69,6 +69,7 @@ def load(path):
             raise BadInput('%s: %s must be a list of objects with a handle' % (path, t))
         T[t] = {o['handle']: o for o in objs}
     T['_taken'] = meta.get('taken') or meta.get('dumped_at') or ''
+    T['_tree'] = meta.get('tree') or ''
     T['_by_id'] = {}
     for t in WEB_KIND:
         for o in T[t].values():
@@ -575,6 +576,27 @@ def digest(old, new, root=None, told=frozenset(), weak_tags=WEAK_TAGS, include_p
     return groups
 
 
+def when(stamp):
+    """The time a dump or snapshot was taken, or None when it cannot be read."""
+    for parse in (datetime.datetime.fromisoformat, lambda x: datetime.datetime.strptime(x, '%Y-%m-%dT%H:%M:%S%z')):
+        try:
+            return parse(stamp)
+        except (TypeError, ValueError):
+            pass
+    return None
+
+
+def check_pair(old, new, old_path, new_path):
+    """A digest of two different trees is noise: refuse it. Warn when OLD was taken after NEW."""
+    if old['_tree'] and new['_tree'] and old['_tree'] != new['_tree']:
+        raise BadInput('%s and %s are snapshots of two different trees (%s, %s)' % (
+            old_path, new_path, old['_tree'], new['_tree']))
+    a, b = when(old['_taken']), when(new['_taken'])
+    if a and b and (a.tzinfo is None) == (b.tzinfo is None) and a > b:
+        print('gwt-report: warning: --from %s was taken after --to %s; are they swapped?' % (old_path, new_path),
+              file=sys.stderr)
+
+
 def web_url(base, t, gid):
     return '%s/%s/%s' % (base.rstrip('/'), WEB_KIND[t], gid) if base else ''
 
@@ -681,6 +703,7 @@ def main(argv=None):
         if (args.audience or args.mark) and not args.told:
             p.error('--audience and --mark need --told FILE')
         old, new = load(args.old), load(args.new)
+        check_pair(old, new, args.old, args.new)
         root = person_handle(new, args.root) if args.root else None
         told = read_told(args.told, args.audience) if args.told else frozenset()
         groups = digest(old, new, root, told, weak, args.include_private)

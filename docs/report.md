@@ -99,7 +99,7 @@ With `--root` the groups are split by side (`father's side`, `mother's side`, `b
 
 Each item has its Gramps Web link (`URL/person/I0012`, `URL/event/E0045`, `URL/citation/C0012`, `URL/media/O0003`) when `--base-url` is given, and the web addresses its citations hold in their page, attributes or notes. A weak-tagged object, or a citation of confidence 0 or 1, says `[weak]`. Objects and people marked private are left out unless `--include-private`.
 
-Only new objects are listed. A changed name, a corrected date or an old event newly linked to someone is not.
+Only new objects are listed. A changed name, a corrected date or an old event newly linked to someone is not. `OLD` and `NEW` must be copies of the same tree: two snapshots that name different trees exit `2`, and an `OLD` taken after `NEW` gets a warning that they may be swapped.
 
 ```text
 $ gwt report digest --from report/fixtures/digest-old.json --to report/fixtures/digest-new.json \

@@ -321,6 +321,21 @@ class DigestTest(unittest.TestCase):
             self.assertEqual(code, 2, told)
             self.assertIn('told file', err)
 
+    def test_two_different_trees_exit_2_and_swapped_snapshots_warn(self):
+        other = os.path.join(self.td.name, 'other.json')
+        with open(NEW, encoding='utf-8') as fh:
+            data = json.load(fh)
+        data['tree'] = 'another'
+        with open(other, 'w', encoding='utf-8') as fh:
+            json.dump(data, fh)
+        code, out, err = run('digest', '--from', OLD, '--to', other)
+        self.assertEqual((code, out), (2, ''))
+        self.assertIn('two different trees', err)
+        code, out, err = run('digest', '--from', NEW, '--to', OLD)
+        self.assertEqual(code, 0)
+        self.assertIn('are they swapped?', err)
+        self.assertNotIn('swapped', run('digest', '--from', OLD, '--to', NEW)[2])
+
     def test_told_needs_audience(self):
         with redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit) as cm:
