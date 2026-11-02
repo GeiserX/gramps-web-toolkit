@@ -172,6 +172,24 @@ def test_image_base_page_placeholder_and_missing_page(tmp_path):
         iiif.image_bases(AD + "/f{page}", "3-")
 
 
+def test_image_base_pages_are_checked():
+    with pytest.raises(SystemExit, match="selects no page"):
+        iiif.image_bases(AD + "/f{page}", "5-3")
+    with pytest.raises(SystemExit, match="no \\{page\\}"):
+        iiif.image_bases(AD + "/f12", "1-9")
+    with pytest.raises(SystemExit, match="--pages wants"):
+        iiif.image_bases(AD + "/f{page}", "a-b")
+    assert iiif.image_bases(AD + "/f_{page:04}/info.json", "7,9-10") == [
+        (7, AD + "/f_0007"), (9, AD + "/f_0009"), (10, AD + "/f_0010")]
+    # a manifest's open-ended range still runs to the last canvas
+    assert iiif.parse_pages("2,4-", 5) == [2, 4, 5]
+
+
+def test_image_base_refuses_labels(tmp_path):
+    with pytest.raises(SystemExit, match="--labels"):
+        iiif.run(ns(url=None, image_base=f"{AD}/f12", labels="x", out=str(tmp_path)), FakeClient({}))
+
+
 def test_image_base_resume_sends_no_request(tmp_path):
     c = FakeClient(ad_routes(3904))
     iiif.run(ns(url=None, image_base=f"{AD}/f12", out=str(tmp_path)), c)

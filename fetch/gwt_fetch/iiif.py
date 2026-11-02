@@ -117,16 +117,27 @@ def canvases(manifest: dict) -> list[Canvas]:
     return out
 
 
-def select(cs: list[Canvas], pages: str | None, labels: str | None) -> list[Canvas]:
-    if pages:
-        want: set[int] = set()
-        for part in pages.split(","):
-            part = part.strip()
+def parse_pages(text: str, total: int | None = None) -> list[int]:
+    """1-based positions from `1-5,9,12-`, in order, once each. An open end runs to `total`."""
+    want: list[int] = []
+    for part in text.split(","):
+        part = part.strip()
+        try:
             if "-" in part:
                 a, b = part.split("-", 1)
-                want.update(range(int(a), int(b or len(cs)) + 1))
+                if not b and total is None:
+                    raise SystemExit("gwt-fetch: --image-base cannot count the pages; give an end, e.g. 12-40")
+                want.extend(range(int(a), int(b or total) + 1))
             elif part:
-                want.add(int(part))
+                want.append(int(part))
+        except ValueError:
+            raise SystemExit(f"gwt-fetch: --pages wants numbers and ranges such as 1-5,9,12-, got {text!r}")
+    return list(dict.fromkeys(want))
+
+
+def select(cs: list[Canvas], pages: str | None, labels: str | None) -> list[Canvas]:
+    if pages:
+        want = set(parse_pages(pages, len(cs)))
         cs = [c for c in cs if c.index in want]
     if labels:
         rx = re.compile(labels, re.I)
@@ -213,24 +224,23 @@ def _is_image_info(doc) -> bool:
     return doc.get("protocol") == "http://iiif.io/api/image" or "/api/image/" in str(doc.get("@context", ""))
 
 
+PAGE = re.compile(r"\{page(?::(0\d+))?\}")
+
+
 def image_bases(spec: str, pages: str | None) -> list[tuple[int, str]]:
-    """(position, base URL) for each image. `{page}` in the URL is replaced by each --pages number."""
+    """(position, base URL) for each image. `{page}` in the URL is replaced by each --pages number,
+    `{page:04}` by the number padded with zeros to 4 digits."""
     base = re.sub(r"/info\.json$", "", spec.strip()).rstrip("/")
-    if "{page}" not in base:
+    if not PAGE.search(base):
+        if pages:
+            raise SystemExit("gwt-fetch: --pages needs {page} in --image-base; the URL has no {page}")
         return [(1, base)]
     if not pages:
         raise SystemExit("gwt-fetch: --image-base with {page} needs --pages, e.g. --pages 1-20")
-    want: list[int] = []
-    for part in pages.split(","):
-        part = part.strip()
-        if "-" in part:
-            a, b = part.split("-", 1)
-            if not b:
-                raise SystemExit("gwt-fetch: --image-base cannot count the pages; give an end, e.g. 12-40")
-            want.extend(range(int(a), int(b) + 1))
-        elif part:
-            want.append(int(part))
-    return [(n, base.replace("{page}", str(n))) for n in dict.fromkeys(want)]
+    want = parse_pages(pages)
+    if not want:
+        raise SystemExit(f"gwt-fetch: --pages {pages} selects no page")
+    return [(n, PAGE.sub(lambda m: format(n, m.group(1) or ""), base)) for n in want]
 
 
 def pixel_width(data: bytes) -> int | None:
@@ -299,6 +309,8 @@ def _fetch_native(client, store: Store, stem: str, label: str, base: str, source
 
 
 def run_image_base(args, client) -> int:
+    if getattr(args, "labels", None):
+        raise SystemExit("gwt-fetch: --labels needs a manifest; --image-base has no labels to match")
     bases = image_bases(args.image_base, args.pages)
     print(f"gwt-fetch: {len(bases)} image(s) from a IIIF Image API base", file=sys.stderr)
     if args.list:

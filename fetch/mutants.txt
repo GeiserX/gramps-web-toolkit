@@ -22,3 +22,6 @@ gwt_fetch/crop.py | return f"{parent_url[:m.start()]}#xywh={X + x0},{Y + y0},{w}
 gwt_fetch/crop.py | x0, y0, w, h = scale_box(box, size, (PW, PH)) | x0, y0, w, h = box | a crop of a shrunk piece is scaled back to the original's pixels
 gwt_fetch/iiif.py |     if row and not NATIVE_URL.search(row["image_url"]): |     if False: | --native after a capped full/max run in the same folder adds the native file instead of skipping
 gwt_fetch/iiif.py |     if row: |     if None: | a --native resume skips a page saved at native width without fetching its info.json
+gwt_fetch/iiif.py |     if not want: |     if False: | a --pages range that selects nothing stops with a message instead of exiting 0 with no file
+gwt_fetch/iiif.py |         if pages: |         if False: | --pages with an --image-base that has no {page} stops instead of fetching one image
+gwt_fetch/iiif.py | return [(n, PAGE.sub(lambda m: format(n, m.group(1) or ""), base)) for n in want] | return [(n, PAGE.sub(str(n), base)) for n in want] | {page:04} pads the page number with zeros

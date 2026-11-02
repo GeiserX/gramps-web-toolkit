@@ -46,6 +46,8 @@ Some viewers serve a IIIF Image API (`.../info.json`) and no Presentation manife
 gwt-fetch iiif --image-base 'https://archives.example.fr/iiif/ark:/00000/abc/f{page}/info.json' --pages 10-12 --out /tmp/reg
 ```
 
+Where the archive pads its page numbers (`f_0007`), write `{page:04}`. `--pages` without `{page}` in the URL, a range that selects nothing, and `--labels` stop with a message.
+
 Each file is `NNNN_<last path part>.jpg` (`0010_f10.jpg`), and its row has the `info.json` URL as `manifest_url`. A page whose `info.json` fails is reported and the rest still download. Passing an `info.json` as the plain URL stops with a message that points here.
 
 | Portal | Works | Viewer URL to manifest |
