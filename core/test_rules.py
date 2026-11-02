@@ -245,8 +245,8 @@ class Living(unittest.TestCase):
         # an empty "objects", a row with no handle, a DNA association with no ref: no crash, no false match
         self.assertEqual(rules.Index({"objects": None}).people, {})
         self.assertEqual(rules.Index({"people": [{"gramps_id": "X"}, {"handle": "a"}]}).people, {"a": {"handle": "a"}})
-        loner = {"person_ref_list": [{"rel": "DNA"}]}
-        self.assertEqual(possibly_living(loner, {"people": [loner]}, undated=False), (False, "no-dates", None))
+        holder = {"handle": "a", "person_ref_list": [{"rel": "DNA"}]}
+        self.assertEqual(possibly_living({}, {"people": [holder]}, undated=False), (False, "no-dates", None))
 
 
 class Fold(unittest.TestCase):
