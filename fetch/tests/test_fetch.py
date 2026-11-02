@@ -456,3 +456,15 @@ def test_store_skips_short_rawstore_lines(tmp_path):
     with open(tmp_path / "rawstore.tsv", "a", encoding="utf-8") as f:
         f.write("\n")   # a blank line left by a hand edit
     assert Store(tmp_path).find("0003_x").name == "0003_x.pdf"
+
+
+def test_rawstore_keeps_the_configured_key_prefix(tmp_path, monkeypatch):
+    from gwt_fetch import cli
+    rs = cli.rawstore_module()
+    bucket = Bucket()
+    monkeypatch.setenv("GWT_RAWSTORE_CONFIG", str(tmp_path / "no-config"))
+    monkeypatch.setenv("GWT_RAWSTORE_PREFIX", "archive/")
+    monkeypatch.setattr(rs, "store_from_config", lambda cfg: bucket)
+    monkeypatch.setattr(iiif, "run", scan_once)
+    assert cli.main(["iiif", "https://m/manifest", "--out", str(tmp_path), "--rawstore"]) == 0
+    assert [k.split("/")[0] for k in bucket.objects] == ["archive"]   # same keys as `gwt-rawstore put`
