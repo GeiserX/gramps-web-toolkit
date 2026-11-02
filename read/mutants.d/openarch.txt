@@ -12,3 +12,4 @@ gwt_openarch.py | return page.lstrip('\ufeff').startswith('0 HEAD') | return boo
 gwt_openarch.py |         if p.get('Profession'): | if False: | a record's occupation reaches the candidate
 gwt_openarch.py | if not docs and offset >= n: | if False: | an Open Archives page past the last row is the end of the results (exit 2), never a STOP
 gwt_openarch.py | off = max(0, min(int(a.start), 10000)) | off = 0 | the search tells the verdict where its page starts, so the last page reads as the end
+gwt_openarch.py | place = (ev.get('EventPlace') or {}).get('Place') or src_place | place = (ev.get('EventPlace') or {}).get('Place') or '' | a record whose event names no place (a population register) keeps the source's own place

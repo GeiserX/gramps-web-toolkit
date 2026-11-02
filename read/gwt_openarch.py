@@ -171,6 +171,8 @@ def _ev_date(d):
 def record_candidates(doc, archive, uuid):
     """Every person of the record, each with its role, the record's event and the others as relatives."""
     events = {e.get('@eid'): e for e in _list(doc.get('Event')) if isinstance(e, dict)}
+    src = doc.get('Source') if isinstance(doc.get('Source'), dict) else {}
+    src_place = (src.get('SourcePlace') or {}).get('Place') or ''     # when the event names no place of its own
     roles = {}
     for r in _list(doc.get('RelationEP')):
         if isinstance(r, dict):
@@ -186,8 +188,9 @@ def record_candidates(doc, archive, uuid):
         kind = event_kind(ev.get('EventType'))
         y = _ev_date(ev.get('EventDate'))
         evs = {}
-        if y or ev.get('EventPlace'):
-            evs[kind] = {'year': y, 'year_to': y, 'place': ((ev.get('EventPlace') or {}).get('Place') or '')}
+        place = (ev.get('EventPlace') or {}).get('Place') or src_place
+        if y or place:
+            evs[kind] = {'year': y, 'year_to': y, 'place': place}
         by = _ev_date(p.get('BirthDate'))
         if (by or p.get('BirthPlace')) and 'birth' not in evs:
             evs['birth'] = {'year': by, 'year_to': by, 'place': (p.get('BirthPlace') or {}).get('Place') or ''}

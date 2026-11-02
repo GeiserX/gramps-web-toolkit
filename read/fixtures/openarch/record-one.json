@@ -19,6 +19,10 @@
   "RelationType": "other:Ondertekenaar"
  },
  "Source": {
+  "SourcePlace": {
+   "Country": "Nederland",
+   "Place": "Nortdam"
+  },
   "SourceType": "other:Verzoekschrift"
  }
 }

@@ -21,7 +21,7 @@ Exit codes are those of [gwt-read](../read.md): 0 rows, 2 none, 3 a block or an 
 
 A search row becomes a candidate with `id` `ARCHIVE:UUID`, the name as the index typed it, the `role` the API gives in English (`Groom`, `Bride`, `Father`, `Registered`), the record's event as `birth`, `death`, `marriage` or `event`, and `url`, the record's citation URL: `https://www.openarchieven.nl/{archive}:{uuid}`. A row is `principal` when its role is the record's main person: a groom or bride, the deceased, the registered person, or the child of a birth or baptism. A child named in a marriage record is not.
 
-`record` gives one candidate per person (`id` `ARCHIVE:UUID:PersonN`), with given name and surname split, the role in English when it is one of the common Dutch roles (`Bruidegom` is `groom`, `Vader van de bruid` is `bride father`) and otherwise as written, the record's event, a birth event when the person has a birth date or place, the occupation, and every other person of the record as a relative with their role.
+`record` gives one candidate per person (`id` `ARCHIVE:UUID:<the record's own person id>`), with given name and surname split, the role in English when it is one of the common Dutch roles (`Bruidegom` is `groom`, `Vader van de bruid` is `bride father`) and otherwise as written, the record's event (its place, or the source's place when the event names none), a birth event when the person has a birth date or place, the occupation, and every other person of the record as a relative with their role.
 
 ## When it stops
 
@@ -32,7 +32,7 @@ A search row becomes a candidate with `id` `ARCHIVE:UUID`, the name as the index
 - a count above zero with no rows, unless `--start` is at or past that count: a page past the last row is the end of the results (exit 2, `past the end` on the results line);
 - an HTML page where the GEDCOM should be.
 
-A 5xx, or no answer at all, is an outage: exit 3, and the gate pauses every lane. A 429 is a wall, as on every source. A 404 for one record is an error (exit 1), not a block.
+A 5xx, or no answer at all, is an outage: exit 3, and the gate pauses every lane. A 429 is a wall, as on every source. A 404 or 410 for one record is an error (exit 1), not a block.
 
 ## Pace, cache and terms
 

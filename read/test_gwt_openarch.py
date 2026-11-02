@@ -153,6 +153,8 @@ class Record(Run):
         self.assertEqual(code, 0, text)
         (c,) = json.load(open(lines['candidates']))['candidates']
         self.assertEqual((c['name'], c['role'], c['principal']), ('Hendrik Velderhoek', 'ondertekenaar', False))
+        # no EventPlace (population registers often have none): the place is the source's own place
+        self.assertEqual(c['events'], {'event': {'year': 1878, 'year_to': 1878, 'place': 'Nortdam'}})
 
     def test_a_birth_record_child_is_the_principal(self):
         self.assertTrue(gwt_openarch.is_principal('Kind', 'birth'))
