@@ -41,6 +41,7 @@ AREA = {'Country', 'State', 'Province', 'Region', 'Department', 'County'}
 SETTLEMENT = {'City', 'Town', 'Village', 'Hamlet', 'Municipality', 'Locality', 'Neighborhood', 'Borough', 'District',
               'Unknown', ''}
 STREET = {'Street', 'Number'}
+LOCAL = {'Parish', 'Farm'}  # a church or a farm under a town; the settlement itself when no town is above
 PROVIDERS = ('cartociudad', 'ban', 'geonames-dump', 'nominatim')
 # the language whose church abbreviations a country's names use; any other country reads English ones
 LANG_OF = {'es': 'es', 'mx': 'es', 'ar': 'es', 'cu': 'es', 'uy': 'es', 'cl': 'es', 'co': 'es', 'pe': 'es',
@@ -411,6 +412,8 @@ class Geocoder:
         if t in AREA:
             return 'area'
         if t in SETTLEMENT:
+            return 'settlement'
+        if t in LOCAL and self.town_above(h) is None:
             return 'settlement'
         return 'street' if t in STREET else 'spot'
 

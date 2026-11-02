@@ -20,3 +20,5 @@ gwt_geocode.py | ok.sort(key=lambda dc: (dc[0], dc[1]['rank'])) | ok.sort(key=la
 gwt_geocode.py | r['name'].split(',')[0] | r['name'] | a CartoCiudad toponym is named by its address up to the comma
 gwt_geocode.py | if cc is None and self.ptype(top) == 'Country': | if False: | a place under a country with no known code is never searched worldwide, so a namesake abroad cannot win
 gwt_geocode.py |         if self.unreadable_point(h):  # |         if False:  # | a point the tree holds in degrees and minutes is never overwritten, even with --recheck
+gwt_geocode.py | if t in LOCAL and self.town_above(h) is None: | if False: | a parish or farm with no town above is looked up as the settlement, not left unresolved as a spot
+gwt_geocode.py | if t in LOCAL and self.town_above(h) is None: | if t in LOCAL: | a parish under a town is its church, a spot, never a second town

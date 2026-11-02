@@ -215,6 +215,25 @@ class Countries(unittest.TestCase):
         self.assertFalse(any(c[1].get('q') == 'Pueblo Raro, Ruritania' for c in http.calls))
 
 
+class ParishesAndFarms(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.code, cls.rows, cls.ops, cls.http, _ = run('--country', 'Ruritania=rr')
+
+    def test_a_parish_with_no_town_above_is_the_settlement(self):
+        # English, Scandinavian and Galician trees file events at the parish, with only a county above
+        r = self.rows['P9061']
+        self.assertEqual((r['match'], r['lat']), ('settlement', '51.000000'))
+        self.assertEqual(self.ops['P9061']['set'], {'lat': 51.0, 'long': -1.0})
+
+    def test_a_farm_is_checked_against_its_parish(self):
+        r = self.rows['P9062']
+        self.assertEqual((r['match'], r['lat'], r['distance_km']), ('own-point', '51.008000', '0.9'))
+
+    def test_a_parish_under_a_town_is_its_church(self):
+        self.assertEqual(self.rows['P9063']['match'], 'town-centroid')
+
+
 class KeepPoints(unittest.TestCase):
     def test_places_with_a_point_are_left_alone_by_default(self):
         for extra in ((), ('--only-missing',)):

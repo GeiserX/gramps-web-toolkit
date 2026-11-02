@@ -173,6 +173,42 @@
      "name": "Calle Larga"
     }
    }
+  ],
+  "Little Example, Exampleshire, Ruritania": [
+   {
+    "lat": "51.0",
+    "lon": "-1.0",
+    "category": "boundary",
+    "type": "administrative",
+    "addresstype": "village",
+    "name": "Little Example",
+    "importance": 0.3,
+    "display_name": "Little Example, invented",
+    "address": {
+     "country_code": "rr"
+    },
+    "namedetails": {
+     "name": "Little Example"
+    }
+   }
+  ],
+  "Example Farm, Little Example": [
+   {
+    "lat": "51.008",
+    "lon": "-1.0",
+    "category": "place",
+    "type": "farm",
+    "addresstype": "farm",
+    "name": "Example Farm",
+    "importance": 0.3,
+    "display_name": "Example Farm, invented",
+    "address": {
+     "country_code": "rr"
+    },
+    "namedetails": {
+     "name": "Example Farm"
+    }
+   }
   ]
  },
  "ban": {

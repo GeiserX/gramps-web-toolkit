@@ -124,6 +124,24 @@
     "gramps_id": "E9017",
     "type": "Residence",
     "place": "hP9017"
+   },
+   {
+    "handle": "heP9061",
+    "gramps_id": "E9061",
+    "type": "Residence",
+    "place": "hP9061"
+   },
+   {
+    "handle": "heP9062",
+    "gramps_id": "E9062",
+    "type": "Residence",
+    "place": "hP9062"
+   },
+   {
+    "handle": "heP9063",
+    "gramps_id": "E9063",
+    "type": "Residence",
+    "place": "hP9063"
    }
   ],
   "places": [
@@ -610,6 +628,78 @@
     ],
     "lat": "40°20'00\"N",
     "long": "3°20'00\"W"
+   },
+   {
+    "handle": "hP9060",
+    "gramps_id": "P9060",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Exampleshire"
+    },
+    "place_type": "County",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9050"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9061",
+    "gramps_id": "P9061",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Little Example"
+    },
+    "place_type": "Parish",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9060"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9062",
+    "gramps_id": "P9062",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Example Farm"
+    },
+    "place_type": "Farm",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9061"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9063",
+    "gramps_id": "P9063",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Parroquia de Santa Prueba"
+    },
+    "place_type": "Parish",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9003"
+     }
+    ],
+    "lat": "",
+    "long": ""
    }
   ]
  }
