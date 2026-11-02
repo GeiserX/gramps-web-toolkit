@@ -20,6 +20,10 @@ class ShippedCatalogueTest(unittest.TestCase):
             self.assertTrue(rows, name)
             for row in rows:
                 self.assertTrue(row['url'] or row['notes'], '%s line %d: no url and no note' % (name, row['line']))
+                if row['access'] == 'online':  # online tells a lane it may search there: it needs an address and leave
+                    self.assertTrue(row['url'], '%s line %d: online with no url' % (name, row['line']))
+                    self.assertNotEqual(row['robots'], 'disallow', '%s line %d: online but robots.txt forbids scripts'
+                                        % (name, row['line']))
                 if row['tested']:
                     self.assertLessEqual(row['tested'], datetime.date.today().isoformat())
 
