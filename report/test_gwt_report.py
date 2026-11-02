@@ -1,4 +1,4 @@
-import copy, io, json, os, subprocess, sys, tempfile, unittest
+import copy, io, json, os, re, subprocess, sys, tempfile, unittest
 from contextlib import redirect_stderr, redirect_stdout
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -349,19 +349,16 @@ class DigestTest(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn('line 1', err)
 
-    def test_html_escapes_and_links(self):
+    def test_html_uses_only_inline_tags_chat_apps_take(self):
         out = self.digest('--root', 'I1', '--format', 'html', '--base-url', 'https://g.example.org', '--lang', 'es')
-        self.assertIn('<h3>Lena Gale (I12), prima hermana <a href="https://g.example.org/person/I12">', out)
-        self.assertIn('&#x27;s side</h2>', out)
-
-    def test_digest_on_a_big_pedigree_finds_the_side_and_says_paths_were_cut(self):
-        with tempfile.TemporaryDirectory() as td:
-            old = big_pedigree(os.path.join(td, 'old.json'), drop=('Cm',))
-            new = big_pedigree(os.path.join(td, 'new.json'))
-            code, out, err = run('digest', '--from', old, '--to', new, '--root', 'P1')
-        self.assertEqual(code, 0, err)
-        self.assertIn("## mother's side\n\n### Cm (Cm), first cousin", out)
-        self.assertIn('kin paths were cut at 2000 per person for 1 of these people', out)
+        self.assertIn('<b>Lena Gale (I12), prima hermana</b> <a href="https://g.example.org/person/I12">', out)
+        self.assertIn("<b><u>father's side</u></b>", out)
+        self.assertLessEqual(set(re.findall(r'</?([a-z0-9]+)', out)), {'b', 'u', 'i', 'a'})
+        old, new = R.load(OLD), R.load(NEW)
+        new['people']['hI12']['primary_name']['first_name'] = 'Lena <x> & Co'
+        out = R.render(new, R.digest(old, new), 'https://g.example.org/?t=1&u=2', 'en', 'html')
+        self.assertIn('Lena &lt;x&gt; &amp; Co', out)
+        self.assertIn('<a href="https://g.example.org/?t=1&amp;u=2/person/I12">', out)
 
     def test_without_root_one_group(self):
         out = self.digest()

@@ -125,7 +125,7 @@ $ gwt report digest --from report/fixtures/digest-old.json --to report/fixtures/
 - new person: Rosa Pine [weak] https://gramps.example.org/person/I8
 ```
 
-`--format html` writes the same content as a page with clickable links.
+`--format html` writes the same lines with only the inline tags chat apps accept: `<b>` for the headings, `<u>` for the side, `<i>` for a note and `<a href>` for every link. There is no page around it (no `<html>`, `<h1>` or `<ul>`), so it pastes as it is into a Telegram message sent in HTML mode or into an email.
 
 ### What was already told
 

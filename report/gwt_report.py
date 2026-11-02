@@ -602,17 +602,24 @@ def web_url(base, t, gid):
 
 
 def render(T, groups, base, lang, fmt, since=''):
-    lines = []
-    esc = html.escape if fmt == 'html' else (lambda s: s)
-    side = None
-    title = 'New in the tree' + (' since %s' % since if since else '')
-    lines.append('<html><body><h1>%s</h1>' % esc(title) if fmt == 'html' else '# ' + title)
+    """Markdown, or html: the same lines with only the inline tags chat apps take (b, u, i, a), no page around them,
+    so the text pastes into a Telegram HTML message or an email as it is."""
+    if fmt == 'html':
+        esc = lambda s: html.escape(s, quote=False)
+        link = lambda u: '<a href="%s">%s</a>' % (html.escape(u), esc(u))
+        title, side_head, person_head = '<b>%s</b>', '\n<b><u>%s</u></b>', '\n<b>%s</b>%s\n'
+        note_line = '\n<i>(%s)</i>'
+    else:
+        esc = link = lambda s: s
+        title, side_head, person_head, note_line = '# %s', '\n## %s', '\n### %s%s\n', '\n(%s)'
+    lines = [title % esc('New in the tree' + (' since %s' % since if since else ''))]
     if not groups:
-        lines.append('<p>Nothing new.</p>' if fmt == 'html' else '\nNothing new.')
+        lines.append('\nNothing new.')
+    side = None
     for g in groups:
         if g['side'] != side:
             side = g['side']
-            lines.append('<h2>%s</h2>' % esc(side) if fmt == 'html' else '\n## %s' % side)
+            lines.append(side_head % esc(side))
         p = g['person']
         if p:
             head = who(T, p)
@@ -624,27 +631,15 @@ def render(T, groups, base, lang, fmt, since=''):
                     g['links'][k] for k in LINK_CLASSES)
         else:
             head, url = 'not attached to a person', ''
-        if fmt == 'html':
-            lines.append('<h3>%s%s</h3><ul>' % (esc(head), ' <a href="%s">%s</a>' % (esc(url), esc(url)) if url else ''))
-        else:
-            lines.append('\n### %s%s\n' % (head, ' ' + url if url else ''))
+        lines.append(person_head % (esc(head), ' ' + link(url) if url else ''))
         for it in g['items']:
-            link = web_url(base, it['type'], it['id'])
             text = it['text'] + (' [weak]' if it['weak'] else '')
-            if fmt == 'html':
-                bits = [esc(text)] + ['<a href="%s">%s</a>' % (esc(u), esc(u)) for u in [link] + it['urls'] if u]
-                lines.append('<li>%s</li>' % ' '.join(bits))
-            else:
-                lines.append('- ' + ' '.join([text] + [u for u in [link] + it['urls'] if u]))
-        if fmt == 'html':
-            lines.append('</ul>')
+            lines.append('- ' + ' '.join([esc(text)] + [link(u) for u in [web_url(base, it['type'], it['id'])]
+                                                         + it['urls'] if u]))
     cut = sum(1 for g in groups if g.get('truncated'))
     if cut:
-        note = ('kin paths were cut at %d per person for %d of these people: a more distant relationship, or the '
-                'only one, may be missing' % (MAX_PATHS, cut))
-        lines.append('<p>%s</p>' % esc(note) if fmt == 'html' else '\n(%s)' % note)
-    if fmt == 'html':
-        lines.append('</body></html>')
+        lines.append(note_line % esc('kin paths were cut at %d per person for %d of these people: a more distant '
+                                     'relationship, or the only one, may be missing' % (MAX_PATHS, cut)))
     return '\n'.join(lines).lstrip('\n') + '\n'
 
 
