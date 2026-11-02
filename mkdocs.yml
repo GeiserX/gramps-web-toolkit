@@ -147,7 +147,6 @@ nav:
       - gwt-spanish-poller: spanish-poller.md
   - Safety and pacing:
       - Hard-won lessons: hard-won.md
-      - Search UI verification: search-ui-verification.md
       - gwt-gate: gate.md
       - gwt-fscache: fscache.md
   - Development:
