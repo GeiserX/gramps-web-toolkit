@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass, field
 
 from gwt_apply.dates import DateError, parse_date
-from gwt_apply.dupes import Who, _alike, preflight, tree_people
+from gwt_apply.dupes import Couple, Who, _alike, _same_couple, preflight, tree_people
 from gwt_apply.ops import _is_familysearch, fold, stable_handle, validate
 from gwt_core.rules import Index, possibly_living
 
@@ -52,7 +52,10 @@ PLACE_TYPES = {w: w.title() for w in ("country", "state", "county", "city", "par
 EXTERNAL = {"_FSFTID": "FamilySearch", "_APID": "Ancestry", "_WT_USER": None}
 EXID_SYSTEMS = (("familysearch.org", "FamilySearch"), ("ancestry.", "Ancestry"), ("wikitree.com", "WikiTree"),
                 ("geni.com", "Geni"), ("myheritage.", "MyHeritage"), ("wikidata.org", "Wikidata"))
-USED = {"INDI": {"NAME", "SEX", "FAMC", "FAMS", "SOUR", "NOTE", "SNOTE", "EXID", "_FSFTID", "_APID", "CHAN",
+NAME_TYPES = {"married": "Married Name", "aka": "Also Known As", "birth": "Birth Name", "immigrant": "Also Known As",
+              "maiden": "Birth Name"}
+NAME_USED = {"GIVN", "SURN", "SOUR", "TYPE", "_MARNM"}
+USED = {"INDI": {"NAME", "SEX", "FAMC", "FAMS", "SOUR", "NOTE", "SNOTE", "EXID", "_FSFTID", "_APID", "_UID", "CHAN",
                  *PERSON_EVENTS, *CUSTOM},
         "FAM": {"HUSB", "WIFE", "CHIL", "SOUR", "NOTE", "SNOTE", "CHAN", *FAMILY_EVENTS, *CUSTOM}}
 
@@ -70,7 +73,7 @@ class Person:
     gender: str
     held: str | None = None  # why it is not added: "living", "namesake", "no given name", "same"
     ref: str = ""  # what other ops call it: key:<key>, or the Gramps ID with --same
-    alt_names: list[tuple[str, str]] = field(default_factory=list)
+    alt_names: list[tuple[str, str, str | None]] = field(default_factory=list)  # (given, surname, name type)
     namesake: tuple[str, list[str]] | None = None  # --different: (reason, the Gramps IDs it looks like)
 
 
@@ -80,6 +83,21 @@ def _slug(xref: str) -> str:
 
 def _h(*parts) -> str:
     return hashlib.sha256("\x1f".join(map(str, parts)).encode("utf-8")).hexdigest()[:10]
+
+
+def uids(rec: Line) -> list[str]:
+    """The _UID values of a record, as compared: upper case, hex digits only (some exporters add dashes)."""
+    return [u for u in (re.sub(r"[^0-9A-F]", "", line.value.upper()) for line in rec.all("_UID")) if u]
+
+
+def _tree_uids(person: dict) -> list[str]:
+    out = []
+    for a in person.get("attribute_list") or []:
+        t = a.get("type")
+        t = t.get("string") if isinstance(t, dict) else t
+        if str(t) == "_UID" and a.get("value"):
+            out.append(re.sub(r"[^0-9A-F]", "", str(a["value"]).upper()))
+    return out
 
 
 def split_name(rec: Line) -> tuple[str, str]:
@@ -118,15 +136,21 @@ class Builder:
         self.ops: list[dict] = []
         self.payloads: dict[str, str] = {}
         self.report: dict = {"file": {"version": ged.version, "encoding": ged.encoding, "declared": ged.declared,
-                                      "sha256": ged.sha256, "repaired_lines": len(ged.repairs)},
+                                      "sha256": ged.sha256, "repaired_lines": len(ged.repairs),
+                                      "joined_lines": len(ged.joined)},
                              "people": 0, "families": 0, "events": 0, "places": 0, "sources": 0, "citations": 0,
-                             "notes": 0, "external_ids": 0, "namesakes": [], "file_namesakes": [],
+                             "notes": 0, "external_ids": 0, "namesakes": [], "file_namesakes": [], "file_couples": [],
                              "living_held": [], "held": [], "date_problems": [], "places_ambiguous": [],
                              "places_matched": 0, "second_vitals": [], "families_skipped": [], "duplicate_events": 0,
                              "external_ids_refused": [], "not_imported": {}, "preflight": [], "problems": list(ged.problems)}
         for x in list(self.same) + list(self.different):
             if x not in ged.by_xref or ged.by_xref[x].tag != "INDI":
                 raise ImportError_(f"{x} is not a person in the file")
+        if check_tree:
+            ids = {o.get("gramps_id") for o in self.client.objects.get("Person") or []}
+            for x, gid in self.same.items():
+                if gid not in ids:
+                    raise ImportError_(f"--same {x}={gid}: the tree has no person {gid}")
         self.people: dict[str, Person] = {}
         self.sources: dict[str, str] = {}  # source xref, or inline text hash -> key
         self.citations: dict[tuple, dict] = {}
@@ -134,6 +158,13 @@ class Builder:
         self.places: dict[tuple, tuple[str, str | None]] = {}  # folded path -> (ref, tree handle or None)
         self.ambiguous: set[str] = set()
         self.tree_places = self.client.list_all("Place", ["name", "placeref_list", "gramps_id"]) if check_tree else []
+        self.place_ix: dict[tuple, list[dict]] = {}  # (folded name, enclosing handle) -> tree places
+        self.place_names: dict[str, list[dict]] = {}  # folded name -> tree places, at any level
+        for r in self.tree_places:
+            name = fold((r.get("name") or {}).get("value"))
+            up = next((x.get("ref") for x in r.get("placeref_list") or []), None)
+            self.place_ix.setdefault((name, up), []).append(r)
+            self.place_names.setdefault(name, []).append(r)
         self.place_form = self._form(ged.header.first("PLAC") if ged.header else None)
 
     # --- helpers -------------------------------------------------------------------------------------------
@@ -168,7 +199,17 @@ class Builder:
             names = rec.all("NAME")
             first, surname = split_name(names[0]) if names else ("", "")
             p = Person(rec, f"{self.prefix}-{_slug(rec.xref)}", first, surname, GENDER.get(rec.val("SEX").upper(), "U"))
-            p.alt_names = [split_name(n) for n in names[1:]]
+            for i, n in enumerate(names):
+                given, sur = split_name(n)
+                if i:
+                    p.alt_names.append((given, sur, NAME_TYPES.get(n.val("TYPE").lower())))
+                for m in n.all("_MARNM"):  # a married surname, as Gramps Web's own importer keeps it
+                    if m.value.strip():
+                        p.alt_names.append((given, m.value.strip().strip("/").strip(), "Married Name"))
+                for c in n.children:
+                    if c.tag not in NAME_USED:
+                        k = f"INDI.NAME.{c.tag}"
+                        self.report["not_imported"][k] = self.report["not_imported"].get(k, 0) + 1
             p.ref = "key:" + p.key
             if not first:
                 p.held = "no given name"
@@ -261,6 +302,14 @@ class Builder:
         by_loose: dict[tuple, list[Who]] = {}
         for w in tree:
             by_loose.setdefault(w.loose, []).append(w)
+        # the _UID Gramps Web's own GEDCOM import keeps as an attribute: the same record, whatever its name is now
+        by_uid: dict[str, list[Who]] = {}
+        if self.check_tree:
+            handles = {w.handle: w for w in tree}
+            for o in self.client.objects.get("Person") or []:
+                if o.get("handle") in handles:
+                    for u in _tree_uids(o):
+                        by_uid.setdefault(u, []).append(handles[o["handle"]])
         for x, p in self.people.items():
             if x in self.same:
                 p.held, p.ref = "same", self.same[x]
@@ -268,8 +317,9 @@ class Builder:
             if p.held:
                 continue
             who = self.who(x, x, self.same)
-            alike = [(w, why) for w in by_loose.get(who.loose, []) + [w for w in tree if w.full == who.full]
-                     if (why := _alike(who, w))]
+            # the same full name means the same first name and first surname: by_loose holds every namesake
+            alike = [(w, why) for w in by_loose.get(who.loose, []) if (why := _alike(who, w))]
+            alike += [(w, "same _UID") for u in uids(p.rec) for w in by_uid.get(u, [])]
             ids = sorted({w.ref for w, _ in alike})
             if not ids:
                 continue
@@ -283,7 +333,7 @@ class Builder:
                 "decide": f"--same {x}=<one of {', '.join(ids)}>  or  --different \"{x}=<why another person>\""})
 
     def add_people(self) -> None:
-        made: list[Who] = []
+        made: dict[tuple, list[Who]] = {}  # by loose name: only those can look alike
         refs = {x: p.ref for x, p in self.people.items() if p.held in (None, "same")}
         for x, p in self.people.items():
             if p.held:
@@ -294,7 +344,7 @@ class Builder:
             waived = p.namesake
             # namesakes inside the file: separate records the file keeps apart; preflight wants that said
             who = self.who(x, p.ref, refs)
-            twins = [w.ref for w in made if _alike(who, w)]
+            twins = [w.ref for w in made.get(who.loose, []) if _alike(who, w)]
             if waived or twins:
                 op["allow_namesake"] = True
                 reasons = ([waived[0]] if waived else []) + (
@@ -306,15 +356,21 @@ class Builder:
                                                           "of": [t[4:] for t in twins]})
             self.emit(op)
             self.report["people"] += 1
-            made.append(who)
-            for given, sur in p.alt_names:
-                alt = {"op": "add_alternate_name", "key": f"{p.key}-name-{_h(given, sur)}", "target": {"person": p.ref}}
+            made.setdefault(who.loose, []).append(who)
+            for given, sur, ntype in p.alt_names:
+                alt = {"op": "add_alternate_name", "key": f"{p.key}-name-{_h(given, sur, *([ntype] if ntype else []))}",
+                       "target": {"person": p.ref}}
                 if given:
                     alt["first_name"] = given
                 if sur:
                     alt["surnames"] = [{"surname": sur}]
+                if ntype:
+                    alt["type"] = ntype
                 if given or sur:
                     self.emit(alt)
+            for u in uids(p.rec)[:1]:  # so the next import of a file from the same site finds this person
+                self.emit({"op": "set_attribute", "key": f"{p.key}-uid", "target": {"person": p.ref},
+                           "type": "_UID", "value": u})
 
     # --- places, sources, citations, notes -----------------------------------------------------------------
     def place(self, plac: Line | None, where: str) -> tuple[str | None, str | None]:
@@ -344,8 +400,9 @@ class Builder:
                 matching = handle is not None
                 continue
             if matching:  # the same name under the same parent, top down
-                found = [r for r in self.tree_places if fold((r.get("name") or {}).get("value")) == fold(name)
-                         and next((x.get("ref") for x in r.get("placeref_list") or []), None) == handle]
+                found = self.place_ix.get((fold(name), handle), [])
+                if not found and len(levels) == 1:  # one level only ("Villanueva"): that name anywhere in the tree
+                    found = self.place_names.get(fold(name), [])
                 if len(found) == 1 and found[0].get("gramps_id"):
                     parent, handle = self.places[path] = (found[0]["gramps_id"], found[0]["handle"])
                     self.report["places_matched"] += 1
@@ -544,6 +601,7 @@ class Builder:
 
     # --- families ------------------------------------------------------------------------------------------
     def add_families(self) -> None:
+        couples: list[tuple[Couple, tuple[str, str]]] = []  # families with both parents this list makes
         for f in self.ged.families:
             def usable(x):
                 p = self.people.get(x or "")
@@ -577,6 +635,17 @@ class Builder:
                 op["mother"] = mother
             if births:
                 op["children"] = [r for r, _ in births]
+            if father and mother:
+                # two look-alike couples the file keeps apart, as with look-alike people: preflight wants that said
+                hw = [self.people[x] for x in (husb[0], wife[0])]
+                mine = Couple("key:" + key, *(Who(q.ref, q.first, q.surname) for q in hw))
+                twins = [c.ref for c, pair in couples if pair != (father, mother) and _same_couple(mine, c)]
+                if twins:
+                    op["allow_new_couple"] = True
+                    op["new_couple_reason"] = f"a separate family record of the GEDCOM file ({f.xref})"
+                    op["new_couple_of"] = twins
+                    self.report["file_couples"].append({"xref": f.xref, "of": [t[4:] for t in twins]})
+                couples.append((mine, (father, mother)))
             if not self.emit(op)[1]:
                 continue
             self.report["families"] += 1
@@ -617,10 +686,9 @@ class Builder:
             self.external_ids(p)
             self.unused(p.rec, USED["INDI"])
         self.add_families()
-        media = sum(1 for r in self.ged.records if r.tag == "OBJE") + sum(
-            1 for r in self.ged.records for c in r.children if c.tag == "OBJE")
+        media = sum(1 for r in self.ged.records if r.tag == "OBJE")  # links to them are counted as INDI.OBJE...
         if media:
-            self.report["not_imported"]["OBJE (media: the files are not in a GEDCOM)"] = media
+            self.report["not_imported"]["OBJE records (media: the files are not in a GEDCOM)"] = media
         for op in [*self.citations.values(), *self.notes.values()]:
             self.emit(op)
         bad = validate(self.ops)

@@ -543,3 +543,191 @@ def test_a_windows_file_labelled_ansel_is_read_as_windows_1252_and_reported():
     g = read(b"0 HEAD\n1 CHAR ANSEL\n0 @I1@ INDI\n1 NAME Jos\xe9 /Mu\xf1oz/\n0 TRLR\n")
     assert g.individuals[0].val("NAME") == "José /Muñoz/"
     assert [(r["line"], r["read_as"]) for r in g.repairs] == [(4, "cp1252")]
+
+
+def test_same_with_an_id_the_tree_does_not_have_is_refused():
+    from gwt_gedcom.mapping import ImportError_
+    with pytest.raises(ImportError_, match="no person I9999"):
+        run(FIX / "latin1-551.ged", same={"@I1@": "I9999"})
+
+
+UID_FILE = """0 HEAD
+1 GEDC
+2 VERS 5.5.1
+0 @I1@ INDI
+1 NAME Pedro /Navas/
+1 _UID 0A1B2C3D-4E5F-0000-1111-222233334444
+1 BIRT
+2 DATE 1850
+0 @I2@ INDI
+1 NAME Rosa /Gil/
+1 _UID 99999999999999999999999999999999
+1 BIRT
+2 DATE 1852
+0 TRLR"""
+
+
+def test_a_uid_on_a_tree_person_holds_the_file_person_even_after_a_rename():
+    p, ev = tree_person("h1", "I0042", "Pedro", "Ortiz Navas", 1850)  # renamed in the tree since
+    p["attribute_list"] = [{"type": "_UID", "value": "0a1b2c3d4e5f00001111222233334444"}]
+    ops, rep = run(ged(UID_FILE), snap(Person=[p], Event=ev))
+    assert [(r["xref"], r["namesake_of"], r["why"]) for r in rep["namesakes"]] == [
+        ("@I1@", ["I0042"], ["same _UID"])]
+    rosa = next(o for o in by_op(ops, "add_person") if o["first_name"] == "Rosa")
+    uid = by_op(ops, "set_attribute")
+    assert [(u["target"], u["type"], u["value"]) for u in uid] == [
+        ({"person": "key:" + rosa["key"]}, "_UID", "9" * 32)]
+    assert "INDI._UID" not in rep["not_imported"]
+    assert validate(ops) == []
+
+
+def test_look_alike_couples_inside_the_file_are_kept_apart_like_people():
+    text = """0 HEAD
+0 @I1@ INDI
+1 NAME Melchor /Sanz/
+1 SEX M
+1 BIRT
+2 DATE 1700
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Inés /Mora/
+1 SEX F
+1 FAMS @F1@
+0 @I3@ INDI
+1 NAME Melchor /Sanz/
+1 SEX M
+1 BIRT
+2 DATE 1760
+1 FAMS @F2@
+0 @I4@ INDI
+1 NAME Inés /Mora/
+1 SEX F
+1 FAMS @F2@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+0 @F2@ FAM
+1 HUSB @I3@
+1 WIFE @I4@
+0 TRLR"""
+    ops, rep = run(ged(text), allow_living=True)
+    fams = by_op(ops, "add_family")
+    assert "allow_new_couple" not in fams[0]
+    assert (fams[1]["allow_new_couple"], fams[1]["new_couple_of"]) == (True, ["key:" + fams[0]["key"]])
+    assert rep["file_couples"] == [{"xref": "@F2@", "of": [fams[0]["key"]]}]
+    assert validate(ops) == [] and rep["preflight"] == []
+
+
+def test_a_married_name_becomes_an_alternate_name_and_other_name_parts_are_counted():
+    text = ("0 HEAD\n0 @I1@ INDI\n1 NAME Ana /Ruiz/\n2 _MARNM Gil\n2 NICK Anita\n1 NAME Ana /Vela/\n2 TYPE aka\n"
+            "1 BIRT\n2 DATE 1800\n0 TRLR")
+    ops, rep = run(ged(text))
+    alts = {(a["surnames"][0]["surname"], a.get("type")) for a in by_op(ops, "add_alternate_name")}
+    assert alts == {("Gil", "Married Name"), ("Vela", "Also Known As")}
+    assert rep["not_imported"]["INDI.NAME.NICK"] == 1
+    assert validate(ops) == []
+
+
+def test_a_one_level_place_is_found_at_any_level_when_the_tree_has_one():
+    up = {"handle": "pk", "gramps_id": "P0001", "name": {"value": "Tierra Alta"}, "placeref_list": []}
+    town = {"handle": "pt", "gramps_id": "P0002", "name": {"value": "Villarreal"}, "placeref_list": [{"ref": "pk"}]}
+    text = "0 HEAD\n0 @I1@ INDI\n1 NAME Ana /Ruiz/\n1 BIRT\n2 DATE 1800\n2 PLAC Villarreal\n0 TRLR"
+    ops, rep = run(ged(text), snap(Place=[up, town]))
+    assert by_op(ops, "add_place") == [] and by_op(ops, "add_event")[0]["place"] == "P0002"
+    twin = dict(town, handle="px", gramps_id="P0003", placeref_list=[])
+    other = dict(up, handle="pz", gramps_id="P0004")
+    ops, rep = run(ged(text), snap(Place=[up, town, other, dict(twin, placeref_list=[{"ref": "pz"}])]))
+    assert rep["places_ambiguous"][0]["tree_ids"] == ["P0002", "P0003"]
+
+
+def test_media_is_counted_once():
+    text = "0 HEAD\n0 @I1@ INDI\n1 NAME Ana /Ruiz/\n1 BIRT\n2 DATE 1800\n1 OBJE @M1@\n0 @M1@ OBJE\n1 FILE a.jpg\n0 TRLR"
+    _, rep = run(ged(text))
+    assert rep["not_imported"] == {"INDI.OBJE": 1, "OBJE records (media: the files are not in a GEDCOM)": 1}
+
+
+def _many(n: int) -> bytes:
+    """n people with n different names: none can look like another."""
+    rows = ["0 HEAD"]
+    for i in range(n):
+        rows += [f"0 @I{i}@ INDI", f"1 NAME Name{i} /Surname{i}/", "1 BIRT", "2 DATE 1800"]
+    return ged("\n".join(rows + ["0 TRLR"]))
+
+
+def test_people_are_compared_only_with_people_of_the_same_loose_name(monkeypatch):
+    import gwt_gedcom.audit as audit_mod_
+    import gwt_gedcom.mapping as mapping
+    calls = []
+    real = mapping._alike
+    monkeypatch.setattr(mapping, "_alike", lambda a, b: calls.append(1) or real(a, b))
+    monkeypatch.setattr(audit_mod_, "_alike", lambda a, b: calls.append(1) or real(a, b))
+    tree = snap(Person=[tree_person(f"h{i}", f"I{i:04d}", f"Other{i}", f"Family{i}")[0] for i in range(60)])
+    ops, _ = run(_many(60), tree)
+    audit_mod.audit(read(_many(60)))
+    assert len(by_op(ops, "add_person")) == 60
+    assert calls == []  # every name differs: not one comparison, where all pairs would be 60 x 59 / 2 per pass
+
+
+def test_audit_uses_gwt_checks_parent_ages_by_sex():
+    text = """0 HEAD
+0 @I1@ INDI
+1 NAME Pablo /Ruiz/
+1 SEX M
+1 BIRT
+2 DATE 1800
+0 @I2@ INDI
+1 NAME Rosa /Gil/
+1 SEX F
+1 BIRT
+2 DATE 1815
+0 @I3@ INDI
+1 NAME Luis /Ruiz/
+1 BIRT
+2 DATE 1870
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I3@
+0 TRLR"""
+    a = audit_mod.audit(read(ged(text)))
+    ages = {d["parent"]: d["problem"] for d in a["dates"] if d.get("parent")}
+    assert ages == {"@I2@": "born when the parent was 55"}  # a father of 70 passes, as in gwt-check
+    out = audit_mod.summary(a)
+    assert "{" not in out and "@I3@ (family @F1@, parent @I2@): born when the parent was 55" in out
+
+
+def test_cli_decisions_file_and_template(tmp_path, capsys):
+    p, ev = tree_person("h1", "I0007", "Pedro", "García López", 1730)
+    tree = _tree_file(tmp_path, snap(Person=[p], Event=ev))
+    tmpl, out = tmp_path / "d.txt", tmp_path / "o.jsonl"
+    base = [str(FIX / "latin1-551.ged"), "--tree", tree, "--batch", "b", "--out", str(out)]
+    assert main(base + ["--write-decisions", str(tmpl)]) == 0
+    text = tmpl.read_text()
+    assert "#@I3@=I0007" in text and "#@I6@!=" in text
+    tmpl.write_text(text.replace("#@I3@=I0007", "@I3@=I0007").replace("#@I6@!=", "@I6@!=another Pedro"))
+    assert main(base + ["--decisions", str(tmpl), "--force"]) == 0
+    ops = [json.loads(line) for line in out.read_text().splitlines()]
+    six = next(o for o in by_op(ops, "add_person") if o["key"].endswith("-i6"))
+    assert six["namesake_reason"].startswith("another Pedro")
+    assert any("I0007" in (f.get("children") or []) for f in by_op(ops, "add_family"))
+    assert not [o for o in by_op(ops, "add_person") if o["key"].endswith("-i3")]
+    bad = tmp_path / "bad.txt"
+    bad.write_text("@I3@ I0007\n")
+    assert main(base + ["--decisions", str(bad), "--force"]) == 2 and "line 1" in capsys.readouterr().err
+
+
+def test_cli_refuses_outputs_it_cannot_write_before_reading(tmp_path, capsys):
+    base = [str(FIX / "seven.ged"), "--tree", _tree_file(tmp_path), "--batch", "b"]
+    assert main(base + ["--out", str(tmp_path / "nodir" / "x.jsonl")]) == 2
+    assert "does not exist" in capsys.readouterr().err
+    same = str(tmp_path / "x.jsonl")
+    assert main(base + ["--out", same, "--report", same]) == 2
+    assert not os.path.exists(same)
+
+
+def test_cli_split_says_who_is_in_no_output_and_takes_ids_without_at(tmp_path, capsys):
+    assert main(["split", str(FIX / "split.ged"), "--root", "I1", "--out-dir", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert os.path.exists(tmp_path / "I1.ged")
+    left = split_mod.left_out(read(str(FIX / "split.ged")), ["@I1@"])
+    assert left and f"in no output: {len(left)} of " in out

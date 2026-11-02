@@ -6,7 +6,8 @@ writes trees/I1.ged and trees/I40.ged. A root's tree is everyone who descends fr
 (the root, their parents, grandparents and so on, and every descendant of each of them), plus every spouse of
 those people. A spouse is a stub: their own record and the family they share with a blood relative go in, their
 parents and other marriages do not. Sources, notes, repositories and media the kept records point at go in too.
-Two roots whose trees share people both keep them; the summary says how many.
+Two roots whose trees share people both keep them; the summary says how many, and how many people are in no file
+(the relatives of a spouse, for one).
 """
 
 from __future__ import annotations
@@ -136,6 +137,15 @@ def write(ged: Gedcom, people: set[str], stubs: set[str], families: set[str]) ->
 
 def name_of(xref: str) -> str:
     return re.sub(r"[^A-Za-z0-9_-]+", "", xref) or "root"
+
+
+def left_out(ged: Gedcom, roots: list[str]) -> list[str]:
+    """The people in no root's file: neither blood relatives nor spouse stubs of any root."""
+    kept: set[str] = set()
+    for r in roots:
+        blood, stubs, _ = reach(ged, r)
+        kept |= blood | stubs
+    return [r.xref for r in ged.individuals if r.xref not in kept]
 
 
 def split(ged: Gedcom, roots: list[str], out_dir: str, *, force: bool = False) -> list[dict]:
