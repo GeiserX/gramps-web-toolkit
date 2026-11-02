@@ -1,0 +1,1390 @@
+{
+ "format": "gwt-apply-snapshot/1",
+ "tree": "example",
+ "taken": "2026-01-01T00:00:00+00:00",
+ "objects": {
+  "Person": [
+   {
+    "handle": "hI1",
+    "gramps_id": "I1",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Adam",
+     "surname_list": [
+      {
+       "surname": "Root",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hF1",
+     "hF2"
+    ],
+    "parent_family_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hI2",
+    "gramps_id": "I2",
+    "gender": 0,
+    "private": false,
+    "primary_name": {
+     "first_name": "Eve",
+     "surname_list": [
+      {
+       "surname": "Stone",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hF1"
+    ],
+    "parent_family_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hI3",
+    "gramps_id": "I3",
+    "gender": 0,
+    "private": false,
+    "primary_name": {
+     "first_name": "Lilith",
+     "surname_list": [
+      {
+       "surname": "Moss",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hF2"
+    ],
+    "parent_family_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hA1",
+    "gramps_id": "A1",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Arno1",
+     "surname_list": [
+      {
+       "surname": "Field",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFA1"
+    ],
+    "parent_family_list": [
+     "hF1"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hB1",
+    "gramps_id": "B1",
+    "gender": 0,
+    "private": false,
+    "primary_name": {
+     "first_name": "Bea1",
+     "surname_list": [
+      {
+       "surname": "Hill",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFB1"
+    ],
+    "parent_family_list": [
+     "hF1"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hA2",
+    "gramps_id": "A2",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Arno2",
+     "surname_list": [
+      {
+       "surname": "Field",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFA2"
+    ],
+    "parent_family_list": [
+     "hFA1"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hB2",
+    "gramps_id": "B2",
+    "gender": 0,
+    "private": false,
+    "primary_name": {
+     "first_name": "Bea2",
+     "surname_list": [
+      {
+       "surname": "Hill",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFB2"
+    ],
+    "parent_family_list": [
+     "hFB1"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hA3",
+    "gramps_id": "A3",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Arno3",
+     "surname_list": [
+      {
+       "surname": "Field",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFA3"
+    ],
+    "parent_family_list": [
+     "hFA2"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [
+     "htag1"
+    ]
+   },
+   {
+    "handle": "hB3",
+    "gramps_id": "B3",
+    "gender": 0,
+    "private": false,
+    "primary_name": {
+     "first_name": "Bea3",
+     "surname_list": [
+      {
+       "surname": "Hill",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFB3"
+    ],
+    "parent_family_list": [
+     "hFB2"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hA4",
+    "gramps_id": "A4",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Arno4",
+     "surname_list": [
+      {
+       "surname": "Field",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFA4"
+    ],
+    "parent_family_list": [
+     "hFA3"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hB4",
+    "gramps_id": "B4",
+    "gender": 0,
+    "private": false,
+    "primary_name": {
+     "first_name": "Bea4",
+     "surname_list": [
+      {
+       "surname": "Hill",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFB4"
+    ],
+    "parent_family_list": [
+     "hFB3"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hA5",
+    "gramps_id": "A5",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Arno5",
+     "surname_list": [
+      {
+       "surname": "Field",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFA5"
+    ],
+    "parent_family_list": [
+     "hFA4"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hB5",
+    "gramps_id": "B5",
+    "gender": 0,
+    "private": false,
+    "primary_name": {
+     "first_name": "Bea5",
+     "surname_list": [
+      {
+       "surname": "Hill",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFB5"
+    ],
+    "parent_family_list": [
+     "hFB4"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hA6",
+    "gramps_id": "A6",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Arno6",
+     "surname_list": [
+      {
+       "surname": "Field",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [],
+    "parent_family_list": [
+     "hFA5"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hB6",
+    "gramps_id": "B6",
+    "gender": 0,
+    "private": false,
+    "primary_name": {
+     "first_name": "Bea6",
+     "surname_list": [
+      {
+       "surname": "Hill",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [],
+    "parent_family_list": [
+     "hFB5"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hWA2",
+    "gramps_id": "WA2",
+    "gender": 0,
+    "private": false,
+    "primary_name": {
+     "first_name": "Wife2",
+     "surname_list": [
+      {
+       "surname": "Lake",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFA1"
+    ],
+    "parent_family_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hHB2",
+    "gramps_id": "HB2",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Husband2",
+     "surname_list": [
+      {
+       "surname": "Brook",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFB1"
+    ],
+    "parent_family_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hWA3",
+    "gramps_id": "WA3",
+    "gender": 0,
+    "private": false,
+    "primary_name": {
+     "first_name": "Wife3",
+     "surname_list": [
+      {
+       "surname": "Lake",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFA2"
+    ],
+    "parent_family_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hHB3",
+    "gramps_id": "HB3",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Husband3",
+     "surname_list": [
+      {
+       "surname": "Brook",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFB2"
+    ],
+    "parent_family_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hWA4",
+    "gramps_id": "WA4",
+    "gender": 0,
+    "private": false,
+    "primary_name": {
+     "first_name": "Wife4",
+     "surname_list": [
+      {
+       "surname": "Lake",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFA3"
+    ],
+    "parent_family_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hHB4",
+    "gramps_id": "HB4",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Husband4",
+     "surname_list": [
+      {
+       "surname": "Brook",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFB3"
+    ],
+    "parent_family_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hWA5",
+    "gramps_id": "WA5",
+    "gender": 0,
+    "private": false,
+    "primary_name": {
+     "first_name": "Wife5",
+     "surname_list": [
+      {
+       "surname": "Lake",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFA4"
+    ],
+    "parent_family_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hHB5",
+    "gramps_id": "HB5",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Husband5",
+     "surname_list": [
+      {
+       "surname": "Brook",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFB4"
+    ],
+    "parent_family_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hWA6",
+    "gramps_id": "WA6",
+    "gender": 0,
+    "private": false,
+    "primary_name": {
+     "first_name": "Wife6",
+     "surname_list": [
+      {
+       "surname": "Lake",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFA5"
+    ],
+    "parent_family_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hHB6",
+    "gramps_id": "HB6",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Husband6",
+     "surname_list": [
+      {
+       "surname": "Brook",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFB5"
+    ],
+    "parent_family_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hH1",
+    "gramps_id": "H1",
+    "gender": 0,
+    "private": false,
+    "primary_name": {
+     "first_name": "Hanna",
+     "surname_list": [
+      {
+       "surname": "Root",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hF3"
+    ],
+    "parent_family_list": [
+     "hF2"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hH2",
+    "gramps_id": "H2",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Hugo",
+     "surname_list": [
+      {
+       "surname": "Vale",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [],
+    "parent_family_list": [
+     "hF3"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hHV",
+    "gramps_id": "HV",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Victor",
+     "surname_list": [
+      {
+       "surname": "Vale",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hF3"
+    ],
+    "parent_family_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hC1",
+    "gramps_id": "C1",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Carl",
+     "surname_list": [
+      {
+       "surname": "Root",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFC"
+    ],
+    "parent_family_list": [
+     "hF1"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hC2",
+    "gramps_id": "C2",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Cid",
+     "surname_list": [
+      {
+       "surname": "Root",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFX"
+    ],
+    "parent_family_list": [
+     "hFC"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hE2",
+    "gramps_id": "E2",
+    "gender": 0,
+    "private": false,
+    "primary_name": {
+     "first_name": "Elsa",
+     "surname_list": [
+      {
+       "surname": "Brook",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFX"
+    ],
+    "parent_family_list": [
+     "hFB1"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hX1",
+    "gramps_id": "X1",
+    "gender": 0,
+    "private": false,
+    "primary_name": {
+     "first_name": "Xena",
+     "surname_list": [
+      {
+       "surname": "Root",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [],
+    "parent_family_list": [
+     "hFX"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hK1",
+    "gramps_id": "K1",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Kai",
+     "surname_list": [
+      {
+       "surname": "Field",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [],
+    "parent_family_list": [
+     "hFA1"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hS1",
+    "gramps_id": "S1",
+    "gender": 1,
+    "private": false,
+    "primary_name": {
+     "first_name": "Saul",
+     "surname_list": [
+      {
+       "surname": "Ford",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [],
+    "parent_family_list": [
+     "hFA1",
+     "hFS"
+    ],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   },
+   {
+    "handle": "hSF",
+    "gramps_id": "SF",
+    "gender": 0,
+    "private": false,
+    "primary_name": {
+     "first_name": "Sara",
+     "surname_list": [
+      {
+       "surname": "Ford",
+       "primary": true
+      }
+     ]
+    },
+    "event_ref_list": [],
+    "birth_ref_index": -1,
+    "death_ref_index": -1,
+    "family_list": [
+     "hFS"
+    ],
+    "parent_family_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": []
+   }
+  ],
+  "Family": [
+   {
+    "handle": "hF1",
+    "gramps_id": "F1",
+    "father_handle": "hI1",
+    "mother_handle": "hI2",
+    "child_ref_list": [
+     {
+      "ref": "hA1",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     },
+     {
+      "ref": "hB1",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     },
+     {
+      "ref": "hC1",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     }
+    ],
+    "event_ref_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [],
+    "private": false
+   },
+   {
+    "handle": "hF2",
+    "gramps_id": "F2",
+    "father_handle": "hI1",
+    "mother_handle": "hI3",
+    "child_ref_list": [
+     {
+      "ref": "hH1",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     }
+    ],
+    "event_ref_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [],
+    "private": false
+   },
+   {
+    "handle": "hF3",
+    "gramps_id": "F3",
+    "father_handle": "hHV",
+    "mother_handle": "hH1",
+    "child_ref_list": [
+     {
+      "ref": "hH2",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     }
+    ],
+    "event_ref_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [],
+    "private": false
+   },
+   {
+    "handle": "hFA1",
+    "gramps_id": "FA1",
+    "father_handle": "hA1",
+    "mother_handle": "hWA2",
+    "child_ref_list": [
+     {
+      "ref": "hA2",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [
+       "hN1"
+      ],
+      "private": false
+     },
+     {
+      "ref": "hK1",
+      "frel": "Adopted",
+      "mrel": "Adopted",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     },
+     {
+      "ref": "hS1",
+      "frel": "Stepchild",
+      "mrel": "Stepchild",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     }
+    ],
+    "event_ref_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [],
+    "private": false
+   },
+   {
+    "handle": "hFB1",
+    "gramps_id": "FB1",
+    "father_handle": "hHB2",
+    "mother_handle": "hB1",
+    "child_ref_list": [
+     {
+      "ref": "hB2",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [
+       "hC1"
+      ],
+      "note_list": [],
+      "private": false
+     },
+     {
+      "ref": "hE2",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     }
+    ],
+    "event_ref_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [],
+    "private": false
+   },
+   {
+    "handle": "hFA2",
+    "gramps_id": "FA2",
+    "father_handle": "hA2",
+    "mother_handle": "hWA3",
+    "child_ref_list": [
+     {
+      "ref": "hA3",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     }
+    ],
+    "event_ref_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [],
+    "private": false
+   },
+   {
+    "handle": "hFB2",
+    "gramps_id": "FB2",
+    "father_handle": "hHB3",
+    "mother_handle": "hB2",
+    "child_ref_list": [
+     {
+      "ref": "hB3",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     }
+    ],
+    "event_ref_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [],
+    "private": false
+   },
+   {
+    "handle": "hFA3",
+    "gramps_id": "FA3",
+    "father_handle": "hA3",
+    "mother_handle": "hWA4",
+    "child_ref_list": [
+     {
+      "ref": "hA4",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     }
+    ],
+    "event_ref_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [],
+    "private": false
+   },
+   {
+    "handle": "hFB3",
+    "gramps_id": "FB3",
+    "father_handle": "hHB4",
+    "mother_handle": "hB3",
+    "child_ref_list": [
+     {
+      "ref": "hB4",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     }
+    ],
+    "event_ref_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [],
+    "private": false
+   },
+   {
+    "handle": "hFA4",
+    "gramps_id": "FA4",
+    "father_handle": "hA4",
+    "mother_handle": "hWA5",
+    "child_ref_list": [
+     {
+      "ref": "hA5",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     }
+    ],
+    "event_ref_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [],
+    "private": false
+   },
+   {
+    "handle": "hFB4",
+    "gramps_id": "FB4",
+    "father_handle": "hHB5",
+    "mother_handle": "hB4",
+    "child_ref_list": [
+     {
+      "ref": "hB5",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     }
+    ],
+    "event_ref_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [],
+    "private": false
+   },
+   {
+    "handle": "hFA5",
+    "gramps_id": "FA5",
+    "father_handle": "hA5",
+    "mother_handle": "hWA6",
+    "child_ref_list": [
+     {
+      "ref": "hA6",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     }
+    ],
+    "event_ref_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [],
+    "private": false
+   },
+   {
+    "handle": "hFB5",
+    "gramps_id": "FB5",
+    "father_handle": "hHB6",
+    "mother_handle": "hB5",
+    "child_ref_list": [
+     {
+      "ref": "hB6",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     }
+    ],
+    "event_ref_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [],
+    "private": false
+   },
+   {
+    "handle": "hFS",
+    "gramps_id": "FS",
+    "father_handle": null,
+    "mother_handle": "hSF",
+    "child_ref_list": [
+     {
+      "ref": "hS1",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     }
+    ],
+    "event_ref_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [],
+    "private": false
+   },
+   {
+    "handle": "hFC",
+    "gramps_id": "FC",
+    "father_handle": "hC1",
+    "mother_handle": null,
+    "child_ref_list": [
+     {
+      "ref": "hC2",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     }
+    ],
+    "event_ref_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [],
+    "private": false
+   },
+   {
+    "handle": "hFX",
+    "gramps_id": "FX",
+    "father_handle": "hC2",
+    "mother_handle": "hE2",
+    "child_ref_list": [
+     {
+      "ref": "hX1",
+      "frel": "Birth",
+      "mrel": "Birth",
+      "citation_list": [],
+      "note_list": [],
+      "private": false
+     }
+    ],
+    "event_ref_list": [],
+    "citation_list": [],
+    "media_list": [],
+    "note_list": [],
+    "tag_list": [],
+    "private": false
+   }
+  ],
+  "Event": [],
+  "Citation": [
+   {
+    "handle": "hC1",
+    "gramps_id": "C1",
+    "source_handle": "hS1",
+    "page": "folio 3",
+    "confidence": 3,
+    "note_list": [],
+    "attribute_list": [],
+    "media_list": [],
+    "tag_list": []
+   }
+  ],
+  "Media": [],
+  "Note": [
+   {
+    "handle": "hN1",
+    "gramps_id": "N1",
+    "text": {
+     "string": "[probable] index line only"
+    },
+    "type": "Research"
+   }
+  ],
+  "Tag": [
+   {
+    "handle": "htag1",
+    "name": "Hipótesis",
+    "gramps_id": ""
+   }
+  ],
+  "Place": [],
+  "Source": [
+   {
+    "handle": "hS1",
+    "gramps_id": "S1",
+    "title": "Parish book"
+   }
+  ],
+  "Repository": []
+ }
+}

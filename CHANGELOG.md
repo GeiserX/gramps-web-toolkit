@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Added
+
+- `gwt-report`, a new tool that reads an offline dump or snapshot. `gwt-report kin DUMP A B` lists every blood path between two people (through Birth, Adopted or Unknown parent links, never a marriage or a step link), the common ancestors with their Ahnentafel numbers from each side, the relationship name in English, Spanish and French (cousins of any degree and removal, half relations), how many links of each path are confirmed, probable, weak-tagged or unmarked, and implex in either pedigree. `gwt-report digest --from OLD --to NEW` lists the new people, events, citations and media by person and, with `--root`, by side and kin distance, with Gramps Web links (`--base-url`) and the web addresses their citations hold; `--told FILE --audience NAME` leaves out what that audience was told, and `--mark` records what it shows.
+
 ## [0.3.0] - 2026-10-31
 
 ### Change lists

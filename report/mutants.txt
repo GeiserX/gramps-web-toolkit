@@ -1,0 +1,21 @@
+gwt_report.py | degree, removed = min(g1, g2) - 1, abs(g1 - g2) | degree, removed = min(g1, g2), abs(g1 - g2) | the English cousin degree is one less than the generations up from the nearer person: second cousins share great-grandparents
+gwt_report.py | degree, removed = min(g1, g2) - 1, abs(g1 - g2) | degree, removed = min(g1, g2) - 1, g1 - g2 | removed counts the generation gap either way round: B above A is as removed as B below A
+gwt_report.py | n, d = min(g1, g2), abs(g1 - g2) | n, d = min(g1, g2) - 1, abs(g1 - g2) | the Spanish ordinal counts from siblings: the child of a primo hermano is a sobrino segundo
+gwt_report.py | deg, gap = min(g1, g2) - 1, abs(g1 - g2) | deg, gap = min(g1, g2), abs(g1 - g2) | the French cousin degree: children of siblings are cousins germains
+gwt_report.py | n = 2 * n + (step[2] == 'mother') | n = 2 * n + (step[2] == 'father') | Ahnentafel numbers: a father is 2n, a mother 2n+1
+gwt_report.py | return not any(step[0] in common for step in path) | return True | a path through a nearer common ancestor is that ancestor's relationship, never one more per ancestor above it
+gwt_report.py | (fam_a != fam_b or len(members) == 1 and all( | (len(members) == 1 and all( | two lines that reach the shared ancestor through different families are half kin
+gwt_report.py | len(members) == 1 and all( | len(members) == 1 or all( | one shared parent of a family that records only one parent is not called half
+gwt_report.py | LINEAGE = ('', 'Birth', 'Unknown', 'Adopted') | LINEAGE = ('', 'Birth', 'Unknown', 'Adopted', 'Stepchild') | a stepchild link is never a blood path
+gwt_report.py | text_of(s[4].get('frel' if s[2] == 'father' else 'mrel')) == 'Adopted' | False | a path through an adoption says so
+gwt_report.py |         return 'weak' |         return 'unmarked' | a link whose child or family carries a weak tag counts as weak
+gwt_report.py | if any(m.startswith(PROBABLE) for m in marks): | if False: | a link with a [probable] note counts as probable
+gwt_report.py | or 0) >= 3 for c in | or 0) >= 5 for c in | a link cited at confidence 3 or 4 counts as confirmed
+gwt_report.py | len({at.get(n // 2) for n in ns}) < 2 | False | implex lists the lowest repeated couple, not every ancestor above it again
+gwt_report.py | if parent in seen: | if False: | a person recorded as their own ancestor never multiplies the paths
+gwt_report.py | if h in old[t] or (o.get('private') and not include_private): | if h in old[t]: | private people and objects stay out of a digest unless asked for
+gwt_report.py | if h in old[t] or (o.get('private') | if False or (o.get('private') | a digest lists only what the old snapshot lacks
+gwt_report.py |             if gid in told: |             if False: | the told filter: what this audience was already told is left out
+gwt_report.py | if cells[0] == audience: | if True: | only the rows of the chosen audience count as told
+gwt_report.py | g.update(side=side, distance=sum(r['generations']), | g.update(side=side, distance=0, | people are ordered by kin distance to the root, nearest first
+gwt_report.py |                     if p and new['people'][p].get('private') and not include_private: |                     if False: | a new event or citation of a private person does not show that person
