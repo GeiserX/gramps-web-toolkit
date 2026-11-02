@@ -215,24 +215,35 @@ class Countries(unittest.TestCase):
         self.assertFalse(any(c[1].get('q') == 'Pueblo Raro, Ruritania' for c in http.calls))
 
 
-class OnlyMissing(unittest.TestCase):
-    def test_places_with_a_point_are_left_alone(self):
-        _, rows, ops, http, _ = run('--only-missing')
-        self.assertEqual(rows['P9013']['match'], 'kept')
-        self.assertNotIn('P9013', ops)
-        self.assertFalse(any(c[1].get('q') == 'Villa Movida' for c in http.calls))
+class KeepPoints(unittest.TestCase):
+    def test_places_with_a_point_are_left_alone_by_default(self):
+        for extra in ((), ('--only-missing',)):
+            _, rows, ops, http, _ = run(*extra)
+            self.assertEqual(rows['P9013']['match'], 'kept')
+            self.assertNotIn('P9013', ops)
+            self.assertNotIn('P9016', ops)
+            self.assertFalse(any(c[1].get('q') == 'Villa Movida' for c in http.calls))
 
-    def test_without_it_a_moved_point_is_rewritten(self):
-        _, rows, ops, _, _ = run()
+    def test_recheck_moves_a_point_and_says_from_where(self):
+        _, rows, ops, _, _ = run('--recheck')
         self.assertEqual(ops['P9013']['set'], {'lat': 40.61, 'long': -3.61})
+        self.assertIn("moves the tree's point 1.4 km, from 40.600000, -3.600000", rows['P9013']['note'])
 
-    def test_an_unchanged_point_gives_no_op(self):
-        _, rows, ops, _, _ = run()
+    def test_recheck_ignores_a_move_of_a_few_metres(self):
+        _, rows, ops, _, _ = run('--recheck')
         self.assertEqual(rows['P9012']['match'], 'settlement')
         self.assertNotIn('P9012', ops)
 
-    def test_an_override_wins_over_only_missing(self):
-        _, rows, ops, _, _ = run('--only-missing', overrides='P9013\t40.7\t-3.7\n')
+    def test_recheck_never_puts_the_town_over_a_spot_of_the_tree(self):
+        # the old convent is in no gazetteer: its hand-placed point must not become the town's
+        _, rows, ops, _, _ = run('--recheck')
+        self.assertEqual(rows['P9016']['match'], 'town-centroid')
+        self.assertNotIn('P9016', ops)
+        self.assertEqual((rows['P9016']['lat'], rows['P9016']['long']), ('40.004000', '-3.004000'))
+        self.assertIn("keeps the tree's point", rows['P9016']['note'])
+
+    def test_an_override_wins_over_a_kept_point(self):
+        _, rows, ops, _, _ = run(overrides='P9013\t40.7\t-3.7\n')
         self.assertEqual(ops['P9013']['set'], {'lat': 40.7, 'long': -3.7})
 
 

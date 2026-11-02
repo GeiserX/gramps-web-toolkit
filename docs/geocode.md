@@ -5,7 +5,7 @@ The Gramps Web map shows a marker only for places that have coordinates, and mos
 Standard library only. It reads a `gwt-check dump` or a `gwt-apply` snapshot, gzipped or not, and never touches the tree.
 
 ```sh
-gwt geocode --snapshot DUMP --out changes.jsonl [--only-missing] [--providers LIST] [--overrides FILE]
+gwt geocode --snapshot DUMP --out changes.jsonl [--recheck] [--providers LIST] [--overrides FILE]
             [--geonames FILE ...] [--country NAME=CC ...] [--contact EMAIL] [--cache DIR | --no-cache]
             [--ruling ID] [--lang CODE] > report.tsv
 ```
@@ -14,7 +14,7 @@ A typical run:
 
 ```sh
 gwt check dump tree.json
-gwt geocode --snapshot tree.json --only-missing --contact you@example.org --out coords.jsonl > coords.tsv
+gwt geocode --snapshot tree.json --contact YOUR_EMAIL --out coords.jsonl > coords.tsv
 gwt apply coords.jsonl            # dry run: read it, then add --apply
 ```
 
@@ -24,7 +24,7 @@ Only places that some event uses. A country, a province or a town that only hold
 
 A place no event uses that already has a point is listed in the report as `container`, so you can clear it by hand. `gwt-geocode` never clears coordinates itself.
 
-`--only-missing` leaves every place that already has a point alone and asks no provider about it. Without it, places with a point are looked up again and get an op only when the new point differs.
+A place that already has a point keeps it, and no provider is asked about it: a point placed by hand is usually better than a gazetteer's. `--recheck` looks those places up again. It moves a point only when the answer is more than 50 m away, and the note says how far and from where. It never replaces a church's or a street's own point with its town's point. `--only-missing` names the default and is kept for older scripts.
 
 ## Providers
 
@@ -70,7 +70,7 @@ The report on stdout has one row per event place, then the containers that have 
 | Column | Meaning |
 |---|---|
 | `gramps_id`, `place`, `type` | The place, with its hierarchy (`Chapel > Village > Province > Country`) |
-| `match` | `settlement`, `area` or `own-point` (found), `town-centroid` (the town's point, see the note), `override`, `kept` (already had a point, with `--only-missing`), `unresolved` (no point; the note says why), `container` |
+| `match` | `settlement`, `area` or `own-point` (found), `town-centroid` (the town's point, see the note), `override`, `kept` (already had a point), `unresolved` (no point; the note says why), `container` |
 | `provider`, `confidence` | Who answered, and its own score when it gives one (Nominatim's importance, the BAN score) |
 | `distance_km` | For a spot, how far its point is from its town |
 | `lat`, `long`, `note` | The point, and what was refused on the way |

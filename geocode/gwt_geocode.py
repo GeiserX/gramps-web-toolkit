@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """gwt-geocode: coordinates for the places a tree's events use, as a gwt-apply change list.
 
-  gwt-geocode --snapshot DUMP --out changes.jsonl [--only-missing] [--providers LIST] [--overrides FILE]
+  gwt-geocode --snapshot DUMP --out changes.jsonl [--recheck] [--providers LIST] [--overrides FILE]
               [--geonames FILE ...] [--country NAME=CC ...] [--contact EMAIL] [--cache DIR | --no-cache]
               [--ruling ID] [--lang CODE] > report.tsv
 
-Reads an offline `gwt-check dump` or `gwt-apply` snapshot and never writes to the tree. Only places that some event
-uses get a point: a country, a province or a town that only holds other places gets none, so the Gramps Web map shows
+Reads an offline `gwt-check dump` or `gwt-apply` snapshot and never writes to the tree. A point already in the tree is
+kept unless --recheck asks again. Only places that some event uses get a point: a country, a province or a town that only holds other places gets none, so the Gramps Web map shows
 one marker per event place. Parents are still looked up in memory, as the reference a child is checked against.
 
 Each place is looked up by its own name and the names above it, through a chain of providers (--providers, in order):
@@ -36,6 +36,7 @@ SPOT_KM = 5.0       # a church, building or cemetery: at most this far from its 
 STREET_KM = 2.0     # a street or a house number
 LOCALITY_KM = 30.0  # a town under another town (a hamlet in a municipality)
 AMBIGUOUS_KM = 10.0  # two answers of the same name further apart than this, and nothing to choose by: no answer
+MOVE_KM = 0.05      # with --recheck, a point already in the tree is moved only when the answer is further than this
 AREA = {'Country', 'State', 'Province', 'Region', 'Department', 'County'}
 SETTLEMENT = {'City', 'Town', 'Village', 'Hamlet', 'Municipality', 'Locality', 'Neighborhood', 'Borough', 'District',
               'Unknown', ''}
@@ -375,10 +376,10 @@ class GeonamesDump:
 # ---- the geocoder ------------------------------------------------------------------------------------------------
 
 class Geocoder:
-    def __init__(self, places, events, providers, overrides=None, only_missing=False, countries=None, lang=None):
+    def __init__(self, places, events, providers, overrides=None, recheck=False, countries=None, lang=None):
         self.P, self.providers = places, providers
         self.overrides = overrides or {}
-        self.only_missing, self.lang = only_missing, lang
+        self.recheck, self.lang = recheck, lang
         self.countries = {rules.fold(k): v.lower() for k, v in (countries or {}).items()}
         self.used = {e.get('place') for e in events if e.get('place') in places}
         self.memo = {}
@@ -465,7 +466,7 @@ class Geocoder:
             lat, lon, note = self.overrides[gid]
             return {'match': 'override', 'lat': lat, 'lon': lon, 'provider': 'overrides', 'note': note}
         have = self.tree_point(h)
-        if have and (self.only_missing or h not in self.used):
+        if have and (not self.recheck or h not in self.used):
             return {'match': 'kept', 'lat': have[0], 'lon': have[1], 'note': 'already in the tree'}
         kind = self.kind(h)
         if kind == 'area' and h not in self.used:
@@ -553,10 +554,17 @@ class Geocoder:
                 continue
             gid = self.P[h].get('gramps_id')
             have = self.tree_point(h)
-            if have and abs(have[0] - r['lat']) < 1e-6 and abs(have[1] - r['lon']) < 1e-6:
-                continue
+            if have:  # only an override or --recheck gets here
+                if r['match'] == 'town-centroid':  # a hand-placed spot is better than its town's point
+                    rows[-1].update(lat='%.6f' % have[0], long='%.6f' % have[1], distance_km='')
+                    self.add_note(rows[-1], "keeps the tree's point; no op")
+                    continue
+                moved = km(have, (r['lat'], r['lon']))
+                if moved < (1e-6 if r['match'] == 'override' else MOVE_KM):
+                    continue
+                self.add_note(rows[-1], "moves the tree's point %.1f km, from %.6f, %.6f" % (moved, have[0], have[1]))
             if not gid:
-                rows[-1]['note'] = (rows[-1]['note'] + '; ' if rows[-1]['note'] else '') + 'no Gramps ID, no op'
+                self.add_note(rows[-1], 'no Gramps ID, no op')
                 continue
             ops.append({'op': 'update_place', 'key': 'geocode-%s' % gid, 'place': gid,
                         'set': {'lat': round(r['lat'], 6), 'long': round(r['lon'], 6)}})
@@ -566,6 +574,10 @@ class Geocoder:
                 rows.append(self.row(h, {'match': 'container', 'lat': lat, 'lon': lon,
                                          'note': 'no event uses it, yet it has a point: the map shows a marker'}))
         return rows, ops
+
+    @staticmethod
+    def add_note(row, text):
+        row['note'] = (row['note'] + '; ' if row['note'] else '') + text
 
     def row(self, h, r):
         return {'gramps_id': self.P[h].get('gramps_id') or '', 'place': self.label(h), 'type': self.ptype(h),
@@ -587,7 +599,10 @@ def main(argv=None, http=None):
                                  epilog='See https://geiserx.github.io/gramps-web-toolkit/geocode/')
     ap.add_argument('--snapshot', required=True, help='a gwt-check dump or gwt-apply snapshot (gzipped or not)')
     ap.add_argument('--out', required=True, help='write the update_place change list here (JSON Lines)')
-    ap.add_argument('--only-missing', action='store_true', help='leave places that already have a point alone')
+    keep = ap.add_mutually_exclusive_group()
+    keep.add_argument('--recheck', action='store_true',
+                      help='look up places that already have a point too, and move them when the answer differs')
+    keep.add_argument('--only-missing', action='store_true', help='leave places that have a point alone (the default)')
     ap.add_argument('--providers', default=','.join(PROVIDERS), help='comma-separated, in order (default: %(default)s)')
     ap.add_argument('--overrides', help='TSV of gramps_id, lat, long, note: points that always win')
     ap.add_argument('--geonames', action='append', default=[], metavar='FILE',
@@ -617,7 +632,7 @@ def main(argv=None, http=None):
         places, events = load_snapshot(a.snapshot)
         overrides = load_overrides(a.overrides) if a.overrides else {}
         http = http or Http(None if a.no_cache else a.cache, a.contact)
-        g = Geocoder(places, events, build_providers(names, http, a.geonames), overrides, a.only_missing,
+        g = Geocoder(places, events, build_providers(names, http, a.geonames), overrides, a.recheck,
                      countries, a.lang)
         rows, ops = g.run()
     except BadInput as exc:

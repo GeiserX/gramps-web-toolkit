@@ -112,6 +112,12 @@
     "gramps_id": "E9051",
     "type": "Residence",
     "place": "hP9051"
+   },
+   {
+    "handle": "heP9016",
+    "gramps_id": "E9016",
+    "type": "Residence",
+    "place": "hP9016"
    }
   ],
   "places": [
@@ -544,6 +550,24 @@
     ],
     "lat": "",
     "long": ""
+   },
+   {
+    "handle": "hP9016",
+    "gramps_id": "P9016",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Convento Viejo"
+    },
+    "place_type": "Church",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9003"
+     }
+    ],
+    "lat": "40.004",
+    "long": "-3.004"
    }
   ]
  }
