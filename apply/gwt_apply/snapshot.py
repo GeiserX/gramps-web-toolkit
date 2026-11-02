@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import sys
 from datetime import datetime, timezone
 
 from .client import NAMESPACE, ApiError, Client
@@ -32,6 +33,8 @@ def save(client: Client, path: str) -> dict[str, int]:
         rows: list[dict] = []
         page = 1
         while True:
+            # one line per page before it is read: a read that hangs names the page it hangs on
+            print(f"snapshot: GET /{ns}/ page {page} ({len(rows)} {cls} so far)", file=sys.stderr, flush=True)
             r = client._request("GET", f"/{ns}/", params={"page": page, "pagesize": PAGE})
             if r.status_code != 200:
                 raise ApiError(f"GET {cls} page {page}: HTTP {r.status_code}", r.status_code)

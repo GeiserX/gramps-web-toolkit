@@ -1,0 +1,15 @@
+# file | text to replace (once) | replacement | what the guard protects
+gwt_run.py | if refused: | if False: | a dry run with a conflict stops the run before any write
+gwt_run.py | refused += [r for r in rows if r["status"] == "skip" | refused += [r for r in rows if False and r["status"] == "skip" | a dry-run skip that is not a no-op stops the run
+gwt_run.py | and not r.get("noop") and r["key"] not in accept] | and r["key"] not in accept] | a no-op skip never stops the run
+gwt_run.py | r["status"] == "skip" and not r.get("noop") and r["key"] not in accept] | r["status"] == "skip" and not r.get("noop")] | --accept-skip lets a named skip through
+gwt_run.py | if self.step(name).get("status") == "ok": | if False: | a rerun skips the steps that are done, so the backup is never taken again over a written tree
+gwt_run.py | if self.state.get("list_sha256") != sha: | if False: | a list changed since the run began is refused
+gwt_run.py | if counts["conflict"]: | if False: | an apply that meets a conflict is not tried again
+gwt_run.py | if tries >= self.args.apply_tries: | if True: | an apply that fails on a busy server is tried again
+gwt_run.py | if tries >= self.args.apply_tries: | if tries >= self.args.apply_tries + 1: | the apply stops after --apply-tries tries
+gwt_run.py | if self.args.server_backup and not step.get("server_backup_asked"): | if self.args.server_backup: | the server backup is asked for once, not on every apply try
+gwt_run.py | self.pre.unlink()  # half a snapshot | pass  # half a snapshot | a backup step that did not finish is taken again from scratch
+gwt_run.py | if now - last >= stall: | if False: | the watchdog ends a step that shows no progress
+gwt_run.py | if grown != sizes: | if False: | an API call in the step's log counts as progress
+gwt_run.py | if code == 1: | if False: | a new gwt-check finding stops the run with exit 7
