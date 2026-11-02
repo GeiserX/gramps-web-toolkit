@@ -243,3 +243,20 @@ def test_prove_judges_your_own_settings_not_injected_ones(tmp_path):
     assert code == 1 and "FAILED overlap" in out
     code, out, _ = run(["--prove"] + EXAMPLE + ["--config", EXAMPLE_CONFIG])
     assert code == 0, out
+
+
+def test_a_reader_that_leaves_early_gets_no_traceback(tmp_path):
+    # `gwt-lint ... | head -1`: the pipe closes mid-run; the run stops quietly with exit 2, not with a message
+    lst = tmp_path / "many.jsonl"
+    with open(lst, "w") as f:
+        for i in range(2000):
+            f.write(json.dumps({"op": "add_note", "key": f"n{i}", "ruling": f"R-{i}", "text": f"Witness number {i}.",
+                                "attach": [{"person": "I14"}]}) + "\n")
+    r_fd, w_fd = os.pipe()
+    os.close(r_fd)  # the reader is gone before the first line arrives
+    p = subprocess.run([sys.executable, os.path.join(LINT, "gwt-lint"), str(lst), "--snapshot",
+                        os.path.join(FIX, "tree.json"), "--rules", "scope", "--root", "I1"],
+                       stdout=w_fd, stderr=subprocess.PIPE, text=True)
+    os.close(w_fd)
+    assert p.returncode == 2
+    assert p.stderr == "", p.stderr

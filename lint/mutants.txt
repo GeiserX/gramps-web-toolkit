@@ -68,3 +68,4 @@ gwt_lint/cli.py | if sec in cfg and not isinstance(cfg[sec], dict): | if False: 
 gwt_lint/cli.py | if v is not None and not (isinstance(v, list) and all(isinstance(x, str) for x in v)): | if False: | a list of names with a non-name in it is named
 gwt_lint/cli.py | if v is not None and (not isinstance(v, kind) or isinstance(v, bool)): | if False: | a number or text setting of the wrong type is named
 gwt_lint/rules_tree.py | shown_date, shown_place = _ymd(date), | shown_date, shown_place = date, | a moved event's date is said as a date, not as the snapshot's object
+gwt_lint/cli.py |     except BrokenPipeError: |     except KeyboardInterrupt: | a reader that closes the pipe early, such as head, gets a quiet exit 2, not a traceback
