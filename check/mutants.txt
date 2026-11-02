@@ -116,10 +116,18 @@ gwt_check/media.py | if bits <= DUP_BITS: | if bits < DUP_BITS: | two images exa
 gwt_check/media.py | if bits <= DUP_BITS: | if True: | two images more than DUP_BITS apart are not a pair
 gwt_check/cli.py | f["info"] or f["check"] in media.AFTER_READ | f["info"] | what the server says about files survives a read that settled while someone wrote
 gwt_check/media.py | "pagesize": random.randrange(1, 2**62)}) | "pagesize": 1}) | a file deleted after an earlier run is not hidden by the server's cached answer
-gwt_check/media.py | NO_THUMB = frozenset(range(400, 500)) - {401, 429} | {501} | NO_THUMB = frozenset({404, 413, 415}) | a thumbnail the server cannot make (422, 501) is counted, not the end of the run
+gwt_check/media.py | frozenset(range(400, 500)) - {401, 429} | frozenset({404, 413, 415}) - {401, 429} | a thumbnail the server cannot make (422, 501) is counted, not the end of the run
 gwt_check/client.py | if status in none_on: | if False: | a status the caller expects answers None instead of ending the run
 gwt_check/media.py | unread += bool(got.get("unread")) | unread += 0 | thumbnails --download could not read are counted in the report
 gwt_check/cli.py | if hasattr(args, "download"): | if True: | only check and dump ask the server which media files are missing
 gwt_check/media.py | except ApiError as exc: | except ImportError as exc: | a failing list of missing files is a note, not the end of the check
 gwt_check/media.py | return _mime(o).startswith(( | return (o.get("mime") or "").lower().startswith(( | an image with no MIME stored is measured by its file name
 gwt_check/media.py | if mime.startswith(NON_VIEWABLE_PREFIXES) else | if True else | an archive or JSON file is not told to go into a Transcript note
+gwt_check/media.py | if not isinstance(h, str) or len(h) != HASH_SIDE * HASH_SIDE // 4: | if not isinstance(h, str): | a dHash of the wrong length in a hand-edited dump is skipped, not compared
+gwt_check/media.py | .items() if k != "file_missing"} | .items()} | a failed list of missing files leaves an earlier dump's answer out, not reported again
+gwt_check/media.py | got.pop(k, None) | pass | a thumbnail not read now drops the measures an earlier dump had for it
+gwt_check/media.py | got.pop("unread", None) | pass | a thumbnail measured now is no longer counted as not read
+gwt_check/media.py | S = {h: status.get(h) if isinstance(status.get(h), dict) else {} for h in M} | S = {h: status.get(h) or {} for h in M} | a media status that is not a dict is skipped, not a crash
+gwt_check/media.py | frozenset(range(400, 500)) - {401, 429} | frozenset(range(400, 500)) | a 429 on a thumbnail is asked again, not counted as unread
+gwt_check/tree.py | media_status=status if isinstance(status, dict) else None) | media_status=status) | a dump whose media_status is not a dict is read without it, not a crash
+gwt_check/cli.py | seed.media_status if seed else None | None | check --from keeps the measures of the earlier dump

@@ -109,6 +109,21 @@ def test_a_malformed_measure_in_a_dump_is_skipped_not_a_crash():
     assert found == set()
 
 
+def test_two_short_hashes_are_not_a_pair():
+    found, _ = _found(_tree(_measured(dhash="0f"), _measured(dhash="0f")))
+    assert found == set()
+
+
+def test_a_status_that_is_not_a_dict_is_skipped_not_a_crash(tmp_path):
+    d = _tree()
+    d[media.STATUS]["hO0001"] = "measured"
+    found, info = _found(d)
+    assert found == set() and info["media files not checked"] == 1
+    path = tmp_path / "t.json"
+    path.write_text(json.dumps({"objects": selftest.clean_tree(), media.STATUS: ["not a dict"]}), encoding="utf-8")
+    assert main(["check", str(path)]) == 0
+
+
 def test_a_missing_file_is_found_and_an_unread_one_is_counted():
     found, info = _found(_tree({KEY: {"file_missing": True}}, {KEY: {}}))
     assert found == {("media-file-missing", "O0050")}
@@ -198,6 +213,7 @@ class FakeClient(Client):
         super().__init__("https://gramps.example.org", "u", "pw", sleep=lambda s: None)
         self.token = "t"
         self.missing, self.thumbs, self.calls = set(missing), thumbs or {}, []
+        self.list_status = 200  # what the list of missing files answers
 
     def _call(self, req):
         url = urllib.parse.urlparse(req.full_url)
@@ -206,9 +222,13 @@ class FakeClient(Client):
             q = dict(urllib.parse.parse_qsl(url.query))
             self.calls.append((path, q))
             assert {k: v for k, v in q.items() if k != "pagesize"} == {"filemissing": "1", "keys": "handle"}
+            if self.list_status != 200:
+                return self.list_status, {}, b""
             return 200, {}, json.dumps([{"handle": h} for h in self.missing]).encode()
         self.calls.append((path, None))
         got = self.thumbs.get(path.split("/")[2], 404)
+        if isinstance(got, list):  # one answer per request, in turn
+            got = got.pop(0)
         return (got, {}, b"") if isinstance(got, int) else (200, {}, got)
 
 
@@ -225,6 +245,45 @@ def test_each_missing_file_list_is_a_new_request_to_the_server_cache():
     media.annotate(client, _bare())
     (_, first), (_, second) = client.calls
     assert first["pagesize"] != second["pagesize"]
+
+
+def test_a_failed_list_of_missing_files_forgets_the_old_answer(capsys):
+    # an earlier dump's answer is about files that may have come back or gone since: not checked, not missing
+    client = FakeClient()
+    client.list_status = 500
+    status = media.annotate(client, _bare(), {"hO0001": {"file_missing": True, "w": 256}})
+    assert status == {"hO0001": {"w": 256}}
+    assert "media files not checked" in capsys.readouterr().err
+
+
+def test_download_replaces_old_measures_and_an_old_unread_mark(capsys):
+    pytest.importorskip("PIL.Image")
+    d = _bare()
+    d["media"].append({**copy.deepcopy(d["media"][0]), "handle": "hO0002", "gramps_id": "O0002"})
+    old = {"hO0001": {"file_missing": False, "unread": True}, "hO0002": _measured()[KEY]}
+    client = FakeClient(thumbs={"hO0001": _thumb(_page(1)), "hO0002": 422})
+    status = media.annotate(client, d, old, download=True, workers=1)
+    assert "dhash" in status["hO0001"] and "unread" not in status["hO0001"]
+    assert status["hO0002"] == {"file_missing": False, "unread": True}  # the old measures were of another file
+
+
+def test_a_busy_server_is_asked_again_for_a_thumbnail(capsys):
+    pytest.importorskip("PIL.Image")
+    client = FakeClient(thumbs={"hO0001": [429, _thumb(_page(1))]})
+    status = media.annotate(client, _bare(), download=True)
+    assert "dhash" in status["hO0001"] and "unread" not in status["hO0001"]
+
+
+def test_from_keeps_the_earlier_measures(monkeypatch, tmp_path):
+    _serve(monkeypatch, _bare())
+    old, new = str(tmp_path / "old.json"), str(tmp_path / "new.json")
+    assert main(["dump", old]) == 0
+    saved = json.load(open(old))
+    saved[media.STATUS]["hO0001"].update(w=40, h=40)
+    with open(old, "w") as f:
+        json.dump(saved, f)
+    main(["check", "--from", old, "--save-dump", new])
+    assert json.load(open(new))[media.STATUS]["hO0001"] == {"file_missing": True, "w": 40, "h": 40}
 
 
 def test_download_without_pillow_is_skipped_with_a_note(monkeypatch, capsys):
