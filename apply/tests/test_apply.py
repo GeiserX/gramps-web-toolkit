@@ -679,7 +679,9 @@ def test_remove_tag_takes_one_tag_off_and_keeps_the_tag_and_the_rest(fake):
     assert place["tag_list"] == ["tag-other"] and place["name"] == {"value": "Springfield"}
     assert "tag-weak" in fake.store["tags"]  # the tag itself stays in the tree
     before = len(fake.writes())
-    res = run(fake, ops)[0]  # a rerun: the tag is already off
+    res = run(fake, ops)[0]  # a rerun: the tag is already off, which a list must allow with expect: absent
+    assert res.status == "conflict" and "does not have the tag" in res.actions[-1], res.actions
+    res = run(fake, [dict(ops[0], expect="absent")])[0]
     assert res.status == "skip" and "does not have the tag" in res.actions[-1], res.actions
     assert fake.writes()[before:] == []
 
@@ -2100,7 +2102,7 @@ def test_update_family_type(fake):
     op = {"op": "update_family", "key": "u", "ruling": R, "family": f["gramps_id"], "set": {"type": "Married"}}
     assert run(fake, [op])[0].status == "done" and fake.store["families"]["fam"]["type"] == "Married"
     assert run(fake, [op])[0].status == "skip"
-    assert validate([dict(op, key="b", set={"father": "I1"})]) and validate([dict(op, key="b", set={})])
+    assert validate([dict(op, key="b", set={"colour": "red"})]) and validate([dict(op, key="b", set={})])
 
 
 def test_update_child_ref_relations_and_confirming_a_probable_link(fake):
@@ -2133,7 +2135,8 @@ def test_detach_takes_a_reference_off_and_keeps_the_object(fake):
     op = {"op": "detach", "key": "d", "ruling": R, "target": {"person": "I0001"}, "object": {"note": n["gramps_id"]}}
     assert run(fake, [op])[0].status == "done"
     assert fake.store["people"]["anna"]["note_list"] == [] and "n1" in fake.store["notes"]
-    assert run(fake, [op])[0].status == "skip"
+    assert run(fake, [op])[0].status == "conflict"  # nothing to take off
+    assert run(fake, [dict(op, expect="absent")])[0].status == "skip"
     # the way back is attach_existing
     back = {"op": "attach_existing", "key": "a", "ruling": R, "object": {"note": n["gramps_id"]}, "attach": [{"person": "I0001"}]}
     assert run(fake, [back])[0].status == "done" and fake.store["people"]["anna"]["note_list"] == ["n1"]
@@ -3740,7 +3743,9 @@ def test_unlink_child_takes_both_sides_and_keeps_people_and_family(fake):
     assert note["type"] == "Research"
     assert not any(a.startswith("warning") for a in res[0].actions)  # the family still has its mother
     writes = len(fake.writes())
-    again = run(fake, [_unlink()])
+    again = run(fake, [_unlink()])  # a rerun finds nothing to remove: a conflict, unless the list allows it
+    assert again[0].status == "conflict" and "not a child of Family F0001" in again[0].actions[-1]
+    again = run(fake, [dict(_unlink(), expect="absent")])
     assert again[0].status == "skip" and "not a child of Family F0001" in again[0].actions[-1]
     assert len(fake.writes()) == writes
     # linked again by mistake and taken out again under another key: the same note is reused, not repeated

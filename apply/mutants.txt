@@ -120,3 +120,27 @@ gwt_apply/cli.py | if isinstance(ro, dict) and ro.get("id"): | if False: | the b
 gwt_apply/cli.py | if b.get("restorable") is False or not b.get("size"): | if b.get("restorable") is False: | a 201 that names an empty backup stops the run before it writes
 gwt_apply/ops.py | if self.private_new:  # tags never come here | if False:  # tags never come here | --private-new saves every object the run creates as private
 gwt_apply/cli.py | verify=args.verify, private_new=args.private_new).run(ops) | verify=args.verify).run(ops) | the --private-new flag reaches the run
+gwt_apply/ops.py | elif op.get("expect") == "absent": | elif True: | a removal that finds nothing to remove is a conflict unless the list says expect: absent
+gwt_apply/ops.py | elif self.verify: | elif False: | --verify reads nothing left to remove as the landed state, a skip
+gwt_apply/ops.py | if self._lost: | if False: | the retry of a removal whose answer was lost reads its own write back as done
+gwt_apply/ops.py | held = self._holders(cls, handle) | held = set() | delete refuses an object something still points at
+gwt_apply/ops.py | if key in self.c.pending and handle not in json.dumps(self.c.pending[key]): | if False: | a dry run lets delete take an object an earlier op of the list detached
+gwt_apply/revert.py | before = pre.get((cls, h)) or kept.get((cls, h)) | before = pre.get((cls, h)) | revert makes a deleted object again from the copy its log line keeps
+gwt_apply/client.py | record=record) | record=None) | the log line of a delete keeps the whole object
+gwt_apply/ops.py | if media.get("checksum") != op["expect"]: | if False: | update_media replaces a file only when the media object still has the MD5 the op names
+gwt_apply/ops.py | if self._has(carrier.get(lst) or [], handle, op.get("rect")): | if False: | attach_existing with expect: absent refuses a link already there
+gwt_apply/ops.py | if now not in (None, person): | if False: | update_family never replaces a parent the family already has
+gwt_apply/ops.py | if fam["handle"] != family["handle"] and (fam.get("father_handle"), fam.get("mother_handle")) == couple: | if False: | update_family refuses a couple another family already has
+gwt_apply/ops.py | if cit.get("source_handle") != self.resolve("Source", op["expect_source"]): | if False: | update_citation moves a citation only from the source expect_source names
+gwt_apply/ops.py | if w.get("source_handle") != l_.get("source_handle"): | if False: | merge_citation refuses two citations of different sources
+gwt_apply/ops.py | if len(types) > 1: | if False: | merge_place refuses two places of different types
+gwt_apply/ops.py | if self._inside(a["handle"], b["handle"]): | if False: | merge_place refuses a place inside the other
+gwt_apply/ops.py | if mime.startswith(NOT_A_DOCUMENT) and not op.get("force"): | if False: | add_media refuses a web page or a text file unless force
+gwt_apply/ops.py | other = [a.get("value") for a in attrs if str(a.get("type")) == atype and a.get("value") != value] | other = [] | set_external_id never replaces another id of the same system
+gwt_apply/ops.py | if pos >= len(items): | if False: | reorder_refs refuses a position past the end of the list
+gwt_apply/ops.py | if cls == "Person" and name == "event_ref_list": | if False: | reorder_refs keeps birth_ref_index on the birth event
+gwt_apply/ops.py | found = [n for n in names if self._alt_matches(n, cls, f)] | found = [n for n in names if self._alt_matches(n, cls, f)][:1] | remove_alternate_name refuses a description that matches two names
+gwt_apply/ops.py | if op.get("expect_unreferenced") is not True: | if False: | delete needs expect_unreferenced: true in the list
+gwt_apply/ops.py | if ("source" in f) != isinstance(op.get("expect_source"), str): | if False: | validate refuses a citation move without expect_source
+gwt_apply/ops.py | op["set"][PRIVATE], bool): | op["set"][PRIVATE], object): | validate refuses a private that is not true or false
+gwt_apply/ops.py | and r[0] < r[2] and r[1] < r[3]): | ): | validate refuses an empty region

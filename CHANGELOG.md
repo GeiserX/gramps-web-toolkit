@@ -6,6 +6,14 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+- `gwt-apply`: `detach`, `remove_tag` and `unlink_child` of something the target does not have are a conflict now, not a skip, so a mistyped ID no longer passes a dry run. Add `expect: "absent"` to an op that may find it already gone; `--verify` still reads it as landed. `attach_existing` is unchanged unless it says `expect: "absent"`.
+
+### Added
+
+- `gwt-apply` ops for what lists used to write by hand through the API: `update_media` (description, date, path, private, and the file itself against its current MD5), `delete` (only an object nothing points at; `--revert` makes it again), `merge_place`, `merge_source` and `merge_citation` (the server's merge), `reorder_refs`, `add_alternate_name` and `remove_alternate_name` (people and places), `set_external_id` (FamilySearch in `_FSFTID`). `private` in every `update_*`; `call_name`, `nickname`, `title`, `suffix` in `update_person`; `father` and `mother` in `update_family` for a family that lacks one; `source` with `expect_source` in `update_citation`; a region (`rect`) on `add_media` and `attach_existing`; `add_media` refuses text, HTML, JSON and mail files unless `force`. `ops_table()` lists every op with its fields.
+
 ## [0.3.0] - 2026-10-31
 
 ### Change lists
