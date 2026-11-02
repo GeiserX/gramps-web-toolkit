@@ -2,3 +2,4 @@
 gwt_rawstore.py | if evict and not confirmed(store, rows[d].get(name)): | if False: | migrate --evict deletes only what a fresh HEAD confirms
 gwt_rawstore.py | return have is not None and have[0] == size and (not have[1] or have[1] == sha) | return have is not None | an object of the wrong size is not confirmed
 gwt_rawstore.py | if row is None: | if False: | a file with no manifest row is never confirmed
+gwt_rawstore.py | m.add_argument('--evict', action='store_true' | m.add_argument('--evict-later', action='store_true' | gwt-rawstore migrate takes --evict from the command line

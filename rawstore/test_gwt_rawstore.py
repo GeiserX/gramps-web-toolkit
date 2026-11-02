@@ -1,6 +1,7 @@
 import datetime, hashlib, io, os, subprocess, sys, tempfile, threading, unittest, urllib.parse
 from contextlib import redirect_stderr, redirect_stdout
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from unittest import mock
 from xml.sax.saxutils import escape
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -323,6 +324,26 @@ class GitTest(Base):
         self.assertTrue(R.confirmed(self.store, row))
         self.assertFalse(R.confirmed(self.store, None))   # the object is there, but no row says so
         self.assertFalse(R.confirmed(self.store, (row[0], row[1] + 1, row[2])))
+
+    def cli(self, *argv):
+        env = {k: v for k, v in os.environ.items() if not k.startswith('GWT_RAWSTORE_')}
+        env['GWT_RAWSTORE_CONFIG'] = os.path.join(self.dir, 'no-config')
+        with mock.patch.dict(os.environ, env, clear=True), redirect_stdout(io.StringIO()):
+            return R.main(list(argv), store=self.store)
+
+    def test_migrate_cli_takes_evict_and_remove(self):
+        folder = self.commit_scans()
+        self.assertEqual(self.cli('migrate', folder, '--evict'), 0)
+        self.assertEqual(sorted(os.listdir(folder)), ['.gitignore', 'notes.md', 'rawstore.tsv'])
+        self.assertIn('D  raw/r1/0000.jpg', self.git('status', '--porcelain'))
+        self.write('raw/r2/a.jpg', b'A')
+        self.git('add', '.')
+        self.git('commit', '-qm', 'r2')
+        self.assertEqual(self.cli('migrate', os.path.join(self.dir, 'raw/r2'), '--remove'), 0)
+        self.assertTrue(os.path.exists(os.path.join(self.dir, 'raw/r2/a.jpg')))
+        self.assertIn('D  raw/r2/a.jpg', self.git('status', '--porcelain'))
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.cli('migrate', folder, '--remove', '--evict')
 
     def test_migrate_without_remove_touches_no_index(self):
         self.write('r1/a.jpg', b'A')
