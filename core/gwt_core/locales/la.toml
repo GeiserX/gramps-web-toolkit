@@ -1,0 +1,55 @@
+# Latin, as parish registers write it. Every locale file has the same sections; see docs/rules.md.
+code = "la"
+name = "Latin"
+
+[fold]
+# registers write u for v and i for j: «Ioannes» = «Joannes», «Octauius» = «Octavius»
+pairs = [["j", "i"], ["v", "u"]]
+particles = []
+
+[months]
+"1" = ["Ianuarius", "Ianuarii", "Ianuario", "Ian"]
+"2" = ["Februarius", "Februarii", "Februario", "Feb"]
+"3" = ["Martius", "Martii", "Martio", "Mart"]
+"4" = ["Aprilis", "Aprili", "Apr"]
+"5" = ["Maius", "Maii", "Maio"]
+"6" = ["Iunius", "Iunii", "Iunio"]
+"7" = ["Iulius", "Iulii", "Iulio"]
+"8" = ["Augustus", "Augusti", "Augusto", "Aug"]
+"9" = ["September", "Septembris", "Septembri", "7bris", "7bri"]
+"10" = ["October", "Octobris", "Octobri", "8bris", "8bri"]
+"11" = ["November", "Novembris", "Novembri", "9bris", "9bri"]
+"12" = ["December", "Decembris", "Decembri", "xbris", "xbri", "10bris"]
+
+[dates]
+filler = ["die", "dies", "mensis", "anno", "domini", "a"]
+
+[gender]
+male = ["vir", "masculus", "masculinus"]
+female = ["mulier", "femina", "femininus"]
+
+[roles]
+godparent = ["patrinus", "matrina", "patrini", "susceptor", "susceptrix", "levans"]
+witness = ["testis", "testes", "testibus"]
+father = ["pater", "patris"]
+mother = ["mater", "matris"]
+child = ["filius", "filia", "filium", "filiam", "filii"]
+spouse = ["maritus", "uxor", "coniux", "sponsus", "sponsa", "viduus", "vidua"]
+priest = ["parochus", "sacerdos", "presbyter", "rector", "vicarius", "curatus"]
+
+[events]
+birth = ["nativitas", "natus", "nata"]
+baptism = ["baptismus", "baptizatus", "baptizata", "baptizavi"]
+marriage = ["matrimonium", "coniunxi", "copulati", "sponsalia"]
+death = ["mors", "obitus", "obiit", "defunctus", "defuncta"]
+burial = ["sepultura", "sepultus", "sepulta", "sepelivi"]
+
+[dedication]
+pairs = [
+  ["B.M.V.", "Beatae Mariae Virginis"],
+  ["SS.", "Sanctissimi"],
+  ["Sti.", "Sancti"],
+  ["Stae.", "Sanctae"],
+]
+
+[id_numbers]

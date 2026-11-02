@@ -1,0 +1,63 @@
+# Spanish. Every locale file has the same sections; see docs/rules.md. Words are written as in the records;
+# the code folds case and accents before it compares.
+code = "es"
+name = "Spanish"
+
+[fold]
+# old spellings swap b/v and y/i freely: «Bermúdez» = «Vermúdez», «Ysabel» = «Isabel»
+pairs = [["b", "v"], ["y", "i"]]
+particles = ["de", "del", "la", "las", "los", "y", "e"]
+
+[months]
+"1" = ["enero", "ene"]
+"2" = ["febrero", "feb", "febr"]
+"3" = ["marzo", "mar"]
+"4" = ["abril", "abr"]
+"5" = ["mayo", "may"]
+"6" = ["junio", "jun"]
+"7" = ["julio", "jul"]
+"8" = ["agosto", "ago"]
+"9" = ["septiembre", "setiembre", "sep", "sept", "set", "7bre"]
+"10" = ["octubre", "oct", "8bre"]
+"11" = ["noviembre", "nov", "9bre"]
+"12" = ["diciembre", "dic", "10bre", "xbre"]
+
+[dates]
+filler = ["de", "del", "dia", "año", "a"]
+
+[gender]
+male = ["hombre", "varón", "masculino"]
+female = ["mujer", "hembra", "femenino"]
+
+[roles]
+godparent = ["padrino", "madrina", "padrinos"]
+witness = ["testigo", "testigos"]
+father = ["padre"]
+mother = ["madre"]
+child = ["hijo", "hija", "hijos", "hijas"]
+spouse = ["esposo", "esposa", "marido", "consorte", "cónyuge"]
+priest = ["cura", "párroco", "presbítero", "sacerdote", "teniente cura"]
+
+[events]
+birth = ["nacimiento", "nació", "nacido", "nacida"]
+baptism = ["bautismo", "bautizo", "bauticé", "bautizado", "bautizada"]
+marriage = ["matrimonio", "casamiento", "boda", "velación", "velaciones", "desposorio"]
+death = ["defunción", "muerte", "falleció", "murió", "finado", "difunto"]
+burial = ["entierro", "sepultura", "sepelio", "enterramiento"]
+
+[dedication]
+# abbreviation as written, then the full words
+pairs = [
+  ["N.ª S.ª", "Nuestra Señora"],
+  ["Ntra. Sra.", "Nuestra Señora"],
+  ["Nra. Sra.", "Nuestra Señora"],
+  ["Stmo.", "Santísimo"],
+  ["Sma.", "Santísima"],
+  ["Sto.", "Santo"],
+  ["Sta.", "Santa"],
+]
+
+[id_numbers]
+# DNI: 8 digits and a check letter; NIE: X, Y or Z, 7 digits and a check letter (mod 23)
+dni = '(?<![A-Za-z0-9])\d{8}[A-Za-z](?![A-Za-z0-9])'
+nie = '(?<![A-Za-z0-9])[XYZxyz]\d{7}[A-Za-z](?![A-Za-z0-9])'

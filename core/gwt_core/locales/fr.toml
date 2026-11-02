@@ -1,0 +1,57 @@
+# French. Every locale file has the same sections; see docs/rules.md.
+code = "fr"
+name = "French"
+
+[fold]
+pairs = []
+particles = ["de", "du", "des", "d", "la", "le", "les"]
+
+[months]
+"1" = ["janvier", "janv"]
+"2" = ["février", "févr", "fevr"]
+"3" = ["mars"]
+"4" = ["avril", "avr"]
+"5" = ["mai"]
+"6" = ["juin"]
+"7" = ["juillet", "juil"]
+"8" = ["août", "aout"]
+"9" = ["septembre", "sept", "7bre"]
+"10" = ["octobre", "oct", "8bre"]
+"11" = ["novembre", "nov", "9bre"]
+"12" = ["décembre", "déc", "xbre", "10bre"]
+
+[dates]
+filler = ["le", "du", "de", "an", "l"]
+
+[gender]
+male = ["homme", "masculin"]
+female = ["femme", "féminin"]
+
+[roles]
+godparent = ["parrain", "marraine"]
+witness = ["témoin", "témoins"]
+father = ["père"]
+mother = ["mère"]
+child = ["fils", "fille", "enfant"]
+spouse = ["époux", "épouse", "mari", "veuf", "veuve"]
+priest = ["curé", "prêtre", "vicaire", "desservant"]
+
+[events]
+birth = ["naissance", "né", "née"]
+baptism = ["baptême", "baptisé", "baptisée", "ondoyé"]
+marriage = ["mariage", "marié", "mariée", "publication"]
+death = ["décès", "mort", "décédé", "décédée"]
+burial = ["sépulture", "inhumation", "inhumé", "inhumée", "enterrement"]
+
+[dedication]
+pairs = [
+  ["St", "Saint"],
+  ["Ste", "Sainte"],
+  ["Sts", "Saints"],
+  ["N.-D.", "Notre Dame"],
+  ["N.D.", "Notre Dame"],
+]
+
+[id_numbers]
+# NIR (numéro de sécurité sociale): 13 characters and a 2-digit key, 97 - (number mod 97); Corsica 2A/2B
+nir = '(?<![A-Za-z0-9])[12] ?\d{2} ?\d{2} ?(?:\d{2}|2[ABab]) ?\d{3} ?\d{3} ?\d{2}(?![A-Za-z0-9])'

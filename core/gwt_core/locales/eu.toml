@@ -1,0 +1,57 @@
+# Basque. Every locale file has the same sections; see docs/rules.md.
+code = "eu"
+name = "Basque"
+
+[fold]
+# Basque spelling against the older Spanish one: «Etxeberria» = «Echeverría», «Goikoetxea» = «Goicoechea»
+pairs = [["tx", "ch"], ["k", "c"], ["b", "v"]]
+particles = []
+
+[months]
+"1" = ["urtarrila", "urt"]
+"2" = ["otsaila", "ots"]
+"3" = ["martxoa", "mar"]
+"4" = ["apirila", "api"]
+"5" = ["maiatza", "mai"]
+"6" = ["ekaina", "eka"]
+"7" = ["uztaila", "uzt"]
+"8" = ["abuztua", "abu"]
+"9" = ["iraila", "ira"]
+"10" = ["urria", "urr"]
+"11" = ["azaroa", "aza"]
+"12" = ["abendua", "abe"]
+
+[dates]
+filler = ["ko", "aren", "an", "urtea", "urteko", "eguna"]
+
+[gender]
+male = ["gizona", "gizonezkoa"]
+female = ["emakumea", "emakumezkoa"]
+
+[roles]
+godparent = ["aitabitxi", "amabitxi", "aitabitxiak"]
+witness = ["lekuko", "lekukoa", "lekukoak"]
+father = ["aita"]
+mother = ["ama"]
+child = ["seme", "semea", "alaba"]
+spouse = ["senarra", "emaztea", "alarguna"]
+priest = ["apaiz", "apaiza", "erretorea"]
+
+[events]
+birth = ["jaiotza", "jaio"]
+baptism = ["bataioa", "bataiatu"]
+marriage = ["ezkontza", "ezkondu"]
+death = ["heriotza", "hil"]
+burial = ["ehorzketa", "lurperatu"]
+
+[dedication]
+pairs = [
+  ["Sto.", "Santo"],
+  ["Sta.", "Santa"],
+  ["Ntra. Sra.", "Andra Mari"],
+]
+
+[id_numbers]
+# the Spanish DNI and NIE
+dni = '(?<![A-Za-z0-9])\d{8}[A-Za-z](?![A-Za-z0-9])'
+nie = '(?<![A-Za-z0-9])[XYZxyz]\d{7}[A-Za-z](?![A-Za-z0-9])'

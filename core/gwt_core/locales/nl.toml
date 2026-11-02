@@ -1,0 +1,54 @@
+# Dutch. Every locale file has the same sections; see docs/rules.md.
+code = "nl"
+name = "Dutch"
+
+[fold]
+# old spellings write y for ij: «Wybrand» = «Wijbrand»
+pairs = [["ij", "y"]]
+particles = ["van", "de", "der", "den", "ten", "ter", "het", "t", "in"]
+
+[months]
+"1" = ["januari", "jan"]
+"2" = ["februari", "feb"]
+"3" = ["maart", "mrt"]
+"4" = ["april", "apr"]
+"5" = ["mei"]
+"6" = ["juni", "jun"]
+"7" = ["juli", "jul"]
+"8" = ["augustus", "aug"]
+"9" = ["september", "sep", "sept", "7ber"]
+"10" = ["oktober", "october", "okt", "8ber"]
+"11" = ["november", "nov", "9ber"]
+"12" = ["december", "dec", "xber", "10ber"]
+
+[dates]
+filler = ["den", "de", "op", "in", "jaar", "des"]
+
+[gender]
+male = ["man", "mannelijk"]
+female = ["vrouw", "vrouwelijk"]
+
+[roles]
+godparent = ["peter", "meter", "doopgetuige", "doopgetuigen"]
+witness = ["getuige", "getuigen"]
+father = ["vader"]
+mother = ["moeder"]
+child = ["zoon", "dochter", "kind"]
+spouse = ["echtgenoot", "echtgenote", "weduwnaar", "weduwe"]
+priest = ["pastoor", "priester", "predikant", "kapelaan"]
+
+[events]
+birth = ["geboorte", "geboren"]
+baptism = ["doop", "gedoopt"]
+marriage = ["huwelijk", "getrouwd", "ondertrouw", "gehuwd"]
+death = ["overlijden", "overleden", "sterfte"]
+burial = ["begrafenis", "begraven"]
+
+[dedication]
+pairs = [
+  ["St.", "Sint"],
+  ["O.L.V.", "Onze Lieve Vrouw"],
+  ["O.L. Vrouw", "Onze Lieve Vrouw"],
+]
+
+[id_numbers]

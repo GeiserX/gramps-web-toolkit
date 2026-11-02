@@ -1,0 +1,56 @@
+# English. Every locale file has the same sections; see docs/rules.md.
+code = "en"
+name = "English"
+
+[fold]
+pairs = []
+particles = []
+
+[months]
+"1" = ["january", "jan"]
+"2" = ["february", "feb"]
+"3" = ["march", "mar"]
+"4" = ["april", "apr"]
+"5" = ["may"]
+"6" = ["june", "jun"]
+"7" = ["july", "jul"]
+"8" = ["august", "aug"]
+"9" = ["september", "sep", "sept", "7ber"]
+"10" = ["october", "oct", "8ber"]
+"11" = ["november", "nov", "9ber"]
+"12" = ["december", "dec", "10ber", "xber"]
+
+[dates]
+filler = ["the", "of", "day", "in", "year"]
+
+[gender]
+male = ["male", "man"]
+female = ["female", "woman"]
+
+[roles]
+godparent = ["godfather", "godmother", "godparent", "godparents", "sponsor", "sponsors"]
+witness = ["witness", "witnesses"]
+father = ["father"]
+mother = ["mother"]
+child = ["son", "daughter", "child"]
+spouse = ["husband", "wife", "spouse"]
+priest = ["priest", "minister", "curate", "vicar", "rector"]
+
+[events]
+birth = ["birth", "born"]
+baptism = ["baptism", "baptised", "baptized", "christening", "christened"]
+marriage = ["marriage", "married", "wedding", "banns"]
+death = ["death", "died", "deceased"]
+burial = ["burial", "buried", "interment"]
+
+[dedication]
+pairs = [
+  ["St.", "Saint"],
+  ["Sts.", "Saints"],
+  ["SS.", "Saints"],
+  ["B.V.M.", "Blessed Virgin Mary"],
+]
+
+[id_numbers]
+# United States Social Security number: area 000, 666 and 9xx, group 00 and serial 0000 are never issued
+us_ssn = '(?<![0-9])\d{3}-\d{2}-\d{4}(?![0-9])'

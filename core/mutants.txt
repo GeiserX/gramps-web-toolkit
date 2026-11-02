@@ -1,0 +1,17 @@
+# Mutations the core tests must catch. One row each: file | exact text | replacement | why
+# `python3 .github/scripts/run_tests.py --mutants --only core` applies each row to a scratch copy
+# and fails when the tests still pass. The text must occur exactly once in the file.
+gwt_core/rules.py | LIVING_YEARS = 110 | LIVING_YEARS = 111 | possibly living means born less than 110 years ago
+gwt_core/rules.py | return y >= cutoff, f" | return y > cutoff, f" | born exactly 110 years ago still counts as possibly living
+gwt_core/rules.py | if end: | if False: | a recorded death, burial or cremation is never living
+gwt_core/rules.py | _s(r.get("role")) in ("", "Primary") | True | a godparent's or witness's event is not the person's own
+gwt_core/rules.py | if person.get("handle") in ix.dna: | if False: | a DNA match with no dates is possibly living
+gwt_core/rules.py | self.dna |= {h, r.get("ref")} | self.dna |= {r.get("ref")} | both ends of a DNA association count, the tester too
+gwt_core/rules.py | .strip().casefold() == "dna" | .strip().casefold() != "" | only a DNA association marks a match, not a godparent one
+gwt_core/rules.py | bounds.append((y - PARENT_AGE, f"child-born-{y}")) | bounds.append((y, f"child-born-{y}")) | a parent was born at least 14 years before the child
+gwt_core/rules.py | y - 2 * PARENT_AGE | y | a grandparent was born at least 28 years before the grandchild (no gap 0 going down)
+gwt_core/rules.py | bounds.append((y - PARENT_AGE, f"married-{y}")) | bounds.append((y, f"married-{y}")) | someone who married was born at least 14 years before
+gwt_core/rules.py | y + gap | y | a sibling is born up to `gap` years apart
+gwt_core/rules.py | bound, reason = min(bounds) | bound, reason = max(bounds) | the tightest bound from relatives decides
+gwt_core/rules.py | if w not in particles | if True | a locale's particles are dropped from a folded name
+gwt_core/rules.py | if ID_CHECKS[kind](m.group(0))] | ] | an identity number counts only with a right check digit

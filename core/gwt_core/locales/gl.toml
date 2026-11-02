@@ -1,0 +1,58 @@
+# Galician. Every locale file has the same sections; see docs/rules.md.
+code = "gl"
+name = "Galician"
+
+[fold]
+# Galician x against the older Spanish j and the b/v swap: «Xosé» = «José»
+pairs = [["x", "j"], ["b", "v"], ["y", "i"]]
+particles = ["de", "da", "do", "das", "dos", "e"]
+
+[months]
+"1" = ["xaneiro", "xan"]
+"2" = ["febreiro", "feb"]
+"3" = ["marzo", "mar"]
+"4" = ["abril", "abr"]
+"5" = ["maio", "mai"]
+"6" = ["xuño", "xuñ"]
+"7" = ["xullo", "xul"]
+"8" = ["agosto", "ago"]
+"9" = ["setembro", "set", "7bro"]
+"10" = ["outubro", "out", "8bro"]
+"11" = ["novembro", "nov", "9bro"]
+"12" = ["decembro", "dec", "xbro"]
+
+[dates]
+filler = ["de", "do", "dia", "ano", "a"]
+
+[gender]
+male = ["home", "varón", "masculino"]
+female = ["muller", "feminino"]
+
+[roles]
+godparent = ["padriño", "madriña", "padriños"]
+witness = ["testemuña", "testemuñas"]
+father = ["pai"]
+mother = ["nai"]
+child = ["fillo", "filla", "fillos"]
+spouse = ["marido", "muller", "esposo", "esposa", "viúvo", "viúva"]
+priest = ["párroco", "cura", "crego", "reitor"]
+
+[events]
+birth = ["nacemento", "naceu", "nado", "nada"]
+baptism = ["bautismo", "bautizo", "bautizado", "bautizada"]
+marriage = ["matrimonio", "casamento", "voda"]
+death = ["defunción", "morte", "faleceu", "finado"]
+burial = ["enterro", "sepultura", "enterramento"]
+
+[dedication]
+pairs = [
+  ["N.ª S.ª", "Nosa Señora"],
+  ["Nsa. Sra.", "Nosa Señora"],
+  ["Sto.", "Santo"],
+  ["Sta.", "Santa"],
+]
+
+[id_numbers]
+# the Spanish DNI and NIE
+dni = '(?<![A-Za-z0-9])\d{8}[A-Za-z](?![A-Za-z0-9])'
+nie = '(?<![A-Za-z0-9])[XYZxyz]\d{7}[A-Za-z](?![A-Za-z0-9])'

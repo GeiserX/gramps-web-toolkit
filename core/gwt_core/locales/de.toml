@@ -1,0 +1,53 @@
+# German. Every locale file has the same sections; see docs/rules.md.
+code = "de"
+name = "German"
+
+[fold]
+pairs = []
+particles = ["von", "vom", "zu", "zum", "zur", "van", "der", "den"]
+
+[months]
+"1" = ["Januar", "Jänner", "Jan"]
+"2" = ["Februar", "Feber", "Feb"]
+"3" = ["März", "Mrz"]
+"4" = ["April", "Apr"]
+"5" = ["Mai"]
+"6" = ["Juni", "Jun"]
+"7" = ["Juli", "Jul"]
+"8" = ["August", "Aug"]
+"9" = ["September", "Sept", "Sep", "7ber"]
+"10" = ["Oktober", "Okt", "8ber"]
+"11" = ["November", "Nov", "9ber"]
+"12" = ["Dezember", "Dez", "xber", "10ber"]
+
+[dates]
+filler = ["den", "am", "im", "jahr", "jahre", "des"]
+
+[gender]
+male = ["Mann", "männlich"]
+female = ["Frau", "weiblich"]
+
+[roles]
+godparent = ["Pate", "Patin", "Paten", "Taufpate", "Taufpatin", "Gevatter"]
+witness = ["Zeuge", "Zeugin", "Zeugen", "Trauzeuge"]
+father = ["Vater"]
+mother = ["Mutter"]
+child = ["Sohn", "Tochter", "Kind"]
+spouse = ["Ehemann", "Ehefrau", "Gatte", "Gattin", "Witwer", "Witwe"]
+priest = ["Pfarrer", "Priester", "Kaplan", "Pastor"]
+
+[events]
+birth = ["Geburt", "geboren"]
+baptism = ["Taufe", "getauft"]
+marriage = ["Heirat", "Trauung", "Hochzeit", "getraut", "verheiratet", "copuliert"]
+death = ["Tod", "gestorben", "Sterbefall", "verstorben"]
+burial = ["Begräbnis", "Beerdigung", "begraben", "beerdigt"]
+
+[dedication]
+pairs = [
+  ["St.", "Sankt"],
+  ["Hl.", "Heiligen"],
+  ["U.L.F.", "Unserer Lieben Frau"],
+]
+
+[id_numbers]

@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Added
+
+- `gwt_core.rules`, the shared rules new tools import: `possibly_living()` returns whether a person may be alive with the reason (`child-born-1990`, `dna-match`) and the latest year they can have been born, inferring from children, grandchildren, a marriage and siblings, and counting a DNA match with no dates as living; `fold()` folds names with a language's spelling pairs and particles; `read_date()` reads gwt-apply's date grammar and, with a language, written dates such as «12 de marzo de 1890». Word tables (months, gender, record roles, life events, church-name abbreviations, identity-number patterns) for es, en, fr, it, pt, de, nl, ca, eu, gl and la ship in the package. No tool uses them yet; nothing changes for existing tools.
+
 ## [0.3.0] - 2026-10-31
 
 ### Change lists
