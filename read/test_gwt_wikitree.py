@@ -55,6 +55,8 @@ class Classify(unittest.TestCase):
     def test_profile_keys(self):
         self.assertEqual(gwt_wikitree.profile_key('Zorvalo-12'), 'Zorvalo-12')
         self.assertEqual(gwt_wikitree.profile_key('https://www.wikitree.com/wiki/Zorvalo-12'), 'Zorvalo-12')
+        # a URL copied from a browser comes percent-encoded; sent as is, it is encoded twice and reads as no profile
+        self.assertEqual(gwt_wikitree.profile_key('https://www.wikitree.com/wiki/M%C3%BCller-12'), 'Müller-12')
         self.assertIsNone(gwt_wikitree.profile_key('Zorvalo'))
 
     def test_an_unknown_date_is_no_year(self):

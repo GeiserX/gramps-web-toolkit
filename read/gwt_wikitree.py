@@ -65,7 +65,7 @@ def profile_url(key, ancestors=0):
 
 
 def profile_key(arg):
-    m = _KEY.search((arg or '').strip())
+    m = _KEY.search(urllib.parse.unquote((arg or '').strip()))    # a URL copied from a browser is percent-encoded
     return m.group(1) if m else None
 
 

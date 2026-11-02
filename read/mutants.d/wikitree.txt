@@ -9,3 +9,4 @@ gwt_wikitree.py | return y or None | return y | an unknown WikiTree date (0000-0
 gwt_wikitree.py | if other: | if True: | a parent who is private, or not in the answer, is never listed as a relative
 gwt_wikitree.py | q.append(('dateInclude', 'both'))   # else WikiTree also returns every profile with no date at all | pass | --born and --died keep only profiles with the dates; without dateInclude=both WikiTree returns undated ones too
 gwt_wikitree.py | (m.get('Name') or m.get('Id')) | m.get('Name') | a private WikiTree profile comes as {Id, index} alone: withheld, never a STOP of the whole search
+gwt_wikitree.py | m = _KEY.search(urllib.parse.unquote((arg or '').strip())) | m = _KEY.search((arg or '').strip()) | a percent-encoded profile URL from a browser is decoded once, never sent encoded twice as a false "none"
