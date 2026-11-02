@@ -214,6 +214,34 @@ class FamilySearch(Base):
         code, _, _ = self.run_fs(['--control-ark', '1:1:QZZ1-AAA', 'record', '1:1:QZZ9-RRR'], net, gate)
         self.assertEqual((code, gate.blocks, len(gate.hits), self.out_files()), (gwt_reader.EXIT_WALL, [24], 1, []))
 
+    def test_a_control_read_that_fails_leaves_the_403_a_block(self):
+        for name, second in (('5xx', (500, b'oops')), ('wrong shape', (200, b'{"x": 1}')), ('429', (429, b''))):
+            with self.subTest(name):
+                gate = FakeGate()
+                net = FakeNet(gate, (403, b'forbidden'), second)
+                code, _, text = self.run_fs(['--control-ark', '1:1:QZZ1-AAA', 'record', '1:1:QZZ9-RRR'], net, gate)
+                self.assertEqual((code, gate.blocks, self.out_files()), (gwt_reader.EXIT_WALL, [24], []), text)
+
+    def test_a_control_read_on_a_paused_gate_leaves_the_403_a_block(self):
+        class PauseAfterOne(FakeGate):
+            def wait(self, lane):
+                if self.waits:
+                    raise gwt_read.Paused(600, 'a hit')
+                super().wait(lane)
+        gate = PauseAfterOne()
+        net = FakeNet(gate, (403, b'forbidden'))
+        code, _, text = self.run_fs(['--control-ark', '1:1:QZZ1-AAA', 'record', '1:1:QZZ9-RRR'], net, gate)
+        self.assertEqual((code, gate.blocks, len(net.requests)), (gwt_reader.EXIT_WALL, [24], 1), text)
+
+    def test_a_control_ark_that_is_not_a_record_or_is_the_record_is_refused(self):
+        for bad in ('3:1:QZZ1-AAAA-BBB', 'not-an-ark', '1:1:QZZ9-RRR'):
+            with self.subTest(bad):
+                gate = FakeGate()
+                net = FakeNet(gate)
+                code, _, text = self.run_fs(['--control-ark', bad, 'record', '1:1:QZZ9-RRR'], net, gate)
+                self.assertEqual((code, len(net.requests)), (gwt_read.EXIT_USAGE, 0), text)
+                self.assertIn('--control-ark', text)
+
     def test_a_cached_control_proves_nothing_so_it_is_read_again(self):
         gate = DenyGate()
         net = FakeNet(gate, (200, json.dumps(RECORD).encode()), (403, b'forbidden'), (200, json.dumps(RECORD).encode()))

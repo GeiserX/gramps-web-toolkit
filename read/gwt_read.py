@@ -261,14 +261,22 @@ def cmd_search(a, R):
 
 def _fs_on_403(a, R, ark):
     """Is this record's 403 its own access? Its permissions first (no request); then, with --control-ark, the
-    control record read again through the gate: if it answers, the account is fine and the record is restricted.
-    If the control is refused too, that refusal blocks the gate like any 403."""
+    control record read again through the gate: only when it answers is the account fine and the record restricted.
+    If the control read fails in any way (refused, a 5xx, the wrong shape, a paused gate), the first 403 stays a
+    block."""
     def on_403(body):
         if access_of(body):
             return 'restricted'
         control = ark_id(getattr(a, 'control_ark', ''))
-        if control and control != ark:
-            R.get(record_url(control), {'accept': ACCEPT_RECORD}, expect=is_record, refresh=True)
+        if control:          # cmd_record has refused a control equal to the record
+            try:
+                R.get(record_url(control), {'accept': ACCEPT_RECORD}, expect=is_record, refresh=True)
+            except gwt_reader.Stop as e:
+                if e.verdict == 'blocked':
+                    raise           # the control's own 403 has blocked the gate already: that is the block
+                return None
+            except Paused:
+                return None
             return 'restricted'
         return None
     return on_403
@@ -278,6 +286,10 @@ def cmd_record(a, R):
     ark = ark_id(a.ark)
     if not ark:
         err('%r is not a FamilySearch record ark (1:1:XXXX-XXX)' % a.ark)
+        return EXIT_USAGE
+    control = getattr(a, 'control_ark', '')
+    if control and ark_id(control) in (None, ark):
+        err('--control-ark %r must be a FamilySearch record ark (1:1:XXXX-XXX) other than the one you read' % control)
         return EXIT_USAGE
     key = 'fs-record-' + ark.replace(':', '-')
     try:

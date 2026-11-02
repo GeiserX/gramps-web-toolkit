@@ -190,9 +190,9 @@ def write_manifest(path, rows):
 class Stop(Exception):
     """An answer that must end the run: nothing is saved as a result. exit_code is the process exit."""
 
-    def __init__(self, msg, exit_code=EXIT_ERROR):
+    def __init__(self, msg, exit_code=EXIT_ERROR, verdict=None):
         super().__init__(msg)
-        self.exit_code = exit_code
+        self.exit_code, self.verdict = exit_code, verdict
 
 
 # Bot walls, rate pages and captchas (Imperva/Incapsula, Cloudflare, Akamai, hCaptcha, reCAPTCHA), and the
@@ -299,7 +299,7 @@ class Reader:
                 self.gate.hit(self.lane, what)
             elif tell == 'dead':
                 self.gate.dead(self.lane, what)
-            raise Stop('%s (HTTP %s at %s)' % (why, state['status'], url), code)
+            raise Stop('%s (HTTP %s at %s)' % (why, state['status'], url), code, verdict)
         return status, rh, body, 'status' not in state
 
 
