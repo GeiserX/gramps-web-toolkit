@@ -69,3 +69,7 @@ gwt_lint/cli.py | if v is not None and not (isinstance(v, list) and all(isinstan
 gwt_lint/cli.py | if v is not None and (not isinstance(v, kind) or isinstance(v, bool)): | if False: | a number or text setting of the wrong type is named
 gwt_lint/rules_tree.py | shown_date, shown_place = _ymd(date), | shown_date, shown_place = date, | a moved event's date is said as a date, not as the snapshot's object
 gwt_lint/cli.py |     except BrokenPipeError: |     except KeyboardInterrupt: | a reader that closes the pipe early, such as head, gets a quiet exit 2, not a traceback
+gwt_lint/rules_tree.py | [(MERGED[kind], op.get(f)) for f in ("winner", "loser")] | [(MERGED[kind], op.get(f)) for f in ("winner",)] | a protected person merged away as the loser is protect-update
+gwt_lint/rules_tree.py | QUOTE_WORDS = 4 | QUOTE_WORDS = 5 | a quoted span of four words is a quotation
+gwt_lint/framework.py | "children": "Person", "media": "Media"} | "children": "Person"} | an op that names a media object touches it, for overlap
+gwt_lint/framework.py |             raise InputError(f"{path}: not a snapshot") |             return cls({}) | a snapshot that is not an object exits 2, never lints clean

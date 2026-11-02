@@ -342,6 +342,7 @@ def test_count_quotes_the_words_that_fired():
 @pytest.mark.parametrize("text,codes", [
     ("DNA match; her online tree is called «Gil Family Tree».", []),
     ("She wrote to us: «my mother was born in the old mill».", ["living-quote"]),
+    ("She wrote to us: «born in the mill».", ["living-quote"]),
 ])
 def test_living_quote_wants_a_quotation_not_a_title(text, codes):
     # « » also mark titles and names in Spanish and French; a short quoted title is not a quotation
@@ -354,3 +355,17 @@ def test_living_quote_reads_a_transcript_note_as_a_quotation():
     ops = [{"op": "add_note", "key": "n", "type": "Transcript", "text": "Born at home.", "attach": [{"person": "I12"}]}]
     ctx = F.Context([dict(o, _line=1) for o in ops], F.Tree.load(TREE), {"living": {"this_year": 2026}})
     assert [f.code for f in T.Living().check(ctx)] == ["living-quote"]
+
+
+def test_protect_catches_a_protected_person_merged_away_as_the_loser():
+    ops = [{"op": "merge_person", "key": "m", "_line": 1, "winner": "I8", "loser": "I10", "reason": "same woman"}]
+    ctx = F.Context(ops, F.Tree.load(TREE), {"protect": {"ids": ["I10"]}})
+    assert [f.code for f in T.Protect().check(ctx)] == ["protect-update"]
+
+
+def test_overlap_reads_the_media_an_update_names(tmp_path):
+    (tmp_path / "other.jsonl").write_text(json.dumps(
+        {"op": "add_tag", "key": "t", "target": {"media": "O1"}, "name": "checked"}) + "\n")
+    ctx = F.Context([{"op": "update_media", "key": "um", "_line": 1, "media": "O1", "set": {"desc": "x"}}],
+                    F.Tree.load(TREE), {"overlap": {"open": str(tmp_path)}})
+    assert [f.code for f in T.Overlap().check(ctx)] == ["overlap-open"]

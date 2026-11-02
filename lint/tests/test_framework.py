@@ -260,3 +260,9 @@ def test_a_reader_that_leaves_early_gets_no_traceback(tmp_path):
     os.close(w_fd)
     assert p.returncode == 2
     assert p.stderr == "", p.stderr
+
+
+def test_a_snapshot_that_is_not_an_object_exits_2(tmp_path):
+    arr = tmp_path / "array.json"
+    arr.write_text("[]")
+    assert run([EXAMPLE[0], "--snapshot", str(arr), "--rules", "count"])[0] == 2
