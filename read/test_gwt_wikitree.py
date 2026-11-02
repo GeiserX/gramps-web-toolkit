@@ -37,6 +37,13 @@ class Classify(unittest.TestCase):
         self.assertEqual(v([{'status': 'Permission denied', 'matches': [], 'total': 0}]), 'unknown')
         self.assertEqual(v({'status': 0, 'matches': []}), 'unknown')
         self.assertEqual(v([{'status': 0, 'matches': [], 'total': 5}]), 'unknown', 'a count with no rows read as "none"')
+        self.assertEqual(v([{'status': 0, 'matches': [{'index': 0}], 'total': 1}]), 'unknown', 'a row with no Id')
+
+    def test_a_private_profile_is_only_its_id(self):
+        # the live API gives a private profile as {Id, index} alone: that is a withheld row, not a changed answer
+        doc = [{'status': 0, 'matches': [{'Id': 900009, 'index': 0}], 'total': 1}]
+        self.assertEqual(gwt_wikitree.verdict(doc), 'hits')
+        self.assertEqual(gwt_wikitree.candidates(doc[0]['matches']), ([], 1))
 
     def test_records(self):
         v = gwt_wikitree.record_verdict

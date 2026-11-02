@@ -83,7 +83,8 @@ def verdict(doc):
         return 'unknown'
     if n == 0 and not d['matches']:
         return 'none'
-    if d['matches'] and all(isinstance(m, dict) and m.get('Name') for m in d['matches']):
+    # a private profile comes as {Id, index} alone, no Name: a withheld row, never a changed answer
+    if d['matches'] and all(isinstance(m, dict) and (m.get('Name') or m.get('Id')) for m in d['matches']):
         return 'hits'
     return 'unknown'
 
