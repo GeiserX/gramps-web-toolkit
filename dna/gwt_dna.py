@@ -151,7 +151,7 @@ def match_id(raw_id: str, name: str) -> str:
 
 def read_files(paths: list[str], overrides: dict) -> tuple[dict, list, dict]:
     """(matches by match id, segments as (id or None, folded name, row), report of columns)."""
-    matches, segments, cols = {}, [], {}
+    matches, segments, cols, by_name = {}, [], {}, {}
     for path in paths:
         rows = read_csv(path)
         header, body = rows[0], rows[1:]
@@ -174,7 +174,7 @@ def read_files(paths: list[str], overrides: dict) -> tuple[dict, list, dict]:
                 if not chrom or start is None or end is None or cm is None:
                     continue
                 snps = number(cell(r, "snps"))
-                segments.append((cell(r, "id") or None, fold(clean_name(cell(r, "name"))),
+                segments.append(("-".join(cell(r, "id").split()) or None, fold(clean_name(cell(r, "name"))),
                                  {"name": cell(r, "name"), "chromosome": chrom, "start": int(start), "end": int(end),
                                   "cm": cm, "snps": int(snps) if snps is not None else None}))
             continue
@@ -191,17 +191,24 @@ def read_files(paths: list[str], overrides: dict) -> tuple[dict, list, dict]:
             if not full and not cell(r, "id"):
                 cols[path].setdefault("skipped_rows", []).append(rn)
                 continue
-            mid = base = match_id(cell(r, "id"), full)
-            n = 1
-            while mid in matches:  # two matches with one name and no id are two people
-                n += 1
-                mid = f"{base}-{n}"
+            mid = match_id(cell(r, "id"), full)
+            if cell(r, "id") and mid in matches:  # the same match twice (a list passed twice): one person
+                cols[path].setdefault("duplicate_ids", []).append(mid)
+                continue
             sex = cell(r, "sex")[:1].upper()
-            matches[mid] = {"id": mid, "name": full, "parts": parts, "cm": number(cell(r, "cm")),
-                            "segments": number(cell(r, "segments")), "longest": number(cell(r, "longest")),
-                            "relationship": cell(r, "relationship"), "generations": cell(r, "generations"),
-                            "surnames": " ".join(re.sub(r"\([^)]*\)", " ", cell(r, "surnames")).split()),
-                            "gender": sex if sex in ("M", "F") else None, "segs": []}
+            m = {"id": mid, "name": full, "parts": parts, "cm": number(cell(r, "cm")),
+                 "segments": number(cell(r, "segments")), "longest": number(cell(r, "longest")),
+                 "relationship": cell(r, "relationship"), "generations": cell(r, "generations"),
+                 "surnames": " ".join(re.sub(r"\([^)]*\)", " ", cell(r, "surnames")).split()),
+                 "gender": sex if sex in ("M", "F") else None, "segs": []}
+            if cell(r, "id"):
+                matches[mid] = m
+            else:
+                by_name.setdefault(mid, []).append(m)
+    for base, same in by_name.items():  # two matches with one name and no id are two people, suffixed by cM so
+        for n, m in enumerate(sorted(same, key=lambda m: -(m["cm"] or 0)), 1):  # a reordered export keeps them
+            mid = base if n == 1 else f"{base}-{n}"
+            matches[mid] = m | {"id": mid}
     return matches, segments, cols
 
 
@@ -214,7 +221,7 @@ def attach_segments(matches: dict, segments: list) -> list[str]:
     ambiguous = set()
     for sid, sname, seg in segments:
         named = by_name.get(sname, []) if sname else []
-        if sid and sid in matches:
+        if sid:  # a segment row with an id joins that id only, never a namesake's match
             mid = sid
         elif len(named) == 1:
             mid = named[0]
@@ -222,13 +229,12 @@ def attach_segments(matches: dict, segments: list) -> list[str]:
             ambiguous.add(seg["name"])
             continue
         else:
-            mid = match_id(sid or "", clean_name(seg["name"]))
-            if mid not in matches:
-                matches[mid] = {"id": mid, "name": clean_name(seg["name"]), "parts": None, "cm": None,
-                                "segments": None, "longest": None, "relationship": "", "generations": "",
-                                "surnames": "",
-                                "gender": None, "segs": []}
-                by_name.setdefault(sname, []).append(mid)
+            mid = match_id("", clean_name(seg["name"]))
+        if mid not in matches:
+            matches[mid] = {"id": mid, "name": clean_name(seg["name"]), "parts": None, "cm": None,
+                            "segments": None, "longest": None, "relationship": "", "generations": "",
+                            "surnames": "", "gender": None, "segs": []}
+            by_name.setdefault(sname, []).append(mid)
         matches[mid]["segs"].append(seg)
     for m in matches.values():
         if m["segs"] and m["cm"] is None:

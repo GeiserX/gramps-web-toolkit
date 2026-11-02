@@ -126,6 +126,38 @@ class Reading(unittest.TestCase):
             with self.assertRaises(D.BadInput):
                 D.read_files([p], {})
 
+    def files(self, d, **texts):
+        out = []
+        for name, text in texts.items():
+            out.append(os.path.join(d, name + ".csv"))
+            with open(out[-1], "w") as fh:
+                fh.write(text)
+        return out
+
+    def test_a_segment_row_joins_its_own_id_never_a_namesakes(self):
+        with tempfile.TemporaryDirectory() as d:
+            paths = self.files(d, m="DNA Match ID,Name,Shared DNA\nD-11AA,Tom Sample,0.6% (48.0 cM)\n",
+                               s="DNA Match ID,Match name,Chromosome,Start Location,End Location,Centimorgans,SNPs\n"
+                                 "D-11AA,Tom Sample,7,1000000,9000000,12.5,1500\n"
+                                 "D-99ZZ,Tom Sample,3,5000000,90000000,95.0,9000\n"
+                                 "AB 12,Al Sample,5,1000000,2000000,8.0,800\n")
+            m, segs, _ = D.read_files(paths, {})
+            D.attach_segments(m, segs)
+        self.assertEqual([s["cm"] for s in m["D-11AA"]["segs"]], [12.5])
+        self.assertEqual([s["cm"] for s in m["D-99ZZ"]["segs"]], [95.0])
+        self.assertEqual(m["AB-12"]["name"], "Al Sample")
+
+    def test_a_match_id_listed_twice_is_one_person(self):
+        ops, _, rep = run("myheritage", ["myheritage-matches.csv", "myheritage-matches.csv"])
+        self.assertEqual(rep["matches"], 4)
+        self.assertIn("D-11AA", rep["cols"][fx("myheritage-matches.csv")]["duplicate_ids"])
+
+    def test_same_name_matches_keep_their_ids_when_the_export_is_reordered(self):
+        with tempfile.TemporaryDirectory() as d:
+            a, = self.files(d, a="Full Name,Shared cM\nLee Ward,22\nLee Ward,30\n")
+            m, _, _ = D.read_files([a], {})
+        self.assertEqual((m["name-lee-ward"]["cm"], m["name-lee-ward-2"]["cm"]), (30, 22))
+
 
 class Identity(unittest.TestCase):
     def setUp(self):

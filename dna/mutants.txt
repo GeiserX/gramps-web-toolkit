@@ -7,7 +7,10 @@ gwt_dna.py | if not target and (site, mid) in tree["marks"]: | if False: | a rer
 gwt_dna.py |         if ref == tested: |         if False: | the tested person found as a match gets no association to themself
 gwt_dna.py |             if same: |             if False: | a new match person who shares a name with someone in the tree is waived as a namesake by name, so preflight lets it through
 gwt_dna.py |             made_names.setdefault(fold(f"{first} {surname}"), []).append(f"key:{pkey}") |             pass | two new matches with one name in a run name each other as namesakes
-gwt_dna.py |             while mid in matches: |             while False: | two matches with one name and no id are two people, never one overwritten
+gwt_dna.py |             mid = base if n == 1 else f"{base}-{n}" |             mid = base | two matches with one name and no id are two people, never one overwritten
+gwt_dna.py | sorted(same, key=lambda m: -(m["cm"] or 0)) | same | two same-name matches keep their ids, by cM, when the site reorders its export
+gwt_dna.py |             if cell(r, "id") and mid in matches: |             if False: | a match id listed twice (a list passed twice) is one person, never two
+gwt_dna.py |         if sid:  # a segment row with an id joins that id only, never a namesake's match |         if sid and sid in matches: | a segment row whose id is not in the match list never lands on a namesake's match
 gwt_dna.py |         elif len(named) > 1: |         elif False: | segments of a name two matches share are held back, never given to a new third match
 gwt_dna.py |         n = n.split("@")[0] |         pass | an e-mail used as a display name keeps only its local part
 gwt_dna.py |     n = " ".join(LONG_NUMBER.sub(" ", n).split()) |     n = " ".join(n.split()) | a phone or identity number inside a display name never reaches the tree
