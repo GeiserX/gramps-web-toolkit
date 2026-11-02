@@ -1,0 +1,4 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Switzerland|Schweiz|Suisse|Svizzera|Suiza	country	Swiss cantonal state archives (archives-online.org)	Parish registers, Bevölkerungsverzeichnisse	birth,marriage,death,census,migration	1550-1875	1876	https://www.archives-online.org/	online			2026-11-02	Federal civil registration from 1876; records are kept by the place of citizenship (Heimatort)
+Switzerland|Schweiz|Suisse|Svizzera|Suiza	country	Familiennamenbuch der Schweiz	Place of citizenship per surname	other	1800-1962		https://hls-dhs-dss.ch/famn/	online			2026-11-02	
+Switzerland|Schweiz|Suisse|Svizzera|Suiza	country	e-newspaperarchives.ch	Swiss newspapers (OCR)	press	1700-2000		https://www.e-newspaperarchives.ch/	browser	challenge			Probe: answered a script with HTTP 403 on 2026-11-02 (a bot check or a block); a browser may still get in

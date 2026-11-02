@@ -482,6 +482,8 @@ class LiveServer:
         if "handles" in q:
             wanted = q["handles"].split(",")
             rows = [o for o in rows if o["handle"] in wanted]
+        if "filemissing" in q:  # every file is on the fake server unless a test names it
+            rows = [o for o in rows if o["handle"] in getattr(self, "missing_files", ())]
         if "keys" in q:
             rows = [{k: o.get(k) for k in q["keys"].split(",")} for o in rows]
         headers = {"X-Total-Count": str(len(rows))}
@@ -1075,7 +1077,7 @@ def test_from_on_an_unchanged_tree_lists_each_type_once(live, tmp_path):
     server.calls.clear()
     new = str(tmp_path / "new.json")
     assert main(["check", "--from", old, "--save-dump", new]) == 0
-    calls = _api_calls(server)
+    calls = [q for q in _api_calls(server) if "filemissing" not in q]  # plus the one list of missing files
     assert len(calls) == len(TYPES) and all(q == "keys=handle%2Cchange" for q in calls)
     assert _objects(new) == _objects(old)
 

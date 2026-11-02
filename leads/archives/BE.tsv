@@ -1,0 +1,2 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Belgium|België|Belgique|Belgien|Bélgica	country	AGATHA (State Archives in Belgium)	Parish registers, civil registration, person indexes	birth,marriage,death,notarial	1550-1925	1796	https://agatha.arch.be/en/search/genealogie/	online	ok		2026-11-02	Replaces search.arch.be, closed on 2026-01-01; robots.txt forbids harvesting images

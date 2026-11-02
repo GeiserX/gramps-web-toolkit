@@ -1,0 +1,81 @@
+{
+ "@context": "http://iiif.io/api/presentation/2/context.json",
+ "@id": "https://dam-antenati.cultura.gov.it/antenati/containers/Ex4mple/manifest",
+ "@type": "sc:Manifest",
+ "label": "Archivio di Stato di Esempio > Stato civile italiano > Esempio > 1870",
+ "metadata": [
+  {
+   "label": "Titolo",
+   "value": "1870"
+  },
+  {
+   "label": "Tipologia",
+   "value": "Nati"
+  },
+  {
+   "label": "Conservato da",
+   "value": "Archivio di Stato di Esempio"
+  }
+ ],
+ "sequences": [
+  {
+   "@type": "sc:Sequence",
+   "canvases": [
+    {
+     "@id": "https://antenati.cultura.gov.it/ark:/12657/an_ua0000001/aAaa111",
+     "@type": "sc:Canvas",
+     "width": 1000,
+     "height": 1000,
+     "images": [
+      {
+       "@id": "https://dam-antenati.cultura.gov.it/antenati/containers/Ex4mple/manifest/annotation/aAaa111",
+       "@type": "oa:Annotation",
+       "motivation": "sc:painting",
+       "on": "https://dam-antenati.cultura.gov.it/antenati/containers/Ex4mple/manifest/canvas/aAaa111",
+       "resource": {
+        "@id": "https://iiif-antenati.cultura.gov.it/iiif/2/aAaa111/full/full/0/default.jpg",
+        "@type": "dctypes:Image",
+        "format": "image/jpeg",
+        "width": 1000,
+        "height": 1000,
+        "service": {
+         "@context": "http://iiif.io/api/image/2/context.json",
+         "@id": "https://iiif-antenati.cultura.gov.it/iiif/2/aAaa111",
+         "profile": "http://iiif.io/api/image/2/level2.json"
+        }
+       }
+      }
+     ],
+     "label": "pag. 1"
+    },
+    {
+     "@id": "https://antenati.cultura.gov.it/ark:/12657/an_ua0000001/bBbb222",
+     "@type": "sc:Canvas",
+     "width": 1000,
+     "height": 1000,
+     "images": [
+      {
+       "@id": "https://dam-antenati.cultura.gov.it/antenati/containers/Ex4mple/manifest/annotation/bBbb222",
+       "@type": "oa:Annotation",
+       "motivation": "sc:painting",
+       "on": "https://dam-antenati.cultura.gov.it/antenati/containers/Ex4mple/manifest/canvas/bBbb222",
+       "resource": {
+        "@id": "https://iiif-antenati.cultura.gov.it/iiif/2/bBbb222/full/full/0/default.jpg",
+        "@type": "dctypes:Image",
+        "format": "image/jpeg",
+        "width": 1000,
+        "height": 1000,
+        "service": {
+         "@context": "http://iiif.io/api/image/2/context.json",
+         "@id": "https://iiif-antenati.cultura.gov.it/iiif/2/bBbb222",
+         "profile": "http://iiif.io/api/image/2/level2.json"
+        }
+       }
+      }
+     ],
+     "label": "pag. 2"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,3 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Norway|Norge|Noruega|Norvège|Norwegen	country	Digitalarkivet: person search	Transcribed censuses and parish registers	birth,marriage,death,census,migration	1801-1920		https://www.digitalarkivet.no/en/search/persons?s={given}+{surname}	online	ok		2026-11-02	Crawl-delay 5 s; no official API
+Norway|Norge|Noruega|Norvège|Norwegen	country	Digitalarkivet: scanned church books	Parish register images	birth,marriage,death,probate,court	1600-1969		https://nye.digitalarkivet.no/search/parish	online			2026-11-02	
