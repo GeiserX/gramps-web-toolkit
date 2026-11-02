@@ -3,9 +3,13 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from . import digibib, europeana, gazeta, geo, iiif
 from .net import Client
+from .store import Store
+
+RAWSTORE_HELP = "move each downloaded binary to the gwt-rawstore bucket once it confirms it, and delete the local copy"
 
 
 def parser() -> argparse.ArgumentParser:
@@ -19,6 +23,7 @@ def parser() -> argparse.ArgumentParser:
             sp.add_argument("--labels", help="regular expression matched against canvas labels")
         sp.add_argument("--out", default=".", help="output folder; manifest.tsv is written there")
         sp.add_argument("--list", action="store_true", help="print what would be fetched, download nothing")
+        sp.add_argument("--rawstore", action="store_true", help=RAWSTORE_HELP)
 
     s = sub.add_parser("iiif", help="download canvases from a IIIF manifest or a known viewer URL")
     s.add_argument("url")
@@ -40,6 +45,7 @@ def parser() -> argparse.ArgumentParser:
     gf = g.add_parser("fetch", help="download the PDF and text of one or more references")
     gf.add_argument("refs", nargs="+", metavar="BOE-A-YYYY-N")
     gf.add_argument("--out", default=".")
+    gf.add_argument("--rawstore", action="store_true", help=RAWSTORE_HELP)
 
     s = sub.add_parser("europeana", help="search Europeana (needs EUROPEANA_KEY); prints TSV with manifests")
     s.add_argument("query")
@@ -60,12 +66,42 @@ def parser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv=None) -> int:
+def rawstore_module():
+    """gwt_rawstore, installed beside gwt_fetch in the wheel, or the rawstore/ folder of a clone."""
+    try:
+        import gwt_rawstore
+    except ModuleNotFoundError:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "rawstore"))
+        import gwt_rawstore
+    return gwt_rawstore
+
+
+def to_bucket(out, bucket, prefix="", log=print) -> int:
+    """Upload the binaries gwt-fetch wrote in out (rows of its manifest.tsv still on disk) and delete each one
+    only after the bucket confirms it; its rawstore.tsv row then tells the next run it is done. Text stays.
+    Returns the number of files not stored."""
+    rs = rawstore_module()
+    folder = Path(out)
+    files = [str(folder / f) for f in sorted(Store(folder).rows) if rs.is_binary_name(f) and (folder / f).is_file()]
+    return rs.put(bucket, files, prefix=prefix, remove=True, log=log) if files else 0
+
+
+def main(argv=None, bucket=None) -> int:
     args = parser().parse_args(argv)
     client = Client(delay=args.delay)
     mod = {"iiif": iiif, "digibib": digibib, "gazeta": gazeta, "europeana": europeana, "geo": geo}[args.cmd]
+    rawstore = getattr(args, "rawstore", False) and not getattr(args, "list", False)
+    if rawstore and bucket is None:  # a missing config stops the run before anything is downloaded
+        rs = rawstore_module()
+        cfg = rs.load_config()
+        bucket, prefix = rs.store_from_config(cfg), cfg.get("GWT_RAWSTORE_PREFIX", "")
+    else:
+        prefix = ""
     try:
-        return mod.run(args, client)
+        rc = mod.run(args, client)
+        if rawstore and to_bucket(args.out, bucket, prefix, log=print):
+            rc = max(rc, 1)
+        return rc
     except KeyboardInterrupt:
         return 130
     except Exception as e:  # network and parse errors: one line, non-zero exit

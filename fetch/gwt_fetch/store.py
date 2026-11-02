@@ -2,7 +2,8 @@
 
 A run that dies leaves only `*.part` files behind, so any finished file on disk is complete.
 Re-running the same command skips what is already there and adds a row for any finished file
-the manifest is missing (the run died between the rename and the append).
+the manifest is missing (the run died between the rename and the append). A file that gwt-rawstore
+moved to the bucket (a row in the folder's rawstore.tsv) counts as there, so it is not fetched again.
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
+RAWSTORE = "rawstore.tsv"  # gwt-rawstore's manifest: a row is a file uploaded and confirmed by the bucket
 COLUMNS = ["file", "label", "image_url", "manifest_url", "sha256", "fetched_at"]
 EXT = {
     "image/jpeg": ".jpg", "image/jp2": ".jp2", "image/png": ".png", "image/tiff": ".tif",
@@ -49,18 +51,23 @@ class Store:
             with open(self.manifest, newline="", encoding="utf-8") as f:
                 for row in csv.DictReader(f, delimiter="\t"):
                     self.rows[row["file"]] = row
+        self.stored = _rawstore_names(self.out / RAWSTORE)
 
     def find(self, stem: str) -> Path | None:
-        """The finished file for this stem, whatever its extension."""
+        """The finished file for this stem, whatever its extension. It may live only in the bucket:
+        then the path does not exist on disk."""
         for p in sorted(self.out.glob(stem + ".*")):
             if p.suffix not in (".part", ".tsv"):
                 return p
+        for name in sorted(self.stored):
+            if name.startswith(stem + "."):
+                return self.out / name
         return None
 
     def done(self, stem: str, label: str, image_url: str, manifest_url: str) -> Path | None:
-        """If a finished file exists, make sure it has a row and return it."""
+        """If a finished file exists (on disk or in the bucket), make sure it has a row and return it."""
         p = self.find(stem)
-        if p and p.name not in self.rows:
+        if p and p.name not in self.rows and p.exists():
             self.record(p, label, image_url, manifest_url)
         return p
 
@@ -87,6 +94,15 @@ class Store:
                 w.writeheader()
             w.writerow(row)
         self.rows[path.name] = row
+
+
+def _rawstore_names(path: Path) -> set[str]:
+    """File names listed in a gwt-rawstore manifest (columns sha256, size, key, path)."""
+    if not path.is_file():
+        return set()
+    with open(path, encoding="utf-8") as f:
+        rows = [line.rstrip("\n").split("\t") for line in f]
+    return {r[3] for r in rows if len(r) == 4 and r[0] != "sha256" and "/" not in r[3]}
 
 
 def _clean(s: str) -> str:

@@ -269,12 +269,60 @@ class GitTest(Base):
         status = self.git('status', '--porcelain')
         self.assertIn('D  raw/r1/a.jpg', status)
         self.assertIn('A  raw/r1/rawstore.tsv', status)
-        self.assertIn('A  raw/r1/sub/.gitignore', status)
+        self.assertIn('A  raw/r1/.gitignore', status)
         self.assertNotIn('??', status)  # the files stay on disk, ignored
-        self.assertEqual(open(os.path.join(self.dir, 'raw/r1/.gitignore')).read(), '/a.jpg\n')
+        # one pattern per extension in the migrated folder, not one line per file in every subfolder
+        self.assertEqual(open(os.path.join(self.dir, 'raw/r1/.gitignore')).read(), '*.jpg\n*.pdf\n')
+        self.assertFalse(os.path.exists(os.path.join(self.dir, 'raw/r1/sub/.gitignore')))
+        self.assertTrue(os.path.exists(os.path.join(self.dir, 'raw/r1/a.jpg')))
         self.git('commit', '-qm', 'migrate')
         self.assertEqual(self.git('show', 'HEAD~1:raw/r1/a.jpg'), 'A' * 10)
         self.assertEqual(R.verify(self.store, [os.path.join(self.dir, 'raw')], log=self.log), 0)
+
+    def commit_scans(self, n=3):
+        for i in range(n):
+            self.write('raw/r1/%04d.jpg' % i, b'scan %d' % i)
+        self.write('raw/r1/notes.md', b'# notes')
+        self.git('add', '.')
+        self.git('commit', '-qm', 'raw')
+        return os.path.join(self.dir, 'raw/r1')
+
+    def test_migrate_evict_deletes_confirmed_copies_and_keeps_history(self):
+        folder = self.commit_scans()
+        self.assertEqual(R.migrate(self.store, folder, evict=True, log=self.log), 0)
+        self.assertEqual(sorted(os.listdir(folder)), ['.gitignore', 'notes.md', 'rawstore.tsv'])
+        status = self.git('status', '--porcelain')
+        self.assertIn('D  raw/r1/0000.jpg', status)
+        self.assertNotIn('??', status)
+        self.assertEqual(open(os.path.join(folder, '.gitignore')).read(), '*.jpg\n')  # one line for 3 files
+        self.git('commit', '-qm', 'evict')
+        self.assertEqual(self.git('show', 'HEAD~1:raw/r1/0001.jpg'), 'scan 1')
+        self.assertEqual(R.verify(self.store, [folder], deep=True, log=self.log), 0)
+        self.assertTrue(R.get(self.store, os.path.join(folder, '0002.jpg'), os.path.join(self.dir, 'cache')))
+
+    def test_migrate_evict_keeps_what_a_fresh_head_does_not_confirm(self):
+        folder = self.commit_scans()
+        seen = {}
+
+        class Forgetful(R.S3):
+            """Confirms each upload, then loses the object: the HEAD before eviction finds nothing."""
+            def head(self, key):
+                seen[key] = seen.get(key, 0) + 1
+                return None if seen[key] > 2 else super().head(key)
+        with redirect_stderr(io.StringIO()):
+            self.assertEqual(R.migrate(Forgetful(self.endpoint, BUCKET, 'AK', 'SK'), folder, evict=True,
+                                       log=self.log), 3)
+        self.assertTrue(all(os.path.exists(os.path.join(folder, '%04d.jpg' % i)) for i in range(3)))
+        self.assertNotIn('D  raw/r1/0000.jpg', self.git('status', '--porcelain'))
+        self.assertTrue(any(l.startswith('KEEP ') for l in self.stderr), self.stderr)
+
+    def test_confirmed_needs_a_manifest_row_and_a_matching_object(self):
+        img = self.write('r1/a.jpg', b'AAAA')
+        R.put(self.store, [img], log=self.log)
+        row = R.read_manifest(os.path.join(self.dir, 'r1'))['a.jpg']
+        self.assertTrue(R.confirmed(self.store, row))
+        self.assertFalse(R.confirmed(self.store, None))   # the object is there, but no row says so
+        self.assertFalse(R.confirmed(self.store, (row[0], row[1] + 1, row[2])))
 
     def test_migrate_without_remove_touches_no_index(self):
         self.write('r1/a.jpg', b'A')

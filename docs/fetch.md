@@ -14,13 +14,15 @@ gwt-fetch gazeta fetch BOE-A-YYYY-N [...] [--out DIR]
 gwt-fetch europeana QUERY [--provider any|NAME] [--data-provider NAME] [--country NAME] [--year-from Y] [--year-to Y] [--iiif-only] [--rows N]
 gwt-fetch geo PLACE [...] [--types Municipio,poblacion] [--province NAME] [--limit N]
 gwt-fetch --delay 2 ...   # seconds between requests to one host, default 1
+gwt-fetch iiif URL --out DIR --rawstore   # also digibib and gazeta fetch: images go to the bucket
 ```
 
 ## What every download does
 
 - **One row per file** in `DIR/manifest.tsv`: `file`, `label` (the canvas label or document title), `image_url` (the exact URL that served the bytes), `manifest_url` (the manifest or document page), `sha256`, `fetched_at` (UTC).
 - **It never overwrites.** Files are written as `*.part` and renamed when complete, so a finished file on disk is always whole.
-- **Re-running is resuming.** The same command skips finished files. A finished file without a row (the run died between rename and append) gets its row on the next run.
+- **Re-running is resuming.** The same command skips finished files. A finished file without a row (the run died between rename and append) gets its row on the next run. A file listed in the folder's `rawstore.tsv` counts as finished even when it is no longer on disk, so images moved to the bucket are not downloaded again.
+- **`--rawstore` keeps images out of the working tree.** After the run, every binary file `gwt-fetch` wrote in `--out` (images, PDF) is uploaded with [gwt-rawstore](rawstore.md) and deleted locally once a `HEAD` confirms the object, its size and its sha256. Text files stay. A file the bucket does not confirm stays on disk, has no `rawstore.tsv` row, and the run exits 1; the next `--rawstore` run tries it again. The bucket settings are gwt-rawstore's, and a missing one stops the run before anything is downloaded.
 - **Polite by default.** One request per second per host, retries on 429 and 5xx with backoff, honours `Retry-After`. The user agent is `Mozilla/5.0 (compatible; gwt-fetch/0.1; +https://github.com/GeiserX/gramps-web-toolkit)`; Antenati refuses agents that don't start with `Mozilla/5.0`.
 - **Exit status.** 0 when everything selected was fetched, 1 when some item failed (each failure is printed with the URLs tried and the HTTP status), 2 on a network or parse error.
 

@@ -8,7 +8,8 @@ the record; the bytes live in the bucket and can be fetched back and checked at 
     gwt-rawstore put <files or dirs> [--remove]       upload, write the manifest, optionally delete local copies
     gwt-rawstore get <path|sha> [...] [-o TARGET]      fetch into the cache (or TARGET) and verify the sha256
     gwt-rawstore verify [dirs] [--deep]                every manifest row is in the bucket with the right size and hash
-    gwt-rawstore migrate <dir> [--remove]              upload files already committed; --remove untracks and ignores them
+    gwt-rawstore migrate <dir> [--remove|--evict]      upload files already committed; --remove untracks and ignores them,
+                                                       --evict also deletes the local copies the store confirms
     gwt-rawstore check-staged                          pre-commit check: refuse big binaries outside allowed paths
 
 Configuration comes from the environment, then from the file in $GWT_RAWSTORE_CONFIG (default
@@ -371,36 +372,65 @@ def git(*args, cwd=None):
     return subprocess.run(('git',) + args, cwd=cwd, check=True, capture_output=True, text=True).stdout
 
 
-def gitignore_escape(name):
-    return '/' + re.sub(r'([\\*?\[\]!# ])', r'\\\1', name)
+def confirmed(store, row):
+    """True when there is a manifest row (sha256, size, key) and the store holds that object with its size and hash."""
+    if row is None:
+        return False
+    sha, size, key = row
+    have = store.head(key)
+    return have is not None and have[0] == size and (not have[1] or have[1] == sha)
 
 
-def migrate(store, folder, prefix='', remove=False, jobs=4, log=print):
-    """Upload the binaries git tracks under folder. --remove untracks them and ignores them; history stays."""
+def ignore_binaries(folder, names):
+    """One pattern per binary extension in the folder's .gitignore (`*.jpg` covers every subfolder), not one line
+    per file: a folder of thousands of scans got thousands of lines."""
+    ig = os.path.join(folder, '.gitignore')
+    have = set(open(ig, encoding='utf-8').read().splitlines()) if os.path.isfile(ig) else set()
+    new = sorted({'*' + os.path.splitext(n)[1] for n in names} - have)
+    if new:
+        with open(ig, 'a', encoding='utf-8') as f:
+            f.write('\n'.join(new) + '\n')
+
+
+def migrate(store, folder, prefix='', remove=False, jobs=4, log=print, evict=False):
+    """Upload the binaries git tracks under folder. --remove untracks them and ignores them; --evict does that and
+    deletes each local copy once a fresh HEAD confirms its manifest row. History stays."""
     tracked = [p for p in git('ls-files', '-z', '--', '.', cwd=folder).split('\0') if p and is_binary_name(p)]
     files = [os.path.join(folder, p) for p in tracked if os.path.isfile(os.path.join(folder, p))]
     if len(files) != len(tracked):
         raise SystemExit('gwt-rawstore: %d tracked files are not in the working tree (sparse checkout?); '
-                         'check them out first' % (len(tracked) - len(files)))
+                         'run migrate on a full clone' % (len(tracked) - len(files)))
     failures = put(store, files, prefix=prefix, jobs=jobs, log=log)
     if failures:
         log('%d uploads failed; nothing untracked' % failures, file=sys.stderr)
         return failures
-    if remove and files:
-        by_folder = {}
-        for f in files:
-            by_folder.setdefault(os.path.dirname(f), []).append(os.path.basename(f))
-        for d, names in by_folder.items():
-            git('rm', '--cached', '--quiet', '--', *names, cwd=d)
-            ig = os.path.join(d, '.gitignore')
-            have = set(open(ig, encoding='utf-8').read().splitlines()) if os.path.isfile(ig) else set()
-            new = [gitignore_escape(n) for n in sorted(names) if gitignore_escape(n) not in have]
-            if new:
-                with open(ig, 'a', encoding='utf-8') as f:
-                    f.write('\n'.join(new) + '\n')
-            git('add', '--sparse', '--', MANIFEST, '.gitignore', cwd=d)
-        log('untracked %d files in %d folders; review with git status, then commit' % (len(files), len(by_folder)))
-    return 0
+    if not (remove or evict) or not files:
+        return 0
+    by_folder, kept, rows = {}, [], {}
+    for f in files:
+        d, name = os.path.split(f)
+        if d not in rows:
+            rows[d] = read_manifest(d)
+        if evict and not confirmed(store, rows[d].get(name)):
+            kept.append(f)
+            log('KEEP %s: no confirmed row in %s' % (f, MANIFEST), file=sys.stderr)
+            continue
+        by_folder.setdefault(d, []).append(name)
+    for d, names in by_folder.items():
+        for i in range(0, len(names), 1000):  # in batches: tens of thousands of names pass the argument limit
+            git('rm', '--cached', '--quiet', '--', *(':(literal)' + n for n in names[i:i + 1000]), cwd=d)
+        git('add', '--sparse', '--', MANIFEST, cwd=d)
+        if evict:
+            for n in names:
+                os.unlink(os.path.join(d, n))
+    ignore_binaries(folder, [os.path.basename(f) for f in files])
+    git('add', '--sparse', '--', '.gitignore', cwd=folder)
+    done = len(files) - len(kept)
+    log('%s %d files in %d folders; review with git status, then commit'
+        % ('evicted' if evict else 'untracked', done, len(by_folder)))
+    if kept:
+        log('%d files kept: the store did not confirm them; run gwt-rawstore verify' % len(kept), file=sys.stderr)
+    return len(kept)
 
 
 def check_staged(max_kb, allow, log=print):
@@ -456,7 +486,6 @@ def main(argv=None, store=None):
     g.add_argument('--deep', action='store_true', help='download and hash every object too')
     g = sub.add_parser('migrate', help='move committed binaries under a folder to the store')
     g.add_argument('folder')
-    g.add_argument('--remove', action='store_true', help='git rm --cached them and add them to .gitignore')
     g.add_argument('-j', '--jobs', type=int, default=4)
     g = sub.add_parser('check-staged', help='pre-commit hook: refuse big staged binaries')
     g.add_argument('--max-kb', type=int, default=None)
@@ -479,7 +508,7 @@ def main(argv=None, store=None):
     if a.cmd == 'verify':
         return 1 if verify(store, a.roots, a.deep) else 0
     if a.cmd == 'migrate':
-        return 1 if migrate(store, a.folder, prefix, a.remove, a.jobs) else 0
+        return 1 if migrate(store, a.folder, prefix, a.remove, a.jobs, evict=a.evict) else 0
 
 
 if __name__ == '__main__':

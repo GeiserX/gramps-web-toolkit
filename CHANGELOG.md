@@ -6,6 +6,18 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Added
+
+- `gwt-fetch --rawstore` (on `iiif`, `digibib` and `gazeta fetch`) moves each downloaded image or PDF to the gwt-rawstore bucket and deletes the local copy once a `HEAD` confirms it. `gwt-rawstore migrate --evict` does the same for images already committed: upload, `git rm --cached`, then delete each local copy whose object a fresh `HEAD` confirms.
+
+### Fixed
+
+- `gwt-fetch` no longer downloads again a file that was moved to the bucket: a row in the folder's `rawstore.tsv` counts as finished.
+
+### Changed
+
+- `gwt-rawstore migrate --remove` writes one `.gitignore` pattern per extension (`*.jpg`) in the migrated folder instead of one line per file in every subfolder.
+
 ## [0.3.0] - 2026-10-31
 
 ### Change lists
