@@ -13,8 +13,8 @@ Most new work fits an existing tool. Put it where the table says, and open an is
 | A new source of research tasks | A new kind in `gwt-leads`, or a new input to its priority score |
 | Search history (what was searched, where, with what result) | Calls to the `gwt-ledger` functions (`read_rows`, `find`, `add_row`), not a new file format |
 | A change to the tree | A new `gwt-apply` op. Never a CSV or a sheet for a person to fill in and type back |
-| A rule several tools share (who counts as living, which events are vital, date reading, name folding) | The shared core (coming). Until it lands, say in the PR which copy you followed |
-| Words in a particular language (month names, record terms) | One locale table (coming). No language regex inside a tool |
+| A rule several tools share (who counts as living, which events are vital, date reading, name folding) | The shared core, `core/gwt_core/rules.py`. A tool not yet moved to it keeps its copy; say in the PR which one you followed |
+| Words in a particular language (month names, record terms) | The locale table, `core/gwt_core/locales/<lang>.toml`. No language regex inside a tool |
 | A new top-level tool | Open an issue first, so we agree it is not a mode of an existing tool |
 
 ## Tests must be able to fail
@@ -23,7 +23,7 @@ A test that passes whether or not the code works proves nothing. So:
 
 - Every rule a doc states with *never*, *only* or *unless* has a test for it.
 - In the PR, show that test failing with its guard removed: delete or invert the line that enforces the rule, run the test, paste the red output, then put the line back.
-- Once the repository has `mutants.txt` files, add a row there instead, and CI will remove the guard for you.
+- Once the repository has `mutants.txt` files, add a row there (or in `<pkg>/mutants.d/<name>.txt`) instead, and CI will remove the guard for you.
 - A new check kind gets an error planted in the self-test; the suite already fails when a check has none.
 
 ## Pull requests

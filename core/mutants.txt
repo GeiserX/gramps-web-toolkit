@@ -1,0 +1,33 @@
+# Mutations the core tests must catch. One row each: file | exact text | replacement | why
+# `python3 .github/scripts/run_tests.py --mutants --only core` applies each row to a scratch copy
+# and fails when the tests still pass. The text must occur exactly once in the file.
+gwt_core/rules.py | LIVING_YEARS = 110 | LIVING_YEARS = 111 | possibly living means born less than 110 years ago
+gwt_core/rules.py | return y >= cutoff, f" | return y > cutoff, f" | born exactly 110 years ago still counts as possibly living
+gwt_core/rules.py | if end: | if False: | a recorded death, burial or cremation is never living
+gwt_core/rules.py | _s(r.get("role")) in ("", "Primary") | True | a godparent's or witness's event is not the person's own
+gwt_core/rules.py | if person.get("handle") in ix.dna: | if False: | a DNA match with no dates is possibly living
+gwt_core/rules.py | self.dna |= {h, r.get("ref")} | self.dna |= {r.get("ref")} | both ends of a DNA association count, the tester too
+gwt_core/rules.py | .strip().casefold() == "dna" | .strip().casefold() != "" | only a DNA association marks a match, not a godparent one
+gwt_core/rules.py | e[0] - PARENT_AGE, f"child- | e[0], f"child- | a parent was born at least 14 years before the child
+gwt_core/rules.py | e[0] - 2 * PARENT_AGE | e[0] | a grandparent was born at least 28 years before the grandchild (no gap 0 going down)
+gwt_core/rules.py | bounds.append((y - PARENT_AGE, f"married-{y}")) | bounds.append((y, f"married-{y}")) | someone who married was born at least 14 years before
+gwt_core/rules.py | e[0] + gap, f"sibling- | e[0], f"sibling- | a sibling is born up to `gap` years apart
+gwt_core/rules.py | bound, reason = min(bounds) | bound, reason = max(bounds) | the tightest bound from relatives decides
+gwt_core/rules.py | if w not in particles | if True | a locale's particles are dropped from a folded name
+gwt_core/rules.py | if check(m.group(0))] | ] | an identity number counts only with a right check digit
+gwt_core/rules.py | return first + max(dv[6] - dv[2], 0) | return first | a range or span birth is read by its last year, or someone born in 1930 passes as not living
+gwt_core/rules.py | if d.get("modifier") == MOD_AFTER: | if False: | «after Y» has no end, so it is never an upper bound on the birth year
+gwt_core/rules.py | if after and max(after) >= cutoff: | if False: | born after a year inside the window is living
+gwt_core/rules.py | if not d.get("calendar"): | if True: | a date in another calendar is read through sortval, or an Islamic 1400 passes as 1400 CE
+gwt_core/rules.py | if (e := ix.earliest(person))[0]: | if False: | someone on an 1851 census was born by 1851, so is not living
+gwt_core/rules.py | self.own_events(p, None) if y] | self.own_events(p, BIRTH_TYPES) if y] | a relative's death or census year bounds their birth too, not only a birth
+gwt_core/rules.py | for sh in ix.handles(person.get("family_list"), "parents"): | for sh in (): | a spouse born in Y bounds the person at Y + gap
+gwt_core/rules.py | for ph in ix.handles(person.get("parent_family_list"), "parents"): | for ph in (): | a parent born in Y bounds the child at Y + PARENT_MAX_AGE
+gwt_core/rules.py | re.compile(rx, re.ASCII) | re.compile(rx) | Arabic-Indic or fullwidth digits are not an identity number, and must not crash the check
+gwt_core/rules.py | == "dna" and r.get("ref"): | == "dna": | a DNA association with no ref must not make a person with no handle a match
+gwt_core/rules.py | (len(nums[0]) > 2 or not int(nums[0])) | len(nums[0]) > 2 | day 0 is refused, not read as a month-only date
+gwt_core/rules.py | y, t = own[0] | y, t = own[-1] | the tightest own birth evidence decides: a baptism in 1890 beats a birth «bet 1880 and 1960»
+gwt_core/rules.py | if after and max(after) >= cutoff: | if after and max(after) > cutoff: | «after Y» with Y exactly `years` ago is still living
+gwt_core/rules.py | return first + max(dv[6] - dv[2], 0) | return first + dv[6] - dv[2] | a range written backwards is read by its larger year
+gwt_core/rules.py | return [h for h in out if h in self.people] | return [h for h in out if h] | a family reference to a person not in the snapshot is skipped, not a crash
+gwt_core/rules.py | _EDGE, _END = r"(?<![A-Za-z0-9])", r"(?![A-Za-z0-9])" | _EDGE, _END = "", "" | digits inside a longer number or word are not an identity number

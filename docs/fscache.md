@@ -48,7 +48,7 @@ status, headers, body = cached('GET', url, {'accept': 'application/json'})
 post_cache = FSCache('~/.cache/gwt-fscache', methods=('GET', 'POST'))   # opt in for deterministic POSTs
 ```
 
-`cache.lookup(...)` returns the entry or `None` without calling anything. Put your own pacing or rate gate inside `my_fetch`: a hit returns before the fetcher runs, so it skips the gate too.
+`cache.lookup(...)` returns the entry or `None` without calling anything. `cache.forget(method, url, headers)` drops one stored answer, so the next fetch asks the site again (gwt-read uses it when canaries void a search). Put your own pacing or rate gate inside `my_fetch`: a hit returns before the fetcher runs, so it skips the gate too.
 
 ## As a CLI
 
