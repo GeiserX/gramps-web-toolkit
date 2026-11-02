@@ -2,7 +2,8 @@
 gwt_dna.py |             if len(cands) == 1: |             if False: | a match already in the tree from another site, same name and a close cM, is pointed at, never made twice
 gwt_dna.py | if s != site and close_cm(cm, c)} | if s != site} | a namesake from another site with a far cM is another person, not the same one
 gwt_dna.py |             elif len(cands) > 1: |             elif False: | two close candidates from other sites are reported as ambiguous
-gwt_dna.py |     return abs(a - b) <= max(CROSS_CM_ABS, CROSS_CM_REL * max(a, b)) |     return abs(a - b) <= CROSS_CM_ABS | two sites' cM for one match may differ by up to 30 percent
+gwt_dna.py | min(a, b) >= CROSS_CM_MIN and abs(a - b) <= CROSS_CM_REL * max(a, b) | abs(a - b) <= CROSS_CM_REL * max(a, b) | two small namesake matches on two sites are never taken as one person by name alone
+gwt_dna.py | abs(a - b) <= CROSS_CM_REL * max(a, b) | abs(a - b) <= 10 | two sites' cM for one match may differ by up to 30 percent
 gwt_dna.py | if not target and (site, mid) in tree["marks"]: | if False: | a rerun or a second kit of the same site points at the person the first import made
 gwt_dna.py |         if ref == tested: |         if False: | the tested person found as a match gets no association to themself
 gwt_dna.py |             if same: |             if False: | a new match person who shares a name with someone in the tree is waived as a namesake by name, so preflight lets it through

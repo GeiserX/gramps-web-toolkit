@@ -38,7 +38,8 @@ except ImportError:  # a clone without an install: the shared core sits beside t
 SITES = {"myheritage": "MyHeritage", "ftdna": "FamilyTreeDNA", "gedmatch": "GEDmatch",
          "livingdna": "Living DNA", "ancestry": "AncestryDNA", "other": "a DNA testing site"}
 BATCH = 1500
-CROSS_CM_ABS, CROSS_CM_REL = 10.0, 0.30  # two sites' cM for one match differ by at most max(10 cM, 30 %)
+CROSS_CM_MIN, CROSS_CM_REL = 20.0, 0.30  # a name links two sites' matches only from 20 cM up, within 30 %: below
+# that, common names repeat among the many small matches and the cM says nothing, so the match becomes a namesake
 MARK = "gwt-import-dna"
 MARK_RE = re.compile(r"^%s site=(\S+) id=(\S+) cM=([0-9.]+)" % MARK)
 SEGMENT_HEADER = "Chromosome,Start Location,End Location,Centimorgans,Matching SNPs"
@@ -363,7 +364,7 @@ def read_id_map(path: str | None, site: str) -> dict:
 def close_cm(a: float | None, b: float | None) -> bool:
     if a is None or b is None:
         return False
-    return abs(a - b) <= max(CROSS_CM_ABS, CROSS_CM_REL * max(a, b))
+    return min(a, b) >= CROSS_CM_MIN and abs(a - b) <= CROSS_CM_REL * max(a, b)
 
 
 # --- the change list -----------------------------------------------------------------------------------------

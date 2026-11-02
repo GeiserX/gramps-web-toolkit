@@ -176,9 +176,24 @@ class Identity(unittest.TestCase):
     def test_close_cm(self):
         self.assertTrue(D.close_cm(48.0, 41.5))
         self.assertTrue(D.close_cm(200.0, 150.0))   # 50 cM apart, within 30 % of 200
-        self.assertTrue(D.close_cm(5.0, 15.0))      # small matches: 10 cM either way
+        self.assertFalse(D.close_cm(8.0, 18.0))     # small matches: common names repeat, the cM says nothing
+        self.assertFalse(D.close_cm(14.0, 24.0))
+        self.assertTrue(D.close_cm(25.0, 21.0))
         self.assertFalse(D.close_cm(200.0, 20.0))
         self.assertFalse(D.close_cm(None, 20.0))
+
+    def test_a_small_namesake_match_on_another_site_is_another_person(self):
+        p, n = marked("I0052", "Tom", "Sample", "myheritage", "D-5", 8.0)   # FTDNA's Tom Sample shares 41.5 cM
+        snap = write_tree(self.d.name, tree([p], [n]))
+        with tempfile.TemporaryDirectory() as d:
+            f = os.path.join(d, "m.csv")
+            with open(f, "w") as fh:
+                fh.write("Full Name,Shared cM\nTom Sample,18\n")
+            m, _, _ = D.read_files([f], {})
+        groups, rep = D.build(m, D.load_tree(snap), site="ftdna", tested="I0001", kit="I0001", ruling="R-1",
+                              tag=None, id_map={})
+        self.assertEqual(rep["cross_site"], [])
+        self.assertEqual(groups[0][0]["namesake_of"], ["I0052"])
 
     def test_same_name_far_cm_is_another_person_named_as_namesake(self):
         p, n = marked("I0051", "Jane", "Doe", "myheritage", "D-22BB", 20.0)   # FTDNA's Jane Doe shares 200 cM
