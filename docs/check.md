@@ -21,6 +21,41 @@ Settings come from the environment, or from a `KEY=VALUE` file passed with `--co
 
 It exits `0` with no new findings and `1` with new findings. Findings of a check marked for information only, today `unconnected`, `parent-age`, `marriage-age`, `sibling-spacing`, `lifespan` and `dup-citation`, are printed as `info` and never count as new. It exits `2` on bad input, which covers a file that is not a dump, missing settings, a failed login, and a live tree that never settles (below).
 
+## Same-act person candidates
+
+```sh
+gwt-check same-act dump.json.gz           # offline candidate report
+gwt-check same-act snapshot.json --json   # gwt-apply snapshots work too
+gwt-check same-act --limit 10             # existing live reader and settings
+```
+
+`same-act` is an explicit, read-only report. It is outside `check`, `run_checks`,
+`INFO_CHECKS`, the independent check after apply, and `selftest`. Findings always
+exit `0`; bad input or a failed live read exits `2`. No finding changes normal
+check results. `--json` prints `{"rows": [...]}`; each row has `check`
+(`same-act-person`), a pair `key`, and evidence in `detail`. `--limit` caps printed
+text rows (default 30); JSON contains every row. Without a file it uses the
+existing live read, with `--config`, `--pagesize`, `--workers` and `--live`.
+A `.gramps` backup lacks the evidence and is refused.
+
+A pair needs primary Birth, Baptism, Death or Burial events of the same type,
+the same complete, unqualified Gregorian day (including every stored date
+qualifier), the same existing place handle, and event citations with the same
+existing source handle and **literal**, nonblank page. Distinct citation objects
+can support the same reference. Person citations alone cannot establish which
+event they support. Marriage participants, witnesses, partners and parent/child
+pairs are excluded. Primary given names must match after case, accent and space
+folding; all surname components must match in order, with at most one insertion,
+deletion or substitution per component when both are at least five characters.
+Aliases do not establish identity, and conflicting known genders exclude a pair.
+
+These are candidates to compare against the full act, parents, spouses, notes
+and privacy, never an automatic merge or a selected survivor. Back up and keep a
+checkpoint before any separately reviewed merge. A broad page can cite several
+subjects; a shared reference and similar names are not proof. Missing evidence
+stays quiet. The report compares pairs within each evidence group and has no
+pair-count cap; use a saved dump for a large tree.
+
 ## Reading a tree that is being written to
 
 A live read takes a while, and an apply may be writing to the tree meanwhile. Reading page by page, a write shifts the pages, so an object comes twice or not at all, and a person read before a note was attached to it makes that note look like an orphan. So `gwt-check` does not trust the pages. After paging through every type it compares the `change` stamp of every object with one list per type, a single request each, and reads again whatever moved, appeared or went away, plus the father, mother and children of every family that moved (writing a family edits their family lists, see [Check after a write](#check-after-a-write)). It repeats that until a pass finds nothing moved.

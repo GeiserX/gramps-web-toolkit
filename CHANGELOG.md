@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Added
+
+- `gwt-check same-act [TREE] [--json] [--limit N]` reports person pairs with compatible primary names and matching primary individual acts: exact Gregorian date, existing place and source, and literal citation page. Dump and snapshot input are offline; without a file it uses the existing live reader. Candidates never set the exit code or join normal checks, `INFO_CHECKS`, the apply check or `selftest`. It selects no survivor and changes nothing; backups without the evidence are refused.
+
 ## [0.3.0] - 2026-10-31
 
 ### Change lists

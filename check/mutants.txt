@@ -100,3 +100,37 @@ gwt_check/public.py | LEAKS = ("private-visible", "private-reference", "private-
 gwt_check/public.py | if path and x.get("private") is True: | if x.get("private") is True: | a visible private object is one row, not also a sub-object row with no path
 gwt_check/checks.py | if e and e.get("type") in ("Birth", "Baptism")] | if e and e.get("type") in ("Birth",)] | a recent baptism alone makes a person possibly living
 gwt_check/public.py | if not rep["rows"]: | if False: | a clean comparison says nothing found
+
+# Explicit same-act report: synthetic evidence guards and nonfailure contract.
+gwt_check/act_duplicates.py | if frozenset((a['handle'], b['handle'])) in relatives: | if False: | parent child and partner pairs are not identity hints
+gwt_check/act_duplicates.py | if not _compatible_names(a, b): | if False: | same page alone cannot identify different subjects
+gwt_check/act_duplicates.py | ref.get('role') != 'Primary' | False | witness roles do not identify the subject of an act
+gwt_check/act_duplicates.py | event.get('type') not in INDIVIDUAL | False | marriage and family participants are not duplicate people
+gwt_check/act_duplicates.py | sig = (event['type'], date, place, source, page) | sig = (event['type'], date, place, source, 'ignored') | literal citation page keeps different records distinct
+gwt_check/act_duplicates.py | if tree.partial: | if False: | same-act refuses backups without event evidence
+gwt_check/act_duplicates.py | if not isinstance(date, dict): | if False: | local date key rejects non-object dates
+gwt_check/act_duplicates.py | not isinstance(value, list) | False | local date key requires a stored date list
+gwt_check/act_duplicates.py | len(value) != 4 | False | local date key requires all four stored fields
+gwt_check/act_duplicates.py | not any(value[:3]) | False | local date key rejects an empty date
+gwt_check/act_duplicates.py | if min(len(a), len(b)) < 5 or abs(len(a) - len(b)) > 1: | if False: | short surnames and multiple edits cannot establish identity
+gwt_check/act_duplicates.py | if a == b: | if False: | identical short surnames remain compatible
+gwt_check/act_duplicates.py | if x != y: | if False: | more than one surname edit cannot match
+gwt_check/act_duplicates.py | if not given_a or given_a != given_b or not sa or len(sa) != len(sb) or not all(sa + sb): | if False: | complete primary given names and surname lists are required
+gwt_check/act_duplicates.py | len(values) != 4 | False | exact evidence requires a complete stored date
+gwt_check/act_duplicates.py | not all(values[:3]) | not all(values) | a complete date with no slash flag remains valid evidence
+gwt_check/act_duplicates.py | or values[3] | or False | slash dates are not exact evidence
+gwt_check/act_duplicates.py | date.get('modifier', 0) | False | modified dates are not exact evidence
+gwt_check/act_duplicates.py | date.get('quality', 0) | False | estimated dates are not exact evidence
+gwt_check/act_duplicates.py | date.get('calendar', 0) | False | non-Gregorian dates are not exact evidence
+gwt_check/act_duplicates.py | date.get('newyear', 0) | False | nonstandard new year dates are not exact evidence
+gwt_check/act_duplicates.py | civil_date(values[2], values[1], values[0]) | pass | invalid civil days cannot identify an act
+gwt_check/act_duplicates.py | not event or ref.get('role') | False or ref.get('role') | missing event references are skipped
+gwt_check/act_duplicates.py | not date or place not in tree['places'] | False | unknown places and inexact dates cannot support identity
+gwt_check/act_duplicates.py | source not in tree['sources'] or not isinstance(page, str) or not page.strip() | False | citation source must exist and its literal page must be nonempty text
+gwt_check/act_duplicates.py | if a.get('gender') in (0, 1) and b.get('gender') in (0, 1) and a['gender'] != b['gender']: | if False: | a known gender conflict excludes identity
+gwt_check/act_duplicates.py | for row in rep['rows'][:limit]: | for row in rep['rows']: | same-act text output honors the requested limit
+gwt_check/act_duplicates.py | return {"rows": list(rows.values())} | return {"rows": []} | same-act must actually report synthetic repeated-POST candidates
+gwt_check/cli.py | return 0  # same-act candidates never set the exit code | return 1  # same-act candidates never set the exit code | same-act findings never fail a gate
+gwt_check/act_duplicates.py | if all(parents): | if False: | partners cannot become an identity hint
+gwt_check/act_duplicates.py | if parent and child.get('ref'): | if False: | parent-child exclusions include single-parent families
+gwt_check/act_duplicates.py | rows.setdefault(','.join(ids), dict( | rows.setdefault(str(len(rows)), dict( | multiple shared acts still report a person pair only once

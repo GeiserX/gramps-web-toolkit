@@ -342,6 +342,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--json", action="store_true", help="print the result as JSON")
     p.add_argument("--limit", type=int, default=30, help="people printed (default 30)")
 
+    p = sub.add_parser("same-act", help="same-act person candidates; a read-only report, never fails on findings")
+    p.add_argument("tree", nargs="?", help="dump file or gwt-apply snapshot; without it the live tree is read")
+    p.add_argument("--json", action="store_true", help="print the result as JSON")
+    p.add_argument("--limit", type=int, default=30, help="candidate pairs printed (default 30)")
+    live_opts(p)
+
     p = sub.add_parser("cites", help="events cited by another kind of act or a marginal mention; a report, never fails")
     p.add_argument("tree", nargs="?", help="dump file; without it the live tree is read")
     p.add_argument("--json", action="store_true", help="print the result as JSON")
@@ -400,6 +406,15 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print_public(rep, args.limit or len(rep["rows"]))
             return 1 if rep["leaks"] else 0
+        if args.cmd == "same-act":
+            from .act_duplicates import print_same_act, same_act_report
+            tree = load(args.tree) if args.tree else Tree(live_dump(args)["objects"], source="live tree")
+            rep = same_act_report(tree)
+            if args.json:
+                print(json.dumps(rep, ensure_ascii=False, indent=1))
+            else:
+                print_same_act(rep, args.limit)
+            return 0  # same-act candidates never set the exit code
         if args.cmd == "cites":
             from .cites import cites_report, print_cites
             tree = load(args.tree) if args.tree else Tree(live_dump(args)["objects"], source="live tree")

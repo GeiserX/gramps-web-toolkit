@@ -356,3 +356,16 @@ Format: what happened, why, and the rule.
 **Why.** The client retried 429 and 5xx answers but not network errors, so one page that timed out ended a 15-minute read. It is the read side of lesson 48.
 
 **Rule.** Every request of a long read retries network errors with a growing wait, the same as a 5xx; `gwt-check` tries each request 6 times. On a loaded server, read with small pages and one request at a time (`--pagesize 100 --workers 1`), save the dump, and run the checks on the file.
+
+## Same-act identity candidates need a separate review
+
+**Failure shape (synthetic).** Repeating a person POST can leave distinct people
+with matching baptism events and the same citation. A same-name search can miss
+a one-letter surname variation; treating a shared page as identity can instead
+confuse witnesses, partners or a parent and child.
+
+**Rule.** Ask explicitly for `gwt-check same-act` on a dump or snapshot. Require
+primary individual events, an exact day, place and literal source/page evidence,
+and compatible primary names. Keep candidates outside normal checks and exit
+codes. Compare the full act, relationships, notes and privacy before any merge;
+keep a backup and checkpoint. The report selects no survivor and changes nothing.
