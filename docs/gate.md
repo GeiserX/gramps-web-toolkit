@@ -52,7 +52,7 @@ gate/gwt-gate wait-clear --probe 'curl -fsS -o /dev/null https://records.example
 
 ### Which wall is it?
 
-`challenge(body, url)` names the bot wall in an answer: `perfdrive` (Radware), `imperva` (Incapsula), `cloudflare`, `hcaptcha` or `recaptcha`, or `None`. A reader calls it on every answer it did not expect. A page that only uses the word "captcha" is not a wall, and neither is an ordinary page that loads Cloudflare's `/cdn-cgi/challenge-platform` script. A reCAPTCHA or hCaptcha widget does count, so call it on answers you did not expect, not on a results page that also carries a form with a captcha. From a shell, `gwt-gate challenge saved.html` (or `-` for stdin) prints the vendor and exits 0, prints `none` and exits 1, or exits 2 when it cannot read the file.
+`challenge(body, url)` names the bot wall in an answer: `perfdrive` (Radware), `imperva` (Incapsula), `cloudflare`, `hcaptcha` or `recaptcha`, or `None`. A reader should call it on every answer it did not expect; `gwt-read` does not do this yet and still reports a captcha with `hit`. A page that only uses the word "captcha" is not a wall, and neither is an ordinary page that loads Cloudflare's `/cdn-cgi/challenge-platform` script. A reCAPTCHA or hCaptcha widget does count, so call it on answers you did not expect, not on a results page that also carries a form with a captcha. From a shell, `gwt-gate challenge saved.html` (or `-` for stdin) prints the vendor and exits 0, prints `none` and exits 1, or exits 2 when it cannot read the file.
 
 ## One account signed out
 

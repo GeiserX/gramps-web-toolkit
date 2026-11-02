@@ -1,4 +1,4 @@
-import io, json, os, subprocess, sys, tempfile, unittest
+import io, json, os, re, subprocess, sys, tempfile, unittest
 from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
@@ -498,6 +498,9 @@ class HumanAuthProfileTest(unittest.TestCase):
                 f.write(text)
             with self.assertRaises(ValueError):
                 G.load_profiles(bad)
+        with mock.patch.object(G, 'default_profiles', return_value=bad):  # no path given: the error names the file
+            with self.assertRaisesRegex(ValueError, '^' + re.escape(bad) + ':'):
+                G.load_profiles()
 
 
 class CliHumanProfileTest(unittest.TestCase):

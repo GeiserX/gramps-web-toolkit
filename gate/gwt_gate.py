@@ -381,8 +381,9 @@ def default_profiles():
 def load_profiles(path=None):
     """host -> {per_hour, burst, cooldown_s, fresh_profile, notes} from a tab-separated file. Lines starting
     with # are comments; the first other line is the header. An empty number means no limit."""
+    path = os.path.expanduser(path or default_profiles())  # every error below names the file to edit
     rows, header = {}, None
-    with open(os.path.expanduser(path or default_profiles()), encoding='utf-8') as f:
+    with open(path, encoding='utf-8') as f:
         for n, line in enumerate(f, 1):
             line = line.rstrip('\n')
             if not line.strip() or line.startswith('#'):

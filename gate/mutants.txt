@@ -28,3 +28,4 @@ gwt_gate.py | if self.per_hour else self.cooldown  # a burst needs | if True els
 gwt_gate.py | urllib.parse.urlsplit(a.profile if '://' in a.profile else '//' + a.profile).hostname or '' | a.profile.split('://', 1)[-1].split('/', 1)[0].lower() | a --profile URL with a port or capitals finds its host's row
 gwt_gate.py | if len(cells) != len(header): | if False: | a profiles row with too few or too many cells is refused with its line number, never a KeyError
 gwt_gate.py | except subprocess.SubprocessError: | except ZeroDivisionError: | a probe that hangs past its timeout counts as a failed probe, so wait-clear keeps polling instead of crashing
+gwt_gate.py | path = os.path.expanduser(path or default_profiles())  # every error below names the file to edit | pass | an error in the default profiles file names that file, never "None"
