@@ -15,10 +15,6 @@ Every release has a **Change lists** heading. It names each change that makes a 
 - `gwt-report`, a new tool that reads an offline dump or snapshot. `gwt-report kin DUMP A B` lists every blood path between two people (through Birth, Adopted or Unknown parent links, never a marriage or a step link), the common ancestors with their Ahnentafel numbers from each side, the relationship name in English, Spanish and French (cousins of any degree and removal, half relations), how many links of each path are confirmed, probable, weak-tagged or unmarked, and implex in either pedigree. `gwt-report digest --from OLD --to NEW` lists the new people, events, citations and media by person and, with `--root`, by side and kin distance, with Gramps Web links (`--base-url`) and the web addresses their citations hold; `--told FILE --audience NAME` leaves out what that audience was told, and `--mark` records what it shows. Double cousins get both relationships, a big pedigree keeps both sides (the path cap drops the most distant paths first, and a digest says when it cut), tags that say `débil` or `faible` are weak by default, a digest of two different trees exits 2, and `--format html` keeps to the inline tags chat apps accept.
 - `gwt-fetch --rawstore` (on `iiif`, `digibib` and `gazeta fetch`) moves each downloaded image or PDF to the gwt-rawstore bucket and deletes the local copy once a `HEAD` confirms it. `gwt-rawstore migrate --evict` does the same for images already committed: upload, `git rm --cached`, then delete the local copies, once every upload is confirmed.
 
-### Fixed
-
-- `gwt-fetch` no longer downloads again a file that was moved to the bucket: a row in the folder's `rawstore.tsv` counts as finished.
-
 ### Changed
 
 - `gwt-rawstore migrate --remove` writes one `.gitignore` pattern per extension (`*.jpg`) in the migrated folder instead of one line per file in every subfolder.
@@ -26,6 +22,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 ### Fixed
 
 - `.github/scripts/check_wheel.sh` failed on macOS: it compared the venv path from `mktemp` (`/var/...`) with the module paths Python reports (`/private/var/...`). It now compares real paths, imports every source module the registry names, and runs `gwt read <source> --help` for each.
+- `gwt-fetch` no longer downloads again a file that was moved to the bucket: a row in the folder's `rawstore.tsv` counts as finished.
 
 ## [0.3.0] - 2026-10-31
 
