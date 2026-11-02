@@ -17,6 +17,8 @@ BINARY_GB = 1.0       # default --max-binary-gb: binaries tracked in git, summed
 MIDX_PACKS = 50       # more packs than this with no multi-pack-index is a finding
 PROMISOR_PER_DAY = 100   # more promisor packs written in the last 24 h than this: something is lazy fetching
 SCRATCH_DIRS = ('tmp', 'temp', 'scratch', '.tmp')
+# the toolkit's cache variables (and any GWT_*_CACHE); GWT_LEDGER_DIR is left out: ledgers are meant to be committed
+CACHE_VARS = ('GWT_FSCACHE_DIR', 'GWT_GATE_DIR', 'GWT_MH_LOCK_DIR')
 GEOMETRIC_PROMISOR = (2, 53)   # git repack --geometric handles promisor packs from 2.53 on
 # a git that cannot fetch, prompt or take optional locks, whatever the caller's environment says
 ENV = dict(GIT_NO_LAZY_FETCH='1', GIT_TERMINAL_PROMPT='0', GIT_OPTIONAL_LOCKS='0', LC_ALL='C')
@@ -201,15 +203,22 @@ def doctor(repo='.', max_packs=PACKS, max_tmp_gb=TMP_GB, max_binary_gb=BINARY_GB
     for d in [top] + [os.path.join(top, x) for x in sorted(os.listdir(top)) if x != '.git']:
         if os.path.isdir(d) and not os.path.islink(d) and os.path.isdir(os.path.join(d, '.cache')):
             caches[os.path.join(d, '.cache')] = '.cache folder'
+    inside = lambda p: p == top or p.startswith(top.rstrip('/') + '/')
     for k, v in sorted(environ.items()):
-        if k.startswith('GWT_') and k.endswith(('_DIR', '_CACHE')) and v:
-            p = os.path.realpath(os.path.expanduser(v))
-            if p == top or p.startswith(top.rstrip('/') + '/'):
-                caches[p] = '$' + k
+        if v and (k in CACHE_VARS or (k.startswith('GWT_') and k.endswith('_CACHE'))):
+            v = os.path.expanduser(v)
+            # a relative value is read from the folder the tools run in: here, or the top of the repo
+            for p in {os.path.realpath(v), os.path.realpath(os.path.join(top, v))}:
+                if os.path.isdir(p) and inside(p):
+                    caches[p] = '$' + k
     for p, why in sorted(caches.items()):
-        sized[p] = size = tree_size(p)
-        add('cache', 'warn', '%s inside the repo: %s (%s)' % (why, os.path.relpath(p, top), gb(size)),
-            'keep caches under ~/.cache, outside the work tree' + (', and point %s there' % why if why[0] == '$' else ''))
+        sized[p] = n = tree_size(p)
+        msg = '%s inside the repo: %s (%s)' % (why, os.path.relpath(p, top), gb(n))
+        if n > max_tmp_gb * GB:
+            add('cache', 'warn', msg, 'keep caches under ~/.cache, outside the work tree' +
+                (', and point %s there' % why if why[0] == '$' else ''))
+        else:
+            add('cache', 'ok', msg)
     if not caches:
         add('cache', 'ok', 'no cache folder inside the repo')
     for folder, _ in biggest:

@@ -16,6 +16,10 @@ gwt_rawstore_doctor.py | continue   # outside a sparse checkout: never read it f
 gwt_rawstore_doctor.py |             if size > max_tmp_gb * GB: | if False: | a scratch folder over --max-tmp-gb is a finding
 gwt_rawstore_doctor.py | caches[os.path.join(d, '.cache')] = '.cache folder' | pass | a .cache folder inside the work tree is a finding
 gwt_rawstore_doctor.py | caches[p] = '$' + k | pass | a GWT_*_DIR cache pointed inside the work tree is a finding
+gwt_rawstore_doctor.py | if v and (k in CACHE_VARS or | if v and k.endswith('_DIR') or ( | a committed GWT_LEDGER_DIR is no cache
+gwt_rawstore_doctor.py | os.path.realpath(os.path.join(top, v))} | os.path.realpath(v)} | a relative cache variable is also read from the top of the repo
+gwt_rawstore_doctor.py | if n > max_tmp_gb * GB: | if True: | a cache folder under --max-tmp-gb is no finding
+gwt_rawstore_doctor.py | if n > max_tmp_gb * GB: | if False: | a cache folder over --max-tmp-gb is a finding
 gwt_rawstore_doctor.py | if '[Excluded]' not in r.stdout: | if False: | a big folder Time Machine still backs up is a finding
 gwt_rawstore_doctor.py | if platform != 'darwin': | if False: | Time Machine checks run on macOS only
 gwt_rawstore_doctor.py | return 1 if rep['findings'] else 0 | return 0 | any finding exits 1

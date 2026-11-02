@@ -165,13 +165,36 @@ class Findings(Base):
 
     def test_cache_inside_the_repo(self):
         self.assertEqual(by_check(self.doctor())['cache'][0]['level'], 'ok')
-        write(os.path.join(self.repo, 'tools', '.cache', 'x'))
-        rep = self.doctor(environ={'GWT_FSCACHE_DIR': os.path.join(self.repo, 'fscache'),
-                                   'GWT_RAWSTORE_CACHE': '~/.cache/gwt-rawstore'})
-        msgs = [c['message'] for c in by_check(rep)['cache'] if c['level'] == 'warn']
+        write(os.path.join(self.repo, 'tools', '.cache', 'x'), b'c' * 2000)
+        write(os.path.join(self.repo, 'fscache', 'x'), b'f' * 2000)
+        env = {'GWT_FSCACHE_DIR': os.path.join(self.repo, 'fscache'), 'GWT_RAWSTORE_CACHE': '~/.cache/gwt-rawstore'}
+        rep = self.doctor(environ=env)
+        self.assertEqual(rep['findings'], 0, rep)   # under --max-tmp-gb: listed with its size, no finding
+        self.assertEqual(sum(c['level'] == 'ok' for c in by_check(rep)['cache']), 2)
+        msgs = [c['message'] for c in by_check(self.doctor(environ=env, max_tmp_gb=TINY))['cache']
+                if c['level'] == 'warn']
         self.assertEqual(len(msgs), 2, msgs)
         self.assertTrue(any('$GWT_FSCACHE_DIR' in m for m in msgs))
         self.assertTrue(any('tools/.cache' in m for m in msgs))
+
+    def test_committed_ledger_folder_is_no_cache(self):
+        """docs/ledger.md tells users to commit GWT_LEDGER_DIR inside the repo; that is no finding."""
+        write(os.path.join(self.repo, 'research', 'ledger.d', 'lane-7.tsv'), b'l' * 2000)
+        rep = self.doctor(environ={'GWT_LEDGER_DIR': os.path.join(self.repo, 'research', 'ledger.d')}, max_tmp_gb=TINY)
+        self.assertEqual([c['level'] for c in by_check(rep)['cache']], ['ok'])
+
+    def test_relative_cache_variable_read_from_the_top_of_the_repo(self):
+        """GWT_FSCACHE_DIR=work/cache, as agent-loop.md sets it, is found with --repo from another folder."""
+        write(os.path.join(self.repo, 'work', 'cache', 'x'), b'w' * 2000)
+        cwd = os.getcwd()
+        os.chdir(self.t.name)
+        self.addCleanup(os.chdir, cwd)
+        c = [c for c in by_check(self.doctor(environ={'GWT_FSCACHE_DIR': 'work/cache'}, max_tmp_gb=TINY))['cache']
+             if c['level'] == 'warn']
+        self.assertEqual(len(c), 1, c)
+        self.assertIn('work/cache', c[0]['message'])
+        self.assertEqual([x['level'] for x in by_check(self.doctor(environ={'GWT_FSCACHE_DIR': 'no/such'},
+                                                                   max_tmp_gb=TINY))['cache']], ['ok'])
 
 
 class TimeMachine(Base):
