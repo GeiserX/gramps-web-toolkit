@@ -36,6 +36,7 @@ class Classify(unittest.TestCase):
         self.assertEqual(v(json.loads(fx('changed.json'))), 'unknown', 'a renamed result container read as "none"')
         self.assertEqual(v([{'status': 'Permission denied', 'matches': [], 'total': 0}]), 'unknown')
         self.assertEqual(v({'status': 0, 'matches': []}), 'unknown')
+        self.assertEqual(v([{'status': 0, 'matches': [], 'total': 5}]), 'unknown', 'a count with no rows read as "none"')
 
     def test_records(self):
         v = gwt_wikitree.record_verdict

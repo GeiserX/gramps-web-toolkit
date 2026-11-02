@@ -163,6 +163,11 @@ class Record(Run):
         self.assertNotEqual(code, 0, text)
         self.assertEqual(self.out_files(), [], 'an HTML page was saved as the GEDCOM')
 
+    def test_an_error_answered_with_http_200_is_a_stop(self):
+        gate = FakeGate()
+        code, _, text = self.record(FakeNet(gate, (200, fx('error200.json'))), gate)
+        self.assertEqual((code, self.out_files()), (gwt_reader.EXIT_ERROR, []), text)
+
     def test_a_404_for_one_record_is_an_error_not_a_block(self):
         gate = FakeGate()
         code, _, text = self.record(FakeNet(gate, (404, b'<html>niet gevonden</html>')), gate)

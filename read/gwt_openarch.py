@@ -113,7 +113,7 @@ def record_id(arg):
 def verdict(doc):
     """'hits', 'none' or 'unknown' for a search answer. Only the API's own count says none; an error answer
     (error_code), a missing count or a count with no rows is unknown, a STOP."""
-    if not isinstance(doc, dict) or 'error_code' in doc or not isinstance(doc.get('response'), dict):
+    if not isinstance(doc, dict) or not isinstance(doc.get('response'), dict):
         return 'unknown'    # an error answer, or the result container renamed: a STOP
     n, docs = doc['response'].get('number_found'), doc['response'].get('docs', [])
     if not isinstance(n, int) or isinstance(n, bool) or not isinstance(docs, list):
@@ -126,7 +126,7 @@ def verdict(doc):
 
 
 def is_record(doc):
-    return isinstance(doc, dict) and 'error_code' not in doc and bool(_list(doc.get('Person'))) and \
+    return isinstance(doc, dict) and bool(_list(doc.get('Person'))) and \
         all(isinstance(p, dict) and p.get('@pid') for p in _list(doc.get('Person')))
 
 

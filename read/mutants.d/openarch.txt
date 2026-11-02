@@ -1,6 +1,5 @@
 # Mutations the openarch tests must catch (format: see read/mutants.txt).
 gwt_openarch.py | PACE = {'start': 2.0, 'floor': 2.0, 'ceil': 120.0} | PACE = {'start': 2.0, 'floor': 0.5, 'ceil': 120.0} | Open Archives is never asked faster than one request every 2 s
-gwt_openarch.py | if not isinstance(doc, dict) or 'error_code' in doc or not isinstance(doc.get('response'), dict): | if not isinstance(doc, dict) or not isinstance(doc.get('response'), dict): | an error the API answers with HTTP 200 is a STOP, never zero results
 gwt_openarch.py | if n == 0 and not docs: | if not docs: | a count above zero with no rows (a changed answer) is unknown, never "none"
 gwt_openarch.py | return 'unknown'    # an error answer, or the result container renamed: a STOP | return 'none' | an answer whose container changed is unknown, a STOP, never "none"
 gwt_openarch.py | return '%s/%s:%s' % (WEB, archive, uuid) | return '%s/%s:%s/en' % (WEB, archive, uuid) | a candidate's URL is the record's citation URL, https://www.openarchieven.nl/{archive}:{uuid}

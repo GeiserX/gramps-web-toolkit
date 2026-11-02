@@ -39,6 +39,7 @@ class Classify(unittest.TestCase):
         self.assertEqual(v(json.loads(fx('changed.json'))), 'unknown', 'a renamed result container read as "none"')
         self.assertEqual(v({'response': {'persons': []}}), 'unknown', 'no count is not a zero count')
         self.assertEqual(v({'response': {'total': 4, 'persons': []}}), 'unknown')
+        self.assertEqual(v({'response': {'total': 0.0, 'persons': []}}), 'unknown', 'a count that is not a whole number')
 
     def test_the_pace_keeps_to_one_request_a_second_at_most(self):
         self.assertGreaterEqual(gwt_matchid.SPEC['pace']['floor'], 1.0)
