@@ -19,3 +19,4 @@ gwt_geocode.py | and (c['group'] is None or c['group'] != first['group']) for _,
 gwt_geocode.py | ok.sort(key=lambda dc: (dc[0], dc[1]['rank'])) | ok.sort(key=lambda dc: (dc[0], -dc[1]['rank'])) | a town's own point is preferred to its municipality's centroid
 gwt_geocode.py | r['name'].split(',')[0] | r['name'] | a CartoCiudad toponym is named by its address up to the comma
 gwt_geocode.py | if cc is None and self.ptype(top) == 'Country': | if False: | a place under a country with no known code is never searched worldwide, so a namesake abroad cannot win
+gwt_geocode.py |         if self.unreadable_point(h):  # |         if False:  # | a point the tree holds in degrees and minutes is never overwritten, even with --recheck

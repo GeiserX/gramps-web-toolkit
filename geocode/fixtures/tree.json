@@ -118,6 +118,12 @@
     "gramps_id": "E9016",
     "type": "Residence",
     "place": "hP9016"
+   },
+   {
+    "handle": "heP9017",
+    "gramps_id": "E9017",
+    "type": "Residence",
+    "place": "hP9017"
    }
   ],
   "places": [
@@ -568,6 +574,42 @@
     ],
     "lat": "40.004",
     "long": "-3.004"
+   },
+   {
+    "handle": "hP9017",
+    "gramps_id": "P9017",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Villa Grados"
+    },
+    "place_type": "Town",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9002"
+     }
+    ],
+    "lat": "40°10'00\"N",
+    "long": "3°10'00\"W"
+   },
+   {
+    "handle": "hP9019",
+    "gramps_id": "P9019",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Comarca Ejemplo"
+    },
+    "place_type": "Region",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9001"
+     }
+    ],
+    "lat": "40°20'00\"N",
+    "long": "3°20'00\"W"
    }
   ]
  }

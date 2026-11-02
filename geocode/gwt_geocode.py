@@ -422,6 +422,17 @@ class Geocoder:
             return None
         return (lat, lon) if (lat, lon) != (0.0, 0.0) and -90 <= lat <= 90 and -180 <= lon <= 180 else None
 
+    def unreadable_point(self, h):
+        """The tree has a point, as gwt-check counts one (lat and long both filled in), but not in decimal degrees."""
+        p = self.P[h]
+        if not (str(p.get('lat') or '').strip() and str(p.get('long') or '').strip()):
+            return False
+        try:
+            float(p.get('lat')), float(p.get('long'))
+        except (TypeError, ValueError):
+            return True
+        return False
+
     def label(self, h):
         return ' > '.join(self.pname(x) for x in self.chain(h))
 
@@ -465,6 +476,8 @@ class Geocoder:
         if gid in self.overrides:
             lat, lon, note = self.overrides[gid]
             return {'match': 'override', 'lat': lat, 'lon': lon, 'provider': 'overrides', 'note': note}
+        if self.unreadable_point(h):  # 40°10'00"N: never overwrite what cannot be read
+            return {'match': 'kept', 'note': 'already in the tree, not in decimal degrees: left as it is'}
         have = self.tree_point(h)
         if have and (not self.recheck or h not in self.used):
             return {'match': 'kept', 'lat': have[0], 'lon': have[1], 'note': 'already in the tree'}
@@ -569,10 +582,10 @@ class Geocoder:
             ops.append({'op': 'update_place', 'key': 'geocode-%s' % gid, 'place': gid,
                         'set': {'lat': round(r['lat'], 6), 'long': round(r['lon'], 6)}})
         for h in order:
-            if h not in self.used and self.tree_point(h):
-                lat, lon = self.tree_point(h)
-                rows.append(self.row(h, {'match': 'container', 'lat': lat, 'lon': lon,
-                                         'note': 'no event uses it, yet it has a point: the map shows a marker'}))
+            if h not in self.used and (self.tree_point(h) or self.unreadable_point(h)):
+                lat, lon = self.tree_point(h) or (None, None)
+                r = {'match': 'container', 'note': 'no event uses it, yet it has a point: the map shows a marker'}
+                rows.append(self.row(h, {**r, 'lat': lat, 'lon': lon} if lat is not None else r))
         return rows, ops
 
     @staticmethod

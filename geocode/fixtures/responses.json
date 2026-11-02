@@ -280,6 +280,16 @@
     "province": "Provincia Ejemplo",
     "poblacion": "Villaejemplo"
    }
+  ],
+  "Villa Grados": [
+   {
+    "id": "inv4",
+    "type": "Municipio",
+    "address": "Villa Grados",
+    "muni": "Villa Grados",
+    "muniCode": "99004",
+    "province": "Provincia Ejemplo"
+   }
   ]
  },
  "carto_find": {
@@ -306,6 +316,10 @@
   "inv-top": {
    "lat": 40.002,
    "lng": -3.0
+  },
+  "inv4": {
+   "lat": 40.1667,
+   "lng": -3.1667
   }
  }
 }

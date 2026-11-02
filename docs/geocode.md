@@ -24,7 +24,7 @@ Only places that some event uses. A country, a province or a town that only hold
 
 A place no event uses that already has a point is listed in the report as `container`, so you can clear it by hand. `gwt-geocode` never clears coordinates itself.
 
-A place that already has a point keeps it, and no provider is asked about it: a point placed by hand is usually better than a gazetteer's. `--recheck` looks those places up again. It moves a point only when the answer is more than 50 m away, and the note says how far and from where. It never replaces a church's or a street's own point with its town's point. `--only-missing` names the default and is kept for older scripts.
+A place that already has a point keeps it, and no provider is asked about it: a point placed by hand is usually better than a gazetteer's. `--recheck` looks those places up again. It moves a point only when the answer is more than 50 m away, and the note says how far and from where. It never replaces a church's or a street's own point with its town's point. `--only-missing` names the default and is kept for older scripts. A point is any place whose latitude and longitude are both filled in, as `gwt-check` counts them; one written in degrees and minutes (`40°10'00"N`) is kept as it is, even with `--recheck`, and the note says so.
 
 ## Providers
 

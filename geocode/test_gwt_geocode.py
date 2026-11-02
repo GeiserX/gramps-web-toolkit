@@ -242,6 +242,18 @@ class KeepPoints(unittest.TestCase):
         self.assertEqual((rows['P9016']['lat'], rows['P9016']['long']), ('40.004000', '-3.004000'))
         self.assertIn("keeps the tree's point", rows['P9016']['note'])
 
+    def test_a_point_in_degrees_and_minutes_is_kept_as_it_is(self):
+        # Gramps also stores 40°10'00"N; the tool cannot read it, so it must never overwrite it
+        for extra in ((), ('--recheck',)):
+            _, rows, ops, _, _ = run(*extra)
+            self.assertEqual(rows['P9017']['match'], 'kept')
+            self.assertIn('not in decimal degrees', rows['P9017']['note'])
+            self.assertNotIn('P9017', ops)
+
+    def test_a_container_with_a_point_in_degrees_is_reported(self):
+        _, rows, _, _, _ = run()
+        self.assertEqual(rows['P9019']['match'], 'container')
+
     def test_an_override_wins_over_a_kept_point(self):
         _, rows, ops, _, _ = run(overrides='P9013\t40.7\t-3.7\n')
         self.assertEqual(ops['P9013']['set'], {'lat': 40.7, 'long': -3.7})
