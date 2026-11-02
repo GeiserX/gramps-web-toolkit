@@ -36,3 +36,16 @@ gwt_insee.py | if not lines: | if False: | an empty INSEE file (a failed downloa
 gwt_read.py | return EXIT_ERROR      # a file that cannot be read is an error, never "no results" | return EXIT_EMPTY | an unreadable INSEE file exits 1, so a caller never logs it as "searched, none found"
 gwt_insee.py | h.update(raw) | pass | the envelope lists each INSEE file's real sha256, so a download can be checked against it
 gwt_insee.py | wanted = {tuple(fold(s)) for s in surnames if fold(s)} | wanted = {tuple(fold(s))[:1] for s in surnames if fold(s)} | an INSEE --surname of several words keeps only lines that hold all of them
+gwt_reader.py | if _matches(spec.get('negative_markers'), page): | if True: | a page with no row and without the site's own "no results" words (a skeleton) is unknown, a STOP, never "none"
+gwt_reader.py | if _matches(spec.get('result_markers'), page): | if False: | a page with a row of results classifies as hits
+gwt_reader.py | return lambda page: classify(page, spec) != 'unknown' | return lambda page: True | a source's page check turns an unknown page into a STOP (exit 3)
+gwt_reader.py | if verdict == 'blocked' and on_403 is not None and on_403(state['body']) == 'restricted': | if False: | a 403 the source shows is one record's access is "restricted", and the gate never hears of it
+gwt_read.py | return 'restricted' if perms and 'ThemisPrmAnyone' not in perms else None | return 'restricted' if perms else None | a FamilySearch 403 whose permissions include ThemisPrmAnyone is still a block
+gwt_read.py | expect=is_record, refresh=True) | expect=is_record) | the control record after a 403 is read again, never replayed from the cache
+gwt_read.py | if control and control != ark: | if False: | with --control-ark, a 403 whose control record answers is restricted, not a block
+gwt_read.py | ok = code in (EXIT_OK, EXIT_EMPTY) and n >= ctl['min_count'] | ok = code in (EXIT_OK, EXIT_EMPTY) | a canary that reads less than its minimum makes the run void
+gwt_read.py | ns.refresh, ns.out = True, tmp | ns.refresh, ns.out = False, tmp | a canary is read without the cache: a cached canary proves nothing
+gwt_read.py | c = run_controls(src, src['_search_parser'], a, R, 'before') | c = 0 | a short canary before a search means no search
+gwt_read.py | if when in ('after', 'both') and code in (EXIT_OK, EXIT_EMPTY): | if False: | --controls after runs the canaries after the search and voids it when one is short
+gwt_read.py | if lab.startswith('EVENT_PLACE') and lab.endswith('_ORIG') | if lab.startswith('EVENT_PLACE') | place_orig keeps only the place as the index typed it, not the standard place
+gwt_read.py | if bad or src['id'] in out: | if bad: | a source module cannot take an id another source already has
