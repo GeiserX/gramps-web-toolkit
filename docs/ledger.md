@@ -12,7 +12,7 @@ One row per search, tab-separated, with a header line:
 |---|---|
 | `person_key` | slug of the person searched, e.g. `ana-peiro-toledo` (or a tree id) |
 | `person_label` | readable name |
-| `source` | canonical id of where, from the [source registry](#sources): `familysearch-index`, `gazeta`, `bvph`. Names ending in `-verify`, `-sweep` or `-followup` are reserved for the [research loop](agent-loop.md), which logs those task kinds apart from plain searches (`fs-verify` is stored as `familysearch-index-verify`); `any` stands for a task with no source |
+| `source` | canonical id of where, from the [source registry](#sources): `familysearch`, `gazeta`, `bvph`. Names ending in `-verify`, `-sweep` or `-followup` are reserved for the [research loop](agent-loop.md), which logs those task kinds apart from plain searches (`fs-verify` is stored as `familysearch-verify`); `any` stands for a task with no source |
 | `query` | the search, normalized: casefolded, no accents, no punctuation. Letters and digits of every script stay, so `Иван Петров, 1880` is stored as `иван петров 1880` and `Ørsted` as `ørsted` |
 | `date` | ISO date of the search |
 | `result` | one of the words in [Results](#results) |
@@ -58,20 +58,22 @@ One source has one id. Without that, the same site gets logged as `fs`, `familys
 
 | column | meaning |
 |---|---|
-| `id` | the canonical id, a lowercase slug. An id ending in `-*` covers every id with that prefix (`myheritage-espejo-fs-*`) |
-| `aliases` | other names for the same source, comma-separated: `fs,familysearch,fs-index` |
+| `id` | the canonical id, a lowercase slug. An id ending in `-*` covers every id with that prefix: `parish-scan-*` covers `parish-scan-12` |
+| `aliases` | other names for the same source, comma-separated: `fs,familysearch-index,fs-index` |
 | `country` | ISO 3166 code, `XX` for a source that spans countries |
 | `kind` | `index` (transcribed records), `image` (scans), `fulltext` (searchable text), `catalogue` (finding aids) or `newspaper` |
 | `from`, `to` | the years its records cover; empty when open or too varied to say. [`coverage`](#coverage) uses them |
 
-`add` and `check` turn `--source` into its id: `--source fs` is stored and matched as `familysearch-index`, and rows an older ledger logged under an alias count for the id. A source the registry does not know is an error, exit 2, with the closest ids offered. Pass `--new-source` to log it anyway as its slug, or add it to your own registry file:
+`add` and `check` turn `--source` into its id: `--source fs` is stored and matched as `familysearch`, and rows an older ledger logged under an alias count for the id. The ids of the sources [`gwt read`](read.md) knows (`boe`, `familysearch`, `genae`, `insee`, `pares`) are the same ids here.
+
+A source the registry does not know is kept as its slug, and `add` notes it on stderr: your own archive works without a registry file. A name close to a known id or alias is different: `familysea`, `gaceta-anexo` or `familysearch-imagenes` is a typo or another spelling of a source already in the registry, and logging it would start a new spelling that `check` never matches. That is an error, exit 2, naming the close match, on `add`, `check`, `import-tsv` and `coverage`. Use the known name, add yours as its alias in your own registry file, or pass `--new-source` when it really is a different source:
 
 ```sh
 gwt-ledger sources [--country ES]          # the registry, shipped and yours
 export GWT_LEDGER_SOURCES=research/my-sources.tsv   # or --registry FILE; same columns, extends the shipped one
 ```
 
-A row of your file whose id is already shipped adds its aliases to that source and replaces the fields it fills. An alias that already names another source, a kind outside the five, or a year that is not a number stops every command with exit 2, so a broken registry never matches the wrong rows.
+A row of your file whose id is already shipped adds its aliases to that source and replaces the fields it fills; it may leave `kind` and the rest empty. A file saved with a byte order mark (a UTF-8 export from a spreadsheet) reads the same. An alias that already names another source, a kind outside the five, or a year that is not a number stops every command with exit 2, so a broken registry never matches the wrong rows.
 
 ## Results
 
@@ -145,7 +147,7 @@ Exit 0 from `--exact` already leaves out `blocked` and `denied` rows and rows wh
 
 ```text
 source	rows	hit	partial	none	blocked	hit_rate	partial_rate	blocked_rate
-familysearch-index	3	1	1	0	1	0.33	0.33	0.33
+familysearch	3	1	1	0	1	0.33	0.33	0.33
 boe	1	0	0	1	0	0.00	0.00	0.00
 ```
 
@@ -155,12 +157,12 @@ boe	1	0	0	1	0	0.00	0.00	0.00
 
 ```sh
 gwt-check dump > work/tree.json        # or a gwt-apply snapshot
-printf 'familysearch-index\nbvph\nmatchid\n' > work/columns.txt
+printf 'familysearch\nbvph\nmatchid\n' > work/columns.txt
 gwt-ledger coverage --dump work/tree.json --sources work/columns.txt --root I0001
 ```
 
 ```text
-id	name	familysearch-index	bvph	matchid
+id	name	familysearch	bvph	matchid
 I0001	Ana Zorvalo	hit	-	n/a
 I0002	Pedro Zorvalo	-	blocked	n/a
 I0003	Juana Toledo	-	due	-
@@ -208,7 +210,7 @@ Sources go through the registry (an unknown one refuses the file unless `--new-s
 - **Log the search, not the result.** The query is what you typed into the source: collection or site, film or years, name ("St Mary baptisms film 004400001 Ana Peiro"). Two long write-ups of the same search do not match each other. On a real ledger, the round-30 write-up and the round-25 write-up of the same film and the same images scored under 0.5 against each other. The same search as a short query scored 1.00 against both.
 - **Seeding from prose guesses the person.** A seeder that pulls names out of free text also catches place names: a town called "Villa Nueva" became a person key. Many negatives cover a whole collection and name nobody, so they have no person key. Run `check` without `--person` for collection-level searches, or you miss those rows. A negative that names two people must be filed under each of them: our first seeder used only the first name it matched, so a check for the second person found nothing.
 - **A negative from a blocked period is not a negative.** Log it as `blocked`, not `none`, so the next agent repeats it: `check` lists a `blocked` row but does not count it as done. A `none` with no control run is stored as `unproven` for the same reason.
-- **One site, many names.** Lanes logged the same site as `fs`, `familysearch` and a typo of it, and each `check` saw only its own spelling. The registry folds the aliases, and an unknown name now stops with exit 2 instead of starting a new spelling.
+- **One site, many names.** Lanes logged the same site as `fs`, `familysearch` and a typo of it, and each `check` saw only its own spelling. The registry folds the aliases, and a name close to a known one now stops with exit 2 instead of starting a new spelling.
 - **Ledgers written before Unicode normalisation dropped every letter outside a-z.** A query in Cyrillic, Greek or another script was stored as its digits alone (`Иван Петров 1880` as `1880`), and a letter such as `ø` or `ł` vanished from the word. Those rows no longer match the same search typed again, which errs towards searching again. Rows in plain Latin letters, accents included, are unchanged.
 - **The ledger in git:** agents that share one checkout also share its git index. Commit the ledger with `git commit -- <ledger path>`, or rows another agent staged go into your commit.
 

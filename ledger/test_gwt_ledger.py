@@ -50,7 +50,7 @@ class LedgerTest(unittest.TestCase):
         code, out = run('--ledger', self.path, 'check', '--person', 'ana-peiro-toledo',
                         '--source', 'familysearch', '--query', 'Ana Peiro bautismo 1850-1860')
         self.assertEqual(code, 0)
-        self.assertTrue(out.startswith('1.00\tana-peiro-toledo\tAna Peiro Toledo\tfamilysearch-index\t'))
+        self.assertTrue(out.startswith('1.00\tana-peiro-toledo\tAna Peiro Toledo\tfamilysearch\t'))
         # Reworded with accents and a different order still counts as done.
         code, _ = run('--ledger', self.path, 'check', '--person', 'Ana Peiro Toledo',
                       '--source', 'FamilySearch', '--query', 'bautismo de Ana Peiró, 1850-1860')
@@ -122,7 +122,7 @@ class LedgerTest(unittest.TestCase):
         self.assertIn('rows\t3', lines)
         self.assertIn('persons\t2', lines)
         self.assertIn('result\tnone\t1', lines)
-        self.assertIn('source\tfamilysearch-index\t2', lines)
+        self.assertIn('source\tfamilysearch\t2', lines)
 
     def test_concurrent_writers_lose_nothing(self):
         # 16 processes x 25 rows each, all appending at once through the CLI.
@@ -360,27 +360,46 @@ class RegistryTest(unittest.TestCase):
     def test_an_alias_logged_earlier_answers_a_check_for_the_canonical_id(self):
         self.legacy(('ana-zorvalo', 'Ana Zorvalo', 'fs', 'ana zorvalo bautismo 1850', '2026-01-01', 'hit', 'e.json', 'l1', ''))
         argv = ('--ledger', self.path, 'check', '--person', 'Ana Zorvalo', '--query', 'Ana Zorvalo bautismo 1850')
-        self.assertEqual(run(*argv, '--source', 'familysearch-index')[0], 0)
+        self.assertEqual(run(*argv, '--source', 'familysearch')[0], 0)
         self.assertEqual(run(*argv, '--source', 'FamilySearch', '--exact')[0], 0)
         # Positive control: with aliasing off, the same rows do not answer that check.
         rows = L.read_rows(self.path)
         reg = L.load_registry()
-        self.assertEqual(len(L.find(rows, 'ana-zorvalo', 'familysearch-index', 'ana zorvalo bautismo 1850', registry=reg)), 1)
-        self.assertEqual(L.find(rows, 'ana-zorvalo', 'familysearch-index', 'ana zorvalo bautismo 1850'), [])
+        self.assertEqual(len(L.find(rows, 'ana-zorvalo', 'familysearch', 'ana zorvalo bautismo 1850', registry=reg)), 1)
+        self.assertEqual(L.find(rows, 'ana-zorvalo', 'familysearch', 'ana zorvalo bautismo 1850'), [])
 
     def test_aliases_and_task_suffixes_resolve(self):
         reg = L.load_registry()
-        for given, want in (('fs', 'familysearch-index'), ('Gaceta', 'gazeta'), ('gazeta-anexos', 'gazeta'),
-                            ('fs-verify', 'familysearch-index-verify'), ('any', 'any'), ('any-sweep', 'any-sweep'),
-                            ('myheritage-espejo-fs-1234', 'myheritage-espejo-fs-1234'), ('no-such-site', None),
-                            ('fs-other', None)):
+        for given, want in (('fs', 'familysearch'), ('familysearch-index', 'familysearch'), ('Gaceta', 'gazeta'),
+                            ('gazeta-anexos', 'gazeta'), ('fs-verify', 'familysearch-verify'), ('any', 'any'),
+                            ('any-sweep', 'any-sweep'), ('no-such-site', None), ('fs-other', None)):
             self.assertEqual(reg.lookup(given), want, given)
+
+    def test_spelling_variants_of_shipped_sources_resolve(self):
+        reg = L.load_registry()
+        for given, want in (('gaceta-anexos', 'gazeta'), ('gazeta-boe', 'gazeta'), ('Gazeta de Madrid', 'gazeta'),
+                            ('familysearch-texto', 'familysearch-fulltext'), ('fs-texto', 'familysearch-fulltext'),
+                            ('familysearch-imagen', 'familysearch-images')):
+            self.assertEqual(reg.lookup(given), want, given)
+
+    def test_the_reader_ids_are_the_canonical_ids(self):
+        reg = L.load_registry()
+        for sid in ('boe', 'familysearch', 'genae', 'insee', 'pares'):  # gwt read's own source names
+            self.assertEqual(reg.lookup(sid), sid)
+
+    def test_a_prefix_row_covers_every_id_with_that_prefix(self):
+        mine = os.path.join(self.dir.name, 'mine.tsv')
+        write(mine, 'parish-scan-*\t\tXX\timage\t\t\n')
+        reg = L.load_registry(mine)
+        self.assertEqual(reg.lookup('parish-scan-12'), 'parish-scan-12')
+        self.assertEqual(reg.row('parish-scan-12')['kind'], 'image')
+        self.assertIsNone(L.load_registry().lookup('parish-scan-12'))
 
     def test_add_stores_the_canonical_id(self):
         run('--ledger', self.path, 'add', '--person', 'x', '--source', 'fs', '--query', 'q', '--result', 'hit')
-        self.assertEqual(L.read_rows(self.path)[0]['source'], 'familysearch-index')
+        self.assertEqual(L.read_rows(self.path)[0]['source'], 'familysearch')
 
-    def test_an_unknown_source_exits_2_unless_new_source(self):
+    def test_a_source_close_to_a_known_name_exits_2_unless_new_source(self):
         for cmd in (('add', '--result', 'hit'), ('check',)):
             argv = ('--ledger', self.path, cmd[0], '--person', 'x', '--source', 'familysea', '--query', 'q') + cmd[1:]
             code, err = fail(*argv)
@@ -388,19 +407,34 @@ class RegistryTest(unittest.TestCase):
             self.assertIn('not in the registry', err)
             self.assertIn('familysearch', err)  # the close match is offered
         self.assertFalse(os.path.exists(self.path))
-        self.assertEqual(run('--ledger', self.path, 'add', '--person', 'x', '--source', 'Parish Book 3', '--query', 'q',
+        self.assertEqual(fail('--ledger', self.path, 'add', '--person', 'x', '--source', 'familysea-verify',
+                              '--query', 'q', '--result', 'hit')[0], 2)  # a task suffix does not hide the typo
+        self.assertEqual(run('--ledger', self.path, 'add', '--person', 'x', '--source', 'familysea', '--query', 'q',
                              '--result', 'hit', '--new-source')[0], 0)
-        self.assertEqual(L.read_rows(self.path)[0]['source'], 'parish-book-3')
-        self.assertEqual(run('--ledger', self.path, 'check', '--person', 'x', '--source', 'parish-book-3',
+        self.assertEqual(L.read_rows(self.path)[0]['source'], 'familysea')
+        self.assertEqual(run('--ledger', self.path, 'check', '--person', 'x', '--source', 'familysea',
                              '--query', 'q', '--new-source')[0], 0)
+
+    def test_a_new_source_far_from_every_known_name_is_kept_with_a_note(self):
+        code, err = fail('--ledger', self.path, 'add', '--person', 'x', '--source', 'Parish Book 3', '--query', 'q',
+                         '--result', 'hit')
+        self.assertEqual(code, 0)
+        self.assertIn('not in the registry', err)
+        self.assertEqual(L.read_rows(self.path)[0]['source'], 'parish-book-3')
+        self.assertEqual(run('--ledger', self.path, 'check', '--person', 'x', '--source', 'Parish Book 3',
+                             '--query', 'q')[0], 0)
 
     def test_a_user_registry_extends_the_shipped_one(self):
         mine = os.path.join(self.dir.name, 'mine.tsv')
         write(mine, 'id\taliases\tcountry\tkind\tfrom\tto\nparish-x\tpx\tES\timage\t1600\t1900\n'
-                    'familysearch-index\tfsi\t\tindex\t\t\n')
+                    'familysearch\tfsi\t\tindex\t\t\n')
         reg = L.load_registry(mine)
         self.assertEqual((reg.lookup('px'), reg.lookup('fsi'), reg.lookup('fs')),
-                         ('parish-x', 'familysearch-index', 'familysearch-index'))
+                         ('parish-x', 'familysearch', 'familysearch'))
+        write(mine, '\ufeffid\taliases\nfamysearch-copy\tfsx\tXX\tindex\nfamilysearch\tfsy\n')  # BOM; kind left empty
+        reg = L.load_registry(mine)
+        self.assertEqual((reg.lookup('fsx'), reg.lookup('fsy'), reg.row('familysearch')['kind']),
+                         ('famysearch-copy', 'familysearch', 'index'))
         write(mine, 'boe-copy\tgaceta\tES\tfulltext\t\t\n')  # an alias that already names another source
         with self.assertRaises(ValueError):
             L.load_registry(mine)
@@ -463,11 +497,11 @@ class RegistryTest(unittest.TestCase):
     def test_stats_by_source_folds_aliases(self):
         self.legacy(('a', '', 'fs', 'q1', '2026-01-01', 'hit', '', '', ''),
                     ('b', '', 'familysearch', 'q2', '2026-01-01', 'blocked', '', '', ''),
-                    ('c', '', 'familysearch-index', 'q3', '2026-01-01', 'partial', '', '', ''),
+                    ('c', '', 'familysearch', 'q3', '2026-01-01', 'partial', '', '', ''),
                     ('d', '', 'boe', 'q4', '2026-01-01', 'none', '', '', ''))
         out = run('--ledger', self.path, 'stats', '--by', 'source')[1].splitlines()
         self.assertEqual(out[0].split('\t')[:2], ['source', 'rows'])
-        self.assertEqual(out[1], 'familysearch-index\t3\t1\t1\t0\t1\t0.33\t0.33\t0.33')
+        self.assertEqual(out[1], 'familysearch\t3\t1\t1\t0\t1\t0.33\t0.33\t0.33')
         self.assertEqual(out[2], 'boe\t1\t0\t0\t1\t0\t0.00\t0.00\t0.00')
 
     def test_import_maps_columns_and_synonyms_and_needs_proof(self):
@@ -484,8 +518,16 @@ class RegistryTest(unittest.TestCase):
         self.assertIn('synonym\tfound->hit\t1', out)
         rows = L.read_rows(self.path)
         self.assertEqual([(r['source'], r['result']) for r in rows],
-                         [('familysearch-index', 'hit'), ('gazeta', 'none'), ('bvph', 'unproven')])
+                         [('familysearch', 'hit'), ('gazeta', 'none'), ('bvph', 'unproven')])
         self.assertEqual(rows[0]['agent'], 'import')
+
+    def test_import_reads_a_file_with_a_byte_order_mark_and_crlf(self):
+        src = os.path.join(self.dir.name, 'excel.tsv')
+        with open(src, 'w', encoding='utf-8-sig', newline='') as f:
+            f.write('who\twhere\twhat\toutcome\r\nAna Zorvalo\tfs\tbautismo 1850\tfound\r\n')
+        code, out = run('--ledger', self.path, 'import-tsv', src, '--map', 'person_key=who,source=where,query=what,result=outcome')
+        self.assertEqual(code, 0)
+        self.assertEqual([(r['source'], r['result']) for r in L.read_rows(self.path)], [('familysearch', 'hit')])
 
     def test_import_refuses_the_whole_file_on_one_bad_row(self):
         src = os.path.join(self.dir.name, 'old-log.tsv')
@@ -496,10 +538,10 @@ class RegistryTest(unittest.TestCase):
         code, err = fail(*argv)
         self.assertEqual(code, 2)
         self.assertIn("line 3: result 'maybe'", err)
-        write(src, 'who\twhere\twhat\toutcome\nAna Zorvalo\tsomewhere\tbautismo 1850\thit\n')
+        write(src, 'who\twhere\twhat\toutcome\nAna Zorvalo\tfamilysea\tbautismo 1850\thit\n')
         code, err = fail(*argv)
         self.assertEqual(code, 2)
-        self.assertIn("unknown source 'somewhere'", err)
+        self.assertIn("line 2: source 'familysea' is not in the registry but close to familysearch", err)
         self.assertFalse(os.path.exists(self.path))
         self.assertEqual(run(*argv, '--new-source')[0], 0)
 
@@ -544,7 +586,7 @@ class CoverageTest(unittest.TestCase):
 
     def test_matrix_of_people_and_sources(self):
         m = self.matrix('--root', 'I1')
-        self.assertEqual(m[0], ['id', 'name', 'familysearch-index', 'matchid', 'boe'])
+        self.assertEqual(m[0], ['id', 'name', 'familysearch', 'matchid', 'boe'])
         rows = {r[0]: r[2:] for r in m[1:]}
         self.assertEqual(list(rows), ['I1', 'I2', 'I3'])   # the root and its ancestors, not Luis
         self.assertEqual(rows['I1'], ['hit', 'n/a', '-'])  # matchid starts in 1970; born 1850, Ana's life ends by 1960
@@ -555,11 +597,18 @@ class CoverageTest(unittest.TestCase):
         self.assertEqual([r[0] for r in self.matrix()[1:]], ['I1', 'I2', 'I3', 'I4'])
 
     def test_unknown_source_or_root_exits_2(self):
-        write(self.sources, 'nowhere\n')
+        write(self.sources, 'familysea\n')
         self.assertEqual(fail('--ledger', self.path, 'coverage', '--dump', self.dump, '--sources', self.sources)[0], 2)
         write(self.sources, 'fs\n')
         self.assertEqual(fail('--ledger', self.path, 'coverage', '--dump', self.dump, '--sources', self.sources,
                               '--root', 'I99')[0], 2)
+
+    def test_the_shipped_registry_works_as_a_sources_file(self):
+        self.sources = L.SHIPPED_REGISTRY[0]
+        m = self.matrix('--root', 'I1')
+        self.assertEqual(m[0][:3], ['id', 'name', 'familysearch'])
+        self.assertEqual(len(m[0]), 2 + sum(1 for r in L.load_registry().sources if not r.endswith('-*')))
+
 
 if __name__ == '__main__':
     unittest.main()

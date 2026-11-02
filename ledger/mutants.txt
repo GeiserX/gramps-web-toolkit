@@ -4,7 +4,11 @@
 gwt_ledger.py | if s in self.alias: | if False: | an alias (fs) resolves to its canonical id (familysearch-index)
 gwt_ledger.py | canon = registry.canon if registry else key | canon = key | check finds a row logged under an alias of the source asked for
 gwt_ledger.py | if self.alias.get(a, sid) != sid: | if False: | a registry refuses an alias that already names another source
-gwt_ledger.py | if args.new_source: | if True: | an unknown source exits 2 unless --new-source
+gwt_ledger.py | near = [] if new_source else self.near(slug) | near = [] | a source close to a known name (familysea) exits 2 unless --new-source
+gwt_ledger.py | if near: | if True: | a source far from every known name is kept as its slug, with no registry file
+gwt_ledger.py | if s.endswith('-*'): | if False: | coverage takes the shipped registry as its sources file (a -* row is no column)
+gwt_ledger.py | and not (sid in self.sources and not row['kind']) |  | a user row extending a shipped id may leave kind empty
+gwt_ledger.py | encoding='utf-8-sig') as f:  # -sig | encoding='utf-8') as f:  # -sig | a registry file with a byte order mark reads
 gwt_ledger.py | if result == 'none' and not control: | if False: | a none without --control-ok is stored as unproven
 gwt_ledger.py | if bad or not oks: | if False: | a --control-ok file must be a passing control run (no void, no SHORT)
 gwt_ledger.py | SEARCHED = ('hit', 'none', 'partial', 'out-of-coverage') | SEARCHED = ('hit', 'none', 'partial', 'out-of-coverage', 'unproven') | an unproven row never counts as a search that ran

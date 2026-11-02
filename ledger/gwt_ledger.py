@@ -19,7 +19,8 @@ Agents run `check` before a search and `add` after it, so two lanes never pay fo
   gwt-ledger costs [--by payer|archive|person]               what the requests cost, per currency
 
 Sources are canonical ids from ledger/sources.tsv (extend it with --registry or $GWT_LEDGER_SOURCES): `fs` is
-logged and matched as `familysearch-index`. An unknown source is an error (exit 2) unless --new-source.
+logged and matched as `familysearch`. A source the registry does not know is kept as its slug, unless it is close to
+a known name (familysea, gazeta-anexo): that is a typo or a drift, an error (exit 2) unless --new-source.
 A `none` needs --control-ok (proof the source could have answered), or it is stored as `unproven`.
 
 The ledger path comes from --ledger, else $GWT_LEDGER, else ./buscado.tsv. With --ledger-dir (or $GWT_LEDGER_DIR),
@@ -48,6 +49,7 @@ REGISTRY_COLUMNS = ('id', 'aliases', 'country', 'kind', 'from', 'to')
 SUFFIXES = ('verify', 'sweep', 'followup')  # task kinds of the research loop: <source>-verify and so on
 ANY = 'any'                                 # the research loop's source for a task with no source
 SHIPPED_REGISTRY = (os.path.join(HERE, 'sources.tsv'), os.path.join(HERE, 'gwt_ledger_sources.tsv'))
+NEAR_CUTOFF = 0.8  # an unknown source this close to a known name is a typo or a drift, not a new source
 
 REQUEST_COLUMNS = ('id', 'person_key', 'person_label', 'archive', 'channel', 'thread', 'sent', 'next_date', 'cost',
                    'currency', 'payer', 'status', 'note', 'date')
@@ -134,7 +136,7 @@ class Registry:
         self.prefixes = []  # (prefix-, id) of the `-*` rows
 
     def load(self, path):
-        with open(path, encoding='utf-8') as f:
+        with open(path, encoding='utf-8-sig') as f:  # -sig: a spreadsheet's UTF-8 export starts with a BOM
             for n, line in enumerate(f, 1):
                 parts = [p.strip() for p in line.rstrip('\n').split('\t')]
                 if not parts[0] or parts[0].startswith('#') or parts[0] == 'id':
@@ -149,7 +151,7 @@ class Registry:
         sid = row['id']
         if not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*(?:-\*)?', sid):
             return 'id %r is not a lowercase slug' % sid
-        if row['kind'] not in KINDS:
+        if row['kind'] not in KINDS and not (sid in self.sources and not row['kind']):  # extending keeps the kind
             return 'kind %r of %s is not one of %s' % (row['kind'], sid, ', '.join(KINDS))
         for col in ('from', 'to'):
             if row[col] and not re.fullmatch(r'\d{3,4}', row[col]):
@@ -186,6 +188,30 @@ class Registry:
             if canon:
                 return canon + '-' + suffix
         return None
+
+    def near(self, source):
+        """Known names (ids and aliases) close enough to an unknown source to be a typo or a spelling drift."""
+        s = key(source)
+        base, _, suffix = s.rpartition('-')
+        if base and suffix in SUFFIXES:
+            s = base
+        return difflib.get_close_matches(s, list(self.alias), n=3, cutoff=NEAR_CUTOFF)
+
+    def resolve(self, source, new_source=False):
+        """(id, problem). A known source or alias gives its id; an unknown one far from every known name is kept
+        as its slug. One close to a known name is refused (the problem names the match) unless new_source."""
+        sid = self.lookup(source)
+        if sid:
+            return sid, None
+        slug = key(source)
+        if not slug:
+            return None, 'an empty source'
+        near = [] if new_source else self.near(slug)
+        if near:
+            return None, ('%r is not in the registry but close to %s: a typo or another spelling of a known source. '
+                          'Use that name, add yours as its alias in a --registry file, or pass --new-source if it '
+                          'is a different source' % (source, ', '.join(near)))
+        return slug, None
 
     def canon(self, source):
         """lookup(), or the slug itself for a source the registry does not know (a row logged with --new-source)."""
@@ -454,7 +480,7 @@ def coverage(args, reg, rows, err):
         from gwt_core import rules
     try:
         ix = rules.Index(load_dump(args.dump))
-        with open(args.sources, encoding='utf-8') as f:
+        with open(args.sources, encoding='utf-8-sig') as f:
             wanted = [l.split('\t')[0].strip() for l in f if l.strip() and not l.startswith('#')]
     except (OSError, ValueError, EOFError) as exc:
         return err('cannot read the dump or the sources file: %s' % exc)
@@ -462,9 +488,11 @@ def coverage(args, reg, rows, err):
     for s in wanted:
         if s == 'id':
             continue  # a registry-shaped file's header
-        c = reg.lookup(s)
-        if not c:
-            return err('unknown source %r in %s: not in the registry' % (s, args.sources))
+        if s.endswith('-*'):
+            continue  # a registry family row: its members are columns only when named one by one
+        c, problem = reg.resolve(s)
+        if problem:
+            return err('source %s (in %s)' % (problem, args.sources))
         if c not in cols:
             cols.append(c)
     by_id = {p.get('gramps_id'): h for h, p in ix.people.items()}
@@ -515,8 +543,8 @@ def import_tsv(args, reg, err):
         if need not in mapping:
             return err('--map needs %s=<column of %s>' % (need, args.file))
     try:
-        with open(args.file, encoding='utf-8') as f:
-            lines = [l.rstrip('\n').split('\t') for l in f]
+        with open(args.file, encoding='utf-8-sig') as f:
+            lines = [l.rstrip('\r\n').split('\t') for l in f]
     except (OSError, UnicodeDecodeError) as exc:
         return err('cannot read %s: %s' % (args.file, exc))
     header = lines[0] if lines else []
@@ -524,7 +552,7 @@ def import_tsv(args, reg, err):
     if missing:
         return err('%s has no column %s (its header: %s)' % (args.file, ', '.join(missing), ', '.join(header)))
     idx = {col: header.index(src) for col, src in mapping.items()}
-    out, problems, mapped, unproven = [], [], collections.Counter(), 0
+    out, problems, mapped, unproven, unregistered = [], [], collections.Counter(), 0, collections.Counter()
     for n, parts in enumerate(lines[1:], 2):
         if not any(p.strip() for p in parts):
             continue
@@ -536,10 +564,12 @@ def import_tsv(args, reg, err):
             continue
         if result != word:
             mapped['%s->%s' % (word, result)] += 1
-        source = reg.lookup(v['source']) or (key(v['source']) if args.new_source else None)
-        if not source:
-            problems.append('line %d: unknown source %r (pass --new-source to keep it as is)' % (n, v['source']))
+        source, problem = reg.resolve(v['source'], args.new_source)
+        if problem:
+            problems.append('line %d: source %s' % (n, problem))
             continue
+        if not reg.lookup(v['source']):
+            unregistered[source] += 1
         if not normalize(v['query']):
             problems.append('line %d: empty query' % n)
             continue
@@ -569,6 +599,8 @@ def import_tsv(args, reg, err):
     print('unproven\t%d' % unproven)
     for m, n in sorted(mapped.items()):
         print('synonym\t%s\t%d' % (m, n))
+    for s, n in sorted(unregistered.items()):
+        print('not-in-registry\t%s\t%d' % (s, n))
     return 0
 
 
@@ -605,7 +637,7 @@ def main(argv=None):
                    help='only rows of this --source (required) with the identical normalized query; safe for automatic reuse')
     c.add_argument('--any-result', action='store_true',
                    help='exit 0 on any matching row, blocked, denied or due again included')
-    c.add_argument('--new-source', action='store_true', help='allow a source the registry does not know')
+    c.add_argument('--new-source', action='store_true', help='allow a source the registry does not know that is close to a known name')
     a = sub.add_parser('add', help='append a row (safe with concurrent writers)')
     a.add_argument('--person', required=True); a.add_argument('--label', default='')
     a.add_argument('--source', required=True); a.add_argument('--query', required=True)
@@ -616,7 +648,7 @@ def main(argv=None):
     a.add_argument('--evidence', default='')
     agent_and_date(a)
     a.add_argument('--next-date', default='', type=iso_date, help='ISO date to look again, e.g. the end of an appeal window')
-    a.add_argument('--new-source', action='store_true', help='log a source the registry does not know, as its slug')
+    a.add_argument('--new-source', action='store_true', help='log a source close to a known name as its own slug')
     d = sub.add_parser('due', help='rows whose next_date is on or before a day (default today)')
     d.add_argument('--on', default='', type=iso_date)
     d.add_argument('--ics', action='store_true', help='print a calendar (.ics) of every pending next_date, ledger rows '
@@ -636,7 +668,7 @@ def main(argv=None):
     im.add_argument('--map', required=True, help='LEDGER_COLUMN=FILE_COLUMN,... e.g. person_key=who,source=where,'
                                                  'query=what,result=outcome')
     im.add_argument('--agent', default=os.environ.get('GWT_AGENT', ''), help='for rows with no agent column')
-    im.add_argument('--new-source', action='store_true', help='keep sources the registry does not know')
+    im.add_argument('--new-source', action='store_true', help='keep sources close to a known name as their own slugs')
     rq = sub.add_parser('request', help='letters, emails and forms sent to archives, with due dates and costs')
     rsub = rq.add_subparsers(dest='rcmd', required=True)
     for name in ('add', 'update'):
@@ -674,16 +706,13 @@ def main(argv=None):
     except (OSError, ValueError) as exc:
         return err('cannot read the source registry: %s' % exc)
 
-    def source_id(value):
-        sid = reg.lookup(value)
-        if sid:
-            return sid
-        if args.new_source:
-            return key(value)
-        near = difflib.get_close_matches(key(value), list(reg.alias), n=3)
-        p.error('--source %r is not in the registry%s; `gwt-ledger sources` lists it. Pass --new-source to use '
-                'it anyway, or add it to your --registry file' % (value, ' (did you mean %s?)' % ', '.join(near)
-                                                                  if near else ''))
+    def source_id(value, note=False):
+        sid, problem = reg.resolve(value, args.new_source)
+        if problem:
+            p.error('--source ' + problem)
+        if note and not reg.lookup(value):
+            sys.stderr.write('gwt-ledger: note: %r is not in the registry; logged as %s\n' % (value, sid))
+        return sid
 
     requests_path = args.requests or os.path.join(os.path.dirname(os.path.abspath(args.ledger)), 'requests.tsv')
     today = datetime.date.today().isoformat()
@@ -700,7 +729,7 @@ def main(argv=None):
             if not key(args.agent):
                 p.error('add needs --agent (or $GWT_AGENT): rows go to <ledger-dir>/<agent>.tsv')
             path = os.path.join(args.ledger_dir, key(args.agent) + '.tsv')
-        source = source_id(args.source)
+        source = source_id(args.source, note=True)
         if args.control_ok:
             problem = control_problem(args.control_ok)
             if problem:
