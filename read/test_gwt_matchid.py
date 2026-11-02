@@ -94,6 +94,21 @@ class Search(Run):
         code, _, _ = self.search(FakeNet(gate, (400, b'{"msg":"bad date"}')), gate)
         self.assertEqual((code, gate.hits), (gwt_reader.EXIT_ERROR, []))
 
+    def test_a_4xx_says_the_apis_own_reason(self):
+        gate = FakeGate()
+        code, _, text = self.search(FakeNet(gate, (400, b'{"msg":["invalid birthDate value: 31/31/1900"]}')), gate)
+        self.assertEqual((code, gate.hits), (gwt_reader.EXIT_ERROR, []))
+        self.assertIn('invalid birthDate value: 31/31/1900', text)
+
+    def test_the_anonymous_quota_is_a_block_never_an_error_to_move_past(self):
+        # what matchID answers once the anonymous calls are spent: a lane must pause, not log ERR and send the next one
+        body = (b'{"msg":"No token provided and temporary anonymous usage expired, please register with email or '
+                b'wait 2 hours"}')
+        gate = FakeGate()
+        code, _, text = self.search(FakeNet(gate, (422, body)), gate)
+        self.assertEqual((code, len(gate.hits), self.out_files()), (gwt_reader.EXIT_WALL, 1, []), text)
+        self.assertIn('anonymous usage expired', text)
+
     def test_the_token_goes_in_a_header_and_never_reaches_a_file(self):
         os.environ[gwt_matchid.TOKEN_ENV] = TOKEN
         gate = FakeGate()

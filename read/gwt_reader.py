@@ -190,9 +190,9 @@ def write_manifest(path, rows):
 class Stop(Exception):
     """An answer that must end the run: nothing is saved as a result. exit_code is the process exit."""
 
-    def __init__(self, msg, exit_code=EXIT_ERROR, verdict=None, status=None):
+    def __init__(self, msg, exit_code=EXIT_ERROR, verdict=None, status=None, body=b''):
         super().__init__(msg)
-        self.exit_code, self.verdict, self.status = exit_code, verdict, status
+        self.exit_code, self.verdict, self.status, self.body = exit_code, verdict, status, body
 
 
 # Bot walls, rate pages and captchas (Imperva/Incapsula, Cloudflare, Akamai, hCaptcha, reCAPTCHA), and the
@@ -299,7 +299,8 @@ class Reader:
                 self.gate.hit(self.lane, what)
             elif tell == 'dead':
                 self.gate.dead(self.lane, what)
-            raise Stop('%s (HTTP %s at %s)' % (why, state['status'], url), code, verdict, state['status'])
+            raise Stop('%s (HTTP %s at %s)' % (why, state['status'], url), code, verdict, state['status'],
+                       state['body'])
         return status, rh, body, 'status' not in state
 
 
@@ -360,16 +361,37 @@ def page_check(spec):
 # ---------------------------------------------------------------- open APIs: a server error is the service down
 
 
-def get_api(R, url, headers=None, expect=None, refresh=False, page=None):
+def api_reason(body):
+    """The reason a JSON API gives with an error answer ({"msg": ...}, {"message": ...} or {"error": ...}), short; ''
+    when there is none."""
+    try:
+        d = json.loads(body.decode('utf-8', 'replace') if isinstance(body, bytes) else body or '')
+    except ValueError:
+        return ''
+    why = next((d[k] for k in ('msg', 'message', 'error', 'detail') if d.get(k)), '') if isinstance(d, dict) else ''
+    why = '; '.join(str(x) for x in why) if isinstance(why, list) else str(why)
+    return ' '.join(why.split())[:300]
+
+
+def get_api(R, url, headers=None, expect=None, refresh=False, page=None, wall=None):
     """R.get for an open JSON API. A 5xx or no answer at all (a timeout, a refused connection) is the service down,
     not an error in this one request: it becomes a wall (exit 3, the gate hears a hit), so a lane pauses and never
-    logs the search as "none" or moves on as if it had been read. Other answers are as R.get gives them."""
+    logs the search as "none" or moves on as if it had been read. `wall(status, body)` names a source's own
+    refusals that mean the same (matchID's spent anonymous quota, a 422). Any other error answer stays as R.get
+    gives it, with the API's own reason added to its text."""
     try:
         return R.get(url, headers, expect=expect, refresh=refresh, page=page)
     except Stop as e:
-        if e.verdict == 'http' and (e.status == 0 or 500 <= (e.status or 0) < 600):
+        if e.verdict != 'http':
+            raise
+        why = api_reason(e.body)
+        why = ': %s' % why if why else ''
+        if e.status == 0 or 500 <= (e.status or 0) < 600 or (wall is not None and wall(e.status, e.body or b'')):
             what = 'HTTP %s %s' % (e.status, url[:120])
             R.gate.hit(R.lane, what)
-            raise Stop('the service is down or not answering, read as a block, never as no results; every lane on '
-                       'this source pauses (HTTP %s at %s)' % (e.status, url), EXIT_WALL, 'wall', e.status) from None
+            raise Stop('the service is down, not answering or refusing more requests, read as a block, never as no '
+                       'results; every lane on this source pauses (HTTP %s at %s)%s' % (e.status, url, why),
+                       EXIT_WALL, 'wall', e.status, e.body) from None
+        if why:
+            raise Stop('%s%s' % (e, why), e.exit_code, e.verdict, e.status, e.body) from None
         raise

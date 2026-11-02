@@ -49,6 +49,12 @@ SPEC = {
 }
 
 
+def quota_spent(status, body):
+    """matchID's answer once the anonymous calls are spent: HTTP 422 "No token provided and temporary anonymous usage
+    expired, please register with email or wait N hours". A wall for the gate, never an error a lane moves past."""
+    return status == 422 and b'usage expired' in (body or b'').lower()
+
+
 def _date(v):
     """matchID dates: JJ/MM/AAAA, a year AAAA, or a range JJ/MM/AAAA-JJ/MM/AAAA. The API refuses spaces around the
     range's "-" (HTTP 400), so they are dropped."""
@@ -131,7 +137,7 @@ def search(a, R):
         return EXIT_USAGE
     url = search_url(a.q, a.given, a.surname, a.born, a.died, a.birth_city, a.death_city, a.sex, a.count, a.page)
     status, rh, body, cached = gwt_reader.get_api(R, url, {'accept': ACCEPT}, expect=lambda d: verdict(d) != 'unknown',
-                                                  refresh=a.refresh)
+                                                  refresh=a.refresh, wall=quota_spent)
     doc = json.loads(body)
     cands = [candidate(p) for p in doc['response']['persons']]
     env = gwt_reader.envelope(url, None, json_body=doc, verdict=verdict(doc), status=status, from_cache=cached)
