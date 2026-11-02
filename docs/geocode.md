@@ -33,7 +33,7 @@ Each place is looked up by its own name and the names above it, through a chain 
 | Provider | Covers | What it is |
 |---|---|---|
 | `cartociudad` | Spain | The IGN/CNIG geocoder that `gwt-fetch geo` also uses: towns, municipalities with their INE code, and named spots such as churches (`toponimo`). No key. |
-| `ban` | France | The national address base, https://api-adresse.data.gouv.fr: one point per commune, with its INSEE code and a score. No key. |
+| `ban` | France | The national address base, https://api-adresse.data.gouv.fr: one point per commune, with its INSEE code and a score. Asked with the commune and its `Department` (or `Province`), and only the communes in that département are kept, since many share a name. No key. |
 | `geonames-dump` | any country | A GeoNames dump file you download yourself from https://download.geonames.org/export/dump/ (a country file such as `IT.zip`, or `cities500.zip` for the world's towns), passed with `--geonames FILE`, read offline. Without `--geonames` it is skipped. |
 | `nominatim` | anywhere | OpenStreetMap's geocoder, https://nominatim.openstreetmap.org. At most one request a second, as its usage policy asks; `--contact` adds your e-mail address to the User-Agent. |
 

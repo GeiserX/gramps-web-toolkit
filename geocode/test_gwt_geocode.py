@@ -168,6 +168,12 @@ class Settlements(unittest.TestCase):
         r = self.rows['P9022']
         self.assertEqual((r['provider'], r['lat'], r['long']), ('ban', '48.500000', '-1.500000'))
 
+    def test_ban_is_asked_with_the_departement_and_keeps_its_commune(self):
+        # a far namesake in another département is in the answer too; the département picks the commune
+        self.assertIn({'q': 'Saint-Exemple-sur-Mer Département Exemple', 'type': 'municipality', 'limit': '5'},
+                      [c[1] for c in self.http.calls])
+        self.assertNotIn('places of that name', self.rows['P9022']['note'])
+
     def test_italy_through_the_geonames_dump(self):
         self.assertEqual((self.rows['P9032']['provider'], self.rows['P9032']['lat']), ('geonames-dump', '43.300000'))
         r = self.rows['P9033']

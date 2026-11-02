@@ -283,7 +283,9 @@ class Nominatim:
 
 
 class Ban:
-    """France's national address base: one municipality per commune, with its INSEE code."""
+    """France's national address base: one municipality per commune, with its INSEE code. Many communes share a
+    name (Sainte-Marie is in at least eight départements), so the département goes into the question, and when an
+    answer's context names it, only those answers are kept."""
     name = 'ban'
     URL = 'https://api-adresse.data.gouv.fr/search/'
 
@@ -294,9 +296,12 @@ class Ban:
         return ctx['cc'] == 'fr' and ctx['kind'] == 'settlement'
 
     def search(self, ctx):
-        data = self.http.get_json(self.URL, {'q': ctx['name'], 'type': 'municipality', 'limit': '5'}) or {}
+        dept = ctx.get('department') or ''
+        q = ('%s %s' % (ctx['name'], dept)).strip()
+        feats = (self.http.get_json(self.URL, {'q': q, 'type': 'municipality', 'limit': '5'}) or {}).get('features') or []
+        mine = [f for f in feats if dept and rules.fold(dept) in rules.fold((f.get('properties') or {}).get('context'))]
         out = []
-        for f in data.get('features') or []:
+        for f in mine or feats:
             pr, (lon, lat) = f.get('properties') or {}, f['geometry']['coordinates'][:2]
             out.append(cand(lat, lon, 'settlement', [pr.get('name'), pr.get('city')], self.name,
                             '%.2f' % (pr.get('score') or 0), 'fr'))
@@ -537,7 +542,9 @@ class Geocoder:
         ctx = {'name': self.pname(h), 'kind': kind, 'cc': cc, 'path': names,
                'lang': self.lang or LANG_OF.get(cc or '', 'en'),
                'town': self.pname(town) if town else '',
-               'province': next((self.pname(a) for a in self.chain(h)[1:] if self.ptype(a) == 'Province'), None)}
+               'province': next((self.pname(a) for a in self.chain(h)[1:] if self.ptype(a) == 'Province'), None),
+               'department': next((self.pname(a) for a in self.chain(h)[1:]
+                                   if self.ptype(a) in ('Department', 'Province')), None)}
         ref = self.point(town) if town else None
         ref = (ref['lat'], ref['lon']) if ref and 'lat' in ref else None
         if kind in ('spot', 'street') and not ref:

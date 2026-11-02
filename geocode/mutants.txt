@@ -34,3 +34,5 @@ gwt_geocode.py | ODD_ANSWER = (KeyError, IndexError, TypeError, AttributeError, 
 gwt_geocode.py | encoding='utf-8-sig') as f:  # Excel | encoding='utf-8') as f:  # Excel | an overrides file saved with a byte-order mark still has its first row applied
 gwt_geocode.py | if any(not isinstance(e.get('place') or '', str) for e in events): | if False: | an event whose place is not a handle is a bad snapshot (exit 2), not a traceback
 gwt_geocode.py | ' '.join(str(r[c]).split()) | str(r[c]).replace('\t', ' ') | a line break in a place name or note never splits a report row in two
+gwt_geocode.py | for f in mine or feats: | for f in feats: | the BAN answers whose context names the place's département are kept, so a namesake commune elsewhere is not a tie
+gwt_geocode.py | q = ('%s %s' % (ctx['name'], dept)).strip() | q = ctx['name'] | the BAN is asked with the département, so the right commune is among its five answers

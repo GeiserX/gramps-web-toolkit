@@ -212,9 +212,28 @@
   ]
  },
  "ban": {
-  "Saint-Exemple-sur-Mer": {
+  "Saint-Exemple-sur-Mer Département Exemple": {
    "type": "FeatureCollection",
    "features": [
+    {
+     "type": "Feature",
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.5,
+       44.0
+      ]
+     },
+     "properties": {
+      "label": "Saint-Exemple-sur-Mer",
+      "name": "Saint-Exemple-sur-Mer",
+      "city": "Saint-Exemple-sur-Mer",
+      "score": 0.5,
+      "type": "municipality",
+      "citycode": "97001",
+      "context": "97, Autre Département, Autre Région"
+     }
+    },
     {
      "type": "Feature",
      "geometry": {
@@ -231,7 +250,7 @@
       "score": 0.95,
       "type": "municipality",
       "citycode": "99001",
-      "context": "99, Département Exemple"
+      "context": "98, Département Exemple, Région Exemple"
      }
     },
     {
