@@ -137,6 +137,7 @@ nav:
       - gwt-leads: leads.md
       - Archives catalogue: archives.md
       - gwt-report: report.md
+      - gwt-geocode: geocode.md
       - gwt-run: run.md
   - Research tools:
       - gwt-queue: queue.md

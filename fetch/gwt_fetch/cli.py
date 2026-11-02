@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import digibib, europeana, gazeta, geo, iiif
+from . import crop, digibib, europeana, gazeta, geo, iiif
 from .net import Client
 
 
@@ -21,7 +21,11 @@ def parser() -> argparse.ArgumentParser:
         sp.add_argument("--list", action="store_true", help="print what would be fetched, download nothing")
 
     s = sub.add_parser("iiif", help="download canvases from a IIIF manifest or a known viewer URL")
-    s.add_argument("url")
+    s.add_argument("url", nargs="?", help="manifest URL or viewer URL (omit with --image-base)")
+    s.add_argument("--image-base", metavar="URL",
+                   help="a IIIF Image API base or its info.json, no manifest needed; {page} in it takes each --pages number")
+    s.add_argument("--native", action="store_true",
+                   help="fetch each canvas at the width its info.json gives, refusing a rescaled file")
     pick(s)
 
     s = sub.add_parser("digibib", help="download pages from a DIGIBIB viewer (BVPH, Defensa, ...)")
@@ -51,6 +55,18 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--iiif-only", action="store_true", help="only records whose provider serves IIIF")
     s.add_argument("--rows", type=int, default=20)
 
+    s = sub.add_parser("crop", help="cut a saved image into a box, a grid or a half (needs Pillow)")
+    s.add_argument("images", nargs="+", metavar="IMG")
+    how = s.add_mutually_exclusive_group(required=True)
+    how.add_argument("--box", help="x,y,w,h in pixels")
+    how.add_argument("--grid", help="columns x rows, e.g. 2x3")
+    how.add_argument("--half", choices=["left", "right"])
+    s.add_argument("--from-size", metavar="WxH",
+                   help="the --box was measured on an image of this size (a preview); scale it to the real image")
+    s.add_argument("--overlap", default="0%", help="with --grid, how far each tile reaches into its neighbours, e.g. 10%%")
+    s.add_argument("--max", type=int, help="shrink each piece so its longest side is at most this many pixels")
+    s.add_argument("--out", help="write pieces and their manifest.tsv rows here (default: beside each image)")
+
     s = sub.add_parser("geo", help="geocode Spanish places through CartoCiudad; prints TSV with INE codes")
     s.add_argument("places", nargs="+")
     s.add_argument("--types", default="Municipio,poblacion",
@@ -63,7 +79,8 @@ def parser() -> argparse.ArgumentParser:
 def main(argv=None) -> int:
     args = parser().parse_args(argv)
     client = Client(delay=args.delay)
-    mod = {"iiif": iiif, "digibib": digibib, "gazeta": gazeta, "europeana": europeana, "geo": geo}[args.cmd]
+    mod = {"iiif": iiif, "digibib": digibib, "gazeta": gazeta, "europeana": europeana, "geo": geo,
+           "crop": crop}[args.cmd]
     try:
         return mod.run(args, client)
     except KeyboardInterrupt:
