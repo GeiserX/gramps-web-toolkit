@@ -676,6 +676,9 @@ class CoverageTest(unittest.TestCase):
         m = self.matrix('--root', 'I1')
         self.assertEqual(m[0][:3], ['id', 'name', 'familysearch'])
         self.assertEqual(len(m[0]), 2 + sum(1 for r in L.load_registry().sources if not r.endswith('-*')))
+        self.sources = os.path.join(self.dir.name, 'family.tsv')
+        write(self.sources, 'id\taliases\nfs\nparish-scan-*\t\tXX\timage\n')  # a family row is no column
+        self.assertEqual(self.matrix()[0], ['id', 'name', 'familysearch'])
 
 
 if __name__ == '__main__':
