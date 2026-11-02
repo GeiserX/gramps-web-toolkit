@@ -1,0 +1,52 @@
+# gwt-ledger source registry: one canonical id per source, the slugs that mean the same source, and what it holds.
+# country: ISO 3166 code, XX for a source that spans countries. kind: index (transcribed records), image (scans),
+# fulltext (searchable text), catalogue (finding aids), newspaper. from/to: the years its records cover, empty when
+# open or too varied to say; coverage marks a person n/a when their life falls outside them.
+# An id ending in -* covers every id with that prefix. Extend this with your own file: --registry FILE.
+id	aliases	country	kind	from	to
+familysearch-index	fs,familysearch,fs-index,fs-records,familysearch-records	XX	index		
+familysearch-images	fs-images,fs-film,fs-browse,familysearch-film	XX	image		
+familysearch-fulltext	fs-fulltext,fs-full-text	XX	fulltext		
+familysearch-catalogue	fs-catalog,fs-catalogue,familysearch-catalog	XX	catalogue		
+myheritage	mh,myheritage-records	XX	index		
+myheritage-oldnews	mh-oldnews,oldnews	XX	newspaper		
+myheritage-espejo-fs-*		XX	index		
+ancestry	ancestry-com	XX	index		
+findmypast	fmp	XX	index		
+geneanet		XX	index		
+matricula	matricula-online	XX	image	1550	1950
+ellis-island	ellisisland	US	index	1820	1957
+chronicling-america	chroniclingamerica,loc-newspapers	US	newspaper	1756	1963
+trove	trove-nla	AU	newspaper	1803	
+pares	pares-mcu	ES	catalogue		
+genae		ES	index		
+boe	boe-es	ES	fulltext	1661	
+gazeta	gaceta,gaceta-de-madrid,gazeta-anexos,boe-gazeta	ES	fulltext	1661	1959
+bvph	prensa-historica,prensahistorica	ES	newspaper	1600	
+hemeroteca-bne	hemeroteca-digital,hdbne	ES	newspaper	1683	
+bdh	bdh-bne,biblioteca-digital-hispanica	ES	fulltext		
+digitarq		PT	image	1500	
+antenati	portale-antenati	IT	image	1809	1949
+gallica	bnf-gallica	FR	fulltext		
+retronews		FR	newspaper	1631	
+matchid	deces-matchid	FR	index	1970	
+insee	insee-deces	FR	index	1970	
+memoire-des-hommes	mdh	FR	index	1914	
+openarchieven	open-archives,openarch	NL	index	1600	1950
+wiewaswie		NL	index	1600	1950
+delpher		NL	newspaper	1618	1995
+archion		DE	image	1550	1950
+volksbund		DE	index	1914	1945
+anno	anno-onb	AT	newspaper	1568	1950
+freebmd		GB	index	1837	
+freereg		GB	index	1538	1900
+freecen		GB	index	1841	1911
+scotlandspeople		GB	index	1553	1950
+bna	british-newspaper-archive	GB	newspaper	1700	
+tna-discovery	tna,discovery	GB	catalogue		
+cwgc		GB	index	1914	1947
+arkivdigital		SE	image	1600	1949
+digitalarkivet		NO	index	1600	
+rigsarkivet	arkivalieronline	DK	image	1640	1969
+hiski		FI	index	1600	
+geneteka		PL	index	1600	1969

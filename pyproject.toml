@@ -59,6 +59,7 @@ dev-mode-dirs = ["apply", "check", "fetch", "core", "ledger", "gate", "fscache",
 
 [tool.hatch.build.targets.wheel.force-include]
 "ledger/gwt_ledger.py" = "gwt_ledger.py"
+"ledger/sources.tsv" = "gwt_ledger_sources.tsv"
 "gate/gwt_gate.py" = "gwt_gate.py"
 "fscache/gwt_fscache.py" = "gwt_fscache.py"
 "queue/gwt_queue.py" = "gwt_queue.py"

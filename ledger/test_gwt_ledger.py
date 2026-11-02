@@ -1,4 +1,4 @@
-import datetime, io, os, subprocess, sys, tempfile, unittest
+import datetime, io, json, os, subprocess, sys, tempfile, unittest
 from contextlib import redirect_stderr, redirect_stdout
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -18,14 +18,24 @@ class LedgerTest(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
         self.path = os.path.join(self.dir.name, 'buscado.tsv')
+        # Invented sources these tests log to, as a user's own registry file extends the shipped one.
+        reg = os.path.join(self.dir.name, 'my-sources.tsv')
+        with open(reg, 'w', encoding='utf-8') as f:
+            f.write(''.join('%s\t\tXX\tindex\t\t\n' % s for s in ('s', 'archive', 'kirkebog', 'metryki')))
+        self.env = os.environ.get('GWT_LEDGER_SOURCES')
+        os.environ['GWT_LEDGER_SOURCES'] = reg
 
     def tearDown(self):
+        if self.env is None:
+            os.environ.pop('GWT_LEDGER_SOURCES', None)
+        else:
+            os.environ['GWT_LEDGER_SOURCES'] = self.env
         self.dir.cleanup()
 
     def add(self, person='Ana Peiro Toledo', source='FamilySearch', query='Ana Peiro bautismo 1850-1860',
             result='none', agent='lane-1'):
         return run('--ledger', self.path, 'add', '--person', person, '--label', person, '--source', source,
-                   '--query', query, '--result', result, '--agent', agent)
+                   '--query', query, '--result', result, '--agent', agent, '--control-ok', 'run-1')
 
     def test_normalize_strips_accents_and_punctuation(self):
         self.assertEqual(L.normalize('  Peiró, JOSÉ «Pepe»  1890-1900 '), 'peiro jose pepe 1890 1900')
@@ -40,7 +50,7 @@ class LedgerTest(unittest.TestCase):
         code, out = run('--ledger', self.path, 'check', '--person', 'ana-peiro-toledo',
                         '--source', 'familysearch', '--query', 'Ana Peiro bautismo 1850-1860')
         self.assertEqual(code, 0)
-        self.assertTrue(out.startswith('1.00\tana-peiro-toledo\tAna Peiro Toledo\tfamilysearch\t'))
+        self.assertTrue(out.startswith('1.00\tana-peiro-toledo\tAna Peiro Toledo\tfamilysearch-index\t'))
         # Reworded with accents and a different order still counts as done.
         code, _ = run('--ledger', self.path, 'check', '--person', 'Ana Peiro Toledo',
                       '--source', 'FamilySearch', '--query', 'bautismo de Ana Peiró, 1850-1860')
@@ -112,7 +122,7 @@ class LedgerTest(unittest.TestCase):
         self.assertIn('rows\t3', lines)
         self.assertIn('persons\t2', lines)
         self.assertIn('result\tnone\t1', lines)
-        self.assertIn('source\tfamilysearch\t2', lines)
+        self.assertIn('source\tfamilysearch-index\t2', lines)
 
     def test_concurrent_writers_lose_nothing(self):
         # 16 processes x 25 rows each, all appending at once through the CLI.
@@ -134,7 +144,8 @@ class LedgerTest(unittest.TestCase):
         lanes = os.path.join(self.dir.name, 'lanes')
         for agent, query in (('Lane A', 'Ana Peiro bautismo 1850'), ('lane-b', 'Ana Peiro boda 1875')):
             self.assertEqual(run('--ledger', self.path, '--ledger-dir', lanes, 'add', '--person', 'Ana Peiro Toledo',
-                                 '--source', 'FamilySearch', '--query', query, '--result', 'none', '--agent', agent)[0], 0)
+                                 '--source', 'FamilySearch', '--query', query, '--result', 'none', '--control-ok', 'run-1',
+                                 '--agent', agent)[0], 0)
         self.assertEqual(sorted(os.listdir(lanes)), ['lane-a.tsv', 'lane-b.tsv'])
         with open(self.path) as f:
             self.assertEqual(len(f.read().splitlines()), 2)  # the shared file got no new rows
@@ -150,7 +161,7 @@ class LedgerTest(unittest.TestCase):
         err = io.StringIO()
         with redirect_stderr(err), self.assertRaises(SystemExit):
             run('--ledger', self.path, '--ledger-dir', self.dir.name, 'add', '--person', 'x', '--source', 's',
-                '--query', 'q', '--result', 'none', '--agent', '')
+                '--query', 'q', '--result', 'none', '--control-ok', 'run-1', '--agent', '')
         self.assertIn('add needs --agent', err.getvalue())
 
     def test_cli_launcher(self):
@@ -179,7 +190,7 @@ class LedgerTest(unittest.TestCase):
         for next_date, want in (('2000-01-01', 1), (datetime.date.today().isoformat(), 1), ('2999-01-01', 0)):
             self.path = os.path.join(self.dir.name, next_date + '.tsv')
             run('--ledger', self.path, 'add', '--person', 'ana', '--source', 'fs', '--query', 'q uno',
-                '--result', 'none', '--next-date', next_date)
+                '--result', 'none', '--control-ok', 'run-1', '--next-date', next_date)
             argv = ('--ledger', self.path, 'check', '--query', 'q uno')
             self.assertEqual(run(*argv)[0], want, next_date)
             self.assertEqual(run(*argv, '--any-result')[0], 0, next_date)
@@ -191,14 +202,14 @@ class LedgerTest(unittest.TestCase):
         self.assertEqual(L.normalize('李 小龍'), '李 小龍')
         self.assertEqual(L.normalize('snake_case'), 'snake case')  # underscore stays a separator, as before
         run('--ledger', self.path, 'add', '--person', 'Hans Ørsted', '--source', 'kirkebog', '--query', 'Ørsted 1777',
-            '--result', 'none')
+            '--result', 'none', '--control-ok', 'run-1')
         row = L.read_rows(self.path)[0]
         self.assertEqual((row['person_key'], row['query']), ('hans-ørsted', 'ørsted 1777'))
         self.assertEqual(run('--ledger', self.path, 'check', '--person', 'Hans Ørsted', '--query', 'Ørsted 1777')[0], 0)
 
     def test_two_different_cyrillic_names_do_not_match(self):
         run('--ledger', self.path, 'add', '--person', 'Ivan Petrov', '--source', 'metryki',
-            '--query', 'Иван Петров 1880', '--result', 'none')
+            '--query', 'Иван Петров 1880', '--result', 'none', '--control-ok', 'run-1')
         self.assertEqual(L.read_rows(self.path)[0]['query'], 'иван петров 1880')
         self.assertEqual(run('--ledger', self.path, 'check', '--query', 'Мария Сидорова'), (1, ''))
         self.assertEqual(run('--ledger', self.path, 'check', '--query', 'Мария Сидорова 1880'), (1, ''))
@@ -208,8 +219,8 @@ class LedgerTest(unittest.TestCase):
         self.add()
         for argv in (('check', '--query', '!!! ...'), ('check', '--person', '«»', '--query', 'Ana Peiro'),
                      ('list', '--person', '...'),
-                     ('add', '--person', '?', '--source', 's', '--query', 'q', '--result', 'none'),
-                     ('add', '--person', 'x', '--source', 's', '--query', '—', '--result', 'none')):
+                     ('add', '--person', '?', '--source', 's', '--query', 'q', '--result', 'none', '--control-ok', 'run-1'),
+                     ('add', '--person', 'x', '--source', 's', '--query', '—', '--result', 'none', '--control-ok', 'run-1')):
             err = io.StringIO()
             with self.assertRaises(SystemExit) as e, redirect_stderr(err):
                 run('--ledger', self.path, *argv)
@@ -233,7 +244,7 @@ class LedgerTest(unittest.TestCase):
     def test_next_date_and_due(self):
         run('--ledger', self.path, 'add', '--person', 'x', '--source', 's', '--query', 'q one', '--result', 'denied',
             '--next-date', '2026-11-14')
-        run('--ledger', self.path, 'add', '--person', 'y', '--source', 's', '--query', 'q two', '--result', 'none')
+        run('--ledger', self.path, 'add', '--person', 'y', '--source', 's', '--query', 'q two', '--result', 'none', '--control-ok', 'run-1')
         self.assertEqual(run('--ledger', self.path, 'due', '--on', '2026-11-13'), (0, ''))
         code, out = run('--ledger', self.path, 'due', '--on', '2026-11-14')
         self.assertEqual(code, 0)
@@ -250,7 +261,7 @@ class LedgerTest(unittest.TestCase):
 
     def test_eight_column_ledger_reads_and_takes_new_rows_as_is(self):
         with open(self.path, 'w', encoding='utf-8') as f:
-            f.write('\t'.join(L.COLUMNS[:-1]) + '\n')
+            f.write('\t'.join(L.COLUMNS[:8]) + '\n')
             f.write('ana\tAna\tfs\told query here\t2026-01-01\tnone\t\ta1\n')
         run('--ledger', self.path, 'add', '--person', 'b', '--source', 's', '--query', 'new q', '--result', 'denied',
             '--next-date', '2026-12-01')
@@ -259,7 +270,7 @@ class LedgerTest(unittest.TestCase):
         self.assertIn('new q', run('--ledger', self.path, 'due', '--on', '2026-12-01')[1])
     def dated(self, date, result, query='Ana Peiro bautismo 1850-1860', source='familysearch'):
         run('--ledger', self.path, 'add', '--person', 'ana', '--source', source, '--query', query,
-            '--result', result, '--date', date)
+            '--result', result, '--date', date, '--control-ok', 'run-1')
 
     def test_equal_scores_list_the_newest_first(self):
         # An old `none` must not hide a newer `hit`: a caller that reads the first row reuses the newest.
@@ -311,6 +322,244 @@ class LedgerTest(unittest.TestCase):
             with redirect_stderr(io.StringIO()):
                 code, _ = run('--ledger', os.path.join(td, 'latin1.tsv'), 'check', '--query', 'ana')
             self.assertEqual(code, 2)
+
+
+def write(path, text):
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(text)
+
+
+def fail(*argv):
+    """Exit code and stderr of a command expected to stop with an error."""
+    err = io.StringIO()
+    with redirect_stderr(err), redirect_stdout(io.StringIO()):
+        try:
+            code = L.main(list(argv))
+        except SystemExit as e:
+            code = e.code
+    return code, err.getvalue()
+
+
+class RegistryTest(unittest.TestCase):
+    """Canonical sources, strict results, proof for a none."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.path = os.path.join(self.dir.name, 'buscado.tsv')
+        self.env = os.environ.pop('GWT_LEDGER_SOURCES', None)
+
+    def tearDown(self):
+        if self.env is not None:
+            os.environ['GWT_LEDGER_SOURCES'] = self.env
+        self.dir.cleanup()
+
+    def legacy(self, *rows):
+        """A ledger written before the registry: sources as each lane typed them."""
+        write(self.path, '\t'.join(L.COLUMNS[:9]) + '\n' + ''.join('\t'.join(r) + '\n' for r in rows))
+
+    def test_an_alias_logged_earlier_answers_a_check_for_the_canonical_id(self):
+        self.legacy(('ana-zorvalo', 'Ana Zorvalo', 'fs', 'ana zorvalo bautismo 1850', '2026-01-01', 'hit', 'e.json', 'l1', ''))
+        argv = ('--ledger', self.path, 'check', '--person', 'Ana Zorvalo', '--query', 'Ana Zorvalo bautismo 1850')
+        self.assertEqual(run(*argv, '--source', 'familysearch-index')[0], 0)
+        self.assertEqual(run(*argv, '--source', 'FamilySearch', '--exact')[0], 0)
+        # Positive control: with aliasing off, the same rows do not answer that check.
+        rows = L.read_rows(self.path)
+        reg = L.load_registry()
+        self.assertEqual(len(L.find(rows, 'ana-zorvalo', 'familysearch-index', 'ana zorvalo bautismo 1850', registry=reg)), 1)
+        self.assertEqual(L.find(rows, 'ana-zorvalo', 'familysearch-index', 'ana zorvalo bautismo 1850'), [])
+
+    def test_aliases_and_task_suffixes_resolve(self):
+        reg = L.load_registry()
+        for given, want in (('fs', 'familysearch-index'), ('Gaceta', 'gazeta'), ('gazeta-anexos', 'gazeta'),
+                            ('fs-verify', 'familysearch-index-verify'), ('any', 'any'), ('any-sweep', 'any-sweep'),
+                            ('myheritage-espejo-fs-1234', 'myheritage-espejo-fs-1234'), ('no-such-site', None),
+                            ('fs-other', None)):
+            self.assertEqual(reg.lookup(given), want, given)
+
+    def test_add_stores_the_canonical_id(self):
+        run('--ledger', self.path, 'add', '--person', 'x', '--source', 'fs', '--query', 'q', '--result', 'hit')
+        self.assertEqual(L.read_rows(self.path)[0]['source'], 'familysearch-index')
+
+    def test_an_unknown_source_exits_2_unless_new_source(self):
+        for cmd in (('add', '--result', 'hit'), ('check',)):
+            argv = ('--ledger', self.path, cmd[0], '--person', 'x', '--source', 'familysea', '--query', 'q') + cmd[1:]
+            code, err = fail(*argv)
+            self.assertEqual(code, 2, cmd)
+            self.assertIn('not in the registry', err)
+            self.assertIn('familysearch', err)  # the close match is offered
+        self.assertFalse(os.path.exists(self.path))
+        self.assertEqual(run('--ledger', self.path, 'add', '--person', 'x', '--source', 'Parish Book 3', '--query', 'q',
+                             '--result', 'hit', '--new-source')[0], 0)
+        self.assertEqual(L.read_rows(self.path)[0]['source'], 'parish-book-3')
+        self.assertEqual(run('--ledger', self.path, 'check', '--person', 'x', '--source', 'parish-book-3',
+                             '--query', 'q', '--new-source')[0], 0)
+
+    def test_a_user_registry_extends_the_shipped_one(self):
+        mine = os.path.join(self.dir.name, 'mine.tsv')
+        write(mine, 'id\taliases\tcountry\tkind\tfrom\tto\nparish-x\tpx\tES\timage\t1600\t1900\n'
+                    'familysearch-index\tfsi\t\tindex\t\t\n')
+        reg = L.load_registry(mine)
+        self.assertEqual((reg.lookup('px'), reg.lookup('fsi'), reg.lookup('fs')),
+                         ('parish-x', 'familysearch-index', 'familysearch-index'))
+        write(mine, 'boe-copy\tgaceta\tES\tfulltext\t\t\n')  # an alias that already names another source
+        with self.assertRaises(ValueError):
+            L.load_registry(mine)
+        write(mine, 'bad\t\tES\tmicrofilm\t\t\n')
+        with self.assertRaises(ValueError):
+            L.load_registry(mine)
+
+    def test_none_without_proof_is_stored_as_unproven_and_is_not_done(self):
+        base = ('--ledger', self.path, 'add', '--person', 'x', '--source', 'boe', '--query', 'edicto 1902',
+                '--result', 'none')
+        code, err = fail(*base)
+        self.assertEqual(code, 0)
+        self.assertIn('stored as unproven', err)
+        self.assertEqual(L.read_rows(self.path)[0]['result'], 'unproven')
+        check = ('--ledger', self.path, 'check', '--person', 'x', '--source', 'boe', '--query', 'edicto 1902')
+        self.assertEqual(run(*check)[0], 1)
+        run(*base, '--control-ok', 'run-2026-11-01')
+        self.assertEqual([r['result'] for r in L.read_rows(self.path)], ['unproven', 'none'])
+        self.assertEqual(L.read_rows(self.path)[1]['control'], 'run-2026-11-01')
+        self.assertEqual(run(*check)[0], 0)
+
+    def test_control_ok_file_must_be_a_passing_control_run(self):
+        good, bad = os.path.join(self.dir.name, 'good.txt'), os.path.join(self.dir.name, 'bad.txt')
+        write(good, 'control\tcontrol\t--name "Manuel Rodriguez"\t25 read, want at least 10\tok\n')
+        write(bad, 'control\tafter\t--name x\t0 read, want at least 10\tSHORT\nvoid\tboe: 1 of 1 canaries\n')
+        base = ('--ledger', self.path, 'add', '--person', 'x', '--source', 'boe', '--query', 'q', '--result', 'none')
+        code, err = fail(*base, '--control-ok', bad)
+        self.assertEqual(code, 2)
+        self.assertIn('not a passing control run', err)
+        self.assertFalse(os.path.exists(self.path))
+        self.assertEqual(run(*base, '--control-ok', good)[0], 0)
+        self.assertEqual(L.read_rows(self.path)[0]['result'], 'none')
+
+    def test_results_outside_the_enum_are_refused_by_add(self):
+        for word in ('found', 'negative', 'nothing'):
+            code, _ = fail('--ledger', self.path, 'add', '--person', 'x', '--source', 'boe', '--query', 'q',
+                           '--result', word)
+            self.assertEqual(code, 2, word)
+        self.assertFalse(os.path.exists(self.path))
+
+    def test_new_results_count_as_done_or_not(self):
+        for result, want in (('out-of-coverage', 0), ('restricted', 1), ('paid', 1), ('in-person', 1),
+                             ('unproven', 1)):
+            self.path = os.path.join(self.dir.name, result + '.tsv')
+            run('--ledger', self.path, 'add', '--person', 'x', '--source', 'boe', '--query', 'q', '--result', result)
+            self.assertEqual(run('--ledger', self.path, 'check', '--person', 'x', '--source', 'boe',
+                                 '--query', 'q')[0], want, result)
+
+    def test_check_takes_add_flags_and_person_and_source_alone(self):
+        run('--ledger', self.path, 'add', '--person', 'x', '--source', 'boe', '--query', 'edicto', '--result', 'hit',
+            '--next-date', '2030-01-01')
+        argv = ('--ledger', self.path, 'check', '--person', 'x', '--source', 'boe', '--agent', 'lane-2', '--label', 'X')
+        self.assertEqual(run(*argv)[0], 0)
+        self.assertEqual(run(*argv, '--date', '2030-01-01')[0], 1)  # judged on that day, the row is due again
+        self.assertEqual(run('--ledger', self.path, 'check', '--person', 'x', '--source', 'pares')[0], 1)
+        code, err = fail('--ledger', self.path, 'check', '--person', 'x')
+        self.assertEqual(code, 2)
+        self.assertIn('--person and --source', err)
+
+    def test_stats_by_source_folds_aliases(self):
+        self.legacy(('a', '', 'fs', 'q1', '2026-01-01', 'hit', '', '', ''),
+                    ('b', '', 'familysearch', 'q2', '2026-01-01', 'blocked', '', '', ''),
+                    ('c', '', 'familysearch-index', 'q3', '2026-01-01', 'partial', '', '', ''),
+                    ('d', '', 'boe', 'q4', '2026-01-01', 'none', '', '', ''))
+        out = run('--ledger', self.path, 'stats', '--by', 'source')[1].splitlines()
+        self.assertEqual(out[0].split('\t')[:2], ['source', 'rows'])
+        self.assertEqual(out[1], 'familysearch-index\t3\t1\t1\t0\t1\t0.33\t0.33\t0.33')
+        self.assertEqual(out[2], 'boe\t1\t0\t0\t1\t0\t0.00\t0.00\t0.00')
+
+    def test_import_maps_columns_and_synonyms_and_needs_proof(self):
+        src = os.path.join(self.dir.name, 'old-log.tsv')
+        write(src, 'who\twhere\twhat\toutcome\twhen\tproof\n'
+                   'Ana Zorvalo\tfs\tbautismo 1850\tfound\t2026-01-02\t\n'
+                   'Ana Zorvalo\tgaceta\tedicto 1902\tnegative\t2026-01-03\trun-7\n'
+                   'Luis Gil\tbvph\tesquela 1930\tnothing\t2026-01-04\t\n')
+        code, out = run('--ledger', self.path, 'import-tsv', src, '--agent', 'import',
+                        '--map', 'person_key=who,source=where,query=what,result=outcome,date=when,control=proof')
+        self.assertEqual(code, 0)
+        self.assertIn('imported\t3', out)
+        self.assertIn('unproven\t1', out)
+        self.assertIn('synonym\tfound->hit\t1', out)
+        rows = L.read_rows(self.path)
+        self.assertEqual([(r['source'], r['result']) for r in rows],
+                         [('familysearch-index', 'hit'), ('gazeta', 'none'), ('bvph', 'unproven')])
+        self.assertEqual(rows[0]['agent'], 'import')
+
+    def test_import_refuses_the_whole_file_on_one_bad_row(self):
+        src = os.path.join(self.dir.name, 'old-log.tsv')
+        write(src, 'who\twhere\twhat\toutcome\n'
+                   'Ana Zorvalo\tfs\tbautismo 1850\thit\n'
+                   'Ana Zorvalo\tfs\tedicto 1902\tmaybe\n')
+        argv = ('--ledger', self.path, 'import-tsv', src, '--map', 'person_key=who,source=where,query=what,result=outcome')
+        code, err = fail(*argv)
+        self.assertEqual(code, 2)
+        self.assertIn("line 3: result 'maybe'", err)
+        write(src, 'who\twhere\twhat\toutcome\nAna Zorvalo\tsomewhere\tbautismo 1850\thit\n')
+        code, err = fail(*argv)
+        self.assertEqual(code, 2)
+        self.assertIn("unknown source 'somewhere'", err)
+        self.assertFalse(os.path.exists(self.path))
+        self.assertEqual(run(*argv, '--new-source')[0], 0)
+
+
+def person(handle, gid, first, surname, events=(), parent_family=None):
+    return {'handle': handle, 'gramps_id': gid, 'primary_name': {'first_name': first,
+            'surname_list': [{'surname': surname}]}, 'event_ref_list': [{'ref': e} for e in events],
+            'parent_family_list': [parent_family] if parent_family else []}
+
+
+def event(handle, kind, year):
+    return {'handle': handle, 'type': kind, 'date': {'dateval': [0, 0, year, False], 'sortval': 1}}
+
+
+class CoverageTest(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        d = self.dir.name
+        self.path, self.dump, self.sources = (os.path.join(d, n) for n in ('buscado.tsv', 'tree.json', 'cols.txt'))
+        # An invented family: Ana (I1) is the child of Pedro (I2) and Juana (I3); Luis (I4) is unrelated.
+        tree = {'people': [person('h1', 'I1', 'Ana', 'Zorvalo', ['e1'], 'f1'),
+                           person('h2', 'I2', 'Pedro', 'Zorvalo', ['e2', 'e3']),
+                           person('h3', 'I3', 'Juana', 'Toledo'), person('h4', 'I4', 'Luis', 'Gil')],
+                'families': [{'handle': 'f1', 'father_handle': 'h2', 'mother_handle': 'h3',
+                              'child_ref_list': [{'ref': 'h1'}]}],
+                'events': [event('e1', 'Birth', 1850), event('e2', 'Birth', 1810), event('e3', 'Death', 1880)]}
+        write(self.dump, json.dumps({'objects': tree}))
+        write(self.sources, 'fs\nmatchid\nboe\n')
+        write(self.path, '\t'.join(L.COLUMNS) + '\n' + ''.join('\t'.join(r) + '\n' for r in (
+            ('i1', 'Ana', 'familysearch', 'q', '2026-01-01', 'none', '', '', '', 'run-1'),
+            ('i1', 'Ana', 'fs', 'q2', '2026-02-01', 'hit', '', '', '', ''),
+            ('pedro-zorvalo', 'Pedro', 'boe-es', 'q', '2026-01-01', 'blocked', '', '', '', ''),
+            ('i3', 'Juana', 'boe', 'q', '2026-01-01', 'none', '', '', '2000-01-01', 'run-1'))))
+
+    def tearDown(self):
+        self.dir.cleanup()
+
+    def matrix(self, *extra):
+        code, out = run('--ledger', self.path, 'coverage', '--dump', self.dump, '--sources', self.sources, *extra)
+        self.assertEqual(code, 0)
+        return [line.split('\t') for line in out.splitlines()]
+
+    def test_matrix_of_people_and_sources(self):
+        m = self.matrix('--root', 'I1')
+        self.assertEqual(m[0], ['id', 'name', 'familysearch-index', 'matchid', 'boe'])
+        rows = {r[0]: r[2:] for r in m[1:]}
+        self.assertEqual(list(rows), ['I1', 'I2', 'I3'])   # the root and its ancestors, not Luis
+        self.assertEqual(rows['I1'], ['hit', 'n/a', '-'])  # matchid starts in 1970; born 1850, Ana's life ends by 1960
+        self.assertEqual(rows['I2'], ['-', 'n/a', 'blocked'])  # logged under his name, and under an alias of boe
+        self.assertEqual(rows['I3'], ['-', '-', 'due'])    # no dates: never n/a; the row's next_date has passed
+
+    def test_whole_tree_without_root(self):
+        self.assertEqual([r[0] for r in self.matrix()[1:]], ['I1', 'I2', 'I3', 'I4'])
+
+    def test_unknown_source_or_root_exits_2(self):
+        write(self.sources, 'nowhere\n')
+        self.assertEqual(fail('--ledger', self.path, 'coverage', '--dump', self.dump, '--sources', self.sources)[0], 2)
+        write(self.sources, 'fs\n')
+        self.assertEqual(fail('--ledger', self.path, 'coverage', '--dump', self.dump, '--sources', self.sources,
+                              '--root', 'I99')[0], 2)
 
 if __name__ == '__main__':
     unittest.main()

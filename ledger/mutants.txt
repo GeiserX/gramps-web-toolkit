@@ -1,0 +1,16 @@
+# Mutations the ledger tests must catch. One row each: file | exact text | replacement | why
+# `python3 .github/scripts/run_tests.py --mutants --only ledger` applies each row to a scratch copy
+# and fails when the tests still pass. The text must occur exactly once in the file.
+gwt_ledger.py | if s in self.alias: | if False: | an alias (fs) resolves to its canonical id (familysearch-index)
+gwt_ledger.py | canon = registry.canon if registry else key | canon = key | check finds a row logged under an alias of the source asked for
+gwt_ledger.py | if self.alias.get(a, sid) != sid: | if False: | a registry refuses an alias that already names another source
+gwt_ledger.py | if args.new_source: | if True: | an unknown source exits 2 unless --new-source
+gwt_ledger.py | if result == 'none' and not control: | if False: | a none without --control-ok is stored as unproven
+gwt_ledger.py | if bad or not oks: | if False: | a --control-ok file must be a passing control run (no void, no SHORT)
+gwt_ledger.py | SEARCHED = ('hit', 'none', 'partial', 'out-of-coverage') | SEARCHED = ('hit', 'none', 'partial', 'out-of-coverage', 'unproven') | an unproven row never counts as a search that ran
+gwt_ledger.py | a.add_argument('--result', required=True, choices=RESULTS) | a.add_argument('--result', required=True) | add refuses a result outside the enum (found, negative)
+gwt_ledger.py | result = word if word in RESULTS else SYNONYMS.get(word) | result = word if word in RESULTS else SYNONYMS.get(word, word) | import-tsv refuses a result that is neither a result nor a synonym
+gwt_ledger.py | return bool((src['to'] and int(src['to']) < lo) or (src['from'] and int(src['from']) > hi)) | return False | coverage marks n/a a source whose years cannot hold the person's life
+gwt_ledger.py | if r['status'] not in CLOSED and r['next_date'] and r['next_date'] <= on | if r['next_date'] and r['next_date'] <= on | a closed or refused request is never due
+gwt_ledger.py | t = totals[(r[col] or '-', r['currency'].upper() or '-')] | t = totals[(r[col] or '-', '-')] | costs never add two currencies together
+gwt_ledger.py | .replace(';', '\\;').replace(',', '\\,') | .replace(';', ';').replace(',', ',') | .ics text escapes ; and , (RFC 5545 3.3.11)
