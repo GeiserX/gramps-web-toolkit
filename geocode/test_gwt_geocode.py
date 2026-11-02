@@ -483,6 +483,39 @@ class BadInputs(unittest.TestCase):
         code, *_ = run(overrides='P9006\tforty\t-3\n')
         self.assertEqual(code, 2)
 
+    def test_an_overrides_file_saved_with_a_bom(self):
+        # Excel and Notepad put a byte-order mark first; the first row must still win
+        for text in ('\ufeff' + OVERRIDE, '\ufeffP9006\t40.005\t-3.005\r\n'):
+            code, rows, ops, _, _ = run(overrides=text)
+            self.assertEqual((code, rows['P9006']['match']), (0, 'override'))
+
+    def test_an_event_whose_place_is_not_a_handle(self):
+        with open(TREE, encoding='utf-8') as f:
+            tree = json.load(f)
+        tree['objects']['events'][0]['place'] = {'x': 1}
+        with tempfile.NamedTemporaryFile('w', suffix='.json', delete=False, encoding='utf-8') as f:
+            json.dump(tree, f)
+        try:
+            code, err = run_with(f.name)
+        finally:
+            os.unlink(f.name)
+        self.assertEqual(code, 2)
+        self.assertIn('place', err)
+
+    def test_a_line_break_in_a_name_stays_in_its_row(self):
+        with open(TREE, encoding='utf-8') as f:
+            tree = json.load(f)
+        next(p for p in tree['objects']['places'] if p['gramps_id'] == 'P9002')['name']['value'] = 'Provincia\nEjemplo'
+        with tempfile.TemporaryDirectory() as d:
+            snap = os.path.join(d, 't.json')
+            with open(snap, 'w', encoding='utf-8') as f:
+                json.dump(tree, f)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+                G.main(['--snapshot', snap, '--out', os.path.join(d, 'c.jsonl'), '--no-cache'], http=FakeHttp())
+        lines = buf.getvalue().splitlines()
+        self.assertEqual({len(line.split('\t')) for line in lines}, {len(G.COLUMNS)})
+
     def test_an_unknown_provider(self):
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
             G.main(['--snapshot', TREE, '--out', os.devnull, '--providers', 'nominatim,nope'], http=FakeHttp())

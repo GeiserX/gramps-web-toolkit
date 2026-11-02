@@ -124,6 +124,8 @@ def load_snapshot(path):
         raise BadInput('%s: no places list: is this a gwt-check dump or a gwt-apply snapshot?' % path)
     if any(not isinstance(o, dict) or 'handle' not in o for o in places + events):
         raise BadInput('%s: places and events must be objects with a handle' % path)
+    if any(not isinstance(e.get('place') or '', str) for e in events):
+        raise BadInput("%s: an event's place must be a place handle" % path)
     return {p['handle']: p for p in places}, events
 
 
@@ -131,7 +133,7 @@ def load_overrides(path):
     """gramps_id -> (lat, long, note). A TSV; blank lines, `#` lines and a gramps_id header are skipped."""
     out = {}
     try:
-        with open(path, encoding='utf-8') as f:
+        with open(path, encoding='utf-8-sig') as f:  # Excel and Notepad write a byte-order mark first
             lines = f.read().splitlines()
     except (OSError, UnicodeDecodeError) as exc:
         raise BadInput('%s: %s' % (path, exc))
@@ -703,7 +705,7 @@ def main(argv=None, http=None):
             f.write(json.dumps({**op, 'ruling': a.ruling}, ensure_ascii=False) + '\n')
     print('\t'.join(COLUMNS))
     for r in rows:
-        print('\t'.join(str(r[c]).replace('\t', ' ') for c in COLUMNS))
+        print('\t'.join(' '.join(str(r[c]).split()) for c in COLUMNS))  # a tab or line break in a name stays in its cell
     count = {}
     for r in rows:
         count[r['match']] = count.get(r['match'], 0) + 1

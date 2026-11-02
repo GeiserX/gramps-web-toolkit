@@ -31,3 +31,6 @@ gwt_geocode.py | except (OSError, ValueError):  # a damaged cache file | except 
 gwt_geocode.py | raise BadInput('--out: %s' % exc) | raise | an --out that cannot be written stops with exit 2 before any request
 gwt_geocode.py | return 3 | return 0 | a run where no provider answered a single request exits 3, not 0
 gwt_geocode.py | ODD_ANSWER = (KeyError, IndexError, TypeError, AttributeError, ValueError) | ODD_ANSWER = (ZeroDivisionError,) | a provider answer in a shape it never documented is a note on that place, not a crash that loses the run
+gwt_geocode.py | encoding='utf-8-sig') as f:  # Excel | encoding='utf-8') as f:  # Excel | an overrides file saved with a byte-order mark still has its first row applied
+gwt_geocode.py | if any(not isinstance(e.get('place') or '', str) for e in events): | if False: | an event whose place is not a handle is a bad snapshot (exit 2), not a traceback
+gwt_geocode.py | ' '.join(str(r[c]).split()) | str(r[c]).replace('\t', ' ') | a line break in a place name or note never splits a report row in two
