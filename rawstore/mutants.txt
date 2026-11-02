@@ -28,3 +28,15 @@ gwt_rawstore_doctor.py | errors='surrogateescape', | errors='strict', | a tracke
 gwt_rawstore_doctor.py | except Exception as e:   # a bug must not look like exit 1, "findings" | except ZeroDivisionError as e: | an unexpected error exits 2, never 1
 gwt_rawstore_doctor.py | uncovered = max(0, len(packs) - (covered or 0)) | uncovered = 0 if covered is not None else len(packs) | packs added after the multi-pack-index was written count against it
 gwt_rawstore_doctor.py | shlex.quote(f) for f, _ in biggest | f for f, _ in biggest | a folder name with a space stays one argument in the printed fix
+gwt_rawstore_doctor.py | 'tmutil addexclusion %s' % shlex.quote(p) | 'tmutil addexclusion %s' % p | a backed-up path with a space stays one argument in the printed fix
+gwt_rawstore_doctor.py | sized[os.path.join(top, folder)] = by_folder[folder][1] | pass | a big tracked-binary folder is checked for Time Machine too
+gwt_rawstore_doctor.py | if partial and git_version(version) < GEOMETRIC_PROMISOR: | if False: | a partial clone on git older than 2.53 is told to upgrade before repacking
+gwt_rawstore_doctor.py | out(shown('%-5s %s: %s' % (c['level'], c['check'], c['message']))) | out('%-5s %s: %s' % (c['level'], c['check'], c['message'])) | a non-UTF-8 name prints as U+FFFD, not a crash
+gwt_rawstore_doctor.py | GIT_TERMINAL_PROMPT='0', GIT_OPTIONAL_LOCKS='0', | GIT_TERMINAL_PROMPT='1', GIT_OPTIONAL_LOCKS='1', | doctor's git never prompts and never takes optional locks
+gwt_rawstore_doctor.py | if n[:-5] + '.promisor' in names: | if True: | only promisor packs count as lazy fetches
+gwt_rawstore_doctor.py | partial = bool(config['extensions.partialclone'] or filters or promisor) | partial = bool(promisor) | a partial clone is known from its config
+gwt_rawstore_doctor.py | if os.path.isdir(p) and not os.path.islink(p): | if os.path.isdir(p): | a scratch symlink pointing outside the repo is not walked
+gwt_rawstore_doctor.py | except (FileNotFoundError, subprocess.TimeoutExpired) as e: | except ZeroDivisionError as e: | no tmutil is a skip, not a crash
+gwt_rawstore_doctor.py | raise CannotRun('git is not installed') from None | raise | no git exits 2
+gwt_rawstore_doctor.py | head[:4] == b'MIDX' | True | a file that is not a midx covers no pack
+gwt_rawstore_doctor.py | if os.path.isdir(chain): | if False: | an incremental midx chain counts its packs

@@ -108,6 +108,31 @@ class Clean(Base):
             self.assertEqual(D.main(a, out=out.append), 2)
         self.assertIn('internal error', json.loads(out[0])['error'])
 
+    def test_printed_lines_are_valid_utf8(self):
+        """A non-UTF-8 name read from git is printed with U+FFFD, never as a lone surrogate that crashes print()."""
+        report = {'repo': self.repo, 'git': '2.54.0', 'partial_clone': False, 'findings': 1,
+                  'checks': [{'check': 'binaries', 'level': 'warn', 'message': 'arch\udcff/ 2.0 MB',
+                              'fix': 'gwt-rawstore migrate arch\udcff --remove'}]}
+        out = []
+        with mock.patch.object(D, 'doctor', return_value=report):
+            D.main(argparse.Namespace(repo=self.repo, json=False, max_packs=1, max_tmp_gb=1, max_binary_gb=1),
+                   out=out.append)
+        for line in out:
+            line.encode('utf-8')
+        self.assertTrue(any('arch\ufffd' in l for l in out), out)
+
+    def test_partial_clone_read_from_config(self):
+        """A partial clone is known from its config even before any promisor pack exists."""
+        sh(self.repo, 'config', 'remote.origin.partialclonefilter', 'blob:none')
+        rep = self.doctor()
+        self.assertTrue(rep['partial_clone'])
+        self.assertIn('blob:none', by_check(rep)['lazy-fetch'][0]['message'])
+
+    def test_no_git_cannot_run(self):
+        with mock.patch.object(D, 'run', side_effect=FileNotFoundError('git')):
+            with self.assertRaises(D.CannotRun):
+                self.doctor()
+
     def test_cli_subcommand_needs_no_store_config(self):
         with mock.patch.dict(os.environ, {'GWT_RAWSTORE_CONFIG': os.path.join(self.t.name, 'none')}), \
                 redirect_stderr(io.StringIO()), mock.patch('builtins.print'):
@@ -144,6 +169,19 @@ class Findings(Base):
             sh(self.repo, 'multi-pack-index', 'write')
             self.assertEqual(by_check(self.doctor())['multi-pack-index'][0]['level'], 'ok')
 
+    def test_multi_pack_index_header_is_read(self):
+        """A file that is not a midx covers nothing; an incremental chain's .midx files are counted."""
+        self.add_packs(4)
+        pack = os.path.join(self.repo, '.git', 'objects', 'pack')
+        with mock.patch.object(D, 'MIDX_PACKS', 3):
+            write(os.path.join(pack, 'multi-pack-index'), b'JUNK\x01\x01\x01\x00\x00\x00\x00\x63')
+            self.assertEqual(by_check(self.doctor())['multi-pack-index'][0]['level'], 'warn')
+            os.remove(os.path.join(pack, 'multi-pack-index'))
+            sh(self.repo, 'multi-pack-index', 'write')
+            os.makedirs(os.path.join(pack, 'multi-pack-index.d'))
+            os.rename(os.path.join(pack, 'multi-pack-index'), os.path.join(pack, 'multi-pack-index.d', 'x.midx'))
+            self.assertEqual(by_check(self.doctor())['multi-pack-index'][0]['level'], 'ok')
+
     def test_tracked_binaries(self):
         write(os.path.join(self.repo, 'raw', 'scans', 'page-001.jpg'), b'\xff' * 2000)
         write(os.path.join(self.repo, 'raw', 'notes.txt'), b't' * 5000)   # text: never counted
@@ -162,6 +200,13 @@ class Findings(Base):
         c = by_check(self.doctor(max_tmp_gb=TINY))['scratch'][0]
         self.assertEqual(c['level'], 'warn')
         self.assertIn('tmp/', c['message'])
+
+    def test_scratch_symlink_is_not_followed(self):
+        """tmp/ pointing outside the repo holds nothing of the repo's: no line, no walk."""
+        outside = os.path.join(self.t.name, 'elsewhere')
+        write(os.path.join(outside, 'dump.bin'), b'0' * 2000)
+        os.symlink(outside, os.path.join(self.repo, 'tmp'))
+        self.assertNotIn('scratch', by_check(self.doctor(max_tmp_gb=TINY)))
 
     def test_cache_inside_the_repo(self):
         self.assertEqual(by_check(self.doctor())['cache'][0]['level'], 'ok')
@@ -218,8 +263,9 @@ class FixCommands(Base):
         fixes = {c['check']: c['fix'] for c in rep['checks']}
         self.assertEqual(fixes['packs'], 'git repack --geometric=2 -d && git multi-pack-index write')
         self.assertEqual(shlex.split(fixes['binaries']), ['gwt-rawstore', 'migrate', 'My Scans', '--remove'])
-        self.assertIn(['tmutil', 'addexclusion', os.path.join(self.repo, 'tmp')],
-                      [shlex.split(x) for x in fixes['time-machine'].split(' && ')])
+        tm = [shlex.split(x) for x in fixes['time-machine'].split(' && ')]
+        self.assertIn(['tmutil', 'addexclusion', os.path.join(self.repo, 'tmp')], tm)
+        self.assertIn(['tmutil', 'addexclusion', os.path.join(self.repo, 'My Scans')], tm)   # big binary folder
 
 
 class TimeMachine(Base):
@@ -254,6 +300,18 @@ class TimeMachine(Base):
         self.assertEqual(c['level'], 'warn')
         self.assertIn('tmutil addexclusion %s' % os.path.join(self.repo, 'tmp'), c['fix'])
         self.assertIn(['tmutil', 'isexcluded'], [list(a[:2]) for a in calls])
+
+    def test_no_tmutil_is_a_skip(self):
+        write(os.path.join(self.repo, 'tmp', 'dump.bin'), b'0' * 2000)
+        real = D.run
+
+        def run(args, cwd, timeout=120):
+            if args[0] == 'tmutil':
+                raise FileNotFoundError('tmutil')
+            return real(args, cwd, timeout)
+        with mock.patch.object(D, 'run', run):
+            c = by_check(self.doctor(platform='darwin', max_tmp_gb=TINY))['time-machine'][0]
+        self.assertEqual(c['level'], 'skip')
 
     def test_excluded_big_folders_are_fine(self):
         write(os.path.join(self.repo, 'tmp', 'dump.bin'), b'0' * 2000)
@@ -315,6 +373,22 @@ class PartialClone(unittest.TestCase):
                 self.assertEqual((c['level'], c['fix']), ('warn', 'export GIT_NO_LAZY_FETCH=1'))
                 self.assertIn('%d promisor packs' % (base + 3), c['message'])
 
+    def test_plain_packs_are_not_lazy_fetches(self):
+        base = len(packs(self.repo))
+        for i in range(3):   # recent packs with no .promisor marker: a repack or a push, not a lazy fetch
+            oid = sh(self.repo, 'hash-object', '-w', '--stdin', inp='plain blob %d\n' % i).strip()
+            sh(self.repo, 'pack-objects', '-q', '.git/objects/pack/pack', inp=oid + '\n')
+        with mock.patch.object(D, 'PROMISOR_PER_DAY', base):
+            self.assertEqual(by_check(D.doctor(self.repo, environ={}, platform='linux'))['lazy-fetch'][0]['level'],
+                             'info')
+
+    def test_old_git_is_told_to_upgrade_before_repacking(self):
+        for minimum, said in (((99, 0), True), ((0, 0), False)):
+            with mock.patch.object(D, 'GEOMETRIC_PROMISOR', minimum):
+                c = by_check(D.doctor(self.repo, max_packs=0, environ={}, platform='linux'))['packs'][0]
+            self.assertEqual(c['level'], 'warn')
+            self.assertEqual('Upgrade git to 2.53' in c['message'], said, c)
+
     def test_lazy_fetch_variable_parsed_like_git(self):
         for v, level in (('1', 'ok'), ('true', 'ok'), ('2', 'ok'), ('0', 'info'), ('false', 'info'), ('', 'info')):
             c = by_check(D.doctor(self.repo, environ={'GIT_NO_LAZY_FETCH': v}, platform='linux'))['lazy-fetch'][0]
@@ -335,7 +409,8 @@ class PartialClone(unittest.TestCase):
         self.assertGreater(rep['findings'], 0)
         self.assertTrue(calls)
         for args, env in calls:
-            self.assertEqual(env.get('GIT_NO_LAZY_FETCH'), '1', args)
+            self.assertEqual((env.get('GIT_NO_LAZY_FETCH'), env.get('GIT_TERMINAL_PROMPT'), env.get('GIT_OPTIONAL_LOCKS')),
+                             ('1', '0', '0'), args)
             if args[0] == 'git':
                 self.assertIn(args[1], ('version', 'rev-parse', 'count-objects', 'config', 'ls-files'), args)
             else:
