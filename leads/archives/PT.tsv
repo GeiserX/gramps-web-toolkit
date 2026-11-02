@@ -1,0 +1,3 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Portugal	country	Digitarq (Torre do Tombo and district archives)	Parish registers, passports, notarial	birth,marriage,death,migration,notarial	1500-1911	1911	https://digitarq.arquivos.pt/	browser			2026-11-02	Data loads client-side; civil registration is compulsory from 1911
+Açores|Azores|Açores (Região Autónoma)	region	CulturAçores: registos paroquiais	Azores parish registers	birth,marriage,death	1500-1911		https://culturacores.azores.gov.pt/	online	ok			robots.txt forbids crawling the image files. Probe: answered a script with HTTP 403 on 2026-11-02 (a bot check or a block); a browser may still get in

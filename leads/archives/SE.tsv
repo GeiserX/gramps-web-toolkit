@@ -1,0 +1,3 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Sweden|Sverige|Suecia|Suède|Schweden	country	Riksarkivet (search and IIIF)	Church books, household examination rolls, estate inventories	birth,marriage,death,census,probate,court,military	1500-1999		https://data.riksarkivet.se/api/records?text={place}	online	ok		2026-11-02	Open data; responses are large, ask for small pages; volumes link to IIIF manifests
+Sweden|Sverige|Suecia|Suède|Schweden	country	ArkivDigital	Colour scans of church books	birth,marriage,death,probate	1600-1949		https://www.arkivdigital.net/	paid			2026-11-02	

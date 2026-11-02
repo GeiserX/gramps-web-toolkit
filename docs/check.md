@@ -75,6 +75,7 @@ It trusts the stamps for everything else. A change that reaches the database wit
 | `--limit N` | Findings printed per check (default 30); the JSON has all of them |
 | `--pagesize`, `--workers` | Objects per request (default 1000) and requests in flight (default 4) |
 | `--live` | The old strict read of the live tree, which stops when the tree changes during it |
+| `--download` | Live tree only: also read each image's 256 px thumbnail for `media-tiny`, `media-uniform` and `media-dup-page` ([below](#media)). Needs Pillow; without it those three are skipped with a note. `gwt-check dump --download` saves the measures in the dump, so a later offline check of it reports them too |
 
 **Scope.** The structural and dated checks always run on the whole tree. The scoped duplicate checks (`dup-couple-names`, `dup-person-birth`, `dup-person-relative`, `dup-person-fuzzy`, `dup-vital-event`, `dup-citation`, `dup-media`) report a group only when at least one member is in scope, so a run is not blamed for duplicates that were already there. `place-vs-description` reports only events in scope. Without `--since` or `--tag`, everything is in scope.
 
@@ -219,10 +220,31 @@ gwt-check repos dump.json.gz --json                   # repositories with their 
 | `sibling-spacing` | For information only. Two children of one mother born less than 240 days apart and more than a day apart (twins). Birth events with an exact day only: a baptism can be late |
 | `note-marker-no-tag` | For information only. A note whose text says «hipótesis» or «homónimo» (any accent, whole word) but carries no tag whose name holds that word. Only where the tree has such a tag: a tree that does not use the convention is not blamed. A mention with «descartada», «refutada», «superada», «sustituida» or «desmentida» within three words after or before it is skipped, unless «no», «ni», «sin» or «nada» comes between them |
 | `lifespan` | For information only. A life of more than 105 years, from birth or baptism to death or burial |
+| `media-non-viewable` | A media object Gramps Web shows only as a grey icon: MIME `text/*`, `message/*` (a saved mail), JSON, XHTML, or a tar, gzip or zip archive. Without a stored MIME the file name decides. For text or mail: put its text in a Transcript note (`gwt-apply add_transcription`), then detach it. For JSON or an archive: unpack or convert it to an image or PDF, or detach it |
+| `media-file-missing` | A media object whose file the server does not have (`GET /api/media/?filemissing=1`). Live tree, or a dump gwt-check saved |
+| `media-tiny` | With `--download`. An image whose longer side is under 200 px |
+| `media-uniform` | For information only, with `--download`. An image of which 98% or more of the pixels are within 12 grey levels of one tone: a blank page, a grey placeholder, a failed scan |
+| `media-dup-page` | For information only, with `--download`. Two media objects with different files on one citation whose thumbnails are 20 bits or fewer apart out of 256 (a difference hash): maybe the same page uploaded twice, for example after a re-scan or a crop. Two different pages of one printed register or form can also come this close, so compare them before detaching one. The same file twice is `dup-media`. Keyed by the citation and both media IDs |
 
 Names are compared lowercased, without accents, with b/v and i/y folded and the particle "de" dropped. `dup-person-fuzzy` also drops "del", "la", "las", "los" and "y", and matches "Pedro Lasa" with "Pedro José Lasa Ibarra". For a pair to count, at least one side must be in scope, or belong to a family that is. That covers an old person the run gave a new spouse or new parents. A different spelling of the same word ("Lasa" against "Lassa") is still not matched. A run that allowed namesakes still needs its homonyms read one by one.
 
 The report also gives, without failing: events without a place (in the whole tree and in scope), the `dup-person-fuzzy` pairs left out because their fathers and mothers differ by name (a count in the text report, the pair keys under `info` in `--json`, so a namesake entered with the wrong parents can still be read), sources without a repository (in a tree that has repositories: a source is linked only when its repository is certain, so some stay unlinked), the objects changed and new since `--since`, the last changed object (it should be the last item applied), and the Ahnentafel counts.
+
+## Media
+
+`media-non-viewable` needs only the tree. The others need what the server says about each file, which an offline dump from another tool does not carry:
+
+```sh
+gwt-check check                      # adds media-file-missing: one extra request for the whole tree
+gwt-check check --download           # adds media-tiny, media-uniform and media-dup-page: one thumbnail per image
+gwt-check dump tree.json --download  # saves all of it; gwt-check check tree.json reports the same findings offline
+```
+
+Only `check` and `dump` ask the server about files. A dump keeps the answers beside the objects, under `media_status`, so the objects stay as the server sent them and `gwt-apply --snapshot` or `--revert --pre` can write them back. If the list of missing files fails (a media store that errors or times out), the check goes on and prints `media files not checked: N`.
+
+Gramps Web keeps a list answer in its cache until the tree changes, and a file deleted from the media folder changes nothing in the tree, so `gwt-check` words each request for missing files differently and the server never answers it from the cache. A dump without it, such as a gwt-apply snapshot, reports `media files not checked: N` and skips those kinds; take a new gwt-check dump to check them. `--download` asks for every image's and PDF's 256 px thumbnail (`GET /api/media/<handle>/thumbnail/256`), never the full file, with `--workers` requests in flight, and prints how many it measured. A thumbnail the server will not give (any 4xx but 401 and 429, such as 404 gone, 422 a file it cannot open, or 501 a PDF without poppler) or Pillow cannot read is left out and counted in the report as `media thumbnails not read: N`, never the end of the run. Gramps Web sends AVIF thumbnails, which need Pillow 11.3 or newer. Add Pillow to the tool's own Python: `pipx inject gramps-web-toolkit pillow` after a pipx install, or `pip install pillow` in the same environment as gwt-check; nothing else in gwt-check needs it.
+
+Each finding says what to do: replace the file, detach it from what cites it, or for a text file move its text into a Transcript note. `media-uniform` and `media-dup-page` are for information only, since a blank back page or two takes of one page can be on purpose. `media-tiny` fails the run, since a small image is most often a failed upload; accept a deliberate crop, such as a signature cut from a register, with `mark-known`.
 
 ## Dated checks
 

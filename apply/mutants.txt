@@ -58,8 +58,8 @@ gwt_apply/ops.py | if entry is None and not listed and not retry: | if entry is 
 gwt_apply/ops.py | if fam in (child.get("parent_family_list") or []): | if False: | unlink_child takes the family off the child's parent families too
 gwt_apply/ops.py | retry = op["key"] in self._unlink_notes  # | retry = False  # | unlink_child whose answer was lost still deletes the link's mark on the retry
 gwt_apply/ops.py | if entry is not None and not (family.get("father_handle") or family.get("mother_handle") | if False and not (family.get("father_handle") or family.get("mother_handle") | unlink_child warns when it leaves a family with nobody in it
-gwt_apply/revert.py | elif m == "DELETE" and _cls_of_path(path)[0] == "Note": | elif False: | --revert makes a note the run deleted again from the pre-run copy
-gwt_apply/ops.py | if held: | if False: | unlink_child keeps a link mark another writer took up between its tries
+gwt_apply/revert.py | elif m == "DELETE" and _cls_of_path(path)[0] is not None: | elif False: | --revert makes an object the run deleted (a note, or what the delete op removed) again
+gwt_apply/ops.py | held = self._referrers("Note", handle) | held = set() | unlink_child keeps a link mark another writer took up between its tries
 gwt_apply/ops.py | if not self.c.exists("Note", handle): | if False: | unlink_child whose mark delete lost its answer finds the mark gone and is done
 gwt_apply/ops.py | self._referrers("Note", h) == {("family", fam)}: | self._referrers("Note", h) <= {("family", fam)}: | unlink_child never deletes a mark when the server names no holder for it
 gwt_apply/revert.py | if client.get_live(s["cls"], s["handle"]) is None: | if True: | --revert recreating a note whose answer was lost does not post it twice
@@ -119,4 +119,57 @@ gwt_apply/cli.py | if not bid or not found: | if not found: | a finished task th
 gwt_apply/cli.py | if isinstance(ro, dict) and ro.get("id"): | if False: | the backup id is read from the task's result_object, where the server puts it
 gwt_apply/cli.py | if b.get("restorable") is False or not b.get("size"): | if b.get("restorable") is False: | a 201 that names an empty backup stops the run before it writes
 gwt_apply/ops.py | if self.private_new:  # tags never come here | if False:  # tags never come here | --private-new saves every object the run creates as private
-gwt_apply/cli.py | verify=args.verify, private_new=args.private_new).run(ops) | verify=args.verify).run(ops) | the --private-new flag reaches the run
+gwt_apply/cli.py | verify=args.verify, private_new=args.private_new, landed=landed).run(ops) | verify=args.verify, landed=landed).run(ops) | the --private-new flag reaches the run
+gwt_apply/ops.py | elif op.get("expect") == "absent": | elif True: | a removal that finds nothing to remove is a conflict unless the list says expect: absent
+gwt_apply/ops.py | elif self.verify: | elif False: | --verify reads nothing left to remove as the landed state, a skip
+gwt_apply/ops.py | if self._lost: | if False: | the retry of a removal whose answer was lost reads its own write back as done
+gwt_apply/ops.py | held = self._holders(cls, handle) | held = set() | delete refuses an object something still points at
+gwt_apply/ops.py | if key in self.c.pending and json.dumps(handle) not in json.dumps(self.c.pending[key]): | if False: | a dry run lets delete take an object an earlier op of the list detached
+gwt_apply/revert.py | before = pre.get((cls, h)) or kept.get((cls, h)) | before = pre.get((cls, h)) | revert makes a deleted object again from the copy its log line keeps
+gwt_apply/client.py | record=record) | record=None) | the log line of a delete keeps the whole object
+gwt_apply/ops.py | if media.get("checksum") != op["expect"]: | if False: | update_media replaces a file only when the media object still has the MD5 the op names
+gwt_apply/ops.py | if self._has(carrier.get(lst) or [], handle, op.get("rect")): | if False: | attach_existing with expect: absent refuses a link already there
+gwt_apply/ops.py | if now not in (None, person): | if False: | update_family never replaces a parent the family already has
+gwt_apply/ops.py | if fam["handle"] != family["handle"] and (fam.get("father_handle"), fam.get("mother_handle")) == couple: | if False: | update_family refuses a couple another family already has
+gwt_apply/ops.py | if cit.get("source_handle") != self.resolve("Source", op["expect_source"]): | if False: | update_citation moves a citation only from the source expect_source names
+gwt_apply/ops.py | if w.get("source_handle") != l_.get("source_handle"): | if False: | merge_citation refuses two citations of different sources
+gwt_apply/ops.py | if len(types) > 1: | if False: | merge_place refuses two places of different types
+gwt_apply/ops.py | if self._inside(a["handle"], b["handle"]): | if False: | merge_place refuses a place inside the other
+gwt_apply/ops.py | if mime.startswith(NOT_A_DOCUMENT) and not op.get("force"): | if False: | add_media refuses a web page or a text file unless force
+gwt_apply/ops.py | other = [a.get("value") for a in attrs if str(a.get("type")) == atype and a.get("value") != value] | other = [] | set_external_id never replaces another id of the same system
+gwt_apply/ops.py | if pos >= len(items): | if False: | reorder_refs refuses a position past the end of the list
+gwt_apply/ops.py | if cls == "Person" and name == "event_ref_list": | if False: | reorder_refs keeps birth_ref_index on the birth event
+gwt_apply/ops.py | found = [n for n in names if self._alt_matches(n, cls, f)] | found = [n for n in names if self._alt_matches(n, cls, f)][:1] | remove_alternate_name refuses a description that matches two names
+gwt_apply/ops.py | if op.get("expect_unreferenced") is not True: | if False: | delete needs expect_unreferenced: true in the list
+gwt_apply/ops.py | if ("source" in f) != isinstance(op.get("expect_source"), str): | if False: | validate refuses a citation move without expect_source
+gwt_apply/ops.py | op["set"][PRIVATE], bool): | op["set"][PRIVATE], object): | validate refuses a private that is not true or false
+gwt_apply/ops.py | and r[0] < r[2] and r[1] < r[3]): | ): | validate refuses an empty region
+gwt_apply/ops.py | if (ocls, oref) in self._list_deletes and self._find(ocls, oref) is None: | if self._find(ocls, oref) is None: | a detach whose note is gone passes only when a delete op of the list took it
+gwt_apply/ops.py | if (ocls, oref) in self._list_deletes and self._find(ocls, oref) is None: | if self.verify and (ocls, oref) in self._list_deletes and self._find(ocls, oref) is None: | a rerun of a landed detach-then-delete with expect absent skips, not only under --verify
+gwt_apply/ops.py | elif op["key"] in self.landed: | elif False: | a removal an earlier apply of the same list logged as done is a skip on a rerun
+gwt_apply/cli.py | or lines[0].get("list_sha256") != sha | or False | only the logs of the same list (same sha256) count as an earlier run of it
+gwt_apply/ops.py | set(_QUOTED.findall(json.dumps(o))) & known: | {k for k in known if k in json.dumps(o)}: | offline, a handle that only starts with the object's handle does not hold it
+gwt_apply/ops.py | {UNREFERENCE[cls]}, nothing was | detach it first, nothing was | delete's conflict names the op that takes that kind of reference off
+gwt_apply/ops.py | if role in f and not isinstance(f[role], str): | if False: | validate refuses a null father or mother, where the run crashed
+gwt_apply/ops.py | if "source" in f and not isinstance(f["source"], str): | if False: | validate refuses a null citation source
+gwt_apply/ops.py | if person == family.get(f"{other}_handle") or person in | if False and person in | update_family never makes the family's mother its father too
+gwt_apply/ops.py | person in {r.get("ref") for r in family.get("child_ref_list") or []}: | False: | update_family never makes a child of the family its father
+gwt_apply/ops.py | return re.sub(r"[\s._-]", "", fold(system)) == "familysearch" | return fold(system) == "familysearch" | set_external_id knows FamilySearch written with a space or a dash
+gwt_apply/ops.py | if cls == "Person" and self._alt_matches(obj.get("primary_name") or {}, cls, {"first_name": "", "surnames": [], **f}): | if False: | add_alternate_name refuses a copy of the primary name
+gwt_apply/ops.py | not (self.verify or self._lost or op["key"] in self.landed): | not (self.verify or self._lost): | a rerun of the same list skips the link its earlier --apply made with attach_existing expect: absent
+gwt_apply/cli.py | or lines[0].get("dry_run"): | : | a dry run's log never counts as an earlier apply of the list
+gwt_apply/cli.py | lambda: _plan_on_snapshot(ops, snap, client, tag=args.tag, landed=landed), | lambda: _plan_on_snapshot(ops, snap, client, tag=args.tag), | the plan on a --snapshot of a rerun skips the removals that landed too
+gwt_apply/cli.py | e.get("event") == "op" and e.get("status") == "done" and e.get("key")} | e.get("event") == "op" and e.get("key")} | only the ops an earlier apply logged as done count as landed
+gwt_apply/ops.py |         if not at: | if False: | reorder_refs refuses a reference the list lacks
+gwt_apply/ops.py | if len(at) > 1: | if False: | reorder_refs refuses a reference the list holds twice
+gwt_apply/ops.py | raise Conflict(f"winner and loser are the same {cls.lower()}") | pass | merge_place, merge_source and merge_citation refuse one object as winner and loser
+gwt_apply/ops.py | ("confidence", w.get("confidence", 2) == l_.get("confidence", 2)), | ("confidence", True), | merge_citation refuses citations of another confidence
+gwt_apply/ops.py | ("date", date_key(w.get("date")) == date_key(l_.get("date")))): | ("date", True)): | merge_citation refuses citations of another date
+gwt_apply/ops.py | if "url" in op and not re.match(r"^https?://\S+$", str(op["url"])): | if False: | validate refuses a set_external_id url that is not http(s)
+gwt_apply/ops.py | if _parse_target(op.get("target"))[0] in ("ChildRef", "PersonRef", "Place"): | if False: | validate refuses an external id on a place or a link
+gwt_apply/ops.py | if "force" in op and op["force"] is not True: | if False: | validate refuses a force that is not true
+gwt_apply/ops.py | m = re.match(r"Merged (Person|Family|Event|Repository|Place|Source|Citation) (\S+) ", | m = re.match(r"Merged (Person|Family|Event|Repository) (\S+) ", | --verify follows a merged place, source or citation to its winner
+gwt_apply/ops.py | self._private(person, s) | pass | update_person sets private
+gwt_apply/client.py | self.unsnapped |= {"Person", "Family", "Note"} if cls in ("Person", "Family", "Event") else set(NAMESPACE) | self.unsnapped |= {"Person", "Family", "Note"} | a place, source or citation merge stops trusting the snapshot for every class
+gwt_apply/client.py |         if r.status_code == 412: | if False: | a file the server says changed (412) is named as such
+gwt_apply/ops.py | found |= {k for k, o in self.c.pending.items() if quoted in json.dumps(o)} | pass | offline, delete sees a reference an earlier op of the list adds
