@@ -50,7 +50,8 @@ class Base(unittest.TestCase):
         return D.doctor(repo or self.repo, **kw)
 
     def add_packs(self, n):
-        for i in range(n):
+        start = len(packs(self.repo)) if os.path.isdir(os.path.join(self.repo, '.git', 'objects', 'pack')) else 0
+        for i in range(start, start + n):   # a new blob each time: the same blob would give the same pack name
             oid = sh(self.repo, 'hash-object', '-w', '--stdin', inp='invented blob %d\n' % i).strip()
             sh(self.repo, 'pack-objects', '-q', '.git/objects/pack/pack', inp=oid + '\n')
 
@@ -128,6 +129,18 @@ class Findings(Base):
         with mock.patch.object(D, 'MIDX_PACKS', 3):
             c = by_check(self.doctor())['multi-pack-index'][0]
             self.assertEqual((c['level'], c['fix']), ('warn', 'git multi-pack-index write'))
+            sh(self.repo, 'multi-pack-index', 'write')
+            self.assertEqual(by_check(self.doctor())['multi-pack-index'][0]['level'], 'ok')
+
+    def test_stale_multi_pack_index(self):
+        """A midx written once covers only the packs of that day; the ones added later are a finding again."""
+        self.add_packs(2)
+        sh(self.repo, 'multi-pack-index', 'write')
+        self.add_packs(4)
+        with mock.patch.object(D, 'MIDX_PACKS', 3):
+            c = by_check(self.doctor())['multi-pack-index'][0]
+            self.assertEqual((c['level'], c['fix']), ('warn', 'git multi-pack-index write'))
+            self.assertIn('4 of', c['message'])
             sh(self.repo, 'multi-pack-index', 'write')
             self.assertEqual(by_check(self.doctor())['multi-pack-index'][0]['level'], 'ok')
 

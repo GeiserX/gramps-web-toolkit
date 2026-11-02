@@ -8,7 +8,7 @@ fixes it. Exit status 0 when nothing is wrong, 1 when something is, 2 when it ca
 It never fetches. It runs only `git version`, `rev-parse`, `count-objects -v`, `config --get`, `ls-files` and, on
 macOS, `tmutil isexcluded`; it reads no object, and every git it starts has GIT_NO_LAZY_FETCH=1 as a second guard.
 """
-import json, os, re, subprocess, sys
+import json, os, re, struct, subprocess, sys
 
 GB = 10 ** 9
 PACKS = 500           # default --max-packs
@@ -60,6 +60,25 @@ def tree_size(path):
     return total
 
 
+def midx_packs(packdir):
+    """How many packs the multi-pack-index covers, or None when there is none. The count is the 4-byte number
+    at byte 8 of each midx file's header (git's gitformat-pack, "multi-pack-index files have the following format")."""
+    files = [os.path.join(packdir, 'multi-pack-index')]
+    chain = os.path.join(packdir, 'multi-pack-index.d')
+    if os.path.isdir(chain):
+        files += [os.path.join(chain, n) for n in sorted(os.listdir(chain)) if n.endswith('.midx')]
+    total = None
+    for f in files:
+        try:
+            with open(f, 'rb') as fh:
+                head = fh.read(12)
+        except OSError:
+            continue
+        if len(head) == 12 and head[:4] == b'MIDX':
+            total = (total or 0) + struct.unpack('>I', head[8:12])[0]
+    return total
+
+
 def git_version(text):
     m = re.search(r'(\d+)\.(\d+)', text)
     return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
@@ -93,7 +112,8 @@ def doctor(repo='.', max_packs=PACKS, max_tmp_gb=TMP_GB, max_binary_gb=BINARY_GB
     names = set(os.listdir(packdir)) if os.path.isdir(packdir) else set()
     packs = sorted(n for n in names if n.endswith('.pack'))
     promisor = sum(1 for n in packs if n[:-5] + '.promisor' in names)
-    midx = 'multi-pack-index' in names or 'multi-pack-index.d' in names
+    covered = midx_packs(packdir)
+    uncovered = max(0, len(packs) - (covered or 0))   # packs added after the midx was written are outside it
     counts = dict(l.split(': ', 1) for l in git(repo, 'count-objects', '-v')[1].splitlines() if ': ' in l)
     git_bytes = sum(int(counts.get(k, 0)) for k in ('size', 'size-pack', 'size-garbage')) * 1024
 
@@ -112,10 +132,13 @@ def doctor(repo='.', max_packs=PACKS, max_tmp_gb=TMP_GB, max_binary_gb=BINARY_GB
         add('packs', 'warn', summary + '; over %d, every missing-object lookup reads every pack index' % max_packs, fix)
     else:
         add('packs', 'ok', summary)
-    if len(packs) > MIDX_PACKS and not midx:
-        add('multi-pack-index', 'warn', 'no multi-pack-index over %d packs' % len(packs), 'git multi-pack-index write')
+    if uncovered > MIDX_PACKS:
+        add('multi-pack-index', 'warn', ('%d of %d packs are not in the multi-pack-index' % (uncovered, len(packs))
+                                         if covered is not None else 'no multi-pack-index over %d packs' % len(packs)),
+            'git multi-pack-index write')
     else:
-        add('multi-pack-index', 'ok', 'present' if midx else 'not needed for %d packs' % len(packs))
+        add('multi-pack-index', 'ok', 'covers %d of %d packs' % (covered, len(packs)) if covered is not None
+            else 'not needed for %d packs' % len(packs))
     add('maintenance', 'info', 'gc.auto=%s maintenance.auto=%s' % (config['gc.auto'] or 'unset',
                                                                    config['maintenance.auto'] or 'unset'))
 
