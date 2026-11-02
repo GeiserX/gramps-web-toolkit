@@ -32,3 +32,12 @@ gwt_dna.py |     except (BadInput, OSError) as exc: |     except BadInput as exc
 gwt_dna.py |     text = io.StringIO(text, newline=None).read() |     pass | a CSV with an old Mac's line ends reads
 gwt_dna.py |             if (cm or 0) >= CLOSE_KIN_CM: |             if False: | a new person at close-family cM (often your own kit) is reported, not made silently
 gwt_dna.py | if cm is not None and abs(cm - tree["mark_cm"][(site, mid)]) >= 0.05: | if False: | a re-export whose cM changed is reported, since gwt-apply keeps the old notes
+gwt_dna.py |     except csv.Error as exc: |     except ZeroDivisionError as exc: | a CSV the csv module cannot read is exit 2 and one line, not a traceback
+gwt_dna.py |     except (OSError, ValueError, EOFError) as exc: |     except OSError as exc: | a damaged snapshot is exit 2 and one line, not a traceback
+gwt_dna.py |         text = raw.decode("cp1252", errors="replace") |         raise | a CSV saved by Windows Excel (cp1252) reads with its accents
+gwt_dna.py |     delim = max(",;\t", key=first.count) |     delim = "," | a CSV with semicolons (Excel in most of Europe) reads
+gwt_dna.py |             if not full and not cell(r, "id"): |             if False: | a row with neither name nor id is skipped and listed, never a nameless person
+gwt_dna.py |     if len(rows) < 2: |     if False: | an empty file is exit 2 and one line
+gwt_dna.py |             if need or not ({"id", "name"} & set(found)): |             if False: | a segment file missing a column it needs is exit 2 and one line
+gwt_dna.py |     if not isinstance(people, list) or not people: |     if False: | a snapshot with no people is exit 2 and one line
+gwt_dna.py |         if a.batch < 4: |         if False: | a --batch smaller than one match's ops is exit 2

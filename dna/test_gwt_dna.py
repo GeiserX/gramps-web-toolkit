@@ -424,6 +424,43 @@ class BadFiles(unittest.TestCase):
             self.assertEqual(self.cli(d, *files, extra=["--batch", "7", "--force"])[0], 0)
             self.assertEqual(sorted(os.listdir(d)), ["c-01.jsonl", "c-02.jsonl", "c-03.jsonl"])
 
+    def write(self, d, name, data):
+        p = os.path.join(d, name)
+        with open(p, "wb") as fh:
+            fh.write(data if isinstance(data, bytes) else data.encode("utf-8"))
+        return p
+
+    def test_a_semicolon_or_windows_csv_reads(self):   # Excel in most of Europe writes ; and cp1252
+        with tempfile.TemporaryDirectory() as d:
+            p = self.write(d, "eu.csv", "DNA Match ID;Name;Shared DNA\nD-1;Renée Sample;48,5\n".encode("cp1252"))
+            m = D.read_files([p], {})[0]["D-1"]
+            self.assertEqual((m["name"], m["cm"]), ("Renée Sample", 48.5))
+
+    def test_a_row_with_neither_name_nor_id_is_skipped_and_listed(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = self.write(d, "m.csv", "DNA Match ID,Name,Shared DNA\nD-1,Tom Sample,48\n,,30\n")
+            m, _, cols = D.read_files([p], {})
+            self.assertEqual((sorted(m), cols[p]["skipped_rows"]), (["D-1"], [3]))
+
+    def test_unreadable_files_snapshots_and_options_are_exit_2(self):
+        with tempfile.TemporaryDirectory() as d:
+            ok = fx("myheritage-matches.csv")
+            cases = {
+                "empty file": dict(files=[self.write(d, "e.csv", "")]),
+                "a cell past the csv module's limit": dict(files=[self.write(d, "big.csv", "DNA Match ID,Name,Shared DNA\n"
+                                                                             "D-1,\"" + "x" * 200000 + "\",48\n")]),
+                "a segment file with no start column": dict(files=[self.write(
+                    d, "s.csv", "DNA Match ID,Chromosome,End Location,Centimorgans\nD-1,7,9000000,12.5\n")]),
+                "a damaged snapshot": dict(snapshot=self.write(d, "dam.json", '{"objects": {"peo')),
+                "a snapshot with no people": dict(snapshot=self.write(d, "np.json", '{"objects": {"people": []}}')),
+                "--batch below one match": dict(extra=["--batch", "3"]),
+            }
+            for what, kw in cases.items():
+                code, err = self.cli(d, *kw.get("files", [ok]), snapshot=kw.get("snapshot", fx("tree.json")),
+                                     extra=kw.get("extra", ()))
+                self.assertEqual(code, 2, what)
+                self.assertEqual(len(err.strip().splitlines()), 1, (what, err))
+
 
 @unittest.skipIf(FakeGrampsWeb is None and not os.environ.get("CI"), "gwt-apply not importable")   # CI must run it
 class EndToEnd(unittest.TestCase):
