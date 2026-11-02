@@ -372,15 +372,6 @@ def git(*args, cwd=None):
     return subprocess.run(('git',) + args, cwd=cwd, check=True, capture_output=True, text=True).stdout
 
 
-def confirmed(store, row):
-    """True when there is a manifest row (sha256, size, key) and the store holds that object with its size and hash."""
-    if row is None:
-        return False
-    sha, size, key = row
-    have = store.head(key)
-    return have is not None and have[0] == size and (not have[1] or have[1] == sha)
-
-
 def ignore_binaries(folder, names):
     """One pattern per binary extension in the folder's .gitignore (`*.jpg` covers every subfolder), not one line
     per file: a folder of thousands of scans got thousands of lines."""
@@ -393,8 +384,9 @@ def ignore_binaries(folder, names):
 
 
 def migrate(store, folder, prefix='', remove=False, jobs=4, log=print, evict=False):
-    """Upload the binaries git tracks under folder. --remove untracks them and ignores them; --evict does that and
-    deletes each local copy once a fresh HEAD confirms its manifest row. History stays."""
+    """Upload the binaries git tracks under folder. --remove untracks them and ignores them; --evict also deletes
+    the local copies. put() HEADs every object after its upload, so a file is deleted only once the store holds it
+    with its size and sha256; if any upload fails, nothing is untracked or deleted. History stays."""
     tracked = [p for p in git('ls-files', '-z', '--', '.', cwd=folder).split('\0') if p and is_binary_name(p)]
     files = [os.path.join(folder, p) for p in tracked if os.path.isfile(os.path.join(folder, p))]
     if len(files) != len(tracked):
@@ -406,15 +398,9 @@ def migrate(store, folder, prefix='', remove=False, jobs=4, log=print, evict=Fal
         return failures
     if not (remove or evict) or not files:
         return 0
-    by_folder, kept, rows = {}, [], {}
+    by_folder = {}
     for f in files:
         d, name = os.path.split(f)
-        if d not in rows:
-            rows[d] = read_manifest(d)
-        if evict and not confirmed(store, rows[d].get(name)):
-            kept.append(f)
-            log('KEEP %s: no confirmed row in %s' % (f, MANIFEST), file=sys.stderr)
-            continue
         by_folder.setdefault(d, []).append(name)
     for d, names in by_folder.items():
         for i in range(0, len(names), 1000):  # in batches: tens of thousands of names pass the argument limit
@@ -425,12 +411,9 @@ def migrate(store, folder, prefix='', remove=False, jobs=4, log=print, evict=Fal
                 os.unlink(os.path.join(d, n))
     ignore_binaries(folder, [os.path.basename(f) for f in files])
     git('add', '--sparse', '--', '.gitignore', cwd=folder)
-    done = len(files) - len(kept)
     log('%s %d files in %d folders; review with git status, then commit'
-        % ('evicted' if evict else 'untracked', done, len(by_folder)))
-    if kept:
-        log('%d files kept: the store did not confirm them; run gwt-rawstore verify' % len(kept), file=sys.stderr)
-    return len(kept)
+        % ('evicted' if evict else 'untracked', len(files), len(by_folder)))
+    return 0
 
 
 def check_staged(max_kb, allow, log=print):

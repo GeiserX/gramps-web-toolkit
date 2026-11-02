@@ -53,7 +53,7 @@ Every row of every `rawstore.tsv` under the given directories: the key carries t
 ```sh
 gwt-rawstore migrate <dir> [--remove | --evict] [-j 4]
 ```
-For binaries already committed. Uploads every binary git tracks under `dir` and writes the manifests. With `--remove` it also runs `git rm --cached` on them, adds one pattern per extension (`*.jpg`, `*.pdf`) to `dir/.gitignore`, which covers every subfolder, and stages the manifests and `.gitignore`. The files stay on disk. `--evict` does the same and then deletes each local copy, but only after a fresh `HEAD` finds the object its manifest row names, with the right size and sha256; a file that fails that check stays on disk and tracked, gets a `KEEP <path>` line, and the run exits 1. The history is not rewritten in either case; commit when the diff looks right. If any upload fails, nothing is untracked.
+For binaries already committed. Uploads every binary git tracks under `dir` and writes the manifests. With `--remove` it also runs `git rm --cached` on them, adds one pattern per extension (`*.jpg`, `*.pdf`) to `dir/.gitignore`, which covers every subfolder, and stages the manifests and `.gitignore`. The files stay on disk. `--evict` does the same and then deletes the local copies. Every upload is confirmed by a `HEAD` that checks the size and the sha256 before anything is untracked or deleted. The history is not rewritten in either case; commit when the diff looks right. If any upload fails, nothing is untracked.
 
 It refuses to run when tracked files are missing from the working tree (a sparse checkout), since it cannot hash what it cannot read. Run it on a full clone, for example on a server, then pull the commit on the laptop.
 

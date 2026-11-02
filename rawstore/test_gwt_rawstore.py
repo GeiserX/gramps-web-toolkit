@@ -301,29 +301,20 @@ class GitTest(Base):
         self.assertEqual(R.verify(self.store, [folder], deep=True, log=self.log), 0)
         self.assertTrue(R.get(self.store, os.path.join(folder, '0002.jpg'), os.path.join(self.dir, 'cache')))
 
-    def test_migrate_evict_keeps_what_a_fresh_head_does_not_confirm(self):
+    def test_migrate_evict_heads_each_file_only_inside_put(self):
         folder = self.commit_scans()
-        seen = {}
+        self.assertEqual(R.migrate(self.store, folder, evict=True, log=self.log), 0)
+        # put already HEADs each object before and after the upload; a second check would cost a request per file
+        self.assertEqual(sum(1 for c in FakeS3.calls if c[0] == 'HEAD'), 2 * 3)
 
-        class Forgetful(R.S3):
-            """Confirms each upload, then loses the object: the HEAD before eviction finds nothing."""
-            def head(self, key):
-                seen[key] = seen.get(key, 0) + 1
-                return None if seen[key] > 2 else super().head(key)
+    def test_migrate_evict_deletes_and_untracks_nothing_when_an_upload_fails(self):
+        folder = self.commit_scans()
+        FakeS3.fail[R.object_key(R.sha256_file(os.path.join(folder, '0001.jpg'))[0], '0001.jpg')] = 99
         with redirect_stderr(io.StringIO()):
-            self.assertEqual(R.migrate(Forgetful(self.endpoint, BUCKET, 'AK', 'SK'), folder, evict=True,
-                                       log=self.log), 3)
+            self.assertEqual(R.migrate(self.store, folder, evict=True, log=self.log), 1)
         self.assertTrue(all(os.path.exists(os.path.join(folder, '%04d.jpg' % i)) for i in range(3)))
-        self.assertNotIn('D  raw/r1/0000.jpg', self.git('status', '--porcelain'))
-        self.assertTrue(any(l.startswith('KEEP ') for l in self.stderr), self.stderr)
-
-    def test_confirmed_needs_a_manifest_row_and_a_matching_object(self):
-        img = self.write('r1/a.jpg', b'AAAA')
-        R.put(self.store, [img], log=self.log)
-        row = R.read_manifest(os.path.join(self.dir, 'r1'))['a.jpg']
-        self.assertTrue(R.confirmed(self.store, row))
-        self.assertFalse(R.confirmed(self.store, None))   # the object is there, but no row says so
-        self.assertFalse(R.confirmed(self.store, (row[0], row[1] + 1, row[2])))
+        self.assertNotIn('D  ', self.git('status', '--porcelain'))
+        self.assertFalse(os.path.exists(os.path.join(folder, '.gitignore')))
 
     def cli(self, *argv):
         env = {k: v for k, v in os.environ.items() if not k.startswith('GWT_RAWSTORE_')}
