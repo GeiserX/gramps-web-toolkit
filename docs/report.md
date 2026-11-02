@@ -10,6 +10,8 @@ Standard library only. Both subcommands read a `gwt-check dump` or a `gwt-apply`
 gwt report kin [--lang en|es|fr] [--json] [--weak-tag TEXT] DUMP A B
 ```
 
+Gramps Web already names the relationship between two people, in every language Gramps has a calculator for (`/api/relations/HANDLE1/HANDLE2` in its API). Use that when the name in your language is all you need. `kin` is for the rest of the answer, offline: every path, how solid each link is, the Ahnentafel numbers on both sides, and implex.
+
 It prints every blood relationship between `A` and `B`, nearest first. For each one:
 
 - **the name of what B is to A**, in English, Spanish or French (`--lang`, default `en`; `--json` gives all three). It follows B's gender when the tree records it;
@@ -123,6 +125,12 @@ $ gwt report digest --from report/fixtures/digest-old.json --to report/fixtures/
 ### Rosa Pine (I8), aunt (path: 0 confirmed, 0 probable, 1 weak, 2 unmarked links) https://gramps.example.org/person/I8
 
 - new person: Rosa Pine [weak] https://gramps.example.org/person/I8
+
+## not blood kin
+
+### Tim Reed (I11) https://gramps.example.org/person/I11
+
+- new person: Tim Reed https://gramps.example.org/person/I11
 ```
 
 `--format html` writes the same lines with only the inline tags chat apps accept: `<b>` for the headings, `<u>` for the side, `<i>` for a note and `<a href>` for every link. There is no page around it (no `<html>`, `<h1>` or `<ul>`), so it pastes as it is into a Telegram message sent in HTML mode or into an email.
