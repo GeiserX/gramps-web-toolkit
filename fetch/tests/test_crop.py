@@ -167,3 +167,28 @@ def test_flags_that_do_not_apply_are_refused(page):
     with pytest.raises(SystemExit, match="--from-size"):
         crop.run(args([page], half="left", from_size="900x600"))
     assert not list(page.parent.glob("0001_pag-1_*"))
+
+
+@pytest.mark.parametrize("flags, message", [
+    (dict(box="1,2,3"), "x,y,w,h"),
+    (dict(box="a,b,c,d"), "x,y,w,h"),
+    (dict(box="0,0,0,5"), "above 0"),
+    (dict(grid="0x3"), "AxB"),
+    (dict(grid="2x3", overlap="50%"), "under 50"),
+])
+def test_bad_flag_values_stop_with_a_message(page, flags, message):
+    with pytest.raises(SystemExit, match=message):
+        crop.run(args([page], **flags))
+    assert not list(page.parent.glob("0001_pag-1_*"))
+
+
+def test_a_missing_image_stops_with_a_message(tmp_path):
+    with pytest.raises(SystemExit, match="no such file"):
+        crop.run(args([tmp_path / "nope.jpg"], half="left"))
+
+
+def test_a_page_with_transparency_is_saved_as_jpeg(tmp_path):
+    p = tmp_path / "scan.png"
+    Image.new("RGBA", (400, 300), (255, 255, 255, 0)).save(p)
+    assert crop.run(args([p], half="left")) == 0
+    assert size(tmp_path / "scan_left.jpg") == (200, 300)

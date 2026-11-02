@@ -233,3 +233,34 @@ def test_pixel_width_reads_jpeg_and_png_headers():
         buf = io.BytesIO()
         PIL.new("RGB", (777, 55)).save(buf, "JPEG", **kw)
         assert iiif.pixel_width(buf.getvalue()) == 777
+
+
+def test_iiif_without_a_url_or_image_base_stops_with_a_message():
+    with pytest.raises(SystemExit, match="give a manifest or viewer URL"):
+        iiif.run(ns(url=None), FakeClient({}))
+
+
+def test_image_base_on_antenati_sends_the_portal_referer(tmp_path):
+    base = "https://iiif-antenati.cultura.gov.it/iiif/2/aAaa111"
+    rc = iiif.run(ns(url=None, image_base=f"{base}/info.json", out=str(tmp_path)), RefererClient(antenati_routes()))
+    assert rc == 0
+    assert [r["image_url"] for r in rows(tmp_path / "manifest.tsv")] == [f"{base}/full/4929,/0/default.jpg"]
+
+
+def test_image_base_names_an_html_answer_and_saves_nothing(tmp_path, capsys):
+    routes = ad_routes(3904)
+    routes[f"{AD}/f12/full/3904,/0/default.jpg"] = Resp(b"<html>viewer</html>", "text/html", 200)
+    assert iiif.run(ns(url=None, image_base=f"{AD}/f12", out=str(tmp_path)), FakeClient(routes)) == 1
+    assert "200 text/html" in capsys.readouterr().err
+    assert not list(tmp_path.glob("*.jpg"))
+
+
+def test_a_manifest_with_an_image_context_is_not_taken_for_info_json():
+    v3 = {"@context": ["http://iiif.io/api/image/3/context.json", "http://iiif.io/api/presentation/3/context.json"],
+          "type": "Manifest", "items": []}
+    assert not iiif._is_image_info(v3)
+    assert iiif._is_image_info(json.loads((FIX / "ad_info.json").read_text()))
+
+
+def test_pages_named_twice_are_fetched_once():
+    assert iiif.parse_pages("3,1-3", 5) == [3, 1, 2]

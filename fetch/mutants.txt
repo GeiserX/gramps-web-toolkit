@@ -29,3 +29,14 @@ gwt_fetch/iiif.py | return host == "canadiana.ca" or host.endswith(".canadiana.c
 gwt_fetch/iiif.py | and client.delay < CANADIANA_DELAY: | and False: | a Canadiana run waits the 10 s its robots.txt asks for, without --delay
 gwt_fetch/crop.py |     if parse_overlap(args.overlap) and not args.grid: |     if False: | --overlap without --grid is refused, not silently ignored
 gwt_fetch/crop.py |     if args.from_size and not args.box: |     if False: | --from-size without --box is refused, not silently ignored
+gwt_fetch/iiif.py |     if not args.url: |     if False: | iiif with neither a URL nor --image-base stops with a message, not a traceback
+gwt_fetch/iiif.py | if not r.ok or ctype.startswith("text/"): | if not r.ok: | an HTML page served in place of an image is named as such and not saved
+gwt_fetch/iiif.py | referer = portal_referer(base) or f"{base}/info.json" | referer = f"{base}/info.json" | an Antenati --image-base gets the portal Referer its WAF requires
+gwt_fetch/iiif.py | if not isinstance(doc, dict) or "sequences" in doc or "items" in doc: | if not isinstance(doc, dict): | a manifest whose @context names the Image API is still read as a manifest
+gwt_fetch/iiif.py | return list(dict.fromkeys(want)) | return want | a page named twice in --pages is fetched once
+gwt_fetch/crop.py | if len(parts) != 4 or not all(re.fullmatch(r"\d+", p) for p in parts): | if False: | a malformed --box stops with a message, not a traceback
+gwt_fetch/crop.py |     if not w or not h: |     if False: | a --box of zero width or height is refused
+gwt_fetch/crop.py | if not m or not int(m.group(1)) or not int(m.group(2)): | if not m: | a --grid with zero columns or rows is refused, not an empty run that exits 0
+gwt_fetch/crop.py | if not m or float(m.group(1)) >= 50: | if not m: | an --overlap of 50% or more is refused
+gwt_fetch/crop.py |         if not src.is_file(): |         if False: | a missing image stops with a message, not a traceback
+gwt_fetch/crop.py | if piece.mode not in ("RGB", "L"): | if False: | a page with transparency or a palette is converted before it is saved as JPEG
