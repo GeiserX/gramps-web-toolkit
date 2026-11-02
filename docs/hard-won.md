@@ -356,3 +356,19 @@ Format: what happened, why, and the rule.
 **Why.** The client retried 429 and 5xx answers but not network errors, so one page that timed out ended a 15-minute read. It is the read side of lesson 48.
 
 **Rule.** Every request of a long read retries network errors with a growing wait, the same as a 5xx; `gwt-check` tries each request 6 times. On a loaded server, read with small pages and one request at a time (`--pagesize 100 --workers 1`), save the dump, and run the checks on the file.
+
+### 55. The requested viewer image was not the image on screen
+
+**What happened.** Image-number navigation appeared to change a URL or control,
+while the displayed record stayed elsewhere; an OCR date filter also hid pages
+whose year text had not been recognized. A dynamic table's loading shell looked
+like an empty search.
+
+**Why.** Navigation state, search text and rendered source content were treated
+as equivalent evidence.
+
+**Rule.** Verify the displayed image and reference after navigation. Use
+handwritten index references as clues, not acts, and test documented spelling
+variants and filter behaviour. Wait for an explicit result state. Keep the exact
+query and inspected images in the ledger. Stop on challenges or throttling;
+no fixed delay is a guarantee of permitted access.
