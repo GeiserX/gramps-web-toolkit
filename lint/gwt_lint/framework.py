@@ -38,12 +38,13 @@ CREATES = {"add_person": "Person", "add_event": "Event", "add_family": "Family",
            "add_source": "Source", "add_repository": "Repository", "add_citation": "Citation",
            "add_media": "Media", "add_note": "Note", "add_transcription": "Note"}
 MERGED = {"merge_person": "Person", "merge_family": "Family", "merge_event": "Event",
-          "merge_repository": "Repository"}
+          "merge_repository": "Repository", "merge_place": "Place", "merge_source": "Source",
+          "merge_citation": "Citation"}
 # plain fields that name one object (a Gramps ID or key:<key>), by the kind they name. namesake_of and
 # new_couple_of are left out: they name the people and families the new object is NOT, so the op does not touch them
 FIELDS = {"person": "Person", "child": "Person", "father": "Person", "mother": "Person", "family": "Family",
           "event": "Event", "citation": "Citation", "note": "Note", "place": "Place", "source": "Source",
-          "repository": "Repository", "enclosed_by": "Place", "children": "Person"}
+          "repository": "Repository", "enclosed_by": "Place", "children": "Person", "media": "Media"}
 # fields whose value is new free text, per op ("set.text" is the text key inside `set`)
 TEXT_FIELDS = {"add_note": ("text",), "add_transcription": ("text", "margin_reading"),
                "add_event": ("description",), "update_note": ("set.text",), "update_event": ("set.description",),
@@ -52,13 +53,14 @@ TEXT_FIELDS = {"add_note": ("text",), "add_transcription": ("text", "margin_read
                "set_attribute": ("value",), "merge_person": ("reason",), "merge_family": ("reason",),
                "merge_event": ("reason",), "merge_repository": ("reason",), "add_citation": ("page",),
                "update_citation": ("set.page",), "add_media": ("desc",), "add_source": ("title", "author", "pubinfo"),
-               "update_source": ("set.title",)}
+               "update_source": ("set.title",), "merge_place": ("reason",), "merge_source": ("reason",),
+               "merge_citation": ("reason",), "update_media": ("set.desc",)}
 # fields of gwt-apply ops that are a name, an ID, a type or a path, not free text; a test checks that every field
 # gwt-apply takes is in TEXT_FIELDS or here, so a field it adds later cannot slip past the text rules unseen
 LABELS = {"first_name", "surname", "gender", "gramps_id", "person", "event", "place", "note", "citation", "source",
           "family", "child", "father", "mother", "repository", "winner", "loser", "enclosed_by", "date", "role", "type",
           "frel", "mrel", "name", "abbrev", "url", "call_number", "media_type", "file", "path", "mime", "list",
-          "relation"}
+          "relation", "expect_source", "media", "ref", "call", "nick", "title", "suffix", "lang", "id", "system"}
 PROBABLE = "[probable]"
 
 

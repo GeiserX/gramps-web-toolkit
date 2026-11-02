@@ -49,7 +49,7 @@ gwt_lint/framework.py |     if isinstance(data, (list, dict)): |     if False: |
 gwt_lint/cli.py |                 where[key] = v = [v] |                 pass | one name in lint.toml may be a bare string
 gwt_lint/cli.py |         return _fail(args, f"{type(e).__name__}: {e}") |         raise | an unexpected error exits 2, never 1 (findings)
 gwt_lint/cli.py |     if getattr(args, "json", False): |     if False: | --json prints an input error as JSON on stdout too
-gwt_lint/framework.py | "enclosed_by": "Place", "children": "Person"} | "enclosed_by": "Place", "children": "Person", "namesake_of": "Person", "new_couple_of": "Family"} | the namesakes an op says it is not are not people or families it touches
+gwt_lint/framework.py | "children": "Person", "media": "Media"} | "children": "Person", "media": "Media", "namesake_of": "Person", "new_couple_of": "Family"} | the namesakes an op says it is not are not people or families it touches
 gwt_lint/rules_tree.py |             elif kind in UPDATED or kind in MERGED: |             elif False: | an update or merge of a protected person is protect-update
 gwt_lint/rules_tree.py |             if kind in ("add_event", "update_event", "move_event"): |             if kind in ("add_event", "update_event"): | an event moved onto someone who may be living is judged like a new one
 gwt_lint/rules_tree.py |         return bool((text.get("dateval") or [0])[0]) |         return False | a moved event's exact date in the snapshot counts

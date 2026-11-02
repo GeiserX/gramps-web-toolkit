@@ -267,10 +267,11 @@ def test_every_free_text_field_gwt_apply_takes_is_read():
            {"op": "add_media", "key": "m", "file": "a.jpg", "path": "a.jpg", "desc": "ID card 12345678Z",
             "attach": [{"person": "I10"}]},
            {"op": "update_citation", "key": "u", "citation": "C1", "set": {"page": "DNI 12345678Z"},
-            "expect": "old page"}]
+            "expect": "old page"},
+           {"op": "update_media", "key": "um", "media": "O1", "set": {"desc": "ID card 12345678Z"}}]
     ctx = F.Context([dict(o, _line=1) for o in ops], F.Tree.load(TREE), {"living": {"this_year": 2026}})
     assert [(f.code, f.key) for f in T.Living().check(ctx)] == [("living-id", "c"), ("living-id", "m"),
-                                                                 ("living-id", "u")]
+                                                                 ("living-id", "u"), ("living-id", "um")]
 
 
 def test_no_field_gwt_apply_takes_is_forgotten():
