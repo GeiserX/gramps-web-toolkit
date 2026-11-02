@@ -11,3 +11,7 @@ gwt_archiveorg.py | return re.sub(r'\s+', ' ', s.replace('{{{', '').replace('}}}
 gwt_archiveorg.py | if not r['docs'] and offset >= r['numFound']: | if False: | an archive.org catalogue page past the last row is the end of the results (exit 2), never a STOP
 gwt_archiveorg.py | if not h['hits'] and offset >= h['total']: | if False: | an archive.org full-text page past the last row is the end of the results (exit 2), never a STOP
 gwt_archiveorg.py | off = (max(1, int(a.page)) - 1) * max(1, min(int(a.count), 100)) | off = 0 | the search tells the verdict where its page starts, so the last page reads as the end
+gwt_archiveorg.py | if not isinstance(r, dict) or not _count(r.get('numFound')) or | if not isinstance(r, dict) or | a catalogue count that is not a whole number is unknown, a STOP
+gwt_archiveorg.py | if not isinstance(h, dict) or not _count(h.get('total')) or | if not isinstance(h, dict) or | a full-text count that is not a whole number is unknown, a STOP
+gwt_archiveorg.py | all(isinstance(d, dict) and d.get('identifier') for d in r['docs']) | all(isinstance(d, dict) for d in r['docs']) | a catalogue row with no identifier is unknown, a STOP
+gwt_archiveorg.py | (x.get('fields') or {}).get('identifier') for x | True for x | a full-text hit with no identifier is unknown, a STOP

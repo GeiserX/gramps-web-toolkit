@@ -35,6 +35,10 @@ class Classify(unittest.TestCase):
         self.assertEqual(v(json.loads(fx('none.json'))), 'none')
         self.assertEqual(v(json.loads(fx('changed.json'))), 'unknown', 'a renamed result container read as "none"')
         self.assertEqual(v({'responseHeader': {'status': 400}, 'response': {'numFound': 0, 'docs': []}}), 'unknown')
+        ok = {'responseHeader': {'status': 0}}
+        self.assertEqual(v(dict(ok, response={'numFound': '1', 'docs': [{'identifier': 'x'}]})), 'unknown',
+                         'a count that is not a whole number')
+        self.assertEqual(v(dict(ok, response={'numFound': 1, 'docs': [{'title': 'x'}]})), 'unknown', 'no identifier')
 
     def test_fulltext(self):
         v = gwt_archiveorg.fulltext_verdict
@@ -44,6 +48,10 @@ class Classify(unittest.TestCase):
         failed['response']['header']['succeeded'] = False
         self.assertEqual(v(failed), 'unknown', 'a search the backend says failed read as "none"')
         self.assertEqual(v(json.loads(fx('search.json'))), 'unknown')
+        hits = lambda total, rows: {'response': {'header': {'succeeded': True}, 'body': {'hits': {'total': total,
+                                                                                               'hits': rows}}}}
+        self.assertEqual(v(hits('1', [{'fields': {'identifier': 'x'}}])), 'unknown', 'a count that is not a number')
+        self.assertEqual(v(hits(1, [{'fields': {'title': 'x'}}])), 'unknown', 'a hit with no identifier')
 
     def test_a_page_past_the_last_row_is_the_end_never_a_stop(self):
         past = {'responseHeader': {'status': 0}, 'response': {'numFound': 109, 'docs': []}}

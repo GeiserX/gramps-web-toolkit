@@ -38,6 +38,8 @@ class Classify(unittest.TestCase):
         self.assertEqual(v({'status': 0, 'matches': []}), 'unknown')
         self.assertEqual(v([{'status': 0, 'matches': [], 'total': 5}]), 'unknown', 'a count with no rows read as "none"')
         self.assertEqual(v([{'status': 0, 'matches': [{'index': 0}], 'total': 1}]), 'unknown', 'a row with no Id')
+        self.assertEqual(v([{'status': 0, 'matches': [{'Id': 1, 'Name': 'X-1'}], 'total': '1'}]), 'unknown',
+                         'a count that is not a whole number')
 
     def test_a_private_profile_is_only_its_id(self):
         # the live API gives a private profile as {Id, index} alone: that is a withheld row, not a changed answer
@@ -51,6 +53,22 @@ class Classify(unittest.TestCase):
         self.assertEqual(v(json.loads(fx('people.json'))), 'hits')
         self.assertEqual(v(json.loads(fx('invalid.json'))), 'none', 'the site\'s own "Invalid WikiTree ID"')
         self.assertEqual(v([{'page_name': 'X-1', 'status': 'Something new'}]), 'unknown')
+        self.assertEqual(v([{'status': '', 'people': {}}]), 'none', 'getPeople with no person')
+        self.assertEqual(v([{'status': '', 'people': 'Zorvalo-12'}]), 'unknown', 'people of another type')
+        self.assertEqual(v([{'status': 'Permission denied', 'profile': {'Id': 1}}]), 'unknown',
+                         'getProfile with an error status')
+
+    def test_a_public_profile_without_its_wikitree_id_is_withheld_never_a_crash(self):
+        self.assertEqual(gwt_wikitree.candidates([{'Id': 1, 'Privacy_IsAtLeastPublic': True}]), ([], 1))
+
+    def test_the_asked_profile_goes_first_whatever_the_answers_order_and_generations_count_up(self):
+        people = [{'Id': 3, 'Name': 'Zorvalo-3', 'Privacy_IsAtLeastPublic': True},
+                  {'Id': 2, 'Name': 'Zorvalo-2', 'Privacy_IsAtLeastPublic': True, 'Father': 3},
+                  {'Id': 1, 'Name': 'Zorvalo-1', 'Privacy_IsAtLeastPublic': True, 'Father': 2}]
+        cands, _ = gwt_wikitree.candidates(people)
+        rows = gwt_wikitree.mark_ancestors(cands, people, 1)
+        self.assertEqual([(c['id'], c['principal'], c.get('generation')) for c in rows],
+                         [('Zorvalo-1', True, None), ('Zorvalo-3', False, 2), ('Zorvalo-2', False, 1)])
 
     def test_profile_keys(self):
         self.assertEqual(gwt_wikitree.profile_key('Zorvalo-12'), 'Zorvalo-12')

@@ -41,6 +41,10 @@ class Classify(unittest.TestCase):
         self.assertEqual(v(json.loads(fx('error200.json'))), 'unknown', 'an error answered with HTTP 200 read as "none"')
         self.assertEqual(v({'response': {'number_found': 3}}), 'unknown', 'a count with no rows read as "none"')
         self.assertEqual(v({'response': {'number_found': '0'}}), 'unknown')
+        self.assertEqual(v({'response': {'number_found': 0, 'docs': {}}}), 'unknown', 'rows of another type')
+        self.assertEqual(v({'response': {'number_found': 1, 'docs': [{'identifier': 'u1'}]}}), 'unknown',
+                         'a row with no archive code')
+        self.assertFalse(gwt_openarch.is_record({'Person': [{'PersonName': {}}]}), 'a person with no @pid')
 
     def test_a_page_past_the_last_row_is_the_end_never_a_stop(self):
         past = {'response': {'number_found': 409, 'docs': []}}

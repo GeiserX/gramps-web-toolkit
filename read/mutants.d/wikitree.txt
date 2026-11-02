@@ -11,3 +11,10 @@ gwt_wikitree.py | q.append(('dateInclude', 'both'))   # else WikiTree also retur
 gwt_wikitree.py | (m.get('Name') or m.get('Id')) | m.get('Name') | a private WikiTree profile comes as {Id, index} alone: withheld, never a STOP of the whole search
 gwt_wikitree.py | m = _KEY.search(urllib.parse.unquote((arg or '').strip())) | m = _KEY.search((arg or '').strip()) | a percent-encoded profile URL from a browser is decoded once, never sent encoded twice as a false "none"
 gwt_wikitree.py | c.update(role='ancestor', principal=False, generation=name_gen.get(c['id'])) | pass | with --ancestors only the asked profile is the principal; the others are ancestors with their generation
+gwt_wikitree.py | if not isinstance(n, int) or isinstance(n, bool): | if False: | a search answer whose count is not a whole number is unknown, a STOP
+gwt_wikitree.py | if not isinstance(d['people'], (dict, list)): | if False: | a getPeople answer whose people is of another type is unknown, a STOP
+gwt_wikitree.py | return 'hits' if d['people'] else 'none' | return 'hits' | a getPeople answer with no person is "none" (exit 2)
+gwt_wikitree.py | if d.get('status') == 0 and isinstance(d.get('profile'), dict): | if isinstance(d.get('profile'), dict): | a getProfile answer with an error status is unknown, never a profile
+gwt_wikitree.py | if is_public(p) and p.get('Name')] | if is_public(p)] | a public profile without its WikiTree ID is withheld, never a crash
+gwt_wikitree.py | return sorted(cands, key=lambda c: not c['principal']) | return cands | with --ancestors the asked profile comes first whatever the answer's order
+gwt_wikitree.py | gen[parent] = gen[p.get('Id')] + 1 | gen[parent] = 1 | a grandparent is generation 2, not 1

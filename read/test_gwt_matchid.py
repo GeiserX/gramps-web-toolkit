@@ -40,6 +40,13 @@ class Classify(unittest.TestCase):
         self.assertEqual(v({'response': {'persons': []}}), 'unknown', 'no count is not a zero count')
         self.assertEqual(v({'response': {'total': 4, 'persons': []}}), 'unknown')
         self.assertEqual(v({'response': {'total': 0.0, 'persons': []}}), 'unknown', 'a count that is not a whole number')
+        self.assertEqual(v({'response': {'total': 1, 'persons': [{'id': 'a1', 'name': 'Zorvalo'}]}}), 'unknown',
+                         'a row whose name is no longer an object')
+
+    def test_only_the_spent_quota_422_is_a_wall(self):
+        self.assertTrue(gwt_matchid.quota_spent(422, b'{"msg":"temporary anonymous usage expired"}'))
+        self.assertFalse(gwt_matchid.quota_spent(400, b'{"msg":"temporary anonymous usage expired"}'))
+        self.assertFalse(gwt_matchid.quota_spent(422, b'{"msg":"invalid birthDate value"}'))
 
     def test_a_date_range_is_sent_without_spaces(self):
         # matchID answers HTTP 400 "invalid birthDate value" for "01/01/1900 - 31/12/1910", 200 without the spaces
@@ -51,6 +58,18 @@ class Classify(unittest.TestCase):
         past = {'response': {'total': 2, 'persons': []}}
         self.assertEqual(gwt_matchid.verdict(past, 20), 'none', 'page 2 of a 2-row search read as a changed answer')
         self.assertEqual(gwt_matchid.verdict(past, 0), 'unknown')
+
+    def test_get_api_leaves_a_stop_reader_get_already_judged_alone(self):
+        # a 503 bot page is a wall Reader.get already told the gate about: get_api must not count it twice
+        class R:
+            lane, gate = 't', FakeGate()
+
+            def get(self, *a, **k):
+                raise gwt_reader.Stop('a bot wall', gwt_reader.EXIT_WALL, 'wall', 503, b'{"error": "busy"}')
+        r = R()
+        with self.assertRaises(gwt_reader.Stop) as e:
+            gwt_reader.get_api(r, 'https://deces.matchid.io/deces/api/v1/search?q=x')
+        self.assertEqual((str(e.exception), r.gate.hits), ('a bot wall', []))
 
     def test_the_pace_keeps_to_one_request_a_second_at_most(self):
         self.assertGreaterEqual(gwt_matchid.SPEC['pace']['floor'], 1.0)
