@@ -1,0 +1,5 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Finland|Suomi|Finlandia|Finlande|Finnland	country	HisKi (Genealogical Society of Finland)	Parish register index	birth,marriage,death	1600-1900		https://hiski.genealogia.fi/hiski?en	online	ok		2026-11-02	Free, no login; reached from the society's website. An old CGI application: be very gentle
+Finland|Suomi|Finlandia|Finlande|Finnland	country	Kansallisarkisto Astia	Church book copies, poll-tax registers, court records	birth,marriage,death,court,other	1500-1900		https://astia.narc.fi/uusiastia/	browser			2026-11-02	
+Finland|Suomi|Finlandia|Finlande|Finnland	country	Digi (National Library of Finland)	Newspapers and journals (OCR)	press	1771-1939		https://digi.kansalliskirjasto.fi/	online			2026-11-02	
+Finland|Suomi|Finlandia|Finlande|Finnland	country	Finna	Archives, libraries and museums	catalogue			https://www.finna.fi/	browser	challenge			Probe: answered a script with HTTP 403 on 2026-11-02 (a bot check or a block); a browser may still get in

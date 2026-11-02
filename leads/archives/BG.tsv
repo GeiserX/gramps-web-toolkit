@@ -1,0 +1,2 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Bulgaria|България|Bulgarien|Bulgarie	country	Bulgarian State Archives Agency	Parish and civil registers (some digitised)	birth,marriage,death,census	1893-	1893	https://archives.government.bg/	browser	disallow			Probe: robots.txt forbids scripts there (checked 2026-11-02)

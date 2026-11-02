@@ -1,0 +1,2 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Jersey	country	Jersey Heritage archive catalogue	Parish registers, wills, public registry	birth,marriage,death,probate,land	1540-1950		https://www.jerseyheritage.org/archive-catalogue/	online	ok			Crawl-delay 10 s; images need a subscription. Probe: answered a script with HTTP 404 on 2026-11-02
