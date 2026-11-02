@@ -584,7 +584,7 @@ def test_a_uid_on_a_tree_person_holds_the_file_person_even_after_a_rename():
 def test_look_alike_couples_inside_the_file_are_kept_apart_like_people():
     text = """0 HEAD
 0 @I1@ INDI
-1 NAME Melchor /Sanz/
+1 NAME Tomás /Sanz/
 1 SEX M
 1 BIRT
 2 DATE 1700
@@ -594,7 +594,7 @@ def test_look_alike_couples_inside_the_file_are_kept_apart_like_people():
 1 SEX F
 1 FAMS @F1@
 0 @I3@ INDI
-1 NAME Melchor /Sanz/
+1 NAME Tomás /Sanz/
 1 SEX M
 1 BIRT
 2 DATE 1760
