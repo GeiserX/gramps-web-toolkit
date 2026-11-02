@@ -89,6 +89,8 @@ A register page is often too big to read in one look, and a double page holds tw
 - `--half left|right` cuts the left or right half of a double page.
 - `--max 1600` shrinks each piece so its longest side is at most 1600 px. Leave it out to keep native pixels.
 
+`--from-size` without `--box`, and `--overlap` without `--grid`, are refused rather than ignored.
+
 ```
 $ gwt-fetch crop /tmp/reg/0012_f12.jpg --grid 2x3 --overlap 10%
 /tmp/reg/0012_f12_grid2x3-r1c1.jpg

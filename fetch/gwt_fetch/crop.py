@@ -76,6 +76,10 @@ def parse_overlap(text: str) -> float:
 def pieces(args, size):
     """(name, box in source pixels) for every piece the flags ask for."""
     W, H = size
+    if args.from_size and not args.box:
+        raise SystemExit("gwt-fetch crop: --from-size goes with --box")
+    if parse_overlap(args.overlap) and not args.grid:
+        raise SystemExit("gwt-fetch crop: --overlap goes with --grid")
     if args.box:
         box = parse_box(args.box)
         if args.from_size:

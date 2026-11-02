@@ -27,3 +27,5 @@ gwt_fetch/iiif.py |         if pages: |         if False: | --pages with an --im
 gwt_fetch/iiif.py | return [(n, PAGE.sub(lambda m: format(n, m.group(1) or ""), base)) for n in want] | return [(n, PAGE.sub(str(n), base)) for n in want] | {page:04} pads the page number with zeros
 gwt_fetch/iiif.py | return host == "canadiana.ca" or host.endswith(".canadiana.ca") | return host.endswith("canadiana.ca") | a lookalike host such as evilcanadiana.ca is not rewritten as Canadiana
 gwt_fetch/iiif.py | and client.delay < CANADIANA_DELAY: | and False: | a Canadiana run waits the 10 s its robots.txt asks for, without --delay
+gwt_fetch/crop.py |     if parse_overlap(args.overlap) and not args.grid: |     if False: | --overlap without --grid is refused, not silently ignored
+gwt_fetch/crop.py |     if args.from_size and not args.box: |     if False: | --from-size without --box is refused, not silently ignored

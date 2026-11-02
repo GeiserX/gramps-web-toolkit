@@ -159,3 +159,11 @@ def test_a_crop_of_a_crop_points_into_the_original(page):
     assert crop.run(args([piece], half="left")) == 0
     url = {r["file"]: r["image_url"] for r in rows(page.parent / "manifest.tsv")}["0001_pag-1_right_left.jpg"]
     assert url == "https://img.example/iiif/2/A/full/max/0/default.jpg#xywh=2000,0,999,3000"
+
+
+def test_flags_that_do_not_apply_are_refused(page):
+    with pytest.raises(SystemExit, match="--overlap"):
+        crop.run(args([page], box="0,0,10,10", overlap="10%"))
+    with pytest.raises(SystemExit, match="--from-size"):
+        crop.run(args([page], half="left", from_size="900x600"))
+    assert not list(page.parent.glob("0001_pag-1_*"))
