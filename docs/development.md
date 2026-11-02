@@ -29,7 +29,7 @@ gwt_apply/ops.py | if name == "merge_person" and set(op.get("use_loser") or []) 
 
 The four fields are the file (relative to the package), the exact text to replace (it must occur exactly once), the replacement, and what the guard protects. `python3 .github/scripts/run_tests.py --mutants [--only PKG]` copies the package to a scratch folder once per row, applies the replacement, and runs the package's tests there. The run fails when a mutant survives (the tests still pass), or when a row's text is not found.
 
-When you add a guard, add its row and a test that fails with the row applied. CI runs the mutants of every package a pull request touches, and all of them on a push to `main` or when a pull request changes `.github/`.
+Rows can also go in `<pkg>/mutants.d/*.txt`, same format, read after `mutants.txt` in name order; a new gwt-read source puts its rows in `read/mutants.d/<id>.txt`, so changes made at the same time never edit one file. When you add a guard, add its row and a test that fails with the row applied. CI runs the mutants of every package a pull request touches, and all of them on a push to `main` or when a pull request changes `.github/`.
 
 ## Releases and the changelog
 
