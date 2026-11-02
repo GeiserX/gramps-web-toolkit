@@ -6,6 +6,16 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Fixed
+
+- `gwt-fetch iiif` fetches Portale Antenati again. A pasted manifest URL was sent as its own Referer, and Antenati's firewall answers 403 to anything but `Referer: https://antenati.cultura.gov.it/`; every `dam-antenati` and `iiif-antenati` URL now gets the portal as Referer. Other archives get the Referer they got before.
+
+### Added
+
+- `gwt-fetch iiif --image-base URL/info.json` fetches a IIIF Image API base with no Presentation manifest (French departmental archives) at the native width from `info.json`; `{page}` in the URL takes each `--pages` number. `--native` does the same for each canvas of a manifest, past `full/max` caps such as Antenati's 10 megapixels. Both refuse an image whose width is not the one `info.json` gives, so an upscaled or shrunk file is never saved.
+- `gwt-fetch iiif` turns a Canadiana viewer URL (`heritage.canadiana.ca/view/<id>`) into its manifest. The fetch page lists manifest URL templates for Riksarkivet, ANNO, the Bayerische Staatsbibliothek, the National Diet Library and the Internet Archive.
+- `gwt-fetch crop IMG (--box x,y,w,h [--from-size WxH] | --grid 2x3 [--overlap 10%] | --half left|right) [--max N]` cuts a saved page into JPEG pieces beside it, each with a `manifest.tsv` row that names the source file, its sha256 and the box. Needs Pillow (extra `crop`); without it the command exits 2.
+
 ## [0.3.0] - 2026-10-31
 
 ### Change lists

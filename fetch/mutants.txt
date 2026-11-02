@@ -1,0 +1,18 @@
+# Mutations the fetch tests must catch. One row each: file | exact text | replacement | why
+# `python3 .github/scripts/run_tests.py --mutants --only fetch` applies each row to a scratch copy
+# of fetch/ and fails when the tests still pass. The text must occur exactly once in the file.
+gwt_fetch/iiif.py | if host in ("dam-antenati.cultura.gov.it", "iiif-antenati.cultura.gov.it"): | if False: | an Antenati manifest or image URL is sent with the portal as Referer, which its WAF requires
+gwt_fetch/iiif.py | return url, portal_referer(url) or url | return url, url | a pasted Antenati manifest URL gets the portal Referer, not its own URL
+gwt_fetch/iiif.py | return manifest, portal_referer(manifest) or url | return manifest, url | an Antenati manifest inside a viewer's ?manifest= gets the portal Referer
+gwt_fetch/iiif.py |     if got != width: |     if got is None: | an image whose pixel width is not info.json's width is refused, never saved
+gwt_fetch/iiif.py | url = f"{base}/full/{width},/0/default.jpg" | url = f"{base}/full/max/0/default.jpg" | an Image API base is fetched at info.json's width, not at full/max
+gwt_fetch/iiif.py | if getattr(args, "native", False) and c.service: | if False: | --native fetches each canvas at its info.json width
+gwt_fetch/iiif.py | m = host.endswith("canadiana.ca") and re.match(r"/view/([^/?#]+)", u.path) | m = None | a Canadiana viewer URL becomes its manifest
+gwt_fetch/iiif.py | if _is_image_info(manifest): | if False: | an info.json passed as a manifest stops with a pointer to --image-base
+gwt_fetch/iiif.py |     except Exception as e:  # a missing page or a broken info.json fails this image, not the run |     except ZeroDivisionError as e: | a page with no info.json fails that page and the rest still download
+gwt_fetch/crop.py | box = scale_box(box, parse_pair(args.from_size, "--from-size"), size) | pass | a box measured on a preview is scaled to the real image
+gwt_fetch/crop.py | if x + w > W or y + h > H: | if False: | a box past the image's edge is refused, not padded with black
+gwt_fetch/crop.py | ox, oy = round((x1 - x0) * overlap), round((y1 - y0) * overlap) | ox, oy = 0, 0 | --overlap makes grid tiles reach into their neighbours
+gwt_fetch/crop.py | if args.max and max(piece.size) > args.max: | if False: | --max shrinks a piece to its longest side
+gwt_fetch/crop.py | label = f"crop {x},{y},{w},{h} of {src.name} sha256:{src_sha}" | label = f"crop {x},{y},{w},{h} of {src.name}" | a piece's row names its source's sha256
+gwt_fetch/crop.py |         return 2 |         return 0 | without Pillow, crop exits 2 instead of claiming success
