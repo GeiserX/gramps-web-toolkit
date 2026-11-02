@@ -257,15 +257,11 @@ def main(a, out=None):
     out = out or print
     try:
         rep = doctor(a.repo, a.max_packs, a.max_tmp_gb, a.max_binary_gb)
-    except (CannotRun, subprocess.TimeoutExpired) as e:
-        if a.json:
-            out(json.dumps({'error': str(e)}))
-        print('gwt-rawstore doctor: %s' % e, file=sys.stderr)
-        return 2
     except Exception as e:   # a bug must not look like exit 1, "findings"
+        err = str(e) if isinstance(e, (CannotRun, subprocess.TimeoutExpired)) else 'internal error: %r' % e
         if a.json:
-            out(json.dumps({'error': 'internal error: %r' % e}))
-        print('gwt-rawstore doctor: internal error: %r' % e, file=sys.stderr)
+            out(json.dumps({'error': err}))
+        print('gwt-rawstore doctor: %s' % err, file=sys.stderr)
         return 2
     if a.json:
         out(json.dumps(rep, indent=2))
