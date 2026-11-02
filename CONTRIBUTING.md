@@ -23,7 +23,7 @@ A test that passes whether or not the code works proves nothing. So:
 
 - Every rule a doc states with *never*, *only* or *unless* has a test for it.
 - In the PR, show that test failing with its guard removed: delete or invert the line that enforces the rule, run the test, paste the red output, then put the line back.
-- Once the repository has `mutants.txt` files, add a row there instead, and CI will remove the guard for you.
+- Once the repository has `mutants.txt` files, add a row there (or in `<pkg>/mutants.d/<name>.txt`) instead, and CI will remove the guard for you.
 - A new check kind gets an error planted in the self-test; the suite already fails when a check has none.
 
 ## Pull requests

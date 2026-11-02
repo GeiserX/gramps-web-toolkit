@@ -24,6 +24,7 @@ of the headers the cache sees. Standard library only.
 import datetime, hashlib, json, os, re, struct, unicodedata
 
 EXIT_OK, EXIT_ERROR, EXIT_EMPTY, EXIT_WALL, EXIT_DEAD, EXIT_PAUSED = 0, 1, 2, 3, 4, 6
+EXIT_RESTRICTED = 5      # the site refuses this one record to every account of this access level: a result, not a block
 
 # ---------------------------------------------------------------- small helpers
 
@@ -189,9 +190,9 @@ def write_manifest(path, rows):
 class Stop(Exception):
     """An answer that must end the run: nothing is saved as a result. exit_code is the process exit."""
 
-    def __init__(self, msg, exit_code=EXIT_ERROR):
+    def __init__(self, msg, exit_code=EXIT_ERROR, verdict=None):
         super().__init__(msg)
-        self.exit_code = exit_code
+        self.exit_code, self.verdict = exit_code, verdict
 
 
 # Bot walls, rate pages and captchas (Imperva/Incapsula, Cloudflare, Akamai, hCaptcha, reCAPTCHA), and the
@@ -248,6 +249,15 @@ STOP_FOR = {  # verdict: (exit code, what the lane reads, what the gate hears: b
 NOT_STORED = 599     # the status the cache sees for a 2xx that is a STOP, so it is never stored
 
 
+class Restricted(Stop):
+    """A 403 the source has shown is about one record's access, not about the account or the IP: a result
+    (`restricted`), never a gate hit."""
+
+    def __init__(self, msg, status=403, body=b''):
+        super().__init__(msg, EXIT_RESTRICTED)
+        self.status, self.body = status, body
+
+
 class Reader:
     """GET through gwt-fscache and gwt-gate. fetcher(method, url, headers, data) -> (status, headers, body)
     is gwt-fscache's fetcher signature; the token belongs inside it, never in `headers`, which the cache sees."""
@@ -258,21 +268,27 @@ class Reader:
         self.cache, self.gate, self.lane, self.fetcher = cache, gate, lane, fetcher
         self.log = log or (lambda m: None)
 
-    def get(self, url, headers=None, expect=None, refresh=False, page=None):
+    def get(self, url, headers=None, expect=None, refresh=False, page=None, on_403=None):
         """(status, headers, body, from_cache) for a 2xx answer the site really gave; raises Stop otherwise.
-        `expect` checks a JSON answer, `page` an HTML one (see classify_answer)."""
+        `expect` checks a JSON answer, `page` an HTML one (see classify_answer). `on_403(body)` is asked about a
+        403 before the gate blocks: 'restricted' only logs it as a denial (gate.denied: no pause, no block) and raises
+        Restricted; anything else is a block, as without it."""
         state = {}
 
         def gated(method, u, h, data):
             self.gate.wait(self.lane)       # raises gwt_gate.Paused: the caller exits without a request
             st, rh, body = self.fetcher(method, u, h, data)
             verdict = classify_answer(st, rh, body, expect, page)
-            state.update(status=st, verdict=verdict)
+            state.update(status=st, verdict=verdict, body=body)
             self.log('%s %s -> HTTP %s %s' % (method, u, st, verdict))
             return (st if verdict == 'ok' or not 200 <= st < 300 else NOT_STORED), rh, body
 
         status, rh, body = self.cache.fetch('GET', url, headers or {}, None, gated, refresh=refresh)
         verdict = state.get('verdict', 'ok')
+        if verdict == 'blocked' and on_403 is not None and on_403(state['body']) == 'restricted':
+            self.gate.denied(self.lane, 'HTTP 403 %s' % url[:120])     # logged; no pause, no block
+            raise Restricted('restricted: HTTP 403 at %s is about this record\'s access, not a block; no gate hit' % url,
+                             state['status'], state['body'])
         if verdict != 'ok':
             code, why, tell = STOP_FOR[verdict]
             what = 'HTTP %s %s' % (state['status'], url[:120])
@@ -283,5 +299,58 @@ class Reader:
                 self.gate.hit(self.lane, what)
             elif tell == 'dead':
                 self.gate.dead(self.lane, what)
-            raise Stop('%s (HTTP %s at %s)' % (why, state['status'], url), code)
+            raise Stop('%s (HTTP %s at %s)' % (why, state['status'], url), code, verdict)
         return status, rh, body, 'status' not in state
+
+
+# ---------------------------------------------------------------- the source registry and its contract
+#
+# A source is one record site gwt-read can search. A source module (read/gwt_<id>.py, copy read/_template.py)
+# declares itself in SPEC and gives the commands; gwt-read builds its subcommands, cache rules, gate and canary
+# controls from that, so a new source touches its own module, its tests and docs/sources/<id>.md, plus one line in
+# SOURCE_MODULES below and its line in pyproject.toml's force-include.
+
+# Every module beside gwt_read that holds a source, in the order `gwt-read --help` lists them. A module with a
+# SPEC is a source by itself; the older ones (pares, genae, boe, insee) are declared in gwt_read.LEGACY.
+SOURCE_MODULES = ('gwt_pares', 'gwt_genae', 'gwt_boe', 'gwt_insee')
+
+SPEC_KEYS = {'id': str, 'help': str, 'pace': dict, 'cache_rules': tuple, 'controls': list,
+             'result_markers': list, 'negative_markers': list}
+
+
+def spec_problems(spec):
+    """Why a SPEC does not have the shape gwt-read builds from, as a list of strings; empty when it does."""
+    bad = []
+    for key, kind in SPEC_KEYS.items():
+        if not isinstance(spec.get(key), kind):
+            bad.append('%s must be a %s' % (key, kind.__name__))
+    if not re.fullmatch(r'[a-z][a-z0-9-]*', str(spec.get('id', ''))):
+        bad.append('id must be a lowercase slug')
+    if isinstance(spec.get('pace'), dict) and set(spec['pace']) != {'start', 'floor', 'ceil'}:
+        bad.append('pace must be {start, floor, ceil} seconds')
+    for c in spec.get('controls') or []:
+        if not (isinstance(c, dict) and isinstance(c.get('argv'), list) and c['argv']
+                and isinstance(c.get('min_count'), int) and c['min_count'] > 0):
+            bad.append('each control is {argv: [search options], min_count: an int above 0}')
+    return bad
+
+
+def _matches(markers, page):
+    return any(re.search(m, page) for m in markers or ())
+
+
+def classify(page, spec):
+    """'hits' (a row of results is on the page), 'none' (the site says in its own words that nothing matched) or
+    'unknown' (anything else: a skeleton with no rows, a block page, new wording). 'unknown' is never zero results:
+    page_check() makes it a STOP, exit 3."""
+    page = page or ''
+    if _matches(spec.get('result_markers'), page):
+        return 'hits'
+    if _matches(spec.get('negative_markers'), page):
+        return 'none'
+    return 'unknown'
+
+
+def page_check(spec):
+    """The `page` predicate for Reader.get: true for 'hits' and 'none', false for 'unknown'."""
+    return lambda page: classify(page, spec) != 'unknown'
