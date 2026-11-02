@@ -51,6 +51,59 @@ A ledger written with the older 8 columns needs no upgrade: its rows read with a
 
 In a script: `gwt-ledger check ... >/dev/null && echo "already done, skip"`. Exit 0 already means a search that ran and is not due again, so a `blocked` or `denied` row, or one whose `next_date` has arrived, never skips the search. Add `--any-result` only when you want to know whether anything at all was logged.
 
+## Offline search assessment
+
+`assess` gives advice about a search result supplied by the caller. It does not perform a search,
+open or authenticate the evidence reference, discover ledger files, or read or write the ledger.
+The scope and reference are required, must contain non-whitespace text, and are returned as supplied.
+Use invented data when trying it:
+
+```sh
+gwt-ledger assess --method images --outcome none --access open --coverage full \
+  --scope "Invented parish, births 1800-1801, images 3-9" --ref invented-evidence.txt
+```
+
+Required flags:
+
+| Flag | Values or meaning |
+|---|---|
+| `--method` | `ocr`, `index`, `images`, `catalog` |
+| `--outcome` | `hit`, `none` |
+| `--access` | `open`, `restricted`, `captcha`, `load-error`, `maintenance`, `unknown` |
+| `--coverage` | `full`, `partial`, `outside`, `unknown` |
+| `--scope` | Collection, place, period, query variants and reviewed images |
+| `--ref` | Recoverable evidence reference; not opened or authenticated |
+
+For `ocr` and `index`, also pass both `--control-verified` (a known positive query returned its
+expected record) and `--filters-verified` (the current response was checked for every requested
+filter). Both default to false. These flags record the caller's checks; the command cannot verify them.
+
+The first applicable rule determines the recommended `result`, even when the supplied outcome is `hit`:
+
+1. Access other than `open` gives `blocked`: access failure is not evidence of absence.
+2. Coverage other than `full` gives `partial`: no absence claim for the full stated scope.
+3. OCR or index without both checks gives `partial`.
+4. Otherwise the supplied outcome is kept. A `hit` is a candidate; identity and kinship remain unproved.
+
+For a fully checked `none`, the claim stays within the method:
+
+| Method | Claim |
+|---|---|
+| `ocr` | OCR query returned no matching result within the stated scope |
+| `index` | Index query returned no matching result within the stated scope |
+| `images` | No matching entry located in the images actually reviewed |
+| `catalog` | No matching description located in the inspected catalogue scope |
+
+The command prints one JSON object with `result`, `method`, `scope`, `ref`, `access`, `coverage`,
+`reasons`, `claim` and `kinship_proven` (always false). Valid advice exits 0, including `blocked`
+and `partial`; invalid or missing arguments exit 2. A negative query never establishes that a person
+does not exist. The advice does not expand the supplied scope. Recording it remains a separate
+`add` decision; `assess` does not change what `check` counts as done.
+
+Python callers can use `assess_search(method, outcome, access, coverage, scope, ref,
+control_verified=False, filters_verified=False)` with the same values. It returns the report dict
+and raises `ValueError` for blank scope or reference. The CLI checks the enumerated choices.
+
 ## Matching
 
 Person keys and sources compare as slugs, so `Ana Peiró Toledo` and `ana-peiro-toledo` are the same. `--person` and `--source` are optional on `check`; leave them out to look across the whole ledger.
@@ -115,3 +168,7 @@ export GWT_LEDGER=research/buscado.tsv GWT_LEDGER_DIR=research/ledger.d GWT_AGEN
 ```sh
 python3 -m unittest discover -s ledger
 ```
+
+`test_search_assessment.py` contains eight synthetic assessment tests. The five rows in
+`ledger/mutants.txt` cover access, coverage, OCR/index checks, required scope/reference and the
+kinship disclaimer; each mutation must make the assessment tests fail.

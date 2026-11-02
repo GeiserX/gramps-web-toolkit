@@ -1,0 +1,7 @@
+# Assessment guard mutations: file | exact text | replacement | why
+# Each exact text occurs once; the synthetic assessment tests must fail for each row.
+gwt_ledger.py | if access != 'open': | if False: | access errors never become negative searches
+gwt_ledger.py | elif coverage != 'full': | elif False: | incomplete coverage cannot answer the full scope
+gwt_ledger.py | elif method in ('ocr', 'index') and not (control_verified and filters_verified): | elif False: | OCR and index searches need positive control and verified filters
+gwt_ledger.py | if not scope.strip() or not ref.strip(): | if False: | assessment requires scope and evidence
+gwt_ledger.py | kinship_proven=False | kinship_proven=True | a search result never proves kinship

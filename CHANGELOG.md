@@ -6,6 +6,18 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+None.
+
+### Added
+
+- `gwt-ledger assess` gives optional offline JSON advice for a scoped search result. Access failures
+  recommend `blocked`; incomplete coverage or unverified OCR/index controls and filters recommend
+  `partial`. Claims stay within the supplied scope and method, and a hit never proves kinship.
+  Scope and evidence reference are required but not authenticated. The command does not open
+  evidence or read or write a ledger; existing ledger commands and storage are unchanged.
+
 ## [0.3.0] - 2026-10-31
 
 ### Change lists

@@ -12,12 +12,13 @@ Agents run `check` before a search and `add` after it, so two lanes never pay fo
   gwt-ledger list --person KEY [--source SRC]
   gwt-ledger due [--on YYYY-MM-DD]                           rows whose next_date has arrived (appeal windows, retries)
   gwt-ledger stats
+  gwt-ledger assess --method images --outcome none --access open --coverage full --scope "..." --ref "..."
 
 The ledger path comes from --ledger, else $GWT_LEDGER, else ./buscado.tsv. With --ledger-dir (or $GWT_LEDGER_DIR),
 `add` writes to <dir>/<agent>.tsv, one file per lane, and every reader reads the ledger plus all <dir>/*.tsv.
 Standard library only.
 """
-import argparse, collections, datetime, difflib, fcntl, glob, os, re, sys, unicodedata
+import argparse, collections, datetime, difflib, fcntl, glob, json, os, re, sys, unicodedata
 
 COLUMNS = ('person_key', 'person_label', 'source', 'query', 'date', 'result', 'evidence', 'agent', 'next_date')
 RESULTS = ('hit', 'none', 'partial', 'blocked', 'denied')
@@ -160,12 +161,66 @@ def iso_date(value):
     return datetime.date.fromisoformat(value).isoformat() if value else ''
 
 
+def assess_search(method, outcome, access, coverage, scope, ref,
+                  control_verified=False, filters_verified=False):
+    """Offline advice, not a search or proof of identity. Never expands the supplied scope."""
+    if not scope.strip() or not ref.strip():
+        raise ValueError('scope and ref must be non-empty')
+    reasons = []
+    result = outcome
+    if access != 'open':
+        result = 'blocked'
+        reasons.append('access not confirmed open: ' + access)
+    elif coverage != 'full':
+        result = 'partial'
+        reasons.append('coverage of the stated scope is ' + coverage)
+    elif method in ('ocr', 'index') and not (control_verified and filters_verified):
+        result = 'partial'
+        reasons.append('index/OCR positive control and applied filters need verification')
+    claims = {
+        'ocr': 'OCR query returned no matching result within the stated scope',
+        'index': 'index query returned no matching result within the stated scope',
+        'images': 'no matching entry located in the images actually reviewed',
+        'catalog': 'no matching description located in the inspected catalogue scope',
+    }
+    if result == 'blocked':
+        claim = 'search unresolved; access failure is not evidence of absence'
+    elif result == 'partial':
+        claim = 'incomplete search; no absence claim for the full stated scope'
+    elif outcome == 'hit':
+        claim = 'candidate located within the stated scope; identity and kinship remain unproved'
+    else:
+        claim = claims[method]
+    return dict(result=result, method=method, scope=scope, ref=ref, access=access,
+                coverage=coverage, reasons=reasons, claim=claim, kinship_proven=False)
+
+
+def run_assess(p, args):
+    try:
+        report = assess_search(args.method, args.outcome, args.access, args.coverage,
+                               args.scope, args.ref, args.control_verified, args.filters_verified)
+    except ValueError as exc:
+        p.error(str(exc))
+    print(json.dumps(report, ensure_ascii=False))
+    return 0
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog='gwt-ledger', description=__doc__.split('\n')[0])
     p.add_argument('--ledger', default=os.environ.get('GWT_LEDGER', 'buscado.tsv'))
     p.add_argument('--ledger-dir', default=os.environ.get('GWT_LEDGER_DIR', ''),
                    help='one file per lane: add writes <dir>/<agent>.tsv, readers read the ledger and every file here')
     sub = p.add_subparsers(dest='cmd', required=True)
+    a = sub.add_parser('assess', help='offline advice for a scoped search result; no reads or writes')
+    a.add_argument('--method', required=True, choices=('ocr', 'index', 'images', 'catalog'))
+    a.add_argument('--outcome', required=True, choices=('hit', 'none'))
+    a.add_argument('--access', required=True,
+                   choices=('open', 'restricted', 'captcha', 'load-error', 'maintenance', 'unknown'))
+    a.add_argument('--coverage', required=True, choices=('full', 'partial', 'outside', 'unknown'))
+    a.add_argument('--scope', required=True, help='collection, place, period, query variants and reviewed images')
+    a.add_argument('--ref', required=True, help='recoverable evidence reference; not opened or authenticated')
+    a.add_argument('--control-verified', action='store_true', help='known positive query returned its expected record')
+    a.add_argument('--filters-verified', action='store_true', help='current response was checked for all requested filters')
     c = sub.add_parser('check', help='has this search been done? print the matching rows; exit 0 if one is a '
                                      'search that ran and is not due again, 1 if not')
     c.add_argument('--person'); c.add_argument('--source'); c.add_argument('--query', required=True)
@@ -187,6 +242,8 @@ def main(argv=None):
     l.add_argument('--person', required=True); l.add_argument('--source')
     sub.add_parser('stats', help='counts by result, source and agent')
     args = p.parse_args(argv)
+    if args.cmd == 'assess':
+        return run_assess(p, args)  # offline: no ledger discovery, reads or writes
     # A query or person that normalizes to nothing (only punctuation, say) would match every row.
     for name in ('query', 'person'):
         value = getattr(args, name, None)

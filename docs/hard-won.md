@@ -356,3 +356,16 @@ Format: what happened, why, and the rule.
 **Why.** The client retried 429 and 5xx answers but not network errors, so one page that timed out ended a 15-minute read. It is the read side of lesson 48.
 
 **Rule.** Every request of a long read retries network errors with a growing wait, the same as a 5xx; `gwt-check` tries each request 6 times. On a loaded server, read with small pages and one request at a time (`--pagesize 100 --workers 1`), save the dump, and run the checks on the file.
+
+### Scoped search advice: synthetic regression
+
+**Failure exercised.** Invented search results with restricted access or incomplete coverage must
+not become a full-scope negative, even when the caller supplies a hit. An OCR or index query without
+a verified positive control and verified applied filters also leaves the search incomplete.
+
+**Rule.** `gwt-ledger assess` recommends `blocked` for access failures and `partial` for incomplete
+coverage or missing OCR/index checks. It requires a scope and evidence reference, preserves both,
+and limits a negative claim to the query, images or catalogue inspected. A hit remains a candidate;
+identity and kinship remain unproved. This is offline advice from caller-supplied facts: it does not
+open evidence or read or write a ledger. Eight synthetic tests and five guard mutations exercise
+these boundaries. See [Offline search assessment](ledger.md#offline-search-assessment).
