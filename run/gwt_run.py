@@ -353,13 +353,20 @@ class Run:
             code, why, last = self.watch("verify", self.apply_cmd("--verify", "--json", str(out), "--log",
                                          str(self.dir / "verify.jsonl")),
                                          deadline=self.args.verify_timeout, log_glob="verify.*.jsonl")
-            if not why:
+            rows = json.loads(out.read_text(encoding="utf-8")) if out.exists() and not why else []
+            read = code == 0 or any(r["status"] != "not run" for r in rows)  # else it never read the tree
+            if not why and read:
                 break
-            print(f"verify: try {tries} {why}", flush=True)
+            print(f"verify: try {tries} {why or f'could not read the tree (exit {code})'}", flush=True)
+            if tries < self.args.verify_tries and not why:
+                time.sleep(self.args.retry_wait)
         else:
-            raise self.stalled("verify", why, last)
+            if why:
+                raise self.stalled("verify", why, last)
+            self.mark("verify", "failed", exit=code)
+            raise Stop(EXIT["failed"], f"verify: could not read the tree after {tries} tries (exit {code}); running "
+                                       f"the same gwt-run again goes on from here; see {self.dir / 'verify.out'}")
         if code != 0:
-            rows = json.loads(out.read_text(encoding="utf-8")) if out.exists() else []
             missing = [f"[{r['status']}] {r['key']}: {r['reason']}" for r in rows if r["status"] != "skip"]
             self.mark("verify", "failed", exit=code, missing=missing)
             raise Stop(EXIT["verify"], f"verify: {len(missing)} op(s) not in the tree; see {self.dir / 'verify.out'}")
@@ -367,6 +374,7 @@ class Run:
 
     def gate(self) -> None:
         out = self.dir / "gate.json"
+        out.unlink(missing_ok=True)
         cmd = [sys.executable, "-m", "gwt_check", "check", "--from", str(self.pre), "--baseline", str(self.pre),
                "--json", str(out)]
         if self.args.known:
@@ -376,13 +384,20 @@ class Run:
         code, why, last = self.watch("gate", cmd)
         if why:
             raise self.stalled("gate", why, last)
-        if code == 1:
-            self.mark("gate", "failed", exit=code)
-            raise Stop(EXIT["gate"], f"gate: gwt-check found new problems since the backup; see {self.dir / 'gate.out'}")
-        if code != 0:
-            self.mark("gate", "failed", exit=code)
-            raise Stop(EXIT["input"] if code == 2 else EXIT["failed"], f"gate: gwt-check exited {code}")
-        self.mark("gate", "ok")
+        if code == 0:
+            self.mark("gate", "ok")
+            return
+        try:
+            new = json.loads(out.read_text(encoding="utf-8")).get("new") or []
+        except (OSError, ValueError, AttributeError):
+            new = []
+        if code == 1 and new:
+            self.mark("gate", "failed", exit=code, new=len(new))
+            raise Stop(EXIT["gate"], f"gate: gwt-check found {len(new)} new problem(s) since the backup; "
+                                     f"see {self.dir / 'gate.out'}")
+        self.mark("gate", "failed", exit=code)  # it crashed or could not read the tree: no finding to triage
+        raise Stop(EXIT["failed"], f"gate: gwt-check did not finish (exit {code}); running the same gwt-run again "
+                                   f"tries it again; see {self.dir / 'gate.out'}")
 
     def run(self) -> int:
         for name in STEPS:

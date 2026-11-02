@@ -20,7 +20,7 @@ HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE), str(HERE.parent / "apply" / "tests")]
 
 import gwt_run  # noqa: E402
-from fake_api import FakeGrampsWeb  # noqa: E402
+from fake_api import FakeGrampsWeb, Resp  # noqa: E402
 
 R = "ruling-0001"
 JOHN = {"op": "add_person", "key": "p-john", "ruling": R, "first_name": "John", "surname": "Example", "gender": "M"}
@@ -412,3 +412,40 @@ def test_the_server_backup_is_asked_for_once_across_apply_tries(tmp_path, server
     assert gwt_run_main(lst, conf, "--server-backup") == 0
     assert state(lst)["steps"]["apply"]["tries"] == 2  # the server confirmed the first; the second try asks no more
     assert sum(1 for m, p in server.fake.calls if m == "POST" and p == "/api/backups/") == 1
+
+
+def logins_fail_from(server, n, until=None):
+    """Every login from the n-th on (until the until-th, not included) answers HTTP 503."""
+    real, seen = server.fake.request, {"n": 0}
+
+    def maybe_down(method, url, **kw):
+        if url.endswith("/api/token/"):
+            seen["n"] += 1
+            if seen["n"] >= n and (until is None or seen["n"] < until):
+                return Resp(503, "Service Unavailable")
+        return real(method, url, **kw)
+
+    server.fake.request = maybe_down
+
+
+def test_a_verify_that_cannot_log_in_is_tried_again_not_called_missing(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, BIRTH])
+    logins_fail_from(server, 3, until=4)  # backup, apply, then the first verify's login fails once
+    assert gwt_run_main(lst, conf, "--verify-tries", "2") == 0
+
+
+def test_a_verify_that_never_reads_the_tree_is_a_failure_not_missing_ops(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, BIRTH])
+    logins_fail_from(server, 3)
+    assert gwt_run_main(lst, conf, "--verify-tries", "2") == 1
+    st = state(lst)
+    assert st["steps"]["apply"]["status"] == "ok" and st["steps"]["verify"]["status"] == "failed"
+    assert "missing" not in st["steps"]["verify"]
+
+
+def test_a_gate_that_cannot_read_the_tree_is_a_failure_not_new_problems_or_bad_input(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, BIRTH])
+    logins_fail_from(server, 4)  # backup, apply, verify; the gate's login fails
+    assert gwt_run_main(lst, conf) == 1
+    st = state(lst)
+    assert st["steps"]["verify"]["status"] == "ok" and st["steps"]["gate"]["status"] == "failed"
