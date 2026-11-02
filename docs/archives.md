@@ -19,17 +19,18 @@ The record a gap asks for is the same one as with your own file: the birth or ba
 A row fits that record when all of these hold:
 
 - one of the names in its `match` cell is a level of the event's place: the place itself, the province it sits in, the country (names compare folded, the same way `--archives FILE` compares them). A `*` row (a world source) fits any place;
+- a `region` or `place` row of a country's file fits only when the place also names that country, or names no country the catalogue knows. Barcelona, Venezuela never gets the Catalan archives, and Paris, Texas never gets the Archives de Paris. Country rows only fit through the country's own names, so a place chain needs a country level (`España`, `France`, `USA`) before any country row can match; a tree whose places stop at the province gets only the region rows and the world rows;
 - its `record_types` hold the record: `birth` for a birth or baptism, `death` for a death or burial;
 - its `years` hold the event's year (an exact year, or an "about" or estimated one; a "before", "after" or range year is no year, so it never rules a row out);
 - its `coverage_places`, when it has any, include a level of the event's place.
 
-The fitting rows are listed deepest level first (a province's archive before the country's), then in file order, then the world rows.
+The fitting rows are listed deepest level first (a province's archive before the country's), then the world rows. Rows of one level go by `access`: `online` first, then `browser`, `login`, `paid`, `letter` and `in-person`, and in file order within the same access.
 
-- `--format json`: the first fitting row is `where`, with the same keys as with your own file (`archive`, `series`, `url`, `online`, `access`). The others are `also`, a list in the same shape. A row that matches the place and the record but not the year or the places is listed under `outside`, with why: `{"archive": "matchID: décès INSEE", "why": "covers 1970-, not 1930"}`. A search there cannot find this record, so it is not a negative.
+- `--format json`: the first fitting row is `where`, with the same keys as with your own file (`archive`, `series`, `url`, `online`, `access`). The others are `also`, a list in the same shape. A row that matches a named level of the place and the record but not the year or the places is listed under `outside`, with why: `{"archive": "matchID: décès INSEE", "why": "covers 1970-, not 1930"}`. A search there cannot find this record, so it is not a negative. World rows are never listed there: a death in 1890 being outside a 1939-1945 index tells nobody anything.
 - `--format queue`: the note's `where:` part lists up to three rows per record: `where` and the first two of `also`.
 - `--format tsv` does not change.
 
-`online` is `true` only for a source a lane can search (`access` `online`) when the year is known. It is `false` for any other access and `null` when the year is unknown.
+`online` is `true` only for a source a lane can search (`access` `online`) when the year is known. A row whose robots.txt forbids scripts is never `online`. It is `false` for any other access and `null` when the year is unknown.
 
 In the url, `{place}` is the event's own place, `{year}` its year, `{year_from}` and `{year_to}` five years either side, `{given}` and `{surname}` the person's first given name and first surname, and `{code}` the place's code in the tree (an INSEE, INE or ISTAT code, if you keep one). Every value is URL-encoded, and a value the tree does not hold is left empty. `gwt-leads` never opens the url; it only writes it down.
 

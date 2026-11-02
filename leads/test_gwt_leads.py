@@ -954,6 +954,42 @@ class CatalogueTest(unittest.TestCase):
         T['events']['eb2']['date']['modifier'] = 1
         self.assertEqual(self.rows(T, 'builtin:zz', narrow)[('I2', 'birth-uncited')]['where']['online'], None)
 
+    def test_a_world_row_outside_its_years_is_no_hint_and_never_outside(self):
+        T = self.tree()
+        T['places']['es']['name']['value'] = 'Exampleland'
+        d = self.catalogue(self.row(match='*', level='world', archive='Wartime index', years='1939-1945'),
+                           self.row(archive='Civil register', years='1890-1950'))
+        got = self.rows(T, 'builtin:zz', d)[('I2', 'birth-uncited')]
+        self.assertNotIn('where', got)
+        self.assertEqual(got['outside'], [{'archive': 'Civil register', 'why': 'covers 1890-1950, not 1880'}])
+
+    def two_countries(self):
+        """Invented: ZZ holds a Gipuzkoa region row; YY is another country with a country row of its own."""
+        d = self.catalogue(self.row(archive='Exampleland register'),
+                           self.row(match='Gipuzkoa', level='region', archive='Gipuzkoa archive'))
+        with open(os.path.join(d, 'YY.tsv'), 'w', encoding='utf-8') as f:
+            f.write('\t'.join(L.CATALOGUE_COLUMNS) + '\n' + self.row(match='Otherland', archive='Otherland register') + '\n')
+        return d
+
+    def test_a_region_row_never_fits_a_same_name_place_in_another_country(self):
+        d, T = self.two_countries(), self.tree()
+        T['places']['es']['name']['value'] = 'Otherland'  # Gipuzkoa, Otherland: a namesake abroad
+        got = self.rows(T, 'builtin:zz,yy', d)[('I2', 'birth-uncited')]
+        self.assertEqual([got['where']['archive']] + [h['archive'] for h in got.get('also', [])], ['Otherland register'])
+        self.assertNotIn('outside', got)
+        T['places']['es']['name']['value'] = 'Exampleland'  # positive control: its own country
+        self.assertEqual(self.rows(T, 'builtin:zz,yy', d)[('I2', 'birth-uncited')]['where']['archive'], 'Gipuzkoa archive')
+        T['places']['es']['name']['value'] = 'Nowhereland'  # a country no file names: the name alone still fits
+        self.assertEqual(self.rows(T, 'builtin:zz', d)[('I2', 'birth-uncited')]['where']['archive'], 'Gipuzkoa archive')
+
+    def test_rows_of_one_level_go_by_access(self):
+        T = self.tree()
+        T['places']['es']['name']['value'] = 'Exampleland'
+        d = self.catalogue(self.row(archive='Parish archive', access='in-person'),
+                           self.row(archive='Ministry', access='letter'), self.row(archive='Index', access='online'))
+        got = self.rows(T, 'builtin:zz', d)[('I2', 'birth-uncited')]
+        self.assertEqual([got['where']['archive']] + [h['archive'] for h in got['also']], ['Index', 'Ministry', 'Parish archive'])
+
     def test_only_rows_holding_the_record_and_world_rows_last(self):
         T = self.tree()
         T['places']['es']['name']['value'] = 'Exampleland'

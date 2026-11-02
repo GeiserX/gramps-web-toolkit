@@ -367,7 +367,9 @@ def read_catalogue(path):
 
 def load_catalogue(spec, directory=None):
     """--archives builtin:es,fr (codes in any case, comma-separated) or builtin:all, as {folded name: [rows]} in file
-    order, the files in the order asked. An unknown code is BadInput naming the codes there are."""
+    order, the files in the order asked. An unknown code is BadInput naming the codes there are. A region or place
+    row of a country file carries home (its file's country names) and countries (every country name the catalogue
+    knows), so catalogue_hints can refuse it for a same-name place in another country."""
     directory = directory or catalogue_dir()
     have = catalogue_codes(directory)
     asked = [c.strip().upper() for c in spec[len(BUILTIN):].split(',') if c.strip()]
@@ -377,9 +379,14 @@ def load_catalogue(spec, directory=None):
     if not asked or unknown:
         raise BadInput('%s: no built-in catalogue %s; there are %s, and all' % (
             spec, ', '.join(unknown) or '(none named)', ', '.join(c.lower() for c in have)))
+    files = {code: read_catalogue(os.path.join(directory, code + '.tsv')) for code in have}
+    countries = frozenset(n for rows in files.values() for r in rows if r['match_level'] == 'country' for n in r['names'])
     index = {}
     for code in dict.fromkeys(asked):
-        for row in read_catalogue(os.path.join(directory, code + '.tsv')):
+        home = frozenset(n for r in files[code] if r['match_level'] == 'country' for n in r['names'])
+        for row in files[code]:
+            if code != 'XX' and row['match_level'] in ('region', 'place'):
+                row.update(home=home, countries=countries)
             for name in row['names']:
                 index.setdefault(name, []).append(row)
     return index
@@ -403,8 +410,11 @@ def catalogue_hints(T, ev, p, catalogue):
     """(hints, outside) for the record a gap asks for, from load_catalogue's index. A row fits when one of its names
     is a level of the event's place (deepest level first, then the world rows), its record_types hold the record
     (birth for a birth or baptism, death for a death or burial), its years hold the event's year and its
-    coverage_places, when it has any, include a level of the place. A row that matches the place and the record
-    but not the year or the places is listed in outside with why: searching there cannot find this record."""
+    coverage_places, when it has any, include a level of the place. Rows of one level go by access (online first,
+    in-person last). A region or place row of a country file fits only when the place names that country, or names
+    no country the catalogue knows: Paris, Texas never gets the Archives de Paris. A row that matches a named level
+    of the place and the record but not the year or the places is listed in outside with why: searching there cannot
+    find this record. World rows (match *) are never listed outside; they are not about this place."""
     if not ev or ev.get('private', False) is True:
         return [], []
     want = 'birth' if etype(ev) in BIRTH_LIKE else 'death' if etype(ev) in DEATH_LIKE else None
@@ -412,9 +422,12 @@ def catalogue_hints(T, ev, p, catalogue):
     if want is None or not chain:
         return [], []
     levels = [fold(n) for n in chain]
+    named = set(levels)
     rows, seen = [], set()
     for name in levels + ['*']:
-        for row in catalogue.get(name, ()):
+        for row in sorted(catalogue.get(name, ()), key=lambda r: CATALOGUE_ACCESS.index(r['access'])):
+            if row.get('home') is not None and named & row['countries'] and not named & row['home']:
+                continue  # a same-name place in another country
             if id(row) not in seen:
                 seen.add(id(row))
                 rows.append(row)
@@ -427,10 +440,12 @@ def catalogue_hints(T, ev, p, catalogue):
     for row in rows:
         if want not in row['record_types']:
             continue
+        world = row['match_level'] == 'world'
         if row['coverage'] and not row['coverage'] & set(levels):
             outside.append({'archive': row['archive'], 'why': 'covers only ' + row['coverage_places'].replace('|', ', ')})
         elif y is not None and row['years'] and not any(lo <= y <= hi for lo, hi in row['years']):
-            outside.append({'archive': row['archive'], 'why': 'covers %s, not %d' % (row['years_text'], y)})
+            if not world:  # Yad Vashem's years say nothing about an 1890 death
+                outside.append({'archive': row['archive'], 'why': 'covers %s, not %d' % (row['years_text'], y)})
         else:
             hints.append({'archive': row['archive'], 'series': row['series'], 'url': fill_url(row['url'], values),
                           'online': False if row['access'] != 'online' else None if y is None else True,

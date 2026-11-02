@@ -70,3 +70,6 @@ gwt_leads.py | read_catalogue(path)  # a bad file stops here, before any request
 gwt_leads.py | if args.delay < 1: | if False: | the probe never waits less than a second between requests
 gwt_leads.py | follow = url.endswith('/robots.txt') | follow = False | a robots.txt that redirects is followed, so a host that moved it is not read as forbidding everything
 gwt_leads.py | if follow else (_NoRedirect,) | if True else (_NoRedirect,) | the probe never follows a redirect from the url it checks: a 3xx is the answer
+gwt_leads.py | if row.get('home') is not None and named & row['countries'] and not named & row['home']: | if False: | a region row of one country never fits a same-name place in another country (Barcelona, Venezuela)
+gwt_leads.py | key=lambda r: CATALOGUE_ACCESS.index(r['access'])): | key=lambda r: 0): | rows of one level go by access, so an online source comes before one reached in person
+gwt_leads.py | if not world:  # Yad Vashem's years say nothing about an 1890 death | if True: | a world row whose years miss the event is no hint and is never listed outside
