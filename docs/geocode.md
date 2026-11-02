@@ -37,6 +37,10 @@ Each place is looked up by its own name and the names above it, through a chain 
 | `geonames-dump` | any country | A GeoNames dump file you download yourself from https://download.geonames.org/export/dump/ (a country file such as `IT.zip`, or `cities500.zip` for the world's towns), passed with `--geonames FILE`, read offline. Without `--geonames` it is skipped. |
 | `nominatim` | anywhere | OpenStreetMap's geocoder, https://nominatim.openstreetmap.org. At most one request a second, as its usage policy asks; `--contact` adds your e-mail address to the User-Agent. |
 
+Each provider's data comes with its licence, and the points you write into your tree carry it: OpenStreetMap through Nominatim is ODbL (credit "© OpenStreetMap contributors"), GeoNames is CC BY 4.0, CartoCiudad is CC BY 4.0 from the IGN/CNIG, and the BAN is the Licence Ouverte 2.0. The op itself records no provider, so keep the report next to the change list; its `provider` column says where each point came from.
+
+For `geonames-dump`, use a country file or `cities500.zip`. Every alternate name of every row is indexed in memory, so `allCountries.zip` needs many gigabytes.
+
 Every answer is cached on disk (`--cache`, default `~/.cache/gwt-geocode`), so a second run asks nothing again. `--no-cache` asks again. A dropped connection, a timeout, 429 and 5xx are tried three times. A provider that blocks the tool (HTTP 403, usually a missing or made-up `--contact` for Nominatim) or fails three questions in a row gets no more requests that run; stderr says so once, and each place's note names the error.
 
 The country decides which providers apply. It is read from the top place of the hierarchy when its type is `Country`: a two-letter name is taken as the code, then the GeoNames dump and Nominatim are asked. When none of them knows the name, no place under that country is looked up, so a namesake in another country can never win; the report says so, and you give the code with `--country Ruritania=rr`.
