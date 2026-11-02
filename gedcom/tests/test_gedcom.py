@@ -132,6 +132,10 @@ def test_lines_the_reader_cannot_place_are_reported_with_their_numbers():
     ("Easter 1850", "text: Easter 1850", "unknown month 'EASTER' for the gregorian calendar"),
     ("@#DHEBREW@ 1 TSH 5600", "text: @#DHEBREW@ 1 TSH 5600", "the hebrew calendar is not one the tool converts"),
     ("", None, None),
+    ("1 JAN 1850/49", "text: 1 JAN 1850/49", "dual year 1850/49: the second year is not the one after the first"),
+    ("1 JAN 1699/00", "1700-01-01", "dual year 1699/00 read as 1700"),
+    ("BET 1900 AND 1800", "text: BET 1900 AND 1800", "the range ends before it starts"),
+    ("FROM 1850 TO 1840", "text: FROM 1850 TO 1840", "the range ends before it starts"),
 ])
 def test_gedcom_dates_become_gwt_apply_dates(text, date, problem):
     assert ged_date(text) == (date, problem)
@@ -490,3 +494,52 @@ def test_cli_audit_and_split(tmp_path, capsys):
     assert main(["split", str(FIX / "split.ged"), "--root", "@I1@", "--out-dir", str(tmp_path)]) == 0
     assert os.path.exists(tmp_path / "I1.ged")
     assert main(["split", str(FIX / "split.ged"), "--root", "@I99@", "--out-dir", str(tmp_path / "x")]) == 2
+
+
+# --- review round 1: encodings, bare lines, _UID, couples, decisions, speed ----------------------------------
+
+def test_a_utf8_character_cut_across_conc_is_put_back_together():
+    raw = (b"0 HEAD\n1 CHAR UTF-8\n0 @I1@ INDI\n1 NAME Ana /Ruiz/\n1 NOTE Born in Le\xc3\n"
+           b"2 CONC \xb3n, daughter of Mar\xc3\n2 CONC \xada\n0 TRLR\n")
+    g = read(raw)
+    assert g.individuals[0].first("NOTE").value == "Born in León, daughter of María"
+    assert g.repairs == []
+
+
+def test_an_ansel_accent_cut_from_its_letter_by_conc_is_put_back():
+    raw = b"0 HEAD\n1 CHAR ANSEL\n0 @I1@ INDI\n1 NOTE Born in Le\xe2\n2 CONC on.\n0 TRLR\n"
+    g = read(raw)
+    assert g.individuals[0].first("NOTE").value == "Born in León."
+    assert g.repairs == []
+
+
+def test_a_bare_line_inside_a_note_is_kept_as_a_new_line_of_it():
+    raw = ged("0 HEAD\n0 @I1@ INDI\n1 NAME Ana /Ruiz/\n1 NOTE First line\n2 CONC  of the note\n"
+              "https://www.example.org/record/1\n12 de marzo de 1850\n1 SEX F\n0 TRLR")
+    g = read(raw)
+    note = g.individuals[0].first("NOTE").value
+    assert note == "First line of the note\nhttps://www.example.org/record/1\n12 de marzo de 1850"
+    assert [(j["line"], j["into"]) for j in g.joined] == [(6, "NOTE"), (7, "NOTE")]
+    assert g.problems == [] and g.individuals[0].val("SEX") == "F"
+    # after a line that is not text, a bare line is still a problem, never glued to a name
+    g = read(ged("0 HEAD\n0 @I1@ INDI\n1 NAME Ana /Ruiz/\nnot a line\n0 TRLR"))
+    assert g.joined == [] and any("line 4" in p for p in g.problems)
+
+
+def test_unicode_without_nul_bytes_is_read_as_utf8_and_reported():
+    g = read(b"0 HEAD\n1 CHAR UNICODE\n0 @I1@ INDI\n1 NAME Ana /L\xc3\xb3pez/\n0 TRLR\n")
+    assert g.individuals[0].val("NAME") == "Ana /López/"
+    assert [(r["line"], r["read_as"]) for r in g.repairs] == [(2, "utf-8")]
+
+
+def test_utf16_without_a_bom_and_utf32_with_one_are_read():
+    body = "0 HEAD\n1 CHAR UNICODE\n0 @I1@ INDI\n1 NAME Zoë /Smith/\n0 TRLR\n"
+    for raw in (body.encode("utf-16-le"), body.encode("utf-16-be"), codecs.BOM_UTF32_LE + body.encode("utf-32-le")):
+        g = read(raw)
+        assert g.individuals[0].val("NAME") == "Zoë /Smith/" and g.repairs == []
+
+
+def test_a_windows_file_labelled_ansel_is_read_as_windows_1252_and_reported():
+    g = read(b"0 HEAD\n1 CHAR ANSEL\n0 @I1@ INDI\n1 NAME Jos\xe9 /Mu\xf1oz/\n0 TRLR\n")
+    assert g.individuals[0].val("NAME") == "José /Muñoz/"
+    assert [(r["line"], r["read_as"]) for r in g.repairs] == [(4, "cp1252")]

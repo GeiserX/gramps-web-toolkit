@@ -7,10 +7,17 @@
 
 Encodings: a byte-order mark wins; else the header's CHAR (UTF-8, UNICODE, ANSEL, ANSI, ASCII, IBMPC, LATIN1);
 GEDCOM 7 is always UTF-8. Files exported by some sites mix encodings, so each line is decoded on its own: a line
-that is not valid in the declared encoding but is valid UTF-8 is read as UTF-8, and a line that is neither is read
-as Windows-1252. Each such line is reported, never silently changed.
+that is not valid in the declared encoding is read as UTF-8 when it is valid UTF-8, else as Windows-1252, and a line
+of an ANSEL file whose accents cannot be ANSEL (a mark before a space, a `/` or the end of the line) is read as
+Windows-1252. Each such line is reported, never silently changed. A file that says UNICODE but has no NUL bytes is
+read as UTF-8, and UTF-16 with no byte-order mark is found by its NUL bytes; both are reported.
 
-CONC and CONT lines are joined into the value they continue. `@@` stands for one `@`.
+A character that an exporter cut in two across a CONC line (the first bytes of `ó` at the end of one line, the rest
+at the start of the CONC) is put back together before the lines are decoded.
+
+CONC and CONT lines are joined into the value they continue. A line that is not a GEDCOM line, right after a text
+value (NOTE, TEXT, PAGE...), is a line break the exporter did not write as CONT: it is kept as a new line of that
+value and listed in `ged.joined`. `@@` stands for one `@`.
 
     ged_date("@#DJULIAN@ 11 FEB 1700")   -> ("julian 1700-02-11", None)
     ged_date("ABT 1850")                 -> ("abt 1850", None)
@@ -53,6 +60,10 @@ CHARSETS = {"UTF-8": "utf-8", "UTF8": "utf-8", "UNICODE": "utf-16", "ASCII": "as
             "LATIN1": "latin-1", "ISO-8859-1": "latin-1", "ISO8859-1": "latin-1", "MACINTOSH": "mac_roman"}
 
 
+# values that are free text, where an exporter may leave a raw line break
+TEXT_TAGS = {"NOTE", "SNOTE", "TEXT", "PAGE", "TITL", "AUTH", "PUBL"}
+
+
 class GedcomError(ValueError):
     pass
 
@@ -92,6 +103,7 @@ class Gedcom:
     records: list[Line]
     repairs: list[dict]
     problems: list[str]
+    joined: list[dict] = field(default_factory=list)  # bare lines kept as a new line of the text value before them
     by_xref: dict[str, Line] = field(default_factory=dict)
 
     def of(self, tag: str) -> list[Line]:
@@ -145,6 +157,17 @@ def _declared(raw: bytes) -> str:
     return m.group(1).strip().upper() if m else ""
 
 
+def _not_ansel(raw: bytes) -> bool:
+    """An ANSEL line whose accents cannot be ANSEL: a combining mark (which ANSEL puts before its letter) before a
+    space, punctuation or the end of the line. A Windows-1252 «José /Muñoz/» labelled ANSEL looks like that."""
+    for i, b in enumerate(raw):
+        if b in ANSEL_COMBINING:
+            nxt = raw[i + 1] if i + 1 < len(raw) else None
+            if nxt is None or (nxt < 0x80 and not chr(nxt).isalnum()):
+                return True
+    return False
+
+
 def _decode_line(raw: bytes, codec: str) -> tuple[str, str | None]:
     """(text, the codec used when it is not `codec`)."""
     if codec == "ansel":
@@ -154,6 +177,11 @@ def _decode_line(raw: bytes, codec: str) -> tuple[str, str | None]:
                 return text, "utf-8"
         except UnicodeDecodeError:
             pass
+        if _not_ansel(raw):
+            try:
+                return raw.decode("cp1252"), "cp1252"
+            except UnicodeDecodeError:
+                pass
         text, unknown = ansel_decode(raw)
         return text, ("ansel with unknown bytes" if unknown else None)
     try:
@@ -182,10 +210,45 @@ def _latin_line_is_utf8(raw: bytes, codec: str) -> bool:
         return False
 
 
+_CONC = re.compile(rb"^(\s*\d{1,2}\s+CONC ?)(.*)$", re.S | re.I)
+
+
+def _utf8_cut(raw: bytes) -> int:
+    """How many bytes the UTF-8 character cut at the end of `raw` still needs, or 0."""
+    for back in range(1, min(4, len(raw)) + 1):
+        b = raw[-back]
+        if b & 0xC0 == 0x80:
+            continue  # a continuation byte: look further back for the lead byte
+        size = 2 if b & 0xE0 == 0xC0 else 3 if b & 0xF0 == 0xE0 else 4 if b & 0xF8 == 0xF0 else 0
+        return size - back if size > back else 0
+    return 0
+
+
+def _mend_conc(chunks: list[bytes], codec: str) -> None:
+    """Put back together a character an exporter cut in two across a CONC line, in place: the UTF-8 bytes the
+    end of a line lacks move from the start of the CONC after it, and an ANSEL accent left at the end of a line
+    moves to the start of the CONC, before the letter it marks."""
+    for i in range(len(chunks) - 1):
+        m = _CONC.match(chunks[i + 1])
+        if not m or not chunks[i]:
+            continue
+        head, value = m.group(1), m.group(2)
+        if codec == "ansel":
+            k = len(chunks[i]) - len(chunks[i].rstrip(bytes(ANSEL_COMBINING)))
+            if k and value[:1] and value[0] < 0x80 and chr(value[0]).isalpha():
+                chunks[i], chunks[i + 1] = chunks[i][:-k], head + chunks[i][-k:] + value
+            continue
+        need = _utf8_cut(chunks[i])
+        if need and len(value) >= need and all(b & 0xC0 == 0x80 for b in value[:need]):
+            chunks[i], chunks[i + 1] = chunks[i] + value[:need], head + value[need:]
+
+
 def decode(raw: bytes) -> tuple[list[tuple[int, str]], str, str, list[dict]]:
     """(numbered lines, codec, declared CHAR, repairs)."""
     declared = ""
-    for bom, codec in ((codecs.BOM_UTF8, "utf-8"), (codecs.BOM_UTF16_LE, "utf-16-le"), (codecs.BOM_UTF16_BE, "utf-16-be")):
+    for bom, codec in ((codecs.BOM_UTF32_LE, "utf-32-le"), (codecs.BOM_UTF32_BE, "utf-32-be"),
+                       (codecs.BOM_UTF8, "utf-8"), (codecs.BOM_UTF16_LE, "utf-16-le"),
+                       (codecs.BOM_UTF16_BE, "utf-16-be")):
         if raw.startswith(bom):
             body = raw[len(bom):]
             if codec != "utf-8":
@@ -193,13 +256,25 @@ def decode(raw: bytes) -> tuple[list[tuple[int, str]], str, str, list[dict]]:
                 return list(enumerate(re.split(r"\r\n|\r|\n", text), 1)), codec, "UNICODE", []
             raw, declared = body, "UTF-8"
             break
+    if not declared and b"\x00" in raw[:200]:  # UTF-16 with no byte-order mark: the NULs say which half is zero
+        codec = "utf-16-le" if raw[1:2] == b"\x00" else "utf-16-be"
+        text = raw.decode(codec, errors="replace")
+        lines = list(enumerate(re.split(r"\r\n|\r|\n", text), 1))
+        said = _declared(text.encode("utf-8")) or "(none)"
+        return lines, codec, said, ([] if said == "UNICODE" else [
+            {"line": 1, "declared": said, "read_as": codec, "text": "no byte-order mark; UTF-16 by its NUL bytes"}])
     declared = declared or _declared(raw)
-    if declared == "UNICODE" and b"\x00" in raw[:200]:
-        text = raw.decode("utf-16", errors="replace")
-        return list(enumerate(re.split(r"\r\n|\r|\n", text), 1)), "utf-16", declared, []
     codec = CHARSETS.get(declared, "utf-8")
-    lines, repairs = [], []
-    for n, chunk in enumerate(re.split(rb"\r\n|\r|\n", raw), 1):
+    repairs: list[dict] = []
+    if codec == "utf-16":  # UNICODE, yet no NUL byte: not UTF-16, whatever the header says
+        codec = "utf-8"
+        at = next((n for n, c in enumerate(re.split(rb"\r\n|\r|\n", raw), 1) if re.match(rb"\s*1\s+CHAR", c)), 1)
+        repairs.append({"line": at, "declared": declared, "read_as": "utf-8",
+                        "text": "the file says UNICODE (UTF-16) but has no NUL bytes; read as UTF-8"})
+    lines = []
+    chunks = re.split(rb"\r\n|\r|\n", raw)
+    _mend_conc(chunks, codec)
+    for n, chunk in enumerate(chunks, 1):
         if _latin_line_is_utf8(chunk, codec):
             text, used = chunk.decode("utf-8"), "utf-8"
         else:
@@ -220,32 +295,40 @@ def read(source: str | bytes) -> Gedcom:
     sha = hashlib.sha256(raw).hexdigest()
     lines, codec, declared, repairs = decode(raw)
     problems: list[str] = []
+    joined: list[dict] = []
     records: list[Line] = []
     stack: list[Line] = []
+    text_of: Line | None = None  # the text value the last line wrote to, where a bare line belongs
     for n, text in lines:
         if not text.strip():
             continue
         m = _LINE.match(text)
-        if not m:
-            problems.append(f"line {n}: not a GEDCOM line: {text[:80]!r}")
+        level = int(m.group(1)) if m else -1
+        if not m or (level > 0 and (not stack or level > stack[-1].level + 1 or level > len(stack))):
+            if text_of is not None:  # a line break inside a note the exporter did not write as CONT
+                text_of.value += "\n" + text.rstrip()
+                joined.append({"line": n, "into": text_of.tag, "of_line": text_of.lineno, "text": text[:120]})
+                continue
+            problems.append(f"line {n}: not a GEDCOM line: {text[:80]!r}" if not m
+                            else f"line {n}: level {level} has no parent line")
             continue
-        level, xref, tag, value = int(m.group(1)), m.group(2), m.group(3).upper(), m.group(4) or ""
+        xref, tag, value = m.group(2), m.group(3).upper(), m.group(4) or ""
         if level == 0:
             line = Line(0, tag, value, xref, n)
             records.append(line)
             stack = [line]
-            continue
-        if not stack or level > stack[-1].level + 1 or level > len(stack):
-            problems.append(f"line {n}: level {level} has no parent line")
+            text_of = line if tag in TEXT_TAGS else None
             continue
         parent = stack[level - 1]
         if tag in ("CONC", "CONT"):
             parent.value += ("\n" if tag == "CONT" else "") + value
+            text_of = parent if parent.tag in TEXT_TAGS else None
             continue
         line = Line(level, tag, value, xref, n)
         parent.children.append(line)
         del stack[level:]
         stack.append(line)
+        text_of = line if tag in TEXT_TAGS and value.strip() else None
     version = ""
     if records and records[0].tag == "HEAD":
         gedc = records[0].first("GEDC")
@@ -254,7 +337,7 @@ def read(source: str | bytes) -> Gedcom:
         problems.append("the file does not start with a HEAD record")
     if not records:
         raise GedcomError("no GEDCOM records in the file")
-    ged = Gedcom(version or "5.5.1", codec, declared, sha, records, repairs, problems)
+    ged = Gedcom(version or "5.5.1", codec, declared, sha, records, repairs, problems, joined)
     for rec in records:
         _unescape(rec, seven=ged.major >= 7)
         if rec.xref:
@@ -307,10 +390,10 @@ def _one(tokens: list[str]) -> tuple[str, str, str | None]:
     if not m:
         raise DateError(f"unreadable year {year_tok!r}")
     year = int(m.group(1))
-    if m.group(2):  # a dual year, 1700/01: the second is the year as counted from 1 January
-        year = int(str(year)[:-2] + m.group(2))
-        if year < int(m.group(1)):
-            year += 100
+    if m.group(2):  # a dual year, 1700/01: the second is the year as counted from 1 January, the next one
+        if int(m.group(2)) != (year + 1) % 100:
+            raise DateError(f"dual year {year_tok}: the second year is not the one after the first")
+        year += 1
         note = f"dual year {year_tok} read as {year}"
     months = FRENCH_MONTHS if cal == "french" else MONTHS
     month = day = 0
@@ -368,7 +451,10 @@ def ged_date(text: str | None) -> tuple[str | None, str | None]:
             out = (f"{word} " if word else "") + read[0][1]
         if cal != "gregorian":
             out = f"{cal} {out}"
-        parse_date(out)  # the real calendar check: 31 FEB is refused here
+        parsed = parse_date(out)  # the real calendar check: 31 FEB is refused here
+        if word in ("bet", "from") and parse_date(read[1][1] if cal == "gregorian" else f"{cal} {read[1][1]}")[
+                "sortval"] < parsed["sortval"]:
+            raise DateError("the range ends before it starts")
         if tokens[0] in ("FROM", "TO") and word in ("aft", "bef"):
             notes.append(f"an open span {tokens[0]} date read as {'after' if word == 'aft' else 'before'} that date")
         if phrase:
