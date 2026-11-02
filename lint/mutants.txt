@@ -73,3 +73,6 @@ gwt_lint/rules_tree.py | [(MERGED[kind], op.get(f)) for f in ("winner", "loser")
 gwt_lint/rules_tree.py | QUOTE_WORDS = 4 | QUOTE_WORDS = 5 | a quoted span of four words is a quotation
 gwt_lint/framework.py | "children": "Person", "media": "Media"} | "children": "Person"} | an op that names a media object touches it, for overlap
 gwt_lint/framework.py |             raise InputError(f"{path}: not a snapshot") |             return cls({}) | a snapshot that is not an object exits 2, never lints clean
+gwt_lint/rules_tree.py |             if op["op"] == "add_note" and str(op.get("text") or "").startswith(PROBABLE): |             if False: | a [probable] note on a child_ref in the same list makes its weak citation need no tag
+gwt_lint/rules_tree.py |             if isinstance(r, str) and not r.startswith("key:"): |             if isinstance(r, str): | the same list key in two lists is two objects, never an overlap
+gwt_lint/rules_tree.py |                     if s not in reach: |                     if True: | a blood relative married to another keeps the blood path in -v

@@ -369,3 +369,27 @@ def test_overlap_reads_the_media_an_update_names(tmp_path):
     ctx = F.Context([{"op": "update_media", "key": "um", "_line": 1, "media": "O1", "set": {"desc": "x"}}],
                     F.Tree.load(TREE), {"overlap": {"open": str(tmp_path)}})
     assert [f.code for f in T.Overlap().check(ctx)] == ["overlap-open"]
+
+
+def test_weak_child_ref_with_a_probable_note_in_the_list_counts():
+    ops = [{"op": "add_note", "key": "n", "text": "[probable] Only a later census suggests it.",
+            "attach": [{"child_ref": {"family": "F2", "child": "I6"}}]},
+           {"op": "add_citation", "key": "c", "source": "S1", "page": "p", "confidence": 0,
+            "attach": [{"child_ref": {"family": "F2", "child": "I6"}}]}]
+    ctx = F.Context([dict(o, _line=1) for o in ops], F.Tree.load(TREE), {"weak": {"tag": "weak"}})
+    assert T.Weak().check(ctx) == []
+
+
+def test_overlap_ignores_list_keys_two_lists_both_use(tmp_path):
+    # key:<name> refers to an object made inside each list, so the same key in two lists is two different objects
+    def ops(key):
+        return [{"op": "add_person", "key": "p-1", "first_name": "Eva", "surname": "Gil", "gender": "F"},
+                {"op": "add_note", "key": key, "text": "Seen in a register.", "attach": [{"person": "key:p-1"}]}]
+    (tmp_path / "other.jsonl").write_text("".join(json.dumps(o) + "\n" for o in ops("n-a")))
+    ctx = F.Context([dict(o, _line=1) for o in ops("n-b")], F.Tree.load(TREE), {"overlap": {"open": str(tmp_path)}})
+    assert T.Overlap().check(ctx) == []
+
+
+def test_scope_path_of_a_blood_relative_married_to_another_stays_the_blood_one():
+    reach = _reach(_view([{"op": "add_family", "key": "f", "father": "I4", "mother": "I6"}]))
+    assert (reach["hI4"], reach["hI6"]) == ("I1 > father I2 > child I4", "I1 > child I6")
