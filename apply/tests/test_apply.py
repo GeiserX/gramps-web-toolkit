@@ -679,7 +679,9 @@ def test_remove_tag_takes_one_tag_off_and_keeps_the_tag_and_the_rest(fake):
     assert place["tag_list"] == ["tag-other"] and place["name"] == {"value": "Springfield"}
     assert "tag-weak" in fake.store["tags"]  # the tag itself stays in the tree
     before = len(fake.writes())
-    res = run(fake, ops)[0]  # a rerun: the tag is already off
+    res = run(fake, ops)[0]  # a rerun: the tag is already off, which a list must allow with expect: absent
+    assert res.status == "conflict" and "does not have the tag" in res.actions[-1], res.actions
+    res = run(fake, [dict(ops[0], expect="absent")])[0]
     assert res.status == "skip" and "does not have the tag" in res.actions[-1], res.actions
     assert fake.writes()[before:] == []
 
@@ -2100,7 +2102,7 @@ def test_update_family_type(fake):
     op = {"op": "update_family", "key": "u", "ruling": R, "family": f["gramps_id"], "set": {"type": "Married"}}
     assert run(fake, [op])[0].status == "done" and fake.store["families"]["fam"]["type"] == "Married"
     assert run(fake, [op])[0].status == "skip"
-    assert validate([dict(op, key="b", set={"father": "I1"})]) and validate([dict(op, key="b", set={})])
+    assert validate([dict(op, key="b", set={"colour": "red"})]) and validate([dict(op, key="b", set={})])
 
 
 def test_update_child_ref_relations_and_confirming_a_probable_link(fake):
@@ -2133,7 +2135,8 @@ def test_detach_takes_a_reference_off_and_keeps_the_object(fake):
     op = {"op": "detach", "key": "d", "ruling": R, "target": {"person": "I0001"}, "object": {"note": n["gramps_id"]}}
     assert run(fake, [op])[0].status == "done"
     assert fake.store["people"]["anna"]["note_list"] == [] and "n1" in fake.store["notes"]
-    assert run(fake, [op])[0].status == "skip"
+    assert run(fake, [op])[0].status == "conflict"  # nothing to take off
+    assert run(fake, [dict(op, expect="absent")])[0].status == "skip"
     # the way back is attach_existing
     back = {"op": "attach_existing", "key": "a", "ruling": R, "object": {"note": n["gramps_id"]}, "attach": [{"person": "I0001"}]}
     assert run(fake, [back])[0].status == "done" and fake.store["people"]["anna"]["note_list"] == ["n1"]
@@ -3740,7 +3743,9 @@ def test_unlink_child_takes_both_sides_and_keeps_people_and_family(fake):
     assert note["type"] == "Research"
     assert not any(a.startswith("warning") for a in res[0].actions)  # the family still has its mother
     writes = len(fake.writes())
-    again = run(fake, [_unlink()])
+    again = run(fake, [_unlink()])  # a rerun finds nothing to remove: a conflict, unless the list allows it
+    assert again[0].status == "conflict" and "not a child of Family F0001" in again[0].actions[-1]
+    again = run(fake, [dict(_unlink(), expect="absent")])
     assert again[0].status == "skip" and "not a child of Family F0001" in again[0].actions[-1]
     assert len(fake.writes()) == writes
     # linked again by mistake and taken out again under another key: the same note is reused, not repeated
@@ -4211,3 +4216,57 @@ def test_private_new_from_the_command_line_with_a_run_tag(fake, scan, tmp_path, 
         assert fake.store[ns][stable_handle(k)]["private"] is True, (ns, k)
     assert "private" not in fake.store["tags"][stable_handle("tag:r1")]  # a Gramps tag has no private flag
     assert not fake.store["people"]["anna"].get("private")  # changed, not created: keeps its own value
+
+
+def test_cli_rerun_of_a_list_whose_removals_landed_is_all_skip(fake, tmp_path, monkeypatch, capsys):
+    """After a crash the same list runs again with --apply: the removals an earlier apply of it logged as done find
+    nothing and skip. A list that never ran (another sha256) with the same removal is a conflict: a mistyped ID."""
+    import gwt_apply.client as clientmod
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: fake)
+    for k, v in {"GWT_URL": "https://gw.example", "GWT_USERNAME": "u", "GWT_PASSWORD": "pw", "GWT_TREE": "tree-test"}.items():
+        monkeypatch.setenv(k, v)
+    fake.add("notes", {"handle": "n1", "type": "Research", "format": 0, "text": {"string": "on Anna", "tags": []}})
+    fake.store["people"]["anna"]["note_list"] = ["n1"]
+    ops = [{"op": "detach", "key": "d", "ruling": R, "target": {"person": "I0001"}, "object": {"note": "N0001"}},
+           {"op": "delete", "key": "x", "ruling": R, "object": {"note": "N0001"}, "expect_unreferenced": True},
+           {"op": "add_note", "key": "n", "ruling": R, "text": "after the cleanup", "attach": [{"person": "I0001"}]}]
+    p = tmp_path / "changes.jsonl"
+    p.write_text("".join(json.dumps(o) + "\n" for o in ops[:2]))
+    assert main([str(p), "--apply"]) == 0 and "n1" not in fake.store["notes"]
+    p.write_text("".join(json.dumps(o) + "\n" for o in ops[:2]))  # the same list, byte for byte
+    capsys.readouterr()
+    assert main([str(p)]) == 0 and main([str(p), "--apply"]) == 0
+    assert "[conflict]" not in capsys.readouterr().out
+    other = tmp_path / "other.jsonl"
+    other.write_text("".join(json.dumps(o) + "\n" for o in ops))
+    assert main([str(other)]) == 1
+    assert "[conflict] d (detach" in capsys.readouterr().out
+
+
+def test_cli_rerun_reads_only_the_done_ops_of_an_earlier_apply(fake, tmp_path, env, capsys):
+    """A dry run's log (planned, never written) and an op an earlier apply logged as a conflict never make an
+    absent removal landed; the plan on a --snapshot reads the same logs as the run."""
+    for h in ("n1", "n2", "n3"):  # N0001-N0003
+        fake.add("notes", {"handle": h, "type": "Research", "format": 0, "text": {"string": h, "tags": []}})
+    fake.store["people"]["anna"]["note_list"] = ["n1", "n3"]
+    det = {"op": "detach", "key": "d", "ruling": R, "target": {"person": "I0001"}, "object": {"note": "N0001"}}
+    p = tmp_path / "dry.jsonl"
+    p.write_text(json.dumps(det) + "\n")
+    log = str(tmp_path / "plan.jsonl")
+    assert main([str(p), "--log", log]) == 0  # a dry run, logged
+    fake.store["people"]["anna"]["note_list"] = ["n3"]  # someone else takes the note off
+    capsys.readouterr()
+    assert main([str(p), "--log", log]) == 1 and "[conflict] d (detach" in capsys.readouterr().out
+    q = tmp_path / "typo.jsonl"
+    q.write_text(json.dumps(dict(det, key="t", object={"note": "N0002"})) + "\n")  # a note Anna never had
+    assert main([str(q), "--apply"]) == 1
+    capsys.readouterr()
+    assert main([str(q), "--apply"]) == 1 and "[conflict] t (detach" in capsys.readouterr().out
+    r = tmp_path / "cleanup.jsonl"
+    r.write_text(json.dumps(dict(det, key="x", object={"note": "N0003"})) + "\n" + json.dumps(
+        {"op": "delete", "key": "y", "ruling": R, "object": {"note": "N0003"}, "expect_unreferenced": True}) + "\n")
+    assert main([str(r), "--apply"]) == 0 and "n3" not in fake.store["notes"]
+    snap = tmp_path / "after.json.gz"
+    assert main(["--save-snapshot", str(snap)]) == 0
+    capsys.readouterr()
+    assert main([str(r), "--snapshot", str(snap), "--apply"]) == 0, capsys.readouterr().out

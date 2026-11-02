@@ -220,7 +220,7 @@ class Client:
     def _snapped(self, cls: str, handle: str) -> bool:
         return self.snapshot is not None and cls not in self.unsnapped and (cls, handle) not in self.stale
 
-    def _request(self, method: str, path: str, *, write: bool = False, **kw):
+    def _request(self, method: str, path: str, *, write: bool = False, record: dict | None = None, **kw):
         if self.offline:
             raise ApiError(f"{method} {path}: a dry run on a snapshot does not reach the server")
         if self.token is None:
@@ -236,7 +236,8 @@ class Client:
             except (requests.ConnectionError, requests.Timeout) as exc:
                 # the write may or may not have happened: the op starts over from fresh reads. The body goes in the
                 # log line, so a revert can tell whether the server holds it.
-                entry = {"method": method, "path": path, "status": None, "error": f"{type(exc).__name__}: {exc}"[:500]}
+                entry = {"method": method, "path": path, "status": None, "error": f"{type(exc).__name__}: {exc}"[:500],
+                         **({"object": record} if record is not None else {})}
                 if write and "json" in kw:
                     entry["body"] = kw["json"]
                 self.log(**entry)
@@ -248,7 +249,7 @@ class Client:
                 self.login()
                 continue
             break
-        entry = {"method": method, "path": path, "status": r.status_code}
+        entry = {"method": method, "path": path, "status": r.status_code, **({"object": record} if record is not None else {})}
         if write and "json" in kw:
             entry["body"] = kw["json"]
             if method == "POST" and path == "/objects/" and r.status_code == 201:
@@ -441,24 +442,25 @@ class Client:
             raise ApiError(f"update {cls}: HTTP {r.status_code} {r.text[:300]}", r.status_code)
         self.written[(cls, obj["handle"])] = copy.deepcopy(body)
 
-    def delete(self, cls: str, handle: str) -> None:
-        """DELETE one object: the lock note, and what `remove` deletes."""
+    def delete(self, cls: str, handle: str, record: dict | None = None) -> None:
+        """DELETE one object: the lock note, and what `remove` deletes. `record` (the whole object) goes in the log
+        line, so --revert can make it again."""
         if self.dry_run:
             raise ApiError("delete in a dry run")
-        r = self._request("DELETE", f"/{NAMESPACE[cls]}/{handle}", write=True)
+        r = self._request("DELETE", f"/{NAMESPACE[cls]}/{handle}", write=True, record=record)
         if r.status_code not in (200, 404):
             raise ApiError(f"delete {cls} {handle}: HTTP {r.status_code} {r.text[:300]}", r.status_code)
         self.written.pop((cls, handle), None)
         self._handles.get(cls, set()).discard(handle)
 
-    def remove(self, cls: str, handle: str) -> None:
+    def remove(self, cls: str, handle: str, record: dict | None = None) -> None:
         """DELETE an object an op has emptied of references. A dry run only marks it as gone."""
         self.deleted.add((cls, handle))
         if self.dry_run:
             self.log(method="DELETE", path=f"/{NAMESPACE[cls]}/{handle}", planned=True)
             return
         try:
-            self.delete(cls, handle)
+            self.delete(cls, handle, record)
         except Retryable:
             # like a lost merge: the object may still be there, so the retry asks the server
             self.deleted.discard((cls, handle))
@@ -480,8 +482,9 @@ class Client:
         if self.dry_run:
             self.log(method="POST", path=path, body=body or {}, planned=True)
             return
-        # a merge rewrites people, families and notes that pointed at the loser: stop trusting the snapshot for them
-        self.unsnapped |= {"Person", "Family", "Note"}
+        # a merge rewrites people, families and notes that pointed at the loser: stop trusting the snapshot for them;
+        # a place, source or citation can be pointed at from any class
+        self.unsnapped |= {"Person", "Family", "Note"} if cls in ("Person", "Family", "Event") else set(NAMESPACE)
         self.stale |= {(cls, winner), (cls, loser)}
         try:
             r = self._request("POST", path, write=True, json=body or {})
@@ -514,3 +517,21 @@ class Client:
         if r.status_code == 409:
             return "file already on server"
         raise ApiError(f"upload {handle}: HTTP {r.status_code} {r.text[:300]}", r.status_code)
+
+    def replace_file(self, handle: str, data: bytes, mime: str, expect: str) -> str:
+        """Replace the file of a media object (PUT /media/<handle>/file). If-Match carries the MD5 the object must
+        still have, so the server refuses a file someone replaced since (412). The server stores the new file under
+        its own name and updates checksum, path and MIME type."""
+        if self.dry_run:
+            self.log(method="PUT", path=f"/media/{handle}/file", planned=True)
+            return "would replace"
+        self.stale.add(("Media", handle))
+        r = self._request("PUT", f"/media/{handle}/file", write=True, data=data,
+                          headers={"Content-Type": mime, "If-Match": expect})
+        if r.status_code == 200:
+            return "replaced"
+        if r.status_code == 409:
+            return "file already on server"
+        if r.status_code == 412:
+            raise ApiError(f"replace the file of Media {handle}: it no longer has MD5 {expect}", 412)
+        raise ApiError(f"replace the file of Media {handle}: HTTP {r.status_code} {r.text[:300]}", r.status_code)
