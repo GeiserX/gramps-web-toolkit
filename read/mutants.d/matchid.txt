@@ -14,3 +14,5 @@ gwt_matchid.py | return re.sub(r'\s*-\s*', '-', str(v).strip()) if v else '' | r
 gwt_reader.py | (wall is not None and wall(e.status, e.body or b'')) | False | a source's own refusal that means "stop" (matchID's spent quota) is a block too
 gwt_matchid.py | return status == 422 and b'usage expired' in (body or b'').lower() | return False | matchID's spent anonymous quota (HTTP 422) pauses every lane, never an error a lane moves past
 gwt_reader.py | why = ': %s' % why if why else '' | why = '' | an API's error answer says why in the STOP text ("invalid birthDate value"), not only "the site answered an error"
+gwt_matchid.py | if not r['persons'] and offset >= n: | if False: | a matchID page past the last row is the end of the results (exit 2), never a STOP
+gwt_matchid.py | off = (max(1, int(a.page)) - 1) * max(1, min(int(a.count), 100)) | off = 0 | the search tells the verdict where its page starts, so the last page reads as the end

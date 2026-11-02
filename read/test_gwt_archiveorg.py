@@ -45,6 +45,14 @@ class Classify(unittest.TestCase):
         self.assertEqual(v(failed), 'unknown', 'a search the backend says failed read as "none"')
         self.assertEqual(v(json.loads(fx('search.json'))), 'unknown')
 
+    def test_a_page_past_the_last_row_is_the_end_never_a_stop(self):
+        past = {'responseHeader': {'status': 0}, 'response': {'numFound': 109, 'docs': []}}
+        self.assertEqual(gwt_archiveorg.verdict(past, 150), 'none', 'page 4 of 109 items read as a changed answer')
+        self.assertEqual(gwt_archiveorg.verdict(past, 50), 'unknown')
+        full = {'response': {'header': {'succeeded': True}, 'body': {'hits': {'total': 3, 'hits': []}}}}
+        self.assertEqual(gwt_archiveorg.fulltext_verdict(full, 50), 'none')
+        self.assertEqual(gwt_archiveorg.fulltext_verdict(full, 0), 'unknown')
+
     def test_the_catalogue_search_keeps_to_one_mediatype_unless_told(self):
         q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(gwt_archiveorg.search_url('title:(x)')).query))
         self.assertEqual(q['q'], '(title:(x)) AND mediatype:(texts)')
@@ -68,6 +76,14 @@ class Search(Run):
         self.assertEqual((book['year'], film['year']), (1904, 1950))
         self.assertEqual(items[0], ['registerofnortia00zzzz', book['iiif_manifest'], book['ocr']])
         self.assertEqual(items[1], ['villazul-burials-film', film['iiif_manifest'], ''])
+
+    def test_paging_past_the_last_row_is_exit_2(self):
+        gate = FakeGate()
+        past = json.dumps({'responseHeader': {'status': 0}, 'response': {'numFound': 109, 'docs': []}}).encode()
+        code, lines, _, text = self.run_ia(['--query', 'title:(x)', '--page', '4', '--count', '50'],
+                                           FakeNet(gate, (200, past)), gate)
+        self.assertEqual((code, gate.hits), (gwt_reader.EXIT_EMPTY, []), text)
+        self.assertIn('past the end', lines['results'])
 
     def test_fulltext_keeps_the_snippets_and_never_the_callers_address(self):
         gate = FakeGate()

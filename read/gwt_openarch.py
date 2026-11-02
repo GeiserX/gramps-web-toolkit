@@ -110,15 +110,19 @@ def record_id(arg):
     return (m.group(1), m.group(2)) if m else None
 
 
-def verdict(doc):
+def verdict(doc, offset=0):
     """'hits', 'none' or 'unknown' for a search answer. Only the API's own count says none; an error answer
-    (error_code), a missing count or a count with no rows is unknown, a STOP."""
+    (error_code), a missing count or a count with no rows is unknown, a STOP, unless the rows asked for start at or
+    past that count (`offset`): then it is the end of the results."""
     if not isinstance(doc, dict) or not isinstance(doc.get('response'), dict):
         return 'unknown'    # an error answer, or the result container renamed: a STOP
     n, docs = doc['response'].get('number_found'), doc['response'].get('docs', [])
     if not isinstance(n, int) or isinstance(n, bool) or not isinstance(docs, list):
         return 'unknown'
     if n == 0 and not docs:
+        return 'none'
+    # paged past the last row: the end of the results, not a changed answer
+    if not docs and offset >= n:
         return 'none'
     if docs and all(isinstance(d, dict) and d.get('identifier') and d.get('archive_code') for d in docs):
         return 'hits'
@@ -216,22 +220,21 @@ def add_record_args(sp):
     sp.add_argument('--gedcom', action='store_true', help='also save the record as GEDCOM 7.0 (<key>.ged)')
 
 
-def _expect(doc):
-    return verdict(doc) != 'unknown'
-
-
 def search(a, R):
     url = search_url(a.name, a.period, a.eventplace, a.archive, a.sourcetype, a.relationtype, a.country, a.count,
                      a.start)
-    status, rh, body, cached = gwt_reader.get_api(R, url, {'accept': ACCEPT}, expect=_expect, refresh=a.refresh)
+    off = max(0, min(int(a.start), 10000))
+    status, rh, body, cached = gwt_reader.get_api(R, url, {'accept': ACCEPT},
+                                                  expect=lambda d: verdict(d, off) != 'unknown',
+                                                  refresh=a.refresh)
     doc = json.loads(body)
     cands = search_candidates(doc)
-    env = gwt_reader.envelope(url, None, json_body=doc, verdict=verdict(doc), status=status, from_cache=cached)
+    env = gwt_reader.envelope(url, None, json_body=doc, verdict=verdict(doc, off), status=status, from_cache=cached)
     words = [SOURCE, a.name, a.period, a.eventplace, a.archive, a.sourcetype, a.relationtype, a.country, a.start]
     base = gwt_reader.write_search(a.out, gwt_reader.search_key(url, words), env, cands)
     gwt_reader.print_paths(SOURCE, base, print)
-    print('results\t%s total, %d read%s' % (doc['response']['number_found'], len(cands), ' (cache)' if cached else ''),
-          flush=True)
+    print('results\t%s total, %d read%s%s' % (doc['response']['number_found'], len(cands), gwt_reader.past_end(cands, off),
+                                            ' (cache)' if cached else ''), flush=True)
     return gwt_reader.EXIT_OK if cands else gwt_reader.EXIT_EMPTY
 
 

@@ -29,7 +29,7 @@ A search row becomes a candidate with `id` `ARCHIVE:UUID`, the name as the index
 
 - an answer of another shape, such as the result container renamed;
 - an error the API answers with HTTP 200 and an `error_code` (a missing archive code does this);
-- a count above zero with no rows;
+- a count above zero with no rows, unless `--start` is at or past that count: a page past the last row is the end of the results (exit 2, `past the end` on the results line);
 - an HTML page where the GEDCOM should be.
 
 A 5xx, or no answer at all, is an outage: exit 3, and the gate pauses every lane. A 429 is a wall, as on every source. A 404 for one record is an error (exit 1), not a block.

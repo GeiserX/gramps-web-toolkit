@@ -10,3 +10,5 @@ gwt_openarch.py | ('number_show', max(1, min(int(count), 100))) | ('number_show'
 gwt_openarch.py | ('start', max(0, min(int(start), 10000))) | ('start', max(0, int(start))) | a search never asks for a start the API refuses (over 10000)
 gwt_openarch.py | return page.lstrip('\ufeff').startswith('0 HEAD') | return bool(page) | an HTML page at a GEDCOM URL is a STOP, never saved as the record's GEDCOM
 gwt_openarch.py |         if p.get('Profession'): | if False: | a record's occupation reaches the candidate
+gwt_openarch.py | if not docs and offset >= n: | if False: | an Open Archives page past the last row is the end of the results (exit 2), never a STOP
+gwt_openarch.py | off = max(0, min(int(a.start), 10000)) | off = 0 | the search tells the verdict where its page starts, so the last page reads as the end

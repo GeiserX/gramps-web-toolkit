@@ -67,8 +67,9 @@ def _count(n):
     return isinstance(n, int) and not isinstance(n, bool)
 
 
-def verdict(doc):
-    """'hits', 'none' or 'unknown' for a catalogue answer: {responseHeader: {status: 0}, response: {numFound, docs}}."""
+def verdict(doc, offset=0):
+    """'hits', 'none' or 'unknown' for a catalogue answer: {responseHeader: {status: 0}, response: {numFound, docs}}.
+    A page that starts at or past numFound (`offset`, the rows before it) is the end of the results."""
     if not isinstance(doc, dict) or (doc.get('responseHeader') or {}).get('status') != 0:
         return 'unknown'
     r = doc.get('response')
@@ -76,12 +77,15 @@ def verdict(doc):
         return 'unknown'    # the result container renamed: a STOP
     if r['numFound'] == 0 and not r['docs']:
         return 'none'
+    # paged past the last row: the end of the results, not a changed answer
+    if not r['docs'] and offset >= r['numFound']:
+        return 'none'
     if r['docs'] and all(isinstance(d, dict) and d.get('identifier') for d in r['docs']):
         return 'hits'
     return 'unknown'
 
 
-def fulltext_verdict(doc):
+def fulltext_verdict(doc, offset=0):
     """The same for a full-text answer: {response: {header: {succeeded: true}, body: {hits: {total, hits}}}}."""
     r = doc.get('response') if isinstance(doc, dict) else None
     if not isinstance(r, dict) or (r.get('header') or {}).get('succeeded') is not True:
@@ -90,6 +94,9 @@ def fulltext_verdict(doc):
     if not isinstance(h, dict) or not _count(h.get('total')) or not isinstance(h.get('hits'), list):
         return 'unknown'
     if h['total'] == 0 and not h['hits']:
+        return 'none'
+    # paged past the last row: the end of the results, not a changed answer
+    if not h['hits'] and offset >= h['total']:
         return 'none'
     if h['hits'] and all(isinstance(x, dict) and (x.get('fields') or {}).get('identifier') for x in h['hits']):
         return 'hits'
@@ -135,8 +142,10 @@ def search(a, R):
         return EXIT_USAGE
     full = a.fulltext
     url = fulltext_url(a.query, a.count, a.page) if full else search_url(a.query, a.mediatype, a.count, a.page)
+    off = (max(1, int(a.page)) - 1) * max(1, min(int(a.count), 100))
     judge = fulltext_verdict if full else verdict
-    status, rh, body, cached = gwt_reader.get_api(R, url, {'accept': ACCEPT}, expect=lambda d: judge(d) != 'unknown',
+    status, rh, body, cached = gwt_reader.get_api(R, url, {'accept': ACCEPT},
+                                                  expect=lambda d: judge(d, off) != 'unknown',
                                                   refresh=a.refresh)
     doc = json.loads(body)
     if full:
@@ -147,11 +156,12 @@ def search(a, R):
     else:
         kept = doc
         total, cands = doc['response']['numFound'], [candidate(d) for d in doc['response']['docs']]
-    env = gwt_reader.envelope(url, None, json_body=kept, verdict=judge(doc), status=status, from_cache=cached)
+    env = gwt_reader.envelope(url, None, json_body=kept, verdict=judge(doc, off), status=status, from_cache=cached)
     words = [SOURCE, 'fulltext' if full else 'catalogue', a.query, a.mediatype, a.page]
     base = gwt_reader.write_search(a.out, gwt_reader.search_key(url, words), env, cands)
     gwt_reader.print_paths(SOURCE, base, print)
     for c in cands:
         print('item\t%s\t%s\t%s' % (c['id'], c['iiif_manifest'], c.get('ocr', '')), flush=True)
-    print('results\t%s total, %d read%s' % (total, len(cands), ' (cache)' if cached else ''), flush=True)
+    print('results\t%s total, %d read%s%s' % (total, len(cands), gwt_reader.past_end(cands, off),
+                                            ' (cache)' if cached else ''), flush=True)
     return gwt_reader.EXIT_OK if cands else gwt_reader.EXIT_EMPTY

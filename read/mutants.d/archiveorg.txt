@@ -8,3 +8,6 @@ gwt_archiveorg.py | if not isinstance(r, dict) or (r.get('header') or {}).get('s
 gwt_archiveorg.py | if not isinstance(doc, dict) or (doc.get('responseHeader') or {}).get('status') != 0: | if not isinstance(doc, dict): | a catalogue answer with an error status is unknown, never "none"
 gwt_archiveorg.py | [('rows', max(1, min(int(count), 100))), | [('rows', max(1, int(count))), | a catalogue search never asks for more than 100 rows
 gwt_archiveorg.py | return re.sub(r'\s+', ' ', s.replace('{{{', '').replace('}}}', '')).strip() | return s | a full-text snippet loses the site's {{{ }}} highlight marks
+gwt_archiveorg.py | if not r['docs'] and offset >= r['numFound']: | if False: | an archive.org catalogue page past the last row is the end of the results (exit 2), never a STOP
+gwt_archiveorg.py | if not h['hits'] and offset >= h['total']: | if False: | an archive.org full-text page past the last row is the end of the results (exit 2), never a STOP
+gwt_archiveorg.py | off = (max(1, int(a.page)) - 1) * max(1, min(int(a.count), 100)) | off = 0 | the search tells the verdict where its page starts, so the last page reads as the end

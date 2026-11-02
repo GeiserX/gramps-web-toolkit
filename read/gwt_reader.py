@@ -395,3 +395,8 @@ def get_api(R, url, headers=None, expect=None, refresh=False, page=None, wall=No
         if why:
             raise Stop('%s%s' % (e, why), e.exit_code, e.verdict, e.status, e.body) from None
         raise
+
+
+def past_end(cands, offset):
+    """The note a search's results line carries when a page past the last row came back empty."""
+    return ' (past the end)' if not cands and offset else ''

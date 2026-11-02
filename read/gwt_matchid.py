@@ -71,8 +71,9 @@ def search_url(q='', given='', surname='', born='', died='', birth_city='', deat
     return API + '/search?' + urllib.parse.urlencode(p)
 
 
-def verdict(doc):
-    """'hits', 'none' or 'unknown': {response: {total: N, persons: [...]}}."""
+def verdict(doc, offset=0):
+    """'hits', 'none' or 'unknown': {response: {total: N, persons: [...]}}. A page that starts at or past the total
+    (`offset`, the rows before it) is the end of the results."""
     r = doc.get('response') if isinstance(doc, dict) else None
     if not isinstance(r, dict) or not isinstance(r.get('persons'), list):
         return 'unknown'    # the result container renamed: a STOP
@@ -80,6 +81,9 @@ def verdict(doc):
     if not isinstance(n, int) or isinstance(n, bool):
         return 'unknown'
     if n == 0 and not r['persons']:
+        return 'none'
+    # paged past the last row: the end of the results, not a changed answer
+    if not r['persons'] and offset >= n:
         return 'none'
     if r['persons'] and all(isinstance(x, dict) and x.get('id') and isinstance(x.get('name'), dict)
                             for x in r['persons']):
@@ -136,14 +140,16 @@ def search(a, R):
         print('gwt-read: matchid: give --surname, --given or --q', file=sys.stderr, flush=True)
         return EXIT_USAGE
     url = search_url(a.q, a.given, a.surname, a.born, a.died, a.birth_city, a.death_city, a.sex, a.count, a.page)
-    status, rh, body, cached = gwt_reader.get_api(R, url, {'accept': ACCEPT}, expect=lambda d: verdict(d) != 'unknown',
+    off = (max(1, int(a.page)) - 1) * max(1, min(int(a.count), 100))
+    status, rh, body, cached = gwt_reader.get_api(R, url, {'accept': ACCEPT},
+                                                  expect=lambda d: verdict(d, off) != 'unknown',
                                                   refresh=a.refresh, wall=quota_spent)
     doc = json.loads(body)
     cands = [candidate(p) for p in doc['response']['persons']]
-    env = gwt_reader.envelope(url, None, json_body=doc, verdict=verdict(doc), status=status, from_cache=cached)
+    env = gwt_reader.envelope(url, None, json_body=doc, verdict=verdict(doc, off), status=status, from_cache=cached)
     words = [SOURCE, a.q, a.given, a.surname, a.born, a.died, a.birth_city, a.death_city, a.sex, a.page]
     base = gwt_reader.write_search(a.out, gwt_reader.search_key(url, words), env, cands)
     gwt_reader.print_paths(SOURCE, base, print)
-    print('results\t%s total, %d read%s' % (doc['response']['total'], len(cands), ' (cache)' if cached else ''),
-          flush=True)
+    print('results\t%s total, %d read%s%s' % (doc['response']['total'], len(cands), gwt_reader.past_end(cands, off),
+                                            ' (cache)' if cached else ''), flush=True)
     return gwt_reader.EXIT_OK if cands else gwt_reader.EXIT_EMPTY

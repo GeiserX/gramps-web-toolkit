@@ -47,6 +47,11 @@ class Classify(unittest.TestCase):
             gwt_matchid.search_url(surname='Zorvalo', born='01/01/1900 - 31/12/1910', died='1950 -1960')).query))
         self.assertEqual((q['birthDate'], q['deathDate']), ('01/01/1900-31/12/1910', '1950-1960'))
 
+    def test_a_page_past_the_last_row_is_the_end_never_a_stop(self):
+        past = {'response': {'total': 2, 'persons': []}}
+        self.assertEqual(gwt_matchid.verdict(past, 20), 'none', 'page 2 of a 2-row search read as a changed answer')
+        self.assertEqual(gwt_matchid.verdict(past, 0), 'unknown')
+
     def test_the_pace_keeps_to_one_request_a_second_at_most(self):
         self.assertGreaterEqual(gwt_matchid.SPEC['pace']['floor'], 1.0)
         self.assertEqual(gwt_reader.spec_problems(gwt_matchid.SPEC), [])
@@ -73,6 +78,13 @@ class Search(Run):
         gate = FakeGate()
         code, lines, _ = self.search(FakeNet(gate, (200, fx('none.json'))), gate)
         self.assertEqual((code, gate.hits), (gwt_reader.EXIT_EMPTY, []))
+
+    def test_paging_past_the_last_row_is_exit_2(self):
+        gate = FakeGate()
+        past = json.dumps({'response': {'total': 2, 'size': 20, 'page': 2, 'persons': []}}).encode()
+        code, lines, text = self.search(FakeNet(gate, (200, past)), gate, '--page', '2')
+        self.assertEqual((code, gate.hits), (gwt_reader.EXIT_EMPTY, []), text)
+        self.assertIn('past the end', lines['results'])
 
     def test_a_changed_answer_is_a_stop_never_zero_results(self):
         gate = FakeGate()

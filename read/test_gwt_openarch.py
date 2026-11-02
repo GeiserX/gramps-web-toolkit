@@ -42,6 +42,11 @@ class Classify(unittest.TestCase):
         self.assertEqual(v({'response': {'number_found': 3}}), 'unknown', 'a count with no rows read as "none"')
         self.assertEqual(v({'response': {'number_found': '0'}}), 'unknown')
 
+    def test_a_page_past_the_last_row_is_the_end_never_a_stop(self):
+        past = {'response': {'number_found': 409, 'docs': []}}
+        self.assertEqual(gwt_openarch.verdict(past, 410), 'none', 'paging past the end read as a changed answer')
+        self.assertEqual(gwt_openarch.verdict(past, 400), 'unknown', 'rows missing inside the total read as the end')
+
     def test_record_ids_and_urls(self):
         self.assertEqual(gwt_openarch.record_id('zzarch:' + UUID), ('zzarch', UUID))
         self.assertEqual(gwt_openarch.record_id('https://www.openarchieven.nl/zzarch:%s/en' % UUID), ('zzarch', UUID))
@@ -78,6 +83,13 @@ class Search(Run):
         code, lines, _ = self.search(FakeNet(gate, (200, fx('none.json'))), gate)
         self.assertEqual((code, gate.hits), (gwt_reader.EXIT_EMPTY, []))
         self.assertEqual(json.load(open(lines['candidates'])), {'candidates': []})
+
+    def test_paging_past_the_last_row_is_exit_2(self):
+        gate = FakeGate()
+        past = json.dumps({'query': {'start': 410}, 'response': {'number_found': 409, 'docs': []}}).encode()
+        code, lines, text = self.search(FakeNet(gate, (200, past)), gate, '--start', '410')
+        self.assertEqual((code, gate.hits), (gwt_reader.EXIT_EMPTY, []), text)
+        self.assertIn('past the end', lines['results'])
 
     def test_a_changed_answer_is_a_stop_never_zero_results_and_never_cached(self):
         for name in ('changed.json', 'error200.json'):
