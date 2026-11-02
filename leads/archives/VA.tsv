@@ -1,0 +1,2 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Vatican City|Vatican|Holy See|Città del Vaticano|Ciudad del Vaticano	country	Biblioteca Apostolica Vaticana (DigiVatLib)	Manuscripts (IIIF)	other	800-1939		https://digi.vatlib.it/	online				The Apostolic Archive is reading-room only; marriage dispensations are mostly in diocesan archives. Probe: robots.txt did not answer a script on 2026-11-02 (TLS error, timeout or server error), so the probe skipped it

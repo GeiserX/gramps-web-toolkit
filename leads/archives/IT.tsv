@@ -1,0 +1,3 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Italy|Italia|Italie|Italien	country	Portale Antenati	Stato civile (Archivi di Stato), IIIF	birth,marriage,death	1809-1949	1866	https://antenati.cultura.gov.it/	browser	challenge			Napoleonic civil registration 1809-1815; national from 1866. A WAF refuses scripted page requests. Probe: answered a script with HTTP 403 on 2026-11-02 (a bot check or a block); a browser may still get in
+Italy|Italia|Italie|Italien	country	CISEI (Centro Internazionale Studi Emigrazione Italiana)	Departures from Genoa	migration	1833-1960		https://www.ciseionline.it/2012/index.asp	online	ok		2026-11-02	

@@ -1,0 +1,2 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Philippines|Pilipinas|Filipinas	country	National Archives of the Philippines	Spanish collection; civil registration 1888-1986 on FamilySearch	birth,marriage,death,census,notarial	1600-1986	1888	https://nationalarchives.gov.ph/	browser	challenge			Probe: answered a script with HTTP 403 on 2026-11-02 (a bot check or a block); a browser may still get in
