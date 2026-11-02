@@ -40,3 +40,7 @@ gwt_fetch/crop.py | if not m or not int(m.group(1)) or not int(m.group(2)): | if
 gwt_fetch/crop.py | if not m or float(m.group(1)) >= 50: | if not m: | an --overlap of 50% or more is refused
 gwt_fetch/crop.py |         if not src.is_file(): |         if False: | a missing image stops with a message, not a traceback
 gwt_fetch/crop.py | if piece.mode not in ("RGB", "L"): | if False: | a page with transparency or a palette is converted before it is saved as JPEG
+gwt_fetch/iiif.py |     if store.done(stem, label, url, source): |     if False: | a native file on disk without a row gets its row back, with no second image request
+gwt_fetch/iiif.py |         if marker == 0xFF:  # fill byte |         if False: | fill bytes before a JPEG marker do not hide the image's width
+gwt_fetch/iiif.py |     if data[:2] != b"\xff\xd8": |     if False: | a file that is not a JPEG is never read as one
+gwt_fetch/crop.py |                 if store.done(stem, label, url, row.get("manifest_url", "")): |                 if False: | a piece on disk without a row gets its row back and is not cut again

@@ -96,6 +96,16 @@ def test_rerun_never_overwrites(page):
     assert [r["file"] for r in rows(page.parent / "manifest.tsv")].count(out.name) == 1
 
 
+def test_a_piece_on_disk_without_a_row_gets_its_row_back(page, capsys):
+    crop.run(args([page], half="left"))
+    m = page.parent / "manifest.tsv"
+    m.write_text("".join(ln for ln in m.read_text().splitlines(keepends=True) if "_left.jpg" not in ln))
+    capsys.readouterr()
+    assert crop.run(args([page], half="left")) == 0
+    assert capsys.readouterr().out == ""  # nothing cut again
+    assert [r["file"] for r in rows(m)].count("0001_pag-1_left.jpg") == 1
+
+
 def test_image_without_a_row_uses_its_file_name(tmp_path):
     p = tmp_path / "scan.jpg"
     Image.new("L", (300, 200)).save(p)

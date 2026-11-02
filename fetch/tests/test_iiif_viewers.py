@@ -216,6 +216,16 @@ def test_image_base_resume_sends_no_request(tmp_path):
     assert c.calls[n:] == []
 
 
+def test_image_base_file_on_disk_without_a_row_gets_its_row_back(tmp_path):
+    c = FakeClient(ad_routes(3904))
+    iiif.run(ns(url=None, image_base=f"{AD}/f12", out=str(tmp_path)), c)
+    (tmp_path / "manifest.tsv").unlink()
+    n = len(c.calls)
+    assert iiif.run(ns(url=None, image_base=f"{AD}/f12", out=str(tmp_path)), c) == 0
+    assert [u for u, *_ in c.calls[n:]] == [f"{AD}/f12/info.json"]  # the image is not fetched again
+    assert [r["image_url"] for r in rows(tmp_path / "manifest.tsv")] == [f"{AD}/f12/full/3904,/0/default.jpg"]
+
+
 def test_info_json_given_as_manifest_points_at_image_base():
     c = FakeClient({f"{AD}/f12/info.json": Resp((FIX / "ad_info.json").read_bytes(), "application/json")})
     with pytest.raises(SystemExit, match="--image-base"):
@@ -227,6 +237,10 @@ def test_pixel_width_reads_jpeg_and_png_headers():
     png = b"\x89PNG\r\n\x1a\n" + b"\x00\x00\x00\rIHDR" + (1234).to_bytes(4, "big") + (99).to_bytes(4, "big")
     assert iiif.pixel_width(png) == 1234
     assert iiif.pixel_width(b"<html>") is None
+    # fill bytes (0xFF) may pad the space before any marker
+    assert iiif.pixel_width(b"\xff\xd8\xff" + jpeg(3904)[2:]) == 3904
+    # a file that is not a JPEG is not read as one, even when a marker-like byte follows
+    assert iiif.pixel_width(b"GI" + jpeg(3904)[20:]) is None
     PIL = pytest.importorskip("PIL.Image")
     import io
     for kw in ({}, {"progressive": True}):
