@@ -91,6 +91,30 @@ def test_native_flag_fetches_info_width_not_max(tmp_path):
     assert iiif.pixel_width((tmp_path / "0001_pag-1.jpg").read_bytes()) == 4929
 
 
+def test_native_after_a_capped_run_adds_the_native_file(tmp_path):
+    """Re-running a full/max download with --native in the same folder gets the native width beside it."""
+    c = RefererClient(antenati_routes())
+    assert iiif.run(ns(url=MANIFEST, out=str(tmp_path), pages="1"), c) == 0
+    assert iiif.run(ns(url=MANIFEST, out=str(tmp_path), pages="1", native=True), c) == 0
+    assert iiif.pixel_width((tmp_path / "0001_pag-1.jpg").read_bytes()) == 3610       # kept
+    assert iiif.pixel_width((tmp_path / "0001_pag-1_native.jpg").read_bytes()) == 4929
+    assert [r["file"] for r in rows(tmp_path / "manifest.tsv")] == ["0001_pag-1.jpg", "0001_pag-1_native.jpg"]
+
+
+def test_native_resume_sends_only_the_manifest_request(tmp_path):
+    c = RefererClient(antenati_routes())
+    iiif.run(ns(url=MANIFEST, out=str(tmp_path), pages="1", native=True), c)
+    n = len(c.calls)
+    assert iiif.run(ns(url=MANIFEST, out=str(tmp_path), pages="1", native=True), c) == 0
+    assert [u for u, _, _ in c.calls[n:]] == [MANIFEST]
+
+
+def test_native_list_prints_the_info_json(capsys):
+    c = RefererClient(antenati_routes())
+    assert iiif.run(ns(url=MANIFEST, pages="1", native=True, list=True), c) == 0
+    assert capsys.readouterr().out.strip().endswith("/iiif/2/aAaa111/info.json")
+
+
 def test_canadiana_viewer_becomes_its_manifest():
     assert iiif.resolve("https://heritage.canadiana.ca/view/oocihm.lac_reel_x0000/5", None)[0] == \
         "https://heritage.canadiana.ca/iiif/oocihm.lac_reel_x0000/manifest"
@@ -148,12 +172,12 @@ def test_image_base_page_placeholder_and_missing_page(tmp_path):
         iiif.image_bases(AD + "/f{page}", "3-")
 
 
-def test_image_base_resume_fetches_only_info(tmp_path):
+def test_image_base_resume_sends_no_request(tmp_path):
     c = FakeClient(ad_routes(3904))
     iiif.run(ns(url=None, image_base=f"{AD}/f12", out=str(tmp_path)), c)
     n = len(c.calls)
     assert iiif.run(ns(url=None, image_base=f"{AD}/f12", out=str(tmp_path)), c) == 0
-    assert [u for u, _, _ in c.calls[n:]] == [f"{AD}/f12/info.json"]
+    assert c.calls[n:] == []
 
 
 def test_info_json_given_as_manifest_points_at_image_base():

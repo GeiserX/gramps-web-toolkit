@@ -173,7 +173,9 @@ def run(args, client) -> int:
     print(f"gwt-fetch: {title or manifest_url}: {len(cs)} canvas(es) selected", file=sys.stderr)
     if args.list:
         for c in cs:
-            print(f"{c.index}\t{c.label}\t{(candidates(c) or [''])[0]}")
+            url = f"{c.service}/info.json" if getattr(args, "native", False) and c.service else \
+                (candidates(c) or [""])[0]
+            print(f"{c.index}\t{c.label}\t{url}")
         return 0
     store = Store(args.out)
     failed = 0
@@ -255,8 +257,23 @@ def pixel_width(data: bytes) -> int | None:
     return None
 
 
+NATIVE_URL = re.compile(r"/full/\d+,/0/default\.jpg$")
+
+
 def _fetch_native(client, store: Store, stem: str, label: str, base: str, source: str, referer: str) -> bool:
-    """Fetch one image at the width its info.json gives. Refuse (write nothing) a file of another width."""
+    """Fetch one image at the width its info.json gives. Refuse (write nothing) a file of another width.
+
+    A file already saved at native width costs no request. One saved earlier from full/max (a plain
+    run into the same folder) is kept, and the native image goes beside it as <stem>_native.
+    """
+    p = store.find(stem)
+    row = store.rows.get(p.name) if p else None
+    if row and not NATIVE_URL.search(row["image_url"]):
+        stem += "_native"
+        p = store.find(stem)
+        row = store.rows.get(p.name) if p else None
+    if row:
+        return True
     try:
         width = int(client.json(f"{base}/info.json", referer=referer)["width"])
     except Exception as e:  # a missing page or a broken info.json fails this image, not the run

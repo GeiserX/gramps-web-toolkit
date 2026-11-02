@@ -34,7 +34,9 @@ Give it a IIIF Presentation manifest URL (v2 or v3), or a viewer URL from a port
 
 `--pages` takes 1-based canvas positions (`1-5,9,12-`); `--labels` takes a regular expression matched against the canvas label (`--labels '^pag\. (1|2)$'`). `--list` prints position, label and URL and downloads nothing.
 
-`full/max` is not always the native size: Antenati caps it at 10 megapixels. `--native` reads each canvas's `info.json` and asks for `full/<width>,/0/default.jpg` at the width it gives. The run checks the width of the image that comes back, and when the server sent another width (rescaled up or down) it saves nothing for that canvas, prints both widths and exits 1. Read names and dates at native width: a preview is for finding the act, not for reading it.
+`full/max` is not always the native size: Antenati caps it at 10 megapixels. `--native` reads each canvas's `info.json` and asks for `full/<width>,/0/default.jpg` at the width it gives. The run checks the width of the image that comes back, and when the server sent another width (rescaled up or down) it saves nothing for that canvas, prints both widths and exits 1. Read names and dates at native width: a preview is for finding the act, not for reading it. A canvas already saved from `full/max` in the same `--out` folder is kept, and the native file goes beside it as `NNNN_<label>_native.jpg`; a canvas already saved at native width is skipped without a request. With `--list`, `--native` prints each canvas's `info.json` URL.
+
+The cap is the server's own `maxArea` in `info.json`, and `--native` asks above it, on servers that already take seconds per image. Use it for the pages you will read, not for whole registers.
 
 ### `--image-base`: an Image API with no manifest
 
