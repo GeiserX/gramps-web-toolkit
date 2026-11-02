@@ -141,7 +141,8 @@ def test_a_skip_that_is_not_a_noop_stops_the_run_unless_accepted(tmp_path, serve
     # the same list again: p-john reads as "already made by key", which a first dry run never should
     again = tmp_path / "again"
     assert gwt_run_main(lst, conf, "--dir", str(again)) == 3
-    assert any("p-john" in r for r in json.loads((again / "run.json").read_text())["steps"]["dry_run"]["refused"])
+    refused = json.loads((again / "run.json").read_text())["steps"]["dry_run"]["refused"]
+    assert any(r.startswith("[skip] p-john: ") and "already" in r for r in refused)  # says why it is a skip
     # u-anna is a no-op skip (the tree already has that name) and never stops it
     ok = tmp_path / "accepted"
     assert gwt_run_main(lst, conf, "--dir", str(ok), "--accept-skip", "p-john") == 0
@@ -216,7 +217,8 @@ def test_a_read_that_hangs_is_ended_and_named(tmp_path, server, capsys):
     st = state(lst)
     assert st["steps"]["backup"]["status"] == "stalled"
     assert "/people/" in st["steps"]["backup"]["last"]
-    assert "/people/" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "/people/" in err and "no progress for 2 s;" in err
 
 
 def test_the_gate_stops_on_a_new_problem(tmp_path, server):
@@ -471,3 +473,12 @@ def test_a_signal_on_gwt_run_ends_the_step_it_runs(tmp_path, server, sig):
     assert st["steps"]["backup"]["status"] == "stopped" and st["status"] == "stopped"
     ps = subprocess.run(["ps", "-axo", "command"], capture_output=True, text=True).stdout
     assert str(lst) not in ps  # no gwt-apply left reading (or writing) on its own
+
+
+def test_a_dry_run_stopped_on_a_likely_duplicate_names_it(tmp_path, server):
+    twin = {"op": "add_person", "key": "p-anna-twin", "ruling": R, "first_name": "Anna", "surname": "Example",
+            "gender": "F"}
+    lst, conf = setup(tmp_path, server, [JOHN, twin])
+    assert gwt_run_main(lst, conf) == 3
+    refused = state(lst)["steps"]["dry_run"]["refused"]
+    assert any(r.startswith("[refused] ") and "p-anna-twin" in r and "I0001" in r for r in refused)

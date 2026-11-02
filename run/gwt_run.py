@@ -267,7 +267,7 @@ class Run:
 
     def stalled(self, name: str, why: str, last: str) -> Stop:
         self.mark(name, "stalled", why=why, last=last)
-        return Stop(EXIT["stalled"], f"{name}: {'no progress for ' + str(self.args.stall) + ' s' if why == 'stall' else 'past its deadline'}; {last}")
+        return Stop(EXIT["stalled"], f"{name}: {f'no progress for {self.args.stall:g} s' if why == 'stall' else 'past its deadline'}; {last}")
 
     def backup(self) -> None:
         if self.pre.exists():
@@ -294,10 +294,27 @@ class Run:
         self.mark("backup", "ok", file=str(self.pre), md5=self._md5(), tree=snap.get("tree"),
                   objects={c: len(v) for c, v in (snap.get("objects") or {}).items()})
 
+    def _dry_run_log(self) -> tuple[list[str], dict[str, str]]:
+        """From the newest dry-run log: why gwt-apply refused the list as a whole (a likely duplicate, a missing
+        file), and the last action of every op, which says why a skip is one."""
+        logs = sorted(self.dir.glob("dry_run.*.jsonl"), key=lambda p: p.stat().st_mtime)
+        problems, actions = [], {}
+        for line in (logs[-1].read_text(encoding="utf-8").splitlines() if logs else []):
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            if e.get("event") == "refused":
+                problems += [str(p) for p in e.get("problems") or []]
+            elif e.get("event") == "op" and e.get("key") and e.get("actions"):
+                actions[e["key"]] = str(e["actions"][-1])
+        return problems, actions
+
     def dry_run(self) -> None:
         out = self.dir / "dry_run.json"
         out.unlink(missing_ok=True)
-        code, why, last = self.watch("dry_run", self.apply_cmd("--snapshot", str(self.pre), "--json", str(out)))
+        code, why, last = self.watch("dry_run", self.apply_cmd("--snapshot", str(self.pre), "--json", str(out),
+                                                               "--log", str(self.dir / "dry_run.jsonl")))
         if why:
             raise self.stalled("dry_run", why, last)
         if not out.exists():
@@ -308,9 +325,12 @@ class Run:
         refused = [r for r in rows if r["status"] in ("conflict", "error", "not run")]
         refused += [r for r in rows if r["status"] == "skip" and not r.get("noop") and r["key"] not in accept]
         if refused:
-            self.mark("dry_run", "refused", exit=code, refused=[f"[{r['status']}] {r['key']}: {r['reason']}" for r in refused])
+            problems, actions = self._dry_run_log()
+            lines = [f"[refused] {p}" for p in problems]
+            lines += [f"[{r['status']}] {r['key']}: {r['reason'] or actions.get(r['key'], '')}" for r in refused]
+            self.mark("dry_run", "refused", exit=code, refused=lines)
             raise Stop(EXIT["refused"], f"dry run: {len(refused)} op(s) would not go through; nothing was written:\n"
-                       + "\n".join(f"  [{r['status']}] {r['key']}: {r['reason']}" for r in refused))
+                       + "\n".join(f"  {x}" for x in lines))
         counts = {s: sum(r["status"] == s for r in rows) for s in ("done", "skip")}
         self.mark("dry_run", "ok", exit=code, counts=counts)
 

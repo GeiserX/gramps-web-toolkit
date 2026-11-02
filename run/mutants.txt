@@ -23,3 +23,5 @@ gwt_run.py | if self.prev.exists():  # reads only | if False:  # reads only | a 
 gwt_run.py | if not why and read: | if not why: | a verify that never read the tree is tried again, not reported as ops missing
 gwt_run.py | except BaseException:  # Ctrl-C | except ZeroDivisionError:  # Ctrl-C | Ctrl-C or a signal on gwt-run ends the step's own process too
 gwt_run.py | handlers = {sig: signal.signal(sig, _signalled) for sig in (signal.SIGTERM, signal.SIGHUP)} | handlers = {} | SIGTERM on gwt-run stops the run cleanly and marks the step stopped
+gwt_run.py | lines = [f"[refused] {p}" for p in problems] | lines = [] | a dry run that stops on a likely duplicate names the op behind it
+gwt_run.py | {r['reason'] or actions.get(r['key'], '')} | {r['reason']} | a refused skip says why it is a skip
