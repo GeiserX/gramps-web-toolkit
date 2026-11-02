@@ -19,3 +19,5 @@ gwt_report.py |             if gid in told: |             if False: | the told f
 gwt_report.py | if cells[0] == audience: | if True: | only the rows of the chosen audience count as told
 gwt_report.py | g.update(side=side, distance=sum(r['generations']), | g.update(side=side, distance=0, | people are ordered by kin distance to the root, nearest first
 gwt_report.py |                     if p and new['people'][p].get('private') and not include_private: |                     if False: | a new event or citation of a private person does not show that person
+gwt_report.py | cur, path, seen = todo.popleft() | cur, path, seen = todo.pop() | the ancestor walk goes one generation at a time, so the path cap drops the most distant paths, never a whole side
+gwt_report.py |     if cut: |     if False: | a digest says when kin paths were cut, so a person filed as not blood kin may still be kin

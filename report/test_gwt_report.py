@@ -59,6 +59,42 @@ def unlink(T, child, family):
     fam['child_ref_list'] = [c for c in fam['child_ref_list'] if c['ref'] != child]
 
 
+def big_pedigree(path, gens=11, drop=()):
+    """An invented full pedigree with no implex: P1 and every ancestor up to `gens` generations (Ahnentafel ids
+    P2, P3, ...), plus Cf, a son of a brother of P1's father, and Cm, a son of a sister of P1's mother. Ids in
+    `drop` are left out. Written as a gwt-apply snapshot."""
+    people, families = {}, []
+
+    def add(gid, gender):
+        people[gid] = {'handle': 'h' + gid, 'gramps_id': gid, 'gender': gender,
+                       'primary_name': {'first_name': gid, 'surname_list': []}, 'parent_family_list': []}
+
+    def fam(gid, father, mother, children):
+        families.append({'handle': 'h' + gid, 'gramps_id': gid, 'father_handle': 'h' + father,
+                         'mother_handle': 'h' + mother,
+                         'child_ref_list': [{'ref': 'h' + c, 'frel': 'Birth', 'mrel': 'Birth'} for c in children]})
+        for c in children:
+            people[c]['parent_family_list'].append('h' + gid)
+    for n in range(1, 2 ** (gens + 1)):
+        add('P%d' % n, n % 2 if n > 1 else 1)
+    for gid, g in (('UF', 1), ('Cf', 1), ('WF', 0), ('UM', 0), ('Cm', 1), ('HM', 1)):
+        add(gid, g)
+    for n in range(1, 2 ** gens):
+        kids = ['P%d' % n] + (['UF'] if n == 2 else ['UM'] if n == 3 else [])
+        fam('F%d' % n, 'P%d' % (2 * n), 'P%d' % (2 * n + 1), kids)
+    fam('FUF', 'UF', 'WF', ['Cf'])
+    fam('FUM', 'HM', 'UM', ['Cm'])
+    people = [p for gid, p in people.items() if gid not in drop]
+    keep = {p['handle'] for p in people}
+    for f in families:
+        f['child_ref_list'] = [c for c in f['child_ref_list'] if c['ref'] in keep]
+    snap = {'format': 'gwt-apply-snapshot/1', 'tree': 'example', 'taken': '2026-01-01T00:00:00+00:00',
+            'objects': {'Person': people, 'Family': families}}
+    with open(path, 'w', encoding='utf-8') as fh:
+        json.dump(snap, fh)
+    return path
+
+
 class KinTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -175,6 +211,15 @@ class KinTest(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn('no families list', err)
 
+    def test_a_big_pedigree_keeps_both_sides(self):
+        # 11 full generations hold more than 2,000 ancestor paths: the cut drops the most distant, never one side
+        with tempfile.TemporaryDirectory() as td:
+            T = R.load(big_pedigree(os.path.join(td, 'ped.json')))
+        for cousin in ('Cf', 'Cm'):
+            rep = self.kin('P1', cousin, T)
+            self.assertEqual([r['name']['en'] for r in rep['relationships']], ['first cousin'], cousin)
+            self.assertTrue(rep['truncated'])
+
     def test_wrapper_runs(self):
         out = subprocess.run([sys.executable, CLI, 'kin', KIN, 'A3', 'B3', '--lang', 'es'], capture_output=True,
                              text=True, check=True).stdout
@@ -262,6 +307,15 @@ class DigestTest(unittest.TestCase):
         out = self.digest('--root', 'I1', '--format', 'html', '--base-url', 'https://g.example.org', '--lang', 'es')
         self.assertIn('<h3>Lena Gale (I12), prima hermana <a href="https://g.example.org/person/I12">', out)
         self.assertIn('&#x27;s side</h2>', out)
+
+    def test_digest_on_a_big_pedigree_finds_the_side_and_says_paths_were_cut(self):
+        with tempfile.TemporaryDirectory() as td:
+            old = big_pedigree(os.path.join(td, 'old.json'), drop=('Cm',))
+            new = big_pedigree(os.path.join(td, 'new.json'))
+            code, out, err = run('digest', '--from', old, '--to', new, '--root', 'P1')
+        self.assertEqual(code, 0, err)
+        self.assertIn("## mother's side\n\n### Cm (Cm), first cousin", out)
+        self.assertIn('kin paths were cut at 2000 per person for 1 of these people', out)
 
     def test_without_root_one_group(self):
         out = self.digest()

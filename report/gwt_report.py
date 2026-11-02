@@ -18,7 +18,7 @@ by side of the root's family and ordered by kin distance. Each item gets its Gra
 web addresses its citations hold. --told FILE (TSV: audience, object id, date) leaves out what that audience was
 already told; --mark appends what this digest shows. Exit 2 on a bad file. Standard library only.
 """
-import argparse, datetime, gzip, html, json, os, re, sys, unicodedata
+import argparse, collections, datetime, gzip, html, json, os, re, sys, unicodedata
 
 CLASSES = {'Person': 'people', 'Family': 'families', 'Event': 'events', 'Citation': 'citations', 'Media': 'media',
            'Note': 'notes', 'Tag': 'tags', 'Place': 'places', 'Source': 'sources'}
@@ -29,7 +29,7 @@ WEAK_TAGS = ('hipotesis', 'hypothes', 'weak')  # a tag whose folded name holds o
 PROBABLE, CONFIRMED = '[probable]', '[confirmed]'  # the marks gwt-apply puts on a child_ref note
 LINK_CLASSES = ('confirmed', 'probable', 'weak', 'unmarked')
 MAX_GEN = 30         # how far up kin and implex look
-MAX_PATHS = 2000     # paths kept per person: a deep implex multiplies them
+MAX_PATHS = 2000     # paths kept per person, nearest first: a big pedigree or a deep implex multiplies them
 MAX_PEDIGREE = 200000
 WEB_KIND = {'people': 'person', 'events': 'event', 'citations': 'citation', 'media': 'media'}
 URL_RE = re.compile(r'https?://[^\s<>"\]\)]+')
@@ -124,26 +124,25 @@ def parent_steps(T, h):
 
 def ancestor_paths(T, h, max_gen=MAX_GEN, max_paths=MAX_PATHS):
     """{ancestor: [path, ...]}, h itself with the empty path. A path is a tuple of steps (child, parent, role, family,
-    child_ref) from h upwards. Returns (paths, truncated)."""
+    child_ref) from h upwards. The walk goes one generation at a time, so the cap drops the most distant paths
+    first, never a whole side. Returns (paths, truncated)."""
     out = {h: [()]}
-    count = [0]
-    truncated = [False]
-
-    def walk(cur, path, seen):
+    count = 0
+    todo = collections.deque([(h, (), frozenset((h,)))])
+    while todo:
+        cur, path, seen = todo.popleft()
         if len(path) >= max_gen:
-            return
+            continue
         for parent, role, fh, ref in parent_steps(T, cur):
             if parent in seen:
                 continue  # a person recorded as their own ancestor: bad data, never an endless walk
-            if count[0] >= max_paths:
-                truncated[0] = True
-                return
-            count[0] += 1
+            if count >= max_paths:
+                return out, True
+            count += 1
             p2 = path + ((cur, parent, role, fh, ref),)
             out.setdefault(parent, []).append(p2)
-            walk(parent, p2, seen | {parent})
-    walk(h, (), {h})
-    return out, truncated[0]
+            todo.append((parent, p2, seen | {parent}))
+    return out, False
 
 
 def ahnentafel(path):
@@ -172,10 +171,11 @@ def link_class(T, step, weak_tags):
     return 'unmarked'
 
 
-def relationships(T, a, b, weak_tags=WEAK_TAGS, max_paths=MAX_PATHS):
+def relationships(T, a, b, weak_tags=WEAK_TAGS, max_paths=MAX_PATHS, a_paths=None):
     """Every blood relationship between a and b, nearest first. Each is one line of descent: the nearest common
-    ancestor (or couple), the path from a and from b, generations up from each, half or not."""
-    pa, ta = ancestor_paths(T, a, max_paths=max_paths)
+    ancestor (or couple), the path from a and from b, generations up from each, half or not. a_paths is
+    ancestor_paths(T, a) when the caller already has it."""
+    pa, ta = a_paths or ancestor_paths(T, a, max_paths=max_paths)
     pb, tb = ancestor_paths(T, b, max_paths=max_paths)
     common = set(pa) & set(pb)
 
@@ -405,7 +405,7 @@ def print_kin(T, rep, lang):
             print('  implex in %s\'s pedigree: %s at %s' % (
                 side, ' and '.join(who(T, p) for p in e['people']), ', '.join('-'.join(map(str, ns)) for ns in e['numbers'])))
     if rep['truncated']:
-        print('  (path list cut at %d paths: a deep implex; some paths are not shown)' % MAX_PATHS)
+        print('  (path list cut at %d paths per person: the most distant relationships are not shown)' % MAX_PATHS)
 
 
 # ---- digest ------------------------------------------------------------------------------------------------------
@@ -540,13 +540,15 @@ def digest(old, new, root=None, told=frozenset(), weak_tags=WEAK_TAGS, include_p
                     continue
                 by_person.setdefault(p, []).append(item)
     groups = []
+    root_paths = ancestor_paths(new, root) if root else None
     for p, items in by_person.items():
-        g = {'person': p, 'items': items, 'side': 'other', 'kin': None, 'distance': None, 'links': None}
+        g = {'person': p, 'items': items, 'side': 'other', 'kin': None, 'distance': None, 'links': None,
+             'truncated': False}
         if p and root:
             if p == root:
                 g.update(side='root', distance=0, kin=names(0, 0, False, None))
             else:
-                rels, _ = relationships(new, root, p, weak_tags)
+                rels, g['truncated'] = relationships(new, root, p, weak_tags, a_paths=root_paths)
                 if rels:
                     r = rels[0]
                     roles = {rr['side'] for rr in rels}
@@ -609,6 +611,11 @@ def render(T, groups, base, lang, fmt, since=''):
                 lines.append('- ' + ' '.join([text] + [u for u in [link] + it['urls'] if u]))
         if fmt == 'html':
             lines.append('</ul>')
+    cut = sum(1 for g in groups if g.get('truncated'))
+    if cut:
+        note = ('kin paths were cut at %d per person for %d of these people: a more distant relationship, or the '
+                'only one, may be missing' % (MAX_PATHS, cut))
+        lines.append('<p>%s</p>' % esc(note) if fmt == 'html' else '\n(%s)' % note)
     if fmt == 'html':
         lines.append('</body></html>')
     return '\n'.join(lines).lstrip('\n') + '\n'
