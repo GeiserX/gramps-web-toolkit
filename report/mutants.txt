@@ -27,3 +27,10 @@ gwt_report.py | if old['_tree'] and new['_tree'] and old['_tree'] != new['_tree'
 gwt_report.py | (a.tzinfo is None) == (b.tzinfo is None) and a > b: | False: | an OLD snapshot taken after NEW gets a warning that they may be swapped
 gwt_report.py | esc = lambda s: html.escape(s, quote=False) | esc = lambda s: s | a name or a source title with < or & never breaks the html text
 gwt_report.py | title, side_head, person_head = '<b>%s</b>', '\n<b><u>%s</u></b>', '\n<b>%s</b>%s\n' | title, side_head, person_head = '<h1>%s</h1>', '\n<h2>%s</h2>', '\n<h3>%s</h3>%s\n' | the html output keeps to the inline tags chat apps take; block tags are rejected there
+gwt_report.py | (t == 'citations' and (o.get('confidence') or 0) <= 1) | (t == 'citations' and (o.get('confidence') or 0) < 1) | a citation of confidence 0 or 1 is labelled weak
+gwt_report.py | 'both sides' if {'father', 'mother'} <= roles | 'both sides' if False | kin reached through the root's father and mother are on both sides
+gwt_report.py |             add(r.get('ref'), spouses) |             add(r.get('ref'), spouses[:1]) | a family event belongs to both spouses
+gwt_report.py | add(h, [c.get('ref')]) | add(h, spouses) | a citation on a parent link belongs to the child, not the parents
+gwt_report.py | u = u.rstrip('.,;') | u = u | a web address at the end of a sentence loses the full stop
+gwt_report.py | return d.get('year') or ( | return ( | an event date with only a year still shows the year
+gwt_report.py | if len(path) >= max_gen: | if len(path) > max_gen: | kin and implex look 30 generations up, no further

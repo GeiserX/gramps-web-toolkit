@@ -207,6 +207,18 @@ class KinTest(unittest.TestCase):
             T['tags']['htag1']['name'] = name
             self.assertEqual(self.kin('A3', 'B3', T)['relationships'][0]['links']['weak'], 1, name)
 
+    def test_paths_stop_at_30_generations(self):
+        T = {'people': {}, 'families': {}}
+        for n in range(32):  # L0 is the child of L1, ... L31
+            T['people']['hL%d' % n] = {'handle': 'hL%d' % n, 'gramps_id': 'L%d' % n,
+                                       'parent_family_list': ['hFL%d' % n] if n < 31 else []}
+            if n < 31:
+                T['families']['hFL%d' % n] = {'handle': 'hFL%d' % n, 'father_handle': 'hL%d' % (n + 1),
+                                              'child_ref_list': [{'ref': 'hL%d' % n}]}
+        paths, _ = R.ancestor_paths(T, 'hL0')
+        self.assertIn('hL30', paths)
+        self.assertNotIn('hL31', paths)
+
     def test_json_and_lang(self):
         code, out, _ = run('kin', KIN, 'A3', 'B4', '--json')
         data = json.loads(out)
@@ -359,6 +371,32 @@ class DigestTest(unittest.TestCase):
         out = R.render(new, R.digest(old, new), 'https://g.example.org/?t=1&u=2', 'en', 'html')
         self.assertIn('Lena &lt;x&gt; &amp; Co', out)
         self.assertIn('<a href="https://g.example.org/?t=1&amp;u=2/person/I12">', out)
+
+    def test_who_owns_what(self):
+        old, new = R.load(OLD), R.load(NEW)
+        # a family event belongs to both spouses; a citation on a parent link belongs to the child alone
+        new['events']['hE7'] = dict(new['events']['hE1'], handle='hE7', gramps_id='E7', citation_list=[],
+                                    date={'year': 1921})
+        new['families']['hF3']['event_ref_list'] = [{'ref': 'hE7'}]
+        new['citations']['hC7'] = dict(new['citations']['hC1'], handle='hC7', gramps_id='C7', note_list=[],
+                                       media_list=[], confidence=1, page='see https://archive.example.org/b/7.')
+        next(c for c in new['families']['hF3']['child_ref_list'] if c['ref'] == 'hI12')['citation_list'] = ['hC7']
+        groups = R.digest(old, new)
+        owners = lambda gid: sorted(g['person'] for g in groups for it in g['items'] if it['id'] == gid)
+        self.assertEqual(owners('E7'), ['hI4', 'hI6'])
+        self.assertEqual(owners('C7'), ['hI12'])
+        item = lambda gid: next(it for g in groups for it in g['items'] if it['id'] == gid)
+        self.assertIn('Baptism, 1921', item('E7')['text'])                     # a date with only a year
+        self.assertEqual(item('C7')['urls'], ['https://archive.example.org/b/7'])  # sentence dot left out
+        self.assertTrue(item('C7')['weak'])                                     # confidence 0 or 1 is weak
+        self.assertFalse(item('C1')['weak'])
+
+    def test_kin_on_both_sides_of_the_root(self):
+        T = R.load(KIN)  # X1's parents are cousins, so Adam's line is on both of X1's sides
+        old = copy.deepcopy(T)
+        del old['people']['hA2']
+        groups = R.digest(old, T, root='hX1')
+        self.assertEqual([g['side'] for g in groups if g['person'] == 'hA2'], ['both sides'])
 
     def test_without_root_one_group(self):
         out = self.digest()
