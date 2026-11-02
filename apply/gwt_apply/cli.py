@@ -50,12 +50,13 @@ def _client(conf: dict, **kw) -> Client:
                   tree=conf.get("GWT_TREE"), token=conf.get("GWT_TOKEN") or None, **kw)
 
 
-def _plan_on_snapshot(ops: list[dict], snap: dict, client: Client, *, tag: str | None = None) -> list[str]:
+def _plan_on_snapshot(ops: list[dict], snap: dict, client: Client, *, tag: str | None = None,
+                      landed: frozenset = frozenset()) -> list[str]:
     """Plan the whole list on the snapshot, offline; then what stops the plan or changed since the snapshot."""
     planner = Client(client.base[: -len("/api")], "", "", dry_run=True)
     planner.use_snapshot(snap, offline=True)
     problems = preflight(ops, planner)
-    plan = Applier(planner, retries=1, retry_wait=0, tag=tag).run(ops)
+    plan = Applier(planner, retries=1, retry_wait=0, tag=tag, landed=landed).run(ops)
     problems += [f"[{r.status}] {r.key}: {r.actions[-1]}" for r in plan if r.status in ("conflict", "error")]
     if problems:
         return problems + ["the dry run on the snapshot does not go through"]
@@ -80,9 +81,37 @@ def _log_path(args, run_id: str, tree: str | None, *, prefix: str, writes: bool)
         return str(p.with_name(f"{p.stem}.{run_id}{p.suffix or '.jsonl'}"))
     if not writes:
         return None
+    return str(_log_dir(tree) / f"{prefix}-{run_id}.jsonl")
+
+
+def _log_dir(tree: str | None) -> Path:
     folder = re.sub(r"[^A-Za-z0-9._-]", "_", tree or "")
     folder = "_" if folder in ("", ".", "..") else folder  # never the state dir itself or the one above it
-    return str(state_dir() / "gwt-apply" / folder / f"{prefix}-{run_id}.jsonl")
+    return state_dir() / "gwt-apply" / folder
+
+
+def _landed(args, tree: str | None) -> frozenset:
+    """The op keys an earlier --apply of this same list (same sha256) logged as done, from the logs where this run
+    would keep its own. A removal of theirs that finds nothing has landed: a rerun after a crash skips it, while on a
+    list's first run the same removal is a conflict (a mistyped ID)."""
+    if not args.change_list:
+        return frozenset()
+    sha = _sha256(args.change_list)
+    if args.log:
+        p = Path(args.log)
+        logs = p.parent.glob(f"{p.stem}.*{p.suffix or '.jsonl'}")
+    else:
+        logs = _log_dir(tree).glob("gwt-apply-*.jsonl")
+    keys: set[str] = set()
+    for log in logs:
+        try:
+            lines = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines() if line.strip()]
+        except (OSError, ValueError):
+            continue
+        if not lines or lines[0].get("event") != "start" or lines[0].get("list_sha256") != sha or lines[0].get("dry_run"):
+            continue
+        keys |= {e["key"] for e in lines if e.get("event") == "op" and e.get("status") == "done" and e.get("key")}
+    return frozenset(keys)
 
 
 def _sha256(path: str) -> str:
@@ -306,7 +335,8 @@ def main(argv: list[str] | None = None) -> int:
     client = _client(conf, dry_run=not args.apply, log_path=log)
     _first_line(run_id, log)
     outcome: dict = {}
-    return _ended(client, lambda: _run(args, argv, client, run_id, ops, snap, old, offline, outcome), outcome)
+    landed = _landed(args, conf.get("GWT_TREE") or (snap or {}).get("tree"))
+    return _ended(client, lambda: _run(args, argv, client, run_id, ops, snap, old, offline, outcome, landed), outcome)
 
 
 def _backup_id_of_task(t: dict):
@@ -402,7 +432,8 @@ def _server_backup(client: Client, args, lock) -> str | None:
     return None
 
 
-def _run(args, argv, client: Client, run_id: str, ops, snap, old, offline: bool, outcome: dict) -> int:
+def _run(args, argv, client: Client, run_id: str, ops, snap, old, offline: bool, outcome: dict,
+         landed: frozenset = frozenset()) -> int:
     client.run_info = {"run": run_id, "version": version(), "argv": argv, "list": args.change_list,
                        "list_sha256": _sha256(args.change_list) if args.change_list else None,
                        "snapshot": args.snapshot}
@@ -454,7 +485,7 @@ def _run(args, argv, client: Client, run_id: str, ops, snap, old, offline: bool,
                 print(msg, file=sys.stderr)
                 _write_json(args.json, ops, [], "not run: the snapshot check refused the list")
                 return 1
-            refused = _retried("snapshot check", lambda: _plan_on_snapshot(ops, snap, client, tag=args.tag),
+            refused = _retried("snapshot check", lambda: _plan_on_snapshot(ops, snap, client, tag=args.tag, landed=landed),
                                client, args, lock)
             if refused:
                 client.log(event="refused", reason="snapshot-plan", problems=refused)
@@ -477,7 +508,7 @@ def _run(args, argv, client: Client, run_id: str, ops, snap, old, offline: bool,
                 _write_json(args.json, ops, [], "not run: the server backup was refused")
                 return 1
         results = Applier(client, retries=args.retries, retry_wait=args.retry_wait, lock=lock, tag=args.tag,
-                          verify=args.verify, private_new=args.private_new).run(ops)
+                          verify=args.verify, private_new=args.private_new, landed=landed).run(ops)
     except (LockHeld, ApiError) as exc:
         outcome["error"] = str(exc)
         print(exc, file=sys.stderr)
