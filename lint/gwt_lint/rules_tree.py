@@ -64,6 +64,14 @@ def _people(view, cls, ref, families_as_spouses=True):
     return list(people) + [s for f in fams for s in view.spouses(f)], list(fams), None
 
 
+def _ymd(date) -> str:
+    """A snapshot date object as YYYY-MM-DD (its own text when it has one)."""
+    if not isinstance(date, dict):
+        return str(date or "")
+    day, mon, year = (list(date.get("dateval") or []) + [0, 0, 0])[:3]
+    return date.get("text") or f"{year:04d}-{mon:02d}-{day:02d}"
+
+
 def _exact(text) -> bool:
     """Whether a date (as written in a list, or a snapshot's date object) has a day."""
     if isinstance(text, dict):
@@ -318,12 +326,17 @@ class Living(Rule):
                     else ev.get("place")
                 etype = op.get("type") if kind == "add_event" else s.get("type") if kind == "update_event" \
                     else text_of(ev.get("type"))
+                if kind == "move_event":  # a moved event's date and place come from the snapshot: say them as written
+                    shown_date, shown_place = _ymd(date), (view.tree.handles["Place"].get(place) or {}).get("gramps_id")
+                else:
+                    shown_date, shown_place = date, place
                 for w in who:
                     if date and _exact(date):
-                        out.append(self.finding("living-date", op, f"exact date {date} for {w}",
+                        out.append(self.finding("living-date", op, f"exact date {shown_date} for {w}",
                                                 "give the year only"))
                     if place:
-                        out.append(self.finding("living-place", op, f"place {place} for {w}", "leave the place out"))
+                        out.append(self.finding("living-place", op, f"place {shown_place or place} for {w}",
+                                                "leave the place out"))
                     if etype == "Marriage":
                         out.append(self.finding("living-marriage", op, f"a marriage of {w}"))
             if kind in ("add_note", "add_transcription", "update_note"):
