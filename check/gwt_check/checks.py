@@ -8,6 +8,7 @@ import unicodedata
 from collections import defaultdict
 
 from . import dates
+from .media import media_checks
 from .tree import Tree
 
 # list of handles -> type they point at
@@ -95,11 +96,16 @@ CHECKS = {
     "marriage-age": "bride under 12 or groom under 14 at the marriage",
     "sibling-spacing": "two children of one mother born less than 240 days apart, not twins",
     "lifespan": "a life of more than 105 years",
+    "media-non-viewable": "media Gramps Web shows only as an icon: text, JSON, HTML, mail or an archive",
+    "media-file-missing": "media object whose file the server does not have",
+    "media-tiny": "image whose longer side is under 200 px (with --download)",
+    "media-uniform": "image that is mostly one tone: blank, grey or a failed scan (with --download)",
+    "media-dup-page": "two different files of nearly the same image on one citation (with --download)",
 }
 
 # Checks reported without failing: a finding of these is never new, so it never sets the exit code.
 INFO_CHECKS = {"unconnected", "parent-age", "marriage-age", "sibling-spacing", "lifespan", "dup-citation",
-               "place-vs-description", "note-marker-no-tag"}
+               "place-vs-description", "note-marker-no-tag", "media-uniform", "media-dup-page"}
 
 # words in a note that a tag of the same stem is meant to mark; matched without accents, whole word
 NOTE_MARKERS = ("hipotesis", "homonimo")
@@ -749,6 +755,7 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
                     f"{len(ids)} people: {', '.join(ids[:5])}{', ...' if len(ids) > 5 else ''}; "
                     f"main component ({lowest[main]}) has {len(comps[main])}")
 
+    media_checks(T, out, in_scope, info, label)
     dated_checks(T, out, info)
     return out.items, info
 

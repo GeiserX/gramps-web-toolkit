@@ -1,0 +1,211 @@
+"""Media that Gramps Web cannot show: files it draws as a grey icon, files missing on the server, and, with
+`--download`, images too small to read, mostly one tone, or the same page twice on one citation.
+
+What the server says about each media object is kept on the object under KEY, so a saved dump carries it and an
+offline check of that dump reports the same findings. Pillow is optional: without it the image kinds are skipped
+with a note, never a crash.
+"""
+
+from __future__ import annotations
+
+import mimetypes
+import random
+import sys
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
+
+from .client import NETWORK_ERRORS, TRIES, USER_AGENT, ApiError, backoff
+
+KEY = "gwt_media"  # {"file_missing": bool} from a live read; "w", "h", "tone", "dhash" with --download
+
+# Gramps Web draws a thumbnail for images and PDFs. These others it shows as a grey icon that opens nothing useful
+NON_VIEWABLE_PREFIXES = ("text/", "message/")
+NON_VIEWABLE = {"application/json", "application/xhtml+xml", "application/x-tar", "application/gzip",
+                "application/x-gzip", "application/zip"}
+THUMB = 256         # px: the thumbnail asked for; the server never enlarges, so a smaller one is the real size
+MIN_SIDE = 200      # px: an image whose longer side is under this is too small to read
+TONE_WINDOW = 12    # grey levels either side of the most common one that count as the same tone
+UNIFORM_SHARE = 0.98  # share of pixels in one tone that makes a blank, grey or failed image
+HASH_SIDE = 16      # dHash of 16 x 16 = 256 bits
+DUP_BITS = 20       # bits apart at most for two images on one citation to be the same page
+
+# found from what the server says after the read, not from the objects: never part of the pass comparison
+AFTER_READ = {"media-file-missing", "media-tiny", "media-uniform", "media-dup-page"}
+
+
+def non_viewable(o: dict) -> str | None:
+    """The MIME type of a media object Gramps Web shows only as an icon, or None."""
+    mime = (o.get("mime") or mimetypes.guess_type(o.get("path") or "")[0] or "").lower()
+    if mime.startswith(NON_VIEWABLE_PREFIXES) or mime in NON_VIEWABLE:
+        return mime
+    return None
+
+
+def is_image(o: dict) -> bool:
+    mime = (o.get("mime") or "").lower()
+    return mime.startswith("image/") or mime == "application/pdf"
+
+
+def tone_share(hist: list[int]) -> float:
+    """Share of pixels within TONE_WINDOW grey levels of the most common one. `hist` is a 256-bin histogram."""
+    total = sum(hist)
+    if not total:
+        return 0.0
+    top = max(range(len(hist)), key=lambda i: hist[i])
+    return sum(hist[max(0, top - TONE_WINDOW):top + TONE_WINDOW + 1]) / total
+
+
+def dhash(rows: list[list[int]]) -> int:
+    """Difference hash: one bit per pair of neighbours in a row, set when the left one is brighter."""
+    bits = 0
+    for row in rows:
+        for a, b in zip(row, row[1:]):
+            bits = bits << 1 | (a > b)
+    return bits
+
+
+def hamming(a: int, b: int) -> int:
+    return bin(a ^ b).count("1")
+
+
+def measure(data: bytes) -> dict:
+    """Size, tone share and dHash of a thumbnail. Needs Pillow; raises what Pillow raises on a file it cannot read."""
+    from PIL import Image
+
+    with Image.open(BytesIO(data)) as img:
+        img.load()
+        w, h = img.size
+        grey = img.convert("L")
+        small = grey.resize((HASH_SIDE + 1, HASH_SIDE))
+        px = list(small.tobytes())
+        rows = [px[i:i + HASH_SIDE + 1] for i in range(0, len(px), HASH_SIDE + 1)]
+        return {"w": w, "h": h, "tone": round(tone_share(grey.histogram()), 4),
+                "dhash": f"{dhash(rows):0{HASH_SIDE * HASH_SIDE // 4}x}"}
+
+
+def _fetch(client, path: str) -> bytes | None:
+    """The bytes at `path`, or None when the server has no thumbnail for it (404, 413 too large, 415 no
+    thumbnailer). Retries a network error, a 429 and a 5xx like Client.get, and logs in again on a 401."""
+    url = client.base + path
+    for attempt in range(1, TRIES + 1):
+        with client._lock:
+            if client.token is None:
+                client.login()
+            token = client.token
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}", "User-Agent": USER_AGENT})
+        try:
+            status, headers, data = client._call(req)
+        except NETWORK_ERRORS:
+            if attempt < TRIES:
+                client.sleep(backoff(attempt))
+            continue
+        if status == 200:
+            return data
+        if status in (404, 413, 415):
+            return None
+        if status == 401:
+            with client._lock:
+                if client.token == token:
+                    client.token = None
+            continue
+        if status == 429 or status >= 500:
+            if attempt < TRIES:
+                client.sleep(float(headers.get("Retry-After") or backoff(attempt)))
+            continue
+        raise ApiError(f"GET {path}: HTTP {status}")
+    raise ApiError(f"GET {path}: gave up after {TRIES} tries")
+
+
+def annotate(client, objects: dict, *, download: bool = False, workers: int = 4) -> None:
+    """Put what the server says about each media object under KEY: whether its file is missing (one request,
+    GET /api/media/?filemissing=1), and with `download` the measures of its thumbnail."""
+    media = objects.get("media") or []
+    media = list(media.values()) if isinstance(media, dict) else media
+    # Gramps Web caches a list answer until the tree changes, and deleting a file changes nothing in the tree: a
+    # pagesize it ignores without `page`, new on every call, keeps a cached answer from before the deletion out
+    _, rows = client.get("/media/", {"filemissing": 1, "keys": "handle", "pagesize": random.randrange(1, 2**62)})
+    missing = {r["handle"] for r in rows}
+    for o in media:
+        # measures an earlier --download left on an object read from a saved dump stay until measured again
+        o[KEY] = {**(o.get(KEY) or {}), "file_missing": o["handle"] in missing}
+    if not download:
+        return
+    try:
+        import PIL  # noqa: F401
+    except ImportError:
+        print("gwt-check: --download needs Pillow (pip install pillow); media-tiny, media-uniform and "
+              "media-dup-page skipped", file=sys.stderr)
+        return
+    todo = [o for o in media if is_image(o) and not o[KEY]["file_missing"]]
+    def one(o):
+        data = _fetch(client, f"/media/{o['handle']}/thumbnail/{THUMB}")
+        if data is None:
+            return False
+        try:
+            o[KEY].update(measure(data))
+        except Exception:  # noqa: BLE001 - Pillow raises many kinds on a file it cannot read
+            return False
+        return True
+
+    with ThreadPoolExecutor(max(1, workers)) as pool:
+        unread = sum(not ok for ok in pool.map(one, todo))
+    print(f"gwt-check: {len(todo) - unread} thumbnail(s) measured" + (
+        f", {unread} the server would not give or Pillow could not read (an AVIF thumbnail needs Pillow 11.3 "
+        "or newer)" if unread else ""), file=sys.stderr)
+
+
+def media_checks(T: dict, out, in_scope, info: dict, label) -> None:
+    """The media kinds, on what the tree's media objects carry. Single-object kinds report media in scope; a
+    same-page pair needs one side in scope."""
+    M = T["media"]
+    unchecked = 0
+    for h, o in M.items():
+        got = o.get(KEY) or {}
+        if "file_missing" not in got:
+            unchecked += 1
+        if not in_scope("media", h):
+            continue
+        gid = o.get("gramps_id") or h
+        mime = non_viewable(o)
+        if mime:
+            out.add("media-non-viewable", gid, f"{mime}: shown as an icon; put its text in a Transcript note "
+                                               "(gwt-apply add_transcription), then detach it")
+        if got.get("file_missing"):
+            out.add("media-file-missing", gid, f"no file on the server for {o.get('path') or 'its path'}: "
+                                               "upload it again, or detach it")
+        if "w" in got and max(got["w"], got["h"]) < MIN_SIDE:
+            out.add("media-tiny", gid, f"{got['w']}x{got['h']} px: replace it with the full image, or detach it")
+        if got.get("tone", 0) >= UNIFORM_SHARE:
+            out.add("media-uniform", gid, f"{got['tone']:.0%} of it is one tone: a blank, grey or failed image; "
+                                          "replace it, or detach it")
+    if unchecked:
+        info["media files not checked"] = unchecked
+    # the same page twice on one citation: near thumbnails, different files (the same file is dup-media)
+    for c in T["citations"].values():
+        refs = [r.get("ref") for r in c.get("media_list") or [] if isinstance(r, dict)]
+        hashed = [(h, int(M[h][KEY]["dhash"], 16)) for h in dict.fromkeys(refs)
+                  if h in M and "dhash" in (M[h].get(KEY) or {})]
+        for i, (a, ha) in enumerate(hashed):
+            for b, hb in hashed[i + 1:]:
+                if M[a].get("checksum") and M[a].get("checksum") == M[b].get("checksum"):
+                    continue
+                if not (in_scope("media", a) or in_scope("media", b)):
+                    continue
+                bits = hamming(ha, hb)
+                if bits <= DUP_BITS:
+                    pair = ",".join(sorted((label("media", a), label("media", b)), key=_id_order))
+                    out.add("media-dup-page", f"{c.get('gramps_id') or c['handle']} {pair}",
+                            f"{bits} of {HASH_SIDE * HASH_SIDE} bits apart: the same page twice; "
+                            "detach one from the citation")
+
+
+def _id_order(gid: str):
+    from .checks import id_order
+    return id_order(gid)
+
+
+def print_media_info(info: dict) -> None:
+    if info.get("media files not checked"):
+        print(f"media files not checked: {info['media files not checked']} (whether a file is missing is read from "
+              "the live tree; a dump gwt-check saved carries it)")

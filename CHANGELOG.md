@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Added
+
+- `gwt-check` finds media Gramps Web cannot show. `media-non-viewable`: a text, JSON, HTML, mail or archive file, shown only as a grey icon. `media-file-missing`: a media object whose file the server does not have (one request on a live check). With `--download`, which reads each image's 256 px thumbnail and needs Pillow: `media-tiny` (longer side under 200 px), `media-uniform` (a blank, grey or failed image) and `media-dup-page` (the same page twice on one citation, as different files). Without Pillow those three are skipped with a note. `gwt-check dump --download` keeps the measures in the dump for an offline check. `media-uniform` and `media-dup-page` are for information only.
+
 ## [0.3.0] - 2026-10-31
 
 ### Change lists
