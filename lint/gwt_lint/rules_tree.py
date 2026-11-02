@@ -57,6 +57,9 @@ def _people(view, cls, ref, families_as_spouses=True):
 
 
 def _exact(text) -> bool:
+    """Whether a date (as written in a list, or a snapshot's date object) has a day."""
+    if isinstance(text, dict):
+        return bool((text.get("dateval") or [0])[0])
     try:
         d = read_date(text)
     except DateError:
@@ -299,13 +302,17 @@ class Living(Rule):
         for op in ctx.ops:
             kind = op["op"]
             s = op.get("set") if isinstance(op.get("set"), dict) else {}
-            if kind in ("add_event", "update_event"):
+            if kind in ("add_event", "update_event", "move_event"):
+                ev = view.events.get(view.resolve(op.get("event"), "Event")) or {} if kind == "move_event" else {}
                 owners = [("Person", op.get("person")), ("Family", op.get("family"))] if kind == "add_event" \
-                    else [("Event", op.get("event"))]
+                    else attach_targets({"to": op.get("to")}) if kind == "move_event" else [("Event", op.get("event"))]
                 who = alive([(c, r) for c, r in owners if isinstance(r, str)])
-                date = op.get("date") if kind == "add_event" else s.get("date")
-                place = op.get("place") if kind == "add_event" else s.get("place")
-                etype = op.get("type") if kind == "add_event" else s.get("type")
+                date = op.get("date") if kind == "add_event" else s.get("date") if kind == "update_event" \
+                    else ev.get("date")
+                place = op.get("place") if kind == "add_event" else s.get("place") if kind == "update_event" \
+                    else ev.get("place")
+                etype = op.get("type") if kind == "add_event" else s.get("type") if kind == "update_event" \
+                    else text_of(ev.get("type"))
                 for w in who:
                     if date and _exact(date):
                         out.append(self.finding("living-date", op, f"exact date {date} for {w}",

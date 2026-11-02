@@ -106,7 +106,7 @@ Nothing to check: no protected IDs.
 
 ### living
 
-Who may be living comes from `possibly_living()` in the [shared rules](rules.md): no death recorded and born less than `years` ago, an end of a DNA association, or a living bound from relatives' dates. A person the list adds counts with the events the list gives them.
+Who may be living comes from `possibly_living()` in the [shared rules](rules.md): no death recorded and born less than `years` ago, an end of a DNA association, or a living bound from relatives' dates. A person the list adds counts with the events the list gives them. An event is judged when the list adds it, updates it, or moves it (`move_event`) onto someone who may be living; a moved event brings the date, place and type it has in the snapshot.
 
 | Code | When |
 |---|---|

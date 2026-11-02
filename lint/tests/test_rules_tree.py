@@ -233,3 +233,11 @@ def test_namesakes_an_op_says_it_is_not_are_not_touched(tmp_path):
         {"op": "add_note", "key": "n", "text": "x", "attach": [{"person": "I7"}, {"family": "F5"}]}) + "\n")
     ctx = F.Context([dict(o, _line=1) for o in ops], tree, {"overlap": {"open": str(tmp_path)}})
     assert T.Overlap().check(ctx) == []
+
+
+def test_living_judges_an_event_moved_onto_someone_who_may_be_living():
+    # E8b is a birth on 1925-05-01 at P1; moving it onto I10 (born 1990, no death) puts that date and place on her
+    ops = [{"op": "move_event", "key": "mv", "event": "E8b", "from": {"person": "I8"}, "to": {"person": "I10"}},
+           {"op": "move_event", "key": "mv-ok", "event": "E8d", "from": {"person": "I8"}, "to": {"person": "I4"}}]
+    ctx = F.Context([dict(o, _line=1) for o in ops], F.Tree.load(TREE), {"living": {"this_year": 2026}})
+    assert [(f.code, f.key) for f in T.Living().check(ctx)] == [("living-date", "mv"), ("living-place", "mv")]
