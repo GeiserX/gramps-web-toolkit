@@ -12,9 +12,9 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Added
 
-- `gwt-fetch iiif --image-base URL/info.json` fetches a IIIF Image API base with no Presentation manifest (French departmental archives) at the native width from `info.json`; `{page}` in the URL takes each `--pages` number. `--native` does the same for each canvas of a manifest, past `full/max` caps such as Antenati's 10 megapixels. Both refuse an image whose width is not the one `info.json` gives, so an upscaled or shrunk file is never saved.
-- `gwt-fetch iiif` turns a Canadiana viewer URL (`heritage.canadiana.ca/view/<id>`) into its manifest. The fetch page lists manifest URL templates for Riksarkivet, ANNO, the Bayerische Staatsbibliothek, the National Diet Library and the Internet Archive.
-- `gwt-fetch crop IMG (--box x,y,w,h [--from-size WxH] | --grid 2x3 [--overlap 10%] | --half left|right) [--max N]` cuts a saved page into JPEG pieces beside it, each with a `manifest.tsv` row that names the source file, its sha256 and the box. Needs Pillow (extra `crop`); without it the command exits 2.
+- `gwt-fetch iiif --image-base URL/info.json` fetches a IIIF Image API base with no Presentation manifest (French departmental archives) at the native width from `info.json`; `{page}` in the URL takes each `--pages` number. `--native` does the same for each canvas of a manifest, past `full/max` caps such as Antenati's 10 megapixels. Both refuse an image whose width is not the one `info.json` gives, so an upscaled or shrunk file is never saved. Re-running a `full/max` download with `--native` in the same folder adds `<name>_native.jpg` beside each capped page.
+- `gwt-fetch iiif` turns a Canadiana viewer URL (`heritage.canadiana.ca/view/<id>`) into its manifest. A Canadiana run waits the 10 seconds between requests that its robots.txt asks for. The fetch page lists manifest URL templates for Riksarkivet, ANNO, the Bayerische Staatsbibliothek, the National Diet Library and the Internet Archive.
+- `gwt-fetch crop IMG (--box x,y,w,h [--from-size WxH] | --grid 2x3 [--overlap 10%] | --half left|right) [--max N] [--out DIR]` cuts a saved page into JPEG pieces beside it (or in `--out`), each with a `manifest.tsv` row that names the source file, its sha256 and the box. It never adds rows to a `manifest.tsv` another tool wrote. Needs Pillow (extra `crop`); without it the command exits 2.
 
 ## [0.3.0] - 2026-10-31
 
