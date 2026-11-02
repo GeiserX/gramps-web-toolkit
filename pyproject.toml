@@ -24,6 +24,7 @@ classifiers = [
 
 [project.optional-dependencies]
 mh = ["playwright>=1.40"]
+crop = ["Pillow>=10"]
 
 [project.urls]
 Homepage = "https://github.com/GeiserX/gramps-web-toolkit"
