@@ -1,4 +1,4 @@
 # file | exact text | replacement | what the guard protects (see docs/development.md)
-gwt_fetch/store.py | for name in sorted(self.stored): | for name in []: | a file whose rawstore.tsv row says it is in the bucket is not downloaded again
+gwt_fetch/store.py | name = self.stored.get(stem) | name = None | a file whose rawstore.tsv row says it is in the bucket is not downloaded again
 gwt_fetch/store.py | if p and p.name not in self.rows and p.exists(): | if p and p.name not in self.rows: | done() never hashes a file that lives only in the bucket
 gwt_fetch/cli.py | if rs.is_binary_name(f) and (folder / f).is_file() | if (folder / f).is_file() | --rawstore moves binaries only; text files stay in git

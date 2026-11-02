@@ -357,6 +357,18 @@ def test_store_finds_bucket_files_without_a_manifest_row(tmp_path):
     assert not (tmp_path / "manifest.tsv").exists()
 
 
+def test_store_find_does_not_scan_every_bucket_name(tmp_path):
+    import time
+    n = 10000   # a folder of ten thousand scans; scanning every name on every call took 17 s here
+    with open(tmp_path / "rawstore.tsv", "w", encoding="utf-8") as f:
+        f.write("sha256\tsize\tkey\tpath\n")
+        f.writelines(f"{i:064x}\t1\tk/{i:05d}_p.jpg\t{i:05d}_p.jpg\n" for i in range(n))
+    s = Store(tmp_path)
+    start = time.monotonic()
+    assert all(s.find(f"{i:05d}_p").name == f"{i:05d}_p.jpg" for i in range(n))
+    assert time.monotonic() - start < 3
+
+
 class Bucket:
     """In-memory stand-in for gwt-rawstore's S3: head() and put_file() are all put() needs."""
     def __init__(self, keeps=True):

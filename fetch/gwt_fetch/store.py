@@ -51,7 +51,7 @@ class Store:
             with open(self.manifest, newline="", encoding="utf-8") as f:
                 for row in csv.DictReader(f, delimiter="\t"):
                     self.rows[row["file"]] = row
-        self.stored = _rawstore_names(self.out / RAWSTORE)
+        self.stored = {os.path.splitext(n)[0]: n for n in sorted(_rawstore_names(self.out / RAWSTORE))}  # stem -> name
 
     def find(self, stem: str) -> Path | None:
         """The finished file for this stem, whatever its extension. It may live only in the bucket:
@@ -59,10 +59,8 @@ class Store:
         for p in sorted(self.out.glob(stem + ".*")):
             if p.suffix not in (".part", ".tsv"):
                 return p
-        for name in sorted(self.stored):
-            if name.startswith(stem + "."):
-                return self.out / name
-        return None
+        name = self.stored.get(stem)
+        return self.out / name if name else None
 
     def done(self, stem: str, label: str, image_url: str, manifest_url: str) -> Path | None:
         """If a finished file exists (on disk or in the bucket), make sure it has a row and return it."""
