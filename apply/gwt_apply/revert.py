@@ -9,8 +9,9 @@ writes whose answer was lost or came back 5xx (the server may still have done th
 what each object was. Newest write first:
 
 - an object the run changed (PUT) goes back to its pre-run copy, once, whatever the number of writes;
-- a note the run deleted (unlink_child removes the mark of the link it takes away) is made again from its
-  pre-run copy, before the objects that pointed at it are restored;
+- an object the run deleted (the `delete` op, the mark unlink_child removes with its link, the loser of
+  merge_repository) is made again from its pre-run copy, or from the copy the log line keeps, before the
+  objects that pointed at it are restored;
 - a note, citation, event, place, source, repository or tag the run made (POST) is deleted, after every
   restore, and only while nothing points at it any more (the server's backlinks: a later run that reused the
   tag or attached the note keeps it);
@@ -19,7 +20,7 @@ what each object was. Newest write first:
   again right before it is written.
 
 Not undone, reported for a backup restore: people and families the run made (the server also edits the
-objects around them), merges, deletes of anything but a note, and media uploads.
+objects around them), merges done by the server, and media uploads.
 """
 
 from __future__ import annotations
@@ -180,6 +181,7 @@ def plan(entries: list[dict], pre: dict, live, links=None) -> list[dict]:
     created = _created(entries)
     puts: dict[tuple[str, str], list[dict]] = {}
     blind: set[tuple[str, str]] = set()  # PUTs whose answer was lost and whose log line has no body
+    kept: dict[tuple[str, str], dict] = {}  # the copy of a deleted object its log line holds
     manual: list[dict] = []
     order: list[tuple[str, str, str]] = []  # (kind, cls, handle) in log order, first sight of each
     seen: set[tuple[str, str, str]] = set()
@@ -206,8 +208,10 @@ def plan(entries: list[dict], pre: dict, live, links=None) -> list[dict]:
                 puts[(cls, h)].append(e["body"])
             else:
                 blind.add((cls, h))
-        elif m == "DELETE" and _cls_of_path(path)[0] == "Note":
+        elif m == "DELETE" and _cls_of_path(path)[0] is not None:
             key = _cls_of_path(path)
+            if isinstance(e.get("object"), dict):
+                kept[key] = e["object"]
             if ("recreate", *key) not in seen:
                 seen.add(("recreate", *key))
                 order.append(("recreate", *key))
@@ -217,19 +221,21 @@ def plan(entries: list[dict], pre: dict, live, links=None) -> list[dict]:
     steps = []
     for kind, cls, h in reversed(order):
         if kind == "recreate":
-            before = pre.get((cls, h))
+            before = pre.get((cls, h)) or kept.get((cls, h))
             if (cls, h) in created:  # e.g. a mark add_note made and unlink_child then removed
                 steps.append({"action": "skip", "cls": cls, "handle": h, "why": "made and deleted by this run"})
             elif before is None:
                 steps.append({"action": "manual", "cls": cls, "handle": h,
-                              "why": "deleted by the run and not in the pre-run copy; cannot make it again"})
+                              "why": "deleted by the run, and neither the pre-run copy nor the log holds it; "
+                                     "cannot make it again"})
             elif live(cls, h) is not None:
                 steps.append({"action": "skip", "cls": cls, "handle": h, "why": "already in the tree"})
             else:
                 body = {k: v for k, v in before.items() if k not in ("extended", "profile", "backlinks", "change")}
                 body.setdefault("_class", cls)
                 steps.append({"action": "recreate", "cls": cls, "handle": h, "body": body,
-                              "why": "deleted by the run; made again from its pre-run copy"})
+                              "why": "deleted by the run; made again from its " + (
+                                  "pre-run copy" if (cls, h) in pre else "copy in the log")})
             continue
         if kind == "put":
             if (cls, h) in created:
@@ -387,7 +393,7 @@ def execute(client: Client, steps: list[dict], pre: dict, *, lock=None, retries:
     for s in steps:
         if s["action"] in ("restore", "recreate"):
             now = client.get_live(s["cls"], s["handle"])
-            if now is None or not _same(now, pre[(s["cls"], s["handle"])]):
+            if now is None or not _same(now, pre.get((s["cls"], s["handle"])) or s["body"]):
                 problems.append(f"{s['cls']} {s['handle']} does not read back as before the run")
         elif s["action"] == "delete" and client.get_live(s["cls"], s["handle"]) is not None:
             problems.append(f"{s['cls']} {s['handle']} is still there after the delete")
