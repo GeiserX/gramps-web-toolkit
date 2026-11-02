@@ -12,11 +12,11 @@ def _date(y, m=0, d=0, modifier=0, quality=0):
     return {**selftest._date(y, m, d, modifier), "quality": quality}
 
 
-def _event(d, p, gid, typ, date):
+def _event(d, p, gid, typ, date, role="Primary"):
     ev = copy.deepcopy(selftest._get(d, "events", "E0001"))
     ev.update(handle="h" + gid, gramps_id=gid, type=typ, date=date, citation_list=[], tag_list=[])
     d["events"].append(ev)
-    p["event_ref_list"].append(selftest._ref(ev["handle"], role="Primary"))
+    p["event_ref_list"].append(selftest._ref(ev["handle"], role=role))
 
 
 def namesakes(a, b, *, first_b="Teo", baptisms=None):
@@ -56,10 +56,19 @@ def test_kin_hint_stays_when_the_births_could_be_one():
         ([], [_date(1800)]),                                       # no birth on one side
         ([_date(1750, modifier=BEFORE), {**_date(0), "modifier": 6, "text": "algún día"}], [_date(1800)]),  # unreadable
         ([_date(1790), _date(1800)], [_date(1790)]),               # every alternative counts
+        ([_date(1750), _date(1800)], [_date(1800)]),               # the latest alternative too
     ]
     for a, b in cases:
         assert "dup-person-relative" in hints(namesakes(a, b)), (a, b)
         assert "dup-person-relative" in hints(namesakes(b, a)), (b, a)
+
+
+def test_only_the_persons_own_readable_births_count():
+    d = namesakes([], [_date(1800)])
+    p = next(x for x in d["people"] if x["gramps_id"] == "I0911")
+    _event(d, p, "E0919", "Birth", _date(1750, modifier=BEFORE), role="Witness")  # someone else's birth
+    p["event_ref_list"].append(selftest._ref("hE_missing", role="Primary"))         # a dangling reference
+    assert "dup-person-relative" in hints(d)
 
 
 def test_a_baptism_alone_never_sets_two_namesakes_apart():

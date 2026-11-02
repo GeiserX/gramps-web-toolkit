@@ -106,3 +106,6 @@ gwt_check/checks.py | return bool(a and b) and (a[1] < b[0] or b[1] < a[0]) | re
 gwt_check/checks.py | if readable and len(readable) == len(alts) else None | if readable else None | one unreadable birth date leaves the birth unknown
 gwt_check/checks.py | spans[p["handle"]] = (min(s.lo for s in readable), max(s.hi for s in readable)) \ | spans[p["handle"]] = (readable[-1].lo, readable[-1].hi) \ | every birth alternative widens the interval
 gwt_check/checks.py | and dates.kind(E[r["ref"]].get("type")) in dates.BIRTH] | and dates.kind(E[r["ref"]].get("type")) in dates.BIRTH.union(dates.BAPTISM)] | a baptism alone never sets two namesakes apart
+gwt_check/checks.py | if r.get("ref") in E and r.get("role") == "Primary" | if r.get("ref") in E | a birth the person only witnessed never sets two namesakes apart
+gwt_check/checks.py | if r.get("ref") in E and r.get("role") == "Primary" | if r.get("role") == "Primary" | a dangling event reference never crashes the namesake check
+gwt_check/checks.py | max(s.hi for s in readable)) | min(s.hi for s in readable)) | the latest birth alternative widens the interval too
