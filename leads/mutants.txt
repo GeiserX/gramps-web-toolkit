@@ -40,3 +40,33 @@ gwt_leads.py | if f is not None] | ] | a url with text after its last placeholde
 gwt_leads.py | quote(chain[0], safe='') | quote(chain[0]) | a slash in a place name is encoded in the url, never a path step
 gwt_leads.py | any(a <= y <= b for a, b in row['years']) | any(a < y < b for a, b in row['years']) | a years range includes its ends, so a single year is a range of one
 gwt_leads.py | m = re.fullmatch(r'(\d{1,4})(?: | m = re.match(r'(\d{1,4})(?: | a years cell with junk after the year (1850s) exits 2
+gwt_leads.py | elif y is not None and row['years'] and not any(lo <= y <= hi for lo, hi in row['years']): | elif False: | a catalogue row whose years exclude the event's year gives no hint and is listed outside
+gwt_leads.py | return urllib.parse.quote(str(v), safe='') | return str(v) | a catalogue url encodes every value, so a space or an & in a name never breaks the query
+gwt_leads.py | if want not in row['record_types']: | if False: | a catalogue row that does not hold the record asked for (a census for a birth) is never a hint
+gwt_leads.py | if row['coverage'] and not row['coverage'] & set(levels): | if False: | a row whose coverage_places miss the event's place is listed outside, never a hint
+gwt_leads.py | for name in levels + ['*']: | for name in levels: | the world rows (match *) are hints for any place, after the rows of the place itself
+gwt_leads.py | for w in g.get('also', [])[:NOTE_HINTS - 1]: | for w in g.get('also', []): | a queue note carries at most three catalogue hints per record
+gwt_leads.py | 'online': False if row['access'] != 'online' else None if y is None else True, | 'online': None if y is None else True, | a catalogue source reached by letter, login or payment is never called online
+gwt_leads.py | r'\1-9999', text.strip())) | r'\1', text.strip())) | an open years end (1871-) runs to today, not just its first year
+gwt_leads.py | if row['access'] not in CATALOGUE_ACCESS or row['robots'] not in CATALOGUE_ROBOTS: | if False: | a catalogue access or robots value outside its list stops the load
+gwt_leads.py | bad = [f for f, spec, conv in fields if spec or conv or f not in CATALOGUE_URL_FIELDS] | bad = [] | a catalogue url placeholder outside the known seven stops the load
+gwt_leads.py | if not lines or tuple(lines[0].split('\t')) != CATALOGUE_COLUMNS: | if not lines: | a catalogue file whose header is not exactly the catalogue columns stops the load
+gwt_leads.py | if len(cells) != len(CATALOGUE_COLUMNS): | if False: | a catalogue row with a cell too many or too few stops the load
+gwt_leads.py | or (row['match_level'] == 'world') != (folded == ['*']): | : | match * goes with match_level world and nothing else
+gwt_leads.py | if not all(folded) or len(set(folded)) != len(folded): | if not all(folded): | a catalogue match naming the same place twice (once folded) stops the load
+gwt_leads.py | or not set(types) <= set(RECORD_TYPES) or len(set(types)) != len(types): | : | a record type outside the list, or one named twice, stops the load
+gwt_leads.py | if not re.fullmatch(r'(\d{4})?', row['civil_start']): | if False: | a civil_start that is not a year stops the load
+gwt_leads.py | datetime.date.fromisoformat(row['tested']) | pass | a tested cell that is not a date stops the load
+gwt_leads.py | if any(v != v.strip() for v in cells): | if False: | a catalogue cell with spaces around it stops the load
+gwt_leads.py | if row['url'] and not row['url'].startswith(('https://', 'http://')): | if False: | a catalogue url that is not a web address stops the load
+gwt_leads.py | if not asked or unknown: | if unknown: | --archives builtin: with no code stops with the codes there are
+gwt_leads.py | builtin = (args.archives or '').startswith(BUILTIN) | builtin = False | --archives builtin:CC reads the shipped catalogue, never a file of that name
+gwt_leads.py | ok = status is not None and 200 <= status < 400 | ok = status is not None | the probe dates only a url that answered 2xx or 3xx
+gwt_leads.py | if status in (405, 501): | if False: | the probe retries with GET when a server refuses HEAD
+gwt_leads.py | if not robots[host].can_fetch(PROBE_AGENT, url): | if False: | the probe never requests a path robots.txt forbids
+gwt_leads.py | rp.disallow_all = True | rp.allow_all = True | a robots.txt that errors or does not answer forbids the whole host
+gwt_leads.py | if host not in robots: | if True: | the probe fetches robots.txt once per host
+gwt_leads.py | read_catalogue(path)  # a bad file stops here, before any request | pass | a bad catalogue file stops the probe before any request
+gwt_leads.py | if args.delay < 1: | if False: | the probe never waits less than a second between requests
+gwt_leads.py | follow = url.endswith('/robots.txt') | follow = False | a robots.txt that redirects is followed, so a host that moved it is not read as forbidding everything
+gwt_leads.py | if follow else (_NoRedirect,) | if True else (_NoRedirect,) | the probe never follows a redirect from the url it checks: a 3xx is the answer

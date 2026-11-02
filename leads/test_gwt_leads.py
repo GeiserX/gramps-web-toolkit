@@ -880,5 +880,216 @@ class LeadsTest(unittest.TestCase):
             self.assertEqual(''.join(stripped), plain)  # the flag only adds the hint, it changes nothing else
 
 
+
+class CatalogueTest(unittest.TestCase):
+    """--archives builtin:CC: the shipped catalogue, and gwt-leads archives probe."""
+
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.addCleanup(self.td.cleanup)
+
+    def tree(self):
+        """Invented people: I2 born 1880 in a town of a Spanish province, I3 died 1930 in a French commune of a
+        département, I9 born 1870 in a commune of the Seine outside Paris."""
+        T = tree()
+        T['places'] = {
+            'vil': {'handle': 'vil', 'name': {'value': 'Villaejemplo'}, 'code': '20999', 'placeref_list': [{'ref': 'gi'}]},
+            'gi': {'handle': 'gi', 'name': {'value': 'Gipuzkoa'}, 'placeref_list': [{'ref': 'es'}]},
+            'es': {'handle': 'es', 'name': {'value': 'España'}},
+            'com': {'handle': 'com', 'name': {'value': 'Exempleville'}, 'placeref_list': [{'ref': 'pa'}]},
+            'pa': {'handle': 'pa', 'name': {'value': 'Pyrénées-Atlantiques'}, 'placeref_list': [{'ref': 'fr'}]},
+            'fr': {'handle': 'fr', 'name': {'value': 'France'}},
+            'sub': {'handle': 'sub', 'name': {'value': 'Banlieue-Exemple'}, 'placeref_list': [{'ref': 'se'}]},
+            'se': {'handle': 'se', 'name': {'value': 'Seine'}, 'placeref_list': [{'ref': 'fr'}]}}
+        T['events']['eb2'] = event('eb2', 'Birth', 1880, place='vil', cites=())
+        T['events']['ed3'] = event('ed3', 'Death', 1930, place='com', cites=())
+        T['events']['eb9'] = event('eb9', 'Birth', 1870, place='sub', cites=())
+        return T
+
+    def rows(self, T, spec, directory=None):
+        cat = L.load_catalogue(spec, directory)
+        return {(r['person'], r['gap']): r for r in L.leads(T, 'I1', L.DEFAULT_KINDS, 1925, catalogue=cat)[0]}
+
+    def catalogue(self, *lines, name='ZZ'):
+        d = os.path.join(self.td.name, 'cat-%d' % len(os.listdir(self.td.name)))
+        os.makedirs(d)
+        with open(os.path.join(d, name + '.tsv'), 'w', encoding='utf-8') as f:
+            f.write('\n'.join(('\t'.join(L.CATALOGUE_COLUMNS),) + lines) + '\n')
+        return d
+
+    @staticmethod
+    def row(match='Exampleland', level='country', archive='A', types='birth,death', years='', url='', access='online',
+            cover=''):
+        return '\t'.join((match, level, archive, '', types, years, '', url, access, '', cover, '', ''))
+
+    def test_a_spanish_province_and_a_french_departement_get_their_archives(self):
+        got = self.rows(self.tree(), 'builtin:es,fr')
+        es = got[('I2', 'birth-uncited')]
+        self.assertEqual(es['where']['archive'], 'Euskadi Artxiboa: Registros Sacramentales')  # the province row first
+        self.assertIs(es['where']['online'], True)
+        self.assertIn('Registro Civil (Ministerio de Justicia)', [h['archive'] for h in es['also']])  # then the country
+        fr = got[('I3', 'death-uncited')]
+        self.assertEqual(fr['where']['archive'], 'Archives départementales des Pyrénées-Atlantiques')
+        self.assertIn({'archive': 'matchID: décès INSEE', 'why': 'covers 1970-, not 1930'}, fr['outside'])
+        # a commune of the Seine outside Paris: the Archives de Paris match the département but not the place
+        out = got[('I9', 'birth-uncited')]['outside']
+        self.assertIn({'archive': 'Archives de Paris', 'why': 'covers only Paris'}, out)
+        # without fr the French gaps get nothing, and the Spanish gap is unchanged
+        only_es = self.rows(self.tree(), 'builtin:ES')
+        self.assertNotIn('where', only_es[('I3', 'death-uncited')])
+        self.assertEqual(only_es[('I2', 'birth-uncited')]['where'], es['where'])
+
+    def test_a_row_whose_years_exclude_the_event_gives_no_hint(self):
+        T = self.tree()
+        T['places']['es']['name']['value'] = 'Exampleland'
+        narrow = self.catalogue(self.row(archive='Civil register', years='1890-1950'))
+        got = self.rows(T, 'builtin:zz', narrow)[('I2', 'birth-uncited')]
+        self.assertNotIn('where', got)
+        self.assertEqual(got['outside'], [{'archive': 'Civil register', 'why': 'covers 1890-1950, not 1880'}])
+        wide = self.catalogue(self.row(archive='Civil register', years='1870-'))  # positive control: widened
+        got = self.rows(T, 'builtin:zz', wide)[('I2', 'birth-uncited')]
+        self.assertEqual(got['where']['archive'], 'Civil register')
+        self.assertNotIn('outside', got)
+        # an "about" year counts; a "before" year is no year, so it never puts a row outside
+        T['events']['eb2']['date']['modifier'] = 1
+        self.assertEqual(self.rows(T, 'builtin:zz', narrow)[('I2', 'birth-uncited')]['where']['online'], None)
+
+    def test_only_rows_holding_the_record_and_world_rows_last(self):
+        T = self.tree()
+        T['places']['es']['name']['value'] = 'Exampleland'
+        d = self.catalogue(self.row(match='*', level='world', archive='World'),
+                           self.row(archive='Census only', types='census'),
+                           self.row(archive='Deaths only', types='death'),
+                           self.row(match='Gipuzkoa', level='region', archive='Province', access='letter'))
+        got = self.rows(T, 'builtin:zz', d)
+        birth = got[('I2', 'birth-uncited')]
+        self.assertEqual([birth['where']['archive']] + [h['archive'] for h in birth['also']], ['Province', 'World'])
+        self.assertIs(birth['where']['online'], False)  # by letter: not online whatever the year
+        self.assertEqual(got[('I3', 'death-uncited')]['where']['archive'], 'World')  # France: only the world row
+        self.assertNotIn('where', got[('I2', 'marriage-missing-F1')])
+
+    def test_url_values_are_encoded_and_years_widened(self):
+        T = self.tree()
+        T['people']['fa']['primary_name'] = {'first_name': 'Ana Belén', 'surname_list': [{'surname': 'Iriarte & Hijos'}]}
+        T['places']['es']['name']['value'] = 'Exampleland'
+        url = 'https://x.example/?g={given}&s={surname}&p={place}&c={code}&y={year}&a={year_from}&b={year_to}'
+        got = self.rows(T, 'builtin:zz', self.catalogue(self.row(url=url)))[('I2', 'birth-uncited')]['where']['url']
+        self.assertEqual(got, 'https://x.example/?g=Ana%20Bel%C3%A9n&s=Iriarte%20%26%20Hijos&p=Villaejemplo&c=20999'
+                              '&y=1880&a=1875&b=1885')
+
+    def test_the_queue_note_carries_at_most_three_hints_per_record(self):
+        T = self.tree()
+        T['places']['es']['name']['value'] = 'Exampleland'
+        d = self.catalogue(*[self.row(archive='Archive %d' % i) for i in range(5)])
+        rows = L.leads(T, 'I1', L.DEFAULT_KINDS, 1925, catalogue=L.load_catalogue('builtin:zz', d))[0]
+        task = next(L.queue_task(g) for g in L.group_by_person(rows) if g['person'] == 'I2' and g['task'] == 'verify')
+        self.assertEqual(task['note'].split(' | ')[1].count('archive='), 3)
+
+    def test_cli_builtin_prints_hints_and_an_unknown_code_exits_2(self):
+        path = os.path.join(self.td.name, 'dump.json')
+        with open(path, 'w') as f:
+            json.dump(as_dump(self.tree()), f)
+        run = lambda *a: subprocess.run([sys.executable, CLI] + list(a), capture_output=True, text=True)
+        p = run(path, '--archives', 'builtin:es,xx', '--format', 'json', '--include-living')
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn('Euskadi Artxiboa', p.stdout)
+        self.assertIn('FamilySearch', p.stdout)
+        p = run(path, '--archives', 'builtin:qq', '--format', 'json')
+        self.assertEqual((p.returncode, p.stdout), (2, ''))
+        self.assertIn('no built-in catalogue QQ', p.stderr)
+
+    # --- gwt-leads archives probe ---
+
+    def probe(self, answers, *lines, robots=(200, '')):
+        d = self.catalogue(*lines)
+        calls, slept = [], []
+
+        def fetch(method, url):
+            calls.append((method, url))
+            if url.endswith('/robots.txt'):
+                return robots
+            return answers.get((method, url), answers.get(url, (None, 'no answer')))
+        out = io.StringIO()
+        failed = L.probe(d, ['ZZ'], fetch=fetch, sleep=slept.append, delay=2, today='2026-11-02', out=out)
+        with open(os.path.join(d, 'ZZ.tsv'), encoding='utf-8') as f:
+            tested = [line.split('\t')[11] for line in f.read().splitlines()[1:]]
+        return failed, tested, calls, slept, out.getvalue()
+
+    def test_probe_dates_only_the_urls_that_answer(self):
+        ok, bad = 'https://a.example/?q={surname}', 'https://a.example/gone'
+        failed, tested, calls, slept, out = self.probe(
+            {'https://a.example/?q=Example': (302, ''), bad: (404, '')}, self.row(url=ok), self.row(url=bad),
+            self.row(url=''))
+        self.assertEqual((failed, tested), (1, ['2026-11-02', '', '']))
+        self.assertEqual(calls, [('GET', 'https://a.example/robots.txt'), ('HEAD', 'https://a.example/?q=Example'),
+                                 ('HEAD', bad)])  # robots.txt once per host; the invented surname, never a real one
+        self.assertEqual(slept, [2, 2, 2])  # a pause before every request
+        self.assertIn('FAIL\t404', out)
+
+    def test_probe_falls_back_to_get_and_honours_robots(self):
+        url = 'https://b.example/search'
+        failed, tested, calls, _, _ = self.probe({('HEAD', url): (405, ''), ('GET', url): (200, '')}, self.row(url=url))
+        self.assertEqual((failed, tested, calls[-1]), (0, ['2026-11-02'], ('GET', url)))
+        failed, tested, calls, _, out = self.probe({url: (200, '')}, self.row(url=url),
+                                                   robots=(200, 'User-agent: *\nDisallow: /search\n'))
+        self.assertEqual((failed, tested, len(calls)), (1, [''], 1))  # no request to a path robots.txt forbids
+        self.assertIn('robots', out)
+        failed, tested, _, _, _ = self.probe({url: (200, '')}, self.row(url=url), robots=(404, ''))
+        self.assertEqual((failed, tested), (0, ['2026-11-02']))  # no robots.txt: everything allowed
+        failed, _, calls, _, _ = self.probe({url: (200, '')}, self.row(url=url), robots=(503, ''))
+        self.assertEqual((failed, len(calls)), (1, 1))  # a robots.txt that errors forbids everything
+
+    def test_probe_changes_nothing_but_the_tested_cell(self):
+        d = self.catalogue(self.row(url='https://c.example/', archive='Kept "as" is'))
+        path = os.path.join(d, 'ZZ.tsv')
+        with open(path, encoding='utf-8') as f:
+            before = f.read()
+        L.probe(d, ['ZZ'], fetch=lambda m, u: (200, ''), sleep=lambda s: None, today='2026-11-02', out=io.StringIO())
+        with open(path, encoding='utf-8') as f:
+            after = f.read()
+        self.assertEqual(after, before.replace('\t\t\n', '\t2026-11-02\t\n'))
+        with open(path, 'a', encoding='utf-8') as f:
+            f.write('broken row\n')
+        calls = []
+        with self.assertRaises(L.BadInput):
+            L.probe(d, ['ZZ'], fetch=lambda m, u: calls.append(u), sleep=lambda s: None, out=io.StringIO())
+        self.assertEqual(calls, [])  # a bad file stops before any request
+
+    def test_http_fetch_follows_a_robots_txt_redirect_and_nothing_else(self):
+        import http.server, threading
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path in ('/robots.txt', '/page'):
+                    self.send_response(302)
+                    self.send_header('Location', '/moved.txt')
+                    self.end_headers()
+                    return
+                body = b'User-agent: *\nDisallow: /search\n'
+                self.send_response(200)
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *a):
+                pass
+        server = http.server.HTTPServer(('127.0.0.1', 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        base = 'http://127.0.0.1:%d' % server.server_port
+        self.assertEqual(L.http_fetch('GET', base + '/robots.txt', timeout=5), (200, 'User-agent: *\nDisallow: /search\n'))
+        self.assertEqual(L.http_fetch('GET', base + '/page', timeout=5), (302, ''))  # the checked url: a 3xx is the answer
+
+    def test_probe_command_refuses_a_short_delay_and_an_unknown_country(self):
+        d = self.catalogue(self.row())
+        err = io.StringIO()
+        with redirect_stderr(err), self.assertRaises(SystemExit):
+            L.main(['archives', 'probe', '--delay', '0.5', '--dir', d])
+        with redirect_stderr(err):
+            self.assertEqual(L.main(['archives', 'probe', '--country', 'qq', '--dir', d]), 2)
+        self.assertIn('no catalogue file QQ', err.getvalue())
+
+
 if __name__ == '__main__':
     unittest.main()

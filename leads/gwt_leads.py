@@ -22,9 +22,12 @@ birth in --living-after or earlier) and people or events marked private are held
 
 `--format queue` prints one JSON line per task for `gwt-queue add --jsonl - --dedupe`. `--archives FILE` (a TSV
 of place -> archive rows) adds where each gap's record is kept and whether that year is online; it never fetches
-anything. Standard library only.
+anything. `--archives builtin:es,fr` (or `builtin:all`) reads the catalogue shipped in leads/archives/ instead, one
+TSV per country; `gwt-leads archives probe [--country CC]` checks its addresses (maintainers only). Standard library
+only.
 """
-import argparse, collections, csv, datetime, gzip, json, re, string, sys, unicodedata, urllib.parse
+import argparse, collections, csv, datetime, gzip, json, os, re, string, sys, time, unicodedata, urllib.parse
+import urllib.error, urllib.request, urllib.robotparser
 
 KINDS = ('branch-end', 'missing-vital', 'uncited', 'unsupported-link')
 DEFAULT_KINDS = ('branch-end', 'missing-vital', 'uncited')  # unsupported-link needs --links, so it is asked for
@@ -44,6 +47,21 @@ ARCHIVE_COLUMNS = ('match', 'archive', 'series', 'years', 'url')  # --archives: 
 ARCHIVE_OPTIONAL = ('access',)
 ACCESS = ('online', 'browser', 'letter', 'unknown')  # an empty access cell reads as unknown
 URL_FIELDS = ('place', 'year')
+# --archives builtin:CC: the catalogue shipped in leads/archives/<CC>.tsv (XX.tsv: sources for several countries)
+BUILTIN = 'builtin:'
+CATALOGUE_COLUMNS = ('match', 'match_level', 'archive', 'series', 'record_types', 'years', 'civil_start', 'url',
+                     'access', 'robots', 'coverage_places', 'tested', 'notes')
+CATALOGUE_LEVELS = ('world', 'country', 'region', 'place')  # world rows match '*', any place at all
+CATALOGUE_ACCESS = ('online', 'browser', 'login', 'paid', 'letter', 'in-person')
+CATALOGUE_ROBOTS = ('', 'ok', 'disallow', 'challenge')  # empty: not known
+RECORD_TYPES = ('birth', 'marriage', 'death', 'census', 'migration', 'military', 'probate', 'land', 'notarial', 'court',
+                'press', 'directory', 'tree', 'gazetteer', 'catalogue', 'other')
+CATALOGUE_URL_FIELDS = URL_FIELDS + ('surname', 'given', 'code', 'year_from', 'year_to')
+YEAR_WINDOW = 5  # {year_from} and {year_to}: this many years either side of {year}
+NOTE_HINTS = 3   # a queue note lists at most this many catalogue hints per record
+PROBE_AGENT = 'gramps-web-toolkit archives probe (+https://github.com/GeiserX/gramps-web-toolkit)'
+PROBE_VALUES = {'place': 'Example', 'year': 1900, 'surname': 'Example', 'given': 'Anna', 'code': '00000',
+                'year_from': 1895, 'year_to': 1905}  # invented: a probe never searches for a real person
 
 
 class BadInput(Exception):
@@ -270,6 +288,156 @@ def where_of(T, ev, archives):
             'online': None if y is None else any(a <= y <= b for a, b in row['years']), 'access': row['access']}
 
 
+def catalogue_dir():
+    """The shipped catalogue: leads/archives/ in a clone, gwt_leads_archives/ beside the module in the wheel."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for name in ('archives', 'gwt_leads_archives'):
+        if os.path.isdir(os.path.join(here, name)):
+            return os.path.join(here, name)
+    raise BadInput('the built-in archives catalogue is not installed next to %s' % __file__)
+
+
+def catalogue_codes(directory):
+    return sorted((f[:-4] for f in os.listdir(directory) if re.fullmatch(r'[A-Z]{2}\.tsv', f)),
+                  key=lambda c: (c == 'XX', c))  # several-country rows last
+
+
+def parse_catalogue_years(text):
+    """parse_years plus an open end: '1871-' reads as 1871 to 9999, a source that still runs."""
+    return parse_years(re.sub(r'(\d{1,4})\s*-\s*(?=,|$)', r'\1-9999', text.strip()))
+
+
+def read_catalogue(path):
+    """One catalogue TSV as a list of rows. Stricter than an --archives file, because we ship it: the header is
+    CATALOGUE_COLUMNS in that order, every row has every cell, and every value is checked. BadInput on anything else."""
+    try:
+        with open(path, encoding='utf-8', newline='') as fh:
+            lines = fh.read().split('\n')
+    except (OSError, UnicodeDecodeError) as exc:
+        raise BadInput('%s: %s' % (path, exc))
+    if lines and lines[-1] == '':
+        lines.pop()
+    if not lines or tuple(lines[0].split('\t')) != CATALOGUE_COLUMNS:
+        raise BadInput('%s: the header must be %s' % (path, '\\t'.join(CATALOGUE_COLUMNS)))
+    rows = []
+    for n, line in enumerate(lines[1:], 2):
+        where = '%s line %d' % (path, n)
+        cells = line.split('\t')
+        if len(cells) != len(CATALOGUE_COLUMNS):
+            raise BadInput('%s: %d cells, want %d' % (where, len(cells), len(CATALOGUE_COLUMNS)))
+        row = dict(zip(CATALOGUE_COLUMNS, cells))
+        if any(v != v.strip() for v in cells):
+            raise BadInput('%s: a cell starts or ends with a space' % where)
+        folded = [fold(m) if m != '*' else '*' for m in row['match'].split('|')]
+        if not all(folded) or len(set(folded)) != len(folded):
+            raise BadInput('%s: match %r has an empty or repeated name' % (where, row['match']))
+        if row['match_level'] not in CATALOGUE_LEVELS or (row['match_level'] == 'world') != (folded == ['*']):
+            raise BadInput('%s: match_level %r: one of %s, and world exactly when match is *' % (
+                where, row['match_level'], ', '.join(CATALOGUE_LEVELS)))
+        types = row['record_types'].split(',')
+        if not row['archive'] or not set(types) <= set(RECORD_TYPES) or len(set(types)) != len(types):
+            raise BadInput('%s: archive must not be empty and record_types must be some of %s' % (
+                where, ', '.join(RECORD_TYPES)))
+        if row['access'] not in CATALOGUE_ACCESS or row['robots'] not in CATALOGUE_ROBOTS:
+            raise BadInput('%s: access %r or robots %r unknown' % (where, row['access'], row['robots']))
+        if not re.fullmatch(r'(\d{4})?', row['civil_start']):
+            raise BadInput('%s: civil_start %r is not a year' % (where, row['civil_start']))
+        if row['tested']:
+            try:
+                datetime.date.fromisoformat(row['tested'])
+            except ValueError:
+                raise BadInput('%s: tested %r is not a date (YYYY-MM-DD)' % (where, row['tested']))
+        try:
+            years = parse_catalogue_years(row['years'])
+            fields = [part[1:] for part in string.Formatter().parse(row['url']) if part[1] is not None]
+        except (BadInput, ValueError) as exc:
+            raise BadInput('%s: %s' % (where, exc))
+        bad = [f for f, spec, conv in fields if spec or conv or f not in CATALOGUE_URL_FIELDS]
+        if bad:
+            raise BadInput('%s: url placeholder {%s} unknown; only %s' % (
+                where, bad[0], ', '.join('{%s}' % f for f in CATALOGUE_URL_FIELDS)))
+        if row['url'] and not row['url'].startswith(('https://', 'http://')):
+            raise BadInput('%s: url must start with https:// or http://' % where)
+        cover = [fold(c) for c in row['coverage_places'].split('|') if c.strip()]
+        rows.append(dict(row, names=folded, record_types=frozenset(types), years_text=row['years'], years=years,
+                         coverage=frozenset(cover),
+                         line=n))
+    return rows
+
+
+def load_catalogue(spec, directory=None):
+    """--archives builtin:es,fr (codes in any case, comma-separated) or builtin:all, as {folded name: [rows]} in file
+    order, the files in the order asked. An unknown code is BadInput naming the codes there are."""
+    directory = directory or catalogue_dir()
+    have = catalogue_codes(directory)
+    asked = [c.strip().upper() for c in spec[len(BUILTIN):].split(',') if c.strip()]
+    if asked == ['ALL']:
+        asked = have
+    unknown = [c for c in asked if c not in have]
+    if not asked or unknown:
+        raise BadInput('%s: no built-in catalogue %s; there are %s, and all' % (
+            spec, ', '.join(unknown) or '(none named)', ', '.join(c.lower() for c in have)))
+    index = {}
+    for code in dict.fromkeys(asked):
+        for row in read_catalogue(os.path.join(directory, code + '.tsv')):
+            for name in row['names']:
+                index.setdefault(name, []).append(row)
+    return index
+
+
+def given_surname(p):
+    n = (p or {}).get('primary_name') or {}
+    sn = next((s.get('surname', '') for s in n.get('surname_list', []) if s.get('surname')), '')
+    return (n.get('first_name') or '').strip(), sn.strip()
+
+
+def fill_url(template, values):
+    """A catalogue url with its placeholders filled; every value is URL-encoded, so a space or an & in a name never
+    breaks the query. A value the tree does not hold is empty."""
+    def q(v):
+        return urllib.parse.quote(str(v), safe='')
+    return template.format(**{f: q(values.get(f, '')) for f in CATALOGUE_URL_FIELDS})
+
+
+def catalogue_hints(T, ev, p, catalogue):
+    """(hints, outside) for the record a gap asks for, from load_catalogue's index. A row fits when one of its names
+    is a level of the event's place (deepest level first, then the world rows), its record_types hold the record
+    (birth for a birth or baptism, death for a death or burial), its years hold the event's year and its
+    coverage_places, when it has any, include a level of the place. A row that matches the place and the record
+    but not the year or the places is listed in outside with why: searching there cannot find this record."""
+    if not ev or ev.get('private', False) is True:
+        return [], []
+    want = 'birth' if etype(ev) in BIRTH_LIKE else 'death' if etype(ev) in DEATH_LIKE else None
+    chain = place_chain(T, ev.get('place'))
+    if want is None or not chain:
+        return [], []
+    levels = [fold(n) for n in chain]
+    rows, seen = [], set()
+    for name in levels + ['*']:
+        for row in catalogue.get(name, ()):
+            if id(row) not in seen:
+                seen.add(id(row))
+                rows.append(row)
+    y = exact_year(ev)
+    given, surname = given_surname(p)
+    place = (T.get('places', {}).get(ev.get('place')) or {})
+    values = {'place': chain[0], 'year': y or '', 'surname': surname, 'given': given, 'code': place.get('code') or '',
+              'year_from': y - YEAR_WINDOW if y else '', 'year_to': y + YEAR_WINDOW if y else ''}
+    hints, outside = [], []
+    for row in rows:
+        if want not in row['record_types']:
+            continue
+        if row['coverage'] and not row['coverage'] & set(levels):
+            outside.append({'archive': row['archive'], 'why': 'covers only ' + row['coverage_places'].replace('|', ', ')})
+        elif y is not None and row['years'] and not any(lo <= y <= hi for lo, hi in row['years']):
+            outside.append({'archive': row['archive'], 'why': 'covers %s, not %d' % (row['years_text'], y)})
+        else:
+            hints.append({'archive': row['archive'], 'series': row['series'], 'url': fill_url(row['url'], values),
+                          'online': False if row['access'] != 'online' else None if y is None else True,
+                          'access': row['access']})
+    return hints, outside
+
+
 def label(p):
     n = p.get('primary_name') or {}
     sn = ' '.join(s.get('surname', '') for s in n.get('surname_list', []) if s.get('surname'))
@@ -419,9 +587,12 @@ def gap_event(T, p, gap):
     return None
 
 
-def leads(T, root_gid=None, kinds=DEFAULT_KINDS, living_after=None, hold=True, links=None, archives=None):
+def leads(T, root_gid=None, kinds=DEFAULT_KINDS, living_after=None, hold=True, links=None, archives=None,
+          catalogue=None):
     """(rows, held): one row per gap, highest priority first, and {gramps_id: why} for the people held back
-    (none when hold is False). With archives (load_archives), a gap whose place matches a row gets 'where'."""
+    (none when hold is False). With archives (load_archives), a gap whose place matches a row gets 'where'. With
+    catalogue (load_catalogue), the first fitting row is 'where', the others 'also', and the rows that match the place
+    but not the year or the places are 'outside' (catalogue_hints)."""
     living_after = default_living_after() if living_after is None else living_after
     gen = {}
     if root_gid:
@@ -440,6 +611,14 @@ def leads(T, root_gid=None, kinds=DEFAULT_KINDS, living_after=None, hold=True, l
         where = where_of(T, gap_event(T, p, gap), archives) if archives else None
         if where:
             out[-1]['where'] = where
+        if catalogue:
+            hints, outside = catalogue_hints(T, gap_event(T, p, gap), p, catalogue)
+            if hints:
+                out[-1]['where'] = hints[0]
+            if hints[1:]:
+                out[-1]['also'] = hints[1:]
+            if outside:
+                out[-1]['outside'] = outside
 
     for p in T['people'].values():
         why = held_back(T, p, living_after, old) if hold else ''
@@ -567,6 +746,9 @@ def queue_task(r, source=''):
     for g in gaps:
         if g.get('where') and g['where'] not in wheres:
             wheres.append(g['where'])
+        for w in g.get('also', [])[:NOTE_HINTS - 1]:  # the catalogue's next best rows, after its first
+            if w not in wheres:
+                wheres.append(w)
     if wheres:
         note = 'where: %s | %s' % ('; '.join(where_note(w) for w in wheres), note)
     if r.get('facts'):
@@ -580,7 +762,115 @@ def tsv_cell(value):
     return ' '.join(str(value).replace('\t', ' ').splitlines()).strip()
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):  # a 3xx is the answer itself: the probe never follows it
+        return None
+
+
+def http_fetch(method, url, timeout=30):
+    """(status, body text) for one request with the probe's User-Agent; status None and the reason as text when no
+    answer came. Redirects are not followed, except for a robots.txt, which RFC 9309 says to follow (many hosts
+    move theirs to a CDN or to https)."""
+    req = urllib.request.Request(url, method=method, headers={'User-Agent': PROBE_AGENT})
+    follow = url.endswith('/robots.txt')
+    try:
+        with urllib.request.build_opener(*(() if follow else (_NoRedirect,))).open(req, timeout=timeout) as r:
+            return r.status, r.read(200000).decode('utf-8', 'replace') if method == 'GET' else ''
+    except urllib.error.HTTPError as exc:
+        return exc.code, ''
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        return None, str(getattr(exc, 'reason', exc))
+
+
+def probe(directory, codes, fetch=http_fetch, sleep=time.sleep, delay=2.0, today=None, out=sys.stdout):
+    """Check every url of the catalogue files named by codes, filled with invented values (PROBE_VALUES): robots.txt
+    first (one fetch per host; a 4xx robots.txt allows all, a 5xx or no answer forbids all, as RFC 9309 says), then
+    HEAD (GET when HEAD is refused with 405 or 501), with delay seconds before each request. A 2xx or 3xx answer
+    writes today's date into tested; nothing else in the file changes. Returns how many urls failed or were
+    forbidden by robots.txt."""
+    today = today or datetime.date.today().isoformat()
+    robots, failed = {}, 0
+    col = CATALOGUE_COLUMNS.index('tested')
+    for code in codes:
+        path = os.path.join(directory, code + '.tsv')
+        read_catalogue(path)  # a bad file stops here, before any request
+        with open(path, encoding='utf-8', newline='') as fh:
+            lines = fh.read().split('\n')
+        changed = False
+        for n, line in enumerate(lines[1:], 1):
+            if not line:
+                continue
+            cells = line.split('\t')
+            row = dict(zip(CATALOGUE_COLUMNS, cells))
+            if not row['url']:
+                continue
+            url = fill_url(row['url'], PROBE_VALUES)
+            u = urllib.parse.urlsplit(url)
+            host = '%s://%s' % (u.scheme, u.netloc)
+            if host not in robots:
+                sleep(delay)
+                status, text = fetch('GET', host + '/robots.txt')
+                rp = urllib.robotparser.RobotFileParser()
+                if status is not None and 200 <= status < 300:
+                    rp.parse(text.splitlines())
+                elif status is not None and 400 <= status < 500:
+                    rp.allow_all = True
+                else:
+                    rp.disallow_all = True
+                robots[host] = rp
+            if not robots[host].can_fetch(PROBE_AGENT, url):
+                failed += 1
+                print('robots\t-\t%s\t%s\t%s' % (code, row['archive'], url), file=out)
+                continue
+            sleep(delay)
+            status, reason = fetch('HEAD', url)
+            if status in (405, 501):
+                sleep(delay)
+                status, reason = fetch('GET', url)
+            ok = status is not None and 200 <= status < 400
+            if ok and cells[col] != today:
+                cells[col] = today
+                lines[n] = '\t'.join(cells)
+                changed = True
+            failed += not ok
+            print('%s\t%s\t%s\t%s\t%s' % ('ok' if ok else 'FAIL', status if status is not None else reason[:80],
+                                          code, row['archive'], url), file=out, flush=True)
+        if changed:
+            with open(path, 'w', encoding='utf-8', newline='') as fh:
+                fh.write('\n'.join(lines))
+    return failed
+
+
+def probe_main(argv):
+    p = argparse.ArgumentParser(prog='gwt-leads archives probe',
+                                description='Check the catalogue urls live and date the ones that answer. For '
+                                            'maintainers, from a clone; never run in CI.')
+    p.add_argument('--country', action='append', default=[], metavar='CC',
+                   help='only these catalogue files (comma-separated or repeated); default every file')
+    p.add_argument('--dir', help='the catalogue folder (default: the one gwt-leads ships)')
+    p.add_argument('--delay', type=float, default=2.0, help='seconds before each request (default 2, never less than 1)')
+    args = p.parse_args(argv)
+    if args.delay < 1:
+        p.error('--delay must be at least 1 second')
+    try:
+        directory = args.dir or catalogue_dir()
+        have = catalogue_codes(directory)
+        codes = [c.strip().upper() for a in args.country for c in a.split(',') if c.strip()] or have
+        unknown = [c for c in codes if c not in have]
+        if unknown:
+            raise BadInput('no catalogue file %s in %s' % (', '.join(unknown), directory))
+        failed = probe(directory, codes, delay=args.delay)
+    except BadInput as exc:
+        print('gwt-leads: %s' % exc, file=sys.stderr)
+        return 2
+    print('gwt-leads: %d url(s) did not answer 2xx or 3xx or are forbidden by robots.txt' % failed, file=sys.stderr)
+    return 1 if failed else 0
+
+
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv[:2] == ['archives', 'probe']:
+        return probe_main(argv[2:])
     p = argparse.ArgumentParser(prog='gwt-leads', description=__doc__.split('\n')[0])
     p.add_argument('dump')
     p.add_argument('--root', help='Gramps id of the person whose ancestors rank first')
@@ -589,7 +879,8 @@ def main(argv=None):
                    help='the JSON `gwt-check links --json` wrote from this same dump: adds the unsupported-link kind')
     p.add_argument('--archives', metavar='FILE',
                    help='TSV with match, archive, series, years, url (and optionally access): each gap whose place '
-                        'matches a row gets where its record is kept and whether its year is online')
+                        'matches a row gets where its record is kept and whether its year is online. '
+                        'builtin:es,fr (country codes) or builtin:all reads the catalogue shipped with gwt-leads')
     p.add_argument('--limit', type=int, default=0, help='keep the N highest-priority rows (tasks, in queue format)')
     p.add_argument('--format', choices=('queue', 'tsv', 'json'), default='tsv')
     p.add_argument('--living-after', type=int, default=default_living_after(), metavar='YEAR',
@@ -627,9 +918,11 @@ def main(argv=None):
             print('gwt-leads: %s: %s' % (args.links, exc), file=sys.stderr)
             return 2
     try:
-        archives = load_archives(args.archives) if args.archives else None
+        builtin = (args.archives or '').startswith(BUILTIN)
+        archives = load_archives(args.archives) if args.archives and not builtin else None
+        catalogue = load_catalogue(args.archives) if builtin else None
         rows, held = leads(load(args.dump), args.root, kinds, args.living_after, hold=not args.include_living,
-                           links=links, archives=archives)
+                           links=links, archives=archives, catalogue=catalogue)
     except BadInput as exc:
         print('gwt-leads: %s' % exc, file=sys.stderr)
         return 2

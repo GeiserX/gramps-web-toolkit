@@ -1,0 +1,6 @@
+match	match_level	archive	series	record_types	years	civil_start	url	access	robots	coverage_places	tested	notes
+Poland|Polska|Polonia|Polen|Pologne	country	Geneteka (PTG)	Index of parish and civil registers	birth,marriage,death	1600-1969		https://geneteka.genealodzy.pl/index.php?op=gt&lang=eng&rid=B&search_lastname={surname}	online	ok		2026-11-02	Crawl-delay 120 s: single searches only; pick the region (w=) on the page
+Poland|Polska|Polonia|Polen|Pologne	country	Metryki (PTG scans)	Parish register scans	birth,marriage,death	1600-1949		https://metryki.genealodzy.pl/	online			2026-11-02	
+Poland|Polska|Polonia|Polen|Pologne	country	Szukaj w Archiwach	Civil and parish registers (akta stanu cywilnego)	birth,marriage,death,notarial,census	1808-1959	1808	https://www.szukajwarchiwach.gov.pl/	browser	challenge		2026-11-02	Behind a bot challenge
+Wielkopolska|Greater Poland|Poznań|Posen|Province of Posen	region	Poznan Project	Marriage index	marriage	1800-1899		https://poznan-project.psnc.pl/	online			2026-11-02	
+Poland|Polska|Polonia|Polen|Pologne	country	JRI-Poland	Jewish vital records index	birth,marriage,death	1808-1949		https://jri-poland.org/	online			2026-11-02	

@@ -118,3 +118,7 @@ The file must be right, or nothing runs: a file that is not UTF-8, a missing, un
 - `--format tsv` does not change.
 
 Without `--archives` every format prints exactly what it printed before. The hint changes no priority and no dedupe key, and `gwt-leads` never opens the URL: it only writes it down.
+
+### The built-in catalogue
+
+`--archives builtin:es,fr` (country codes) or `--archives builtin:all` reads the catalogue that ships with `gwt-leads` instead of your own file: about 200 archives and portals, one file per country. Each gap can get several hints there: the first is `where`, the rest are `also`, and sources that match the place but cannot hold this record (wrong years, or a narrower area) are listed under `outside`. The columns, the matching rules and the list of countries are in [Archives catalogue](archives.md).
