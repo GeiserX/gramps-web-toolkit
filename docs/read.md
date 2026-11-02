@@ -75,7 +75,7 @@ control	control	--given Cristóbal --surname Colón	25 read, want at least 10	ok
 | `familysearch` | `--surname Smith` | 10 |
 | `insee` | none: it reads files you downloaded, offline | |
 
-Each source also names the marks of its results page: a row of results (`hits`), or the site's own words for "nothing found" (`none`). A page with neither is `unknown`, and `unknown` is a STOP, exit 3, never zero results. [gwt-read sources](sources/index.md) explains how a new source declares all this.
+A source added through the registry also names the marks of its results page: a row of results (`hits`), or the site's own words for "nothing found" (`none`). A page with neither is `unknown`, and `unknown` is a STOP, exit 3, never zero results. PARES, Genae and the BOE apply the same rule through their own page checks. [gwt-read sources](sources/index.md) explains how a new source declares all this.
 
 ## FamilySearch
 
