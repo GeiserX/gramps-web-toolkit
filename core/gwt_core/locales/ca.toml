@@ -1,0 +1,49 @@
+# Catalan. Every locale file has the same sections; see docs/rules.md.
+code = "ca"
+name = "Catalan"
+
+[fold]
+# old spellings swap b/v and y/i: «Ybern» = «Ibern»
+pairs = [["b", "v"], ["y", "i"]]
+particles = ["de", "d", "del", "dels", "la", "les", "i"]
+
+[months]
+"1" = ["gener", "gen"]
+"2" = ["febrer", "febr"]
+"3" = ["març", "mar"]
+"4" = ["abril", "abr"]
+"5" = ["maig"]
+"6" = ["juny"]
+"7" = ["juliol", "jul"]
+"8" = ["agost", "ag"]
+"9" = ["setembre", "set", "7bre"]
+"10" = ["octubre", "oct", "8bre"]
+"11" = ["novembre", "nov", "9bre"]
+"12" = ["desembre", "des", "xbre", "10bre"]
+
+[dates]
+filler = ["de", "d", "del", "dia", "any", "als"]
+
+[roles]
+godparent = ["padrí", "padrina", "padrins"]
+witness = ["testimoni", "testimonis"]
+father = ["pare"]
+mother = ["mare"]
+child = ["fill", "filla", "fills"]
+spouse = ["marit", "muller", "espòs", "esposa", "vidu", "vídua"]
+priest = ["rector", "prevere", "vicari", "capellà"]
+
+[events]
+birth = ["naixement", "nascut", "nascuda", "naixença"]
+baptism = ["baptisme", "bateig", "batejat", "batejada"]
+marriage = ["matrimoni", "casament", "noces", "esposalles"]
+death = ["defunció", "mort", "òbit"]
+burial = ["enterrament", "sepultura"]
+
+[dedication]
+pairs = [
+  ["Ntra. Sra.", "Nostra Senyora"],
+  ["N.ª S.ª", "Nostra Senyora"],
+  ["St.", "Sant"],
+  ["Sta.", "Santa"],
+]

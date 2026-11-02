@@ -37,3 +37,4 @@ for s in $sources; do
   echo "ok   gwt read $s --help"
 done
 "$bin/gwt" check selftest
+"$bin/python" -c "from gwt_core import rules; [rules.load_locale(c) for c in rules.LOCALES]; print('ok   locales', *rules.LOCALES)"

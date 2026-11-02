@@ -84,6 +84,7 @@ The toolkit works for genealogy in any country. `gwt-spanish-poller` and some `g
 ## Development
 
 - [Development](development.md): tests, building this site, and the rules for a change.
+- [Shared rules and locales](rules.md): one rule for who may be living, name folding and date reading, and a word table per language.
 
 ## License
 
