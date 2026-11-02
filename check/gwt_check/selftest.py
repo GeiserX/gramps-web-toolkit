@@ -277,6 +277,11 @@ def p_dup_couple(d):
         _get(d, "people", gid)["family_list"].append("hF0099")
 
 
+def p_homonym_birth_gap(d):
+    _new_person(d, "I0731", "Inventada", "Bruma", birth=(1800,))
+    _new_person(d, "I0732", "Inventada", "Bruma", birth=(1820,))
+
+
 def p_dup_person_birth(d):
     _new_person(d, "I0099", "Tomás", "Ortega Sanz", birth=(1903, 3, 0))
 
@@ -528,6 +533,7 @@ PLANTS = [
     (p_surname_marker, "surname-marker", "I0007 Vidal [¿?]", False),
     (p_note_marker_no_tag, "note-marker-no-tag", "N0098 hipotesis", False),
     (p_dup_couple, "dup-couple", "F0001,F0099", False),
+    (p_homonym_birth_gap, "homonym-birth-gap", "I0731,I0732", False),
     (p_dup_person_birth, "dup-person-birth", "I0008,I0099", False),
     (p_dup_couple_names, "dup-couple-names", "F0002,F0097", False),
     (p_event_no_place, "info:events without place", "E0203", False),
