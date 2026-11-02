@@ -269,7 +269,7 @@ def test_the_wrapper_runs(tmp_path):
     assert r.returncode == 0 and "Exit codes" in r.stdout
 
 
-def test_a_conflict_met_by_the_apply_is_not_tried_again(tmp_path, server):
+def test_a_tree_changed_after_the_backup_is_refused_before_any_write(tmp_path, server):
     lst, conf = setup(tmp_path, server, [JOHN, ANNA])
     real = server.fake.request
     logins = {"n": 0}
@@ -284,8 +284,58 @@ def test_a_conflict_met_by_the_apply_is_not_tried_again(tmp_path, server):
     server.fake.request = anna_goes_before_the_apply
     assert gwt_run_main(lst, conf, "--apply-tries", "3") == 4
     st = state(lst)
-    assert st["steps"]["apply"]["tries"] == 1
+    assert st["steps"]["apply"]["tries"] == 1  # not tried again: another try finds the same
+    assert st["steps"]["apply"]["status"] == "refused"
+    assert not server.fake.store["people"]  # gwt-apply checked the tree against the backup before its first write
+
+
+def test_a_conflict_met_by_a_later_apply_try_is_not_tried_again(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, BIRTH, ANNA])
+    real = server.fake.request
+    seen = {"puts": 0, "logins": 0}
+
+    def busy_then_anna_goes(method, url, **kw):
+        if method == "PUT" and not seen["puts"]:
+            seen["puts"] += 1
+            server.fake.busy = 1  # the first try stops on "database is locked"
+        if url.endswith("/api/token/"):
+            seen["logins"] += 1
+            if seen["logins"] == 3:  # the second apply try
+                del server.fake.store["people"]["anna"]
+        return real(method, url, **kw)
+
+    server.fake.request = busy_then_anna_goes
+    assert gwt_run_main(lst, conf, "--apply-tries", "5") == 4
+    st = state(lst)
+    assert st["steps"]["apply"]["tries"] == 2
     assert st["steps"]["apply"]["counts"]["conflict"] == 1
+
+
+def test_a_refused_server_backup_writes_nothing_and_is_not_tried_without_it(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, BIRTH])
+    server.fake.backup_status = 429
+    assert gwt_run_main(lst, conf, "--server-backup", "--apply-tries", "3") == 4
+    assert sum(1 for m, p in server.fake.calls if m == "POST" and p == "/api/backups/") == 1  # one ask
+    assert [o["primary_name"]["first_name"] for o in server.fake.store["people"].values()] == ["Anna"]  # no write
+    st = state(lst)
+    assert st["steps"]["apply"]["status"] == "refused" and st["steps"]["apply"]["tries"] == 1
+
+
+def test_an_apply_that_refuses_its_input_is_not_tried_again(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN])
+    conf.write_text(conf.read_text().replace("GWT_TREE=tree-test\n", ""))  # gwt-apply --apply needs a tree
+    assert gwt_run_main(lst, conf, "--apply-tries", "3", "--retry-wait", "5") == 2
+    assert state(lst)["steps"]["apply"].get("tries", 0) <= 1
+    assert server.fake.writes() == []
+
+
+def test_apply_tries_count_per_run_of_gwt_run(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, BIRTH])
+    server.fake.busy = 1000
+    assert gwt_run_main(lst, conf, "--apply-tries", "2") == 4
+    assert state(lst)["steps"]["apply"]["tries"] == 2
+    assert gwt_run_main(lst, conf, "--apply-tries", "2") == 4
+    assert state(lst)["steps"]["apply"]["tries"] == 4  # the rerun had its own two tries, not one
 
 
 def test_a_half_written_backup_is_taken_again(tmp_path, server):
@@ -309,5 +359,5 @@ def test_the_server_backup_is_asked_for_once_across_apply_tries(tmp_path, server
 
     server.fake.request = busy_on_first_put
     assert gwt_run_main(lst, conf, "--server-backup") == 0
-    assert state(lst)["steps"]["apply"]["tries"] == 2
+    assert state(lst)["steps"]["apply"]["tries"] == 2  # the server confirmed the first; the second try asks no more
     assert sum(1 for m, p in server.fake.calls if m == "POST" and p == "/api/backups/") == 1

@@ -39,6 +39,12 @@ from pathlib import Path
 
 FORMAT = "gwt-run/1"
 STEPS = ("backup", "dry_run", "apply", "verify", "gate")
+# gwt-apply's --json reason for every op when it stopped before its first write, and what that means
+BEFORE_WRITE = {
+    "not run: the snapshot check refused the list": "the tree changed since the backup (or it is another tree)",
+    "not run: the server backup was refused": "the server did not store the backup --server-backup asks for",
+    "not run: the list stopped on likely duplicates": "the list stopped on likely duplicates",
+}
 EXIT = {"done": 0, "failed": 1, "input": 2, "refused": 3, "apply": 4, "stalled": 5, "verify": 6, "gate": 7}
 
 
@@ -238,16 +244,28 @@ class Run:
         counts = {s: sum(r["status"] == s for r in rows) for s in ("done", "skip")}
         self.mark("dry_run", "ok", exit=code, counts=counts)
 
+    def _server_backup_stored(self) -> bool:
+        """True when an apply log in DIR holds the server's confirmation of a backup."""
+        for log in self.dir.glob("apply.*.jsonl"):
+            try:
+                if any('"server-backup"' in line and json.loads(line).get("event") == "server-backup"
+                       for line in log.read_text(encoding="utf-8").splitlines()):
+                    return True
+            except (OSError, ValueError):
+                continue
+        return False
+
     def apply(self) -> None:
         step = self.step("apply")
-        while True:
+        for this in range(1, self.args.apply_tries + 1):  # --apply-tries counts the tries of this invocation
             tries = step.get("tries", 0) + 1
             out = self.dir / f"apply-{tries}.json"
             extra = ["--apply", "--log", str(self.dir / "apply.jsonl"), "--json", str(out),
                      "--retries", str(self.args.retries), "--retry-wait", str(self.args.retry_wait)]
-            if self.args.server_backup and not step.get("server_backup_asked"):
-                extra.append("--server-backup")  # once: every request stores one more backup on the server
-                step["server_backup_asked"] = True
+            if tries == 1:  # nothing written yet: gwt-apply refuses a tree that changed since the backup, or another tree
+                extra += ["--snapshot", str(self.pre)]
+            if self.args.server_backup and not self._server_backup_stored():
+                extra.append("--server-backup")  # until the server confirms one; gwt-apply writes nothing without it
             self.mark("apply", "running", tries=tries)
             code, why, last = self.watch("apply", self.apply_cmd(*extra), log_glob="apply.*.jsonl")
             rows = json.loads(out.read_text(encoding="utf-8")) if out.exists() else []
@@ -255,16 +273,23 @@ class Run:
             if code == 0:
                 self.mark("apply", "ok", counts=counts)
                 return
+            before = {r["reason"] for r in rows} & set(BEFORE_WRITE)
+            if code == 2 or (rows and before and counts["not run"] == len(rows)):
+                # gwt-apply stopped before its first write; another try finds the same. A rerun starts over.
+                why_not = BEFORE_WRITE.get(next(iter(before), ""), "gwt-apply refused its input")
+                self.mark("apply", "refused", exit=code)
+                raise Stop(EXIT["input"] if code == 2 else EXIT["apply"],
+                           f"apply: {why_not}; nothing was written; see {self.dir / 'apply.out'}")
             if counts["conflict"]:  # the tree changed under the list: another try finds the same
                 self.mark("apply", "failed", exit=code, counts=counts)
                 raise Stop(EXIT["apply"], f"apply: {counts['conflict']} conflict(s); see {self.dir / 'apply.out'}")
-            if tries >= self.args.apply_tries:
+            if this == self.args.apply_tries:
                 if why:
                     raise self.stalled("apply", why, last)
                 self.mark("apply", "failed", exit=code, counts=counts)
-                raise Stop(EXIT["apply"], f"apply: did not finish after {tries} tries (exit {code}); running the same "
+                raise Stop(EXIT["apply"], f"apply: did not finish after {this} tries (exit {code}); running the same "
                                           f"gwt-run again goes on from here; see {self.dir / 'apply.out'}")
-            print(f"apply: try {tries} {'stalled' if why else f'exited {code}'}; another in {self.args.retry_wait} s "
+            print(f"apply: try {tries} {'stalled' if why else f'exited {code}'}; another in {self.args.retry_wait:g} s "
                   "(what is done reads as a skip)", flush=True)
             time.sleep(self.args.retry_wait)
 

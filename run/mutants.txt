@@ -6,10 +6,13 @@ gwt_run.py | r["status"] == "skip" and not r.get("noop") and r["key"] not in acc
 gwt_run.py | if self.step(name).get("status") == "ok": | if False: | a rerun skips the steps that are done, so the backup is never taken again over a written tree
 gwt_run.py | if self.state.get("list_sha256") != sha: | if False: | a list changed since the run began is refused
 gwt_run.py | if counts["conflict"]: | if False: | an apply that meets a conflict is not tried again
-gwt_run.py | if tries >= self.args.apply_tries: | if True: | an apply that fails on a busy server is tried again
-gwt_run.py | if tries >= self.args.apply_tries: | if tries >= self.args.apply_tries + 1: | the apply stops after --apply-tries tries
-gwt_run.py | if self.args.server_backup and not step.get("server_backup_asked"): | if self.args.server_backup: | the server backup is asked for once, not on every apply try
+gwt_run.py | if this == self.args.apply_tries: | if True: | an apply that fails on a busy server is tried again
+gwt_run.py | if this == self.args.apply_tries: | if this == self.args.apply_tries + 1: | the apply stops after --apply-tries tries
+gwt_run.py | if self.args.server_backup and not self._server_backup_stored(): | if self.args.server_backup: | the server backup is asked for until the server confirms one, not on every apply try
 gwt_run.py | self.pre.unlink()  # half a snapshot | pass  # half a snapshot | a backup step that did not finish is taken again from scratch
 gwt_run.py | if now - last >= stall: | if False: | the watchdog ends a step that shows no progress
 gwt_run.py | if grown != sizes: | if False: | an API call in the step's log counts as progress
 gwt_run.py | if code == 1: | if False: | a new gwt-check finding stops the run with exit 7
+gwt_run.py | if tries == 1: | if False: | the first apply try checks the tree against the backup before any write
+gwt_run.py | if code == 2 or (rows and before and counts["not run"] == len(rows)): | if False: | an apply that stopped before its first write (a refused server backup, bad input) is not tried again
+gwt_run.py | for this in range(1, self.args.apply_tries + 1): | for this in range(step.get("tries", 0) + 1, self.args.apply_tries + 1): | --apply-tries counts the tries of this invocation, not of every run
