@@ -33,10 +33,17 @@ def portal_referer(url: str) -> str | None:
     Antenati's manifest server (dam-antenati) and image server (iiif-antenati) answer 403 unless
     the Referer is the portal itself; the manifest URL as Referer is refused too.
     """
-    host = urlsplit(url).netloc.lower()
+    host = urlsplit(url).hostname or ""
     if host in ("dam-antenati.cultura.gov.it", "iiif-antenati.cultura.gov.it"):
         return ANTENATI
     return None
+
+
+def _is_canadiana(host: str) -> bool:
+    return host == "canadiana.ca" or host.endswith(".canadiana.ca")
+
+
+CANADIANA_DELAY = 10.0  # https://heritage.canadiana.ca/robots.txt: Crawl-delay: 10
 
 
 def resolve(url: str, client) -> tuple[str, str]:
@@ -60,7 +67,7 @@ def resolve(url: str, client) -> tuple[str, str]:
     m = re.search(r"europeana\.eu$", host) and re.search(r"/item/(\d+)/([^/?#]+)", u.path)
     if m:
         return f"https://iiif.europeana.eu/presentation/{m.group(1)}/{m.group(2)}/manifest", url
-    m = host.endswith("canadiana.ca") and re.match(r"/view/([^/?#]+)", u.path)
+    m = _is_canadiana(u.hostname or "") and re.match(r"/view/([^/?#]+)", u.path)
     if m:  # Canadiana viewer, e.g. heritage.canadiana.ca/view/<id>/<page>
         return f"{u.scheme}://{u.netloc}/iiif/{m.group(1)}/manifest", url
     return url, portal_referer(url) or url
@@ -175,6 +182,10 @@ def run(args, client) -> int:
     if not args.url:
         raise SystemExit("gwt-fetch: give a manifest or viewer URL, or --image-base URL")
     manifest_url, referer = resolve(args.url, client)
+    if _is_canadiana(urlsplit(manifest_url).hostname or "") and client.delay < CANADIANA_DELAY:
+        print(f"gwt-fetch: Canadiana asks for {CANADIANA_DELAY:.0f} s between requests; waiting that long",
+              file=sys.stderr)
+        client.delay = CANADIANA_DELAY
     manifest = client.json(manifest_url, referer=referer)
     if _is_image_info(manifest):
         raise SystemExit(f"gwt-fetch: {manifest_url} is a IIIF Image API info.json, not a manifest; "

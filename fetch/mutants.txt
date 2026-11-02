@@ -7,7 +7,7 @@ gwt_fetch/iiif.py | return manifest, portal_referer(manifest) or url | return ma
 gwt_fetch/iiif.py |     if got != width: |     if got is None: | an image whose pixel width is not info.json's width is refused, never saved
 gwt_fetch/iiif.py | url = f"{base}/full/{width},/0/default.jpg" | url = f"{base}/full/max/0/default.jpg" | an Image API base is fetched at info.json's width, not at full/max
 gwt_fetch/iiif.py | if getattr(args, "native", False) and c.service: | if False: | --native fetches each canvas at its info.json width
-gwt_fetch/iiif.py | m = host.endswith("canadiana.ca") and re.match(r"/view/([^/?#]+)", u.path) | m = None | a Canadiana viewer URL becomes its manifest
+gwt_fetch/iiif.py | m = _is_canadiana(u.hostname or "") and re.match(r"/view/([^/?#]+)", u.path) | m = None | a Canadiana viewer URL becomes its manifest
 gwt_fetch/iiif.py | if _is_image_info(manifest): | if False: | an info.json passed as a manifest stops with a pointer to --image-base
 gwt_fetch/iiif.py |     except Exception as e:  # a missing page or a broken info.json fails this image, not the run |     except ZeroDivisionError as e: | a page with no info.json fails that page and the rest still download
 gwt_fetch/crop.py | box = scale_box(box, parse_pair(args.from_size, "--from-size"), size) | pass | a box measured on a preview is scaled to the real image
@@ -25,3 +25,5 @@ gwt_fetch/iiif.py |     if row: |     if None: | a --native resume skips a page 
 gwt_fetch/iiif.py |     if not want: |     if False: | a --pages range that selects nothing stops with a message instead of exiting 0 with no file
 gwt_fetch/iiif.py |         if pages: |         if False: | --pages with an --image-base that has no {page} stops instead of fetching one image
 gwt_fetch/iiif.py | return [(n, PAGE.sub(lambda m: format(n, m.group(1) or ""), base)) for n in want] | return [(n, PAGE.sub(str(n), base)) for n in want] | {page:04} pads the page number with zeros
+gwt_fetch/iiif.py | return host == "canadiana.ca" or host.endswith(".canadiana.ca") | return host.endswith("canadiana.ca") | a lookalike host such as evilcanadiana.ca is not rewritten as Canadiana
+gwt_fetch/iiif.py | and client.delay < CANADIANA_DELAY: | and False: | a Canadiana run waits the 10 s its robots.txt asks for, without --delay

@@ -124,6 +124,24 @@ def test_canadiana_viewer_becomes_its_manifest():
     assert iiif.resolve(m, None) == (m, m)
 
 
+def test_lookalike_hosts_are_not_rewritten():
+    for url in ("https://evilcanadiana.ca/view/x", "https://canadiana.ca.example/view/x"):
+        assert iiif.resolve(url, None) == (url, url)
+    port = "https://DAM-ANTENATI.cultura.gov.it:443/antenati/containers/Ex4mple/manifest"
+    assert iiif.resolve(port, None) == (port, ANTENATI)
+
+
+def test_canadiana_run_waits_ten_seconds_between_requests(tmp_path, capsys):
+    """Its robots.txt asks for a 10 s crawl delay; the default 1 s is raised, a longer one kept."""
+    m = "https://heritage.canadiana.ca/iiif/oocihm.lac_reel_x0000/manifest"
+    for given, want in ((1.0, 10.0), (15.0, 15.0)):
+        c = FakeClient({m: Resp(json.dumps({"items": []}), "application/json")})
+        c.delay = given
+        iiif.run(ns(url="https://heritage.canadiana.ca/view/oocihm.lac_reel_x0000", out=str(tmp_path)), c)
+        assert c.delay == want
+    assert "10 s" in capsys.readouterr().err
+
+
 # ---------------------------------------------------------------- --image-base
 
 AD = "https://archives.example.fr/iiif/ark:/00000/exemple"
