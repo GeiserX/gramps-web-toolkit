@@ -1,0 +1,380 @@
+{
+ "nominatim": {
+  "España": [
+   {
+    "lat": "39.3",
+    "lon": "-4.8",
+    "category": "boundary",
+    "type": "administrative",
+    "addresstype": "country",
+    "name": "España",
+    "importance": 0.9,
+    "display_name": "España, invented",
+    "address": {
+     "country_code": "es"
+    },
+    "namedetails": {
+     "name": "España"
+    }
+   }
+  ],
+  "Iglesia de San Ejemplo, Villaejemplo": [
+   {
+    "lat": "40.135",
+    "lon": "-3.0",
+    "category": "amenity",
+    "type": "place_of_worship",
+    "addresstype": "amenity",
+    "name": "Iglesia de San Ejemplo",
+    "importance": 0.4,
+    "display_name": "Iglesia de San Ejemplo, invented",
+    "address": {
+     "country_code": "es"
+    },
+    "namedetails": {
+     "name": "Iglesia de San Ejemplo"
+    }
+   },
+   {
+    "lat": "40.0072",
+    "lon": "-3.0",
+    "category": "amenity",
+    "type": "place_of_worship",
+    "addresstype": "amenity",
+    "name": "Parroquia de San Ejemplo Obrero",
+    "importance": 0.4,
+    "display_name": "Parroquia de San Ejemplo Obrero, invented",
+    "address": {
+     "country_code": "es"
+    },
+    "namedetails": {
+     "name": "Parroquia de San Ejemplo Obrero"
+    }
+   }
+  ],
+  "Ermita de Santa Prueba, Villaejemplo": [
+   {
+    "lat": "40.0108",
+    "lon": "-3.0",
+    "category": "amenity",
+    "type": "place_of_worship",
+    "addresstype": "amenity",
+    "name": "Ermita de Santa Prueba",
+    "importance": 0.4,
+    "display_name": "Ermita de Santa Prueba, invented",
+    "address": {
+     "country_code": "es"
+    },
+    "namedetails": {
+     "name": "Ermita de Santa Prueba"
+    }
+   },
+   {
+    "lat": "40.0045",
+    "lon": "-3.0",
+    "category": "place",
+    "type": "hamlet",
+    "addresstype": "hamlet",
+    "name": "Santa Prueba",
+    "importance": 0.2,
+    "display_name": "Santa Prueba, invented",
+    "address": {
+     "country_code": "es"
+    },
+    "namedetails": {
+     "name": "Santa Prueba"
+    }
+   }
+  ],
+  "Cementerio de Villaejemplo, Villaejemplo": [
+   {
+    "lat": "40.003",
+    "lon": "-3.0",
+    "category": "landuse",
+    "type": "cemetery",
+    "addresstype": "landuse",
+    "name": "Cementerio de Villaejemplo",
+    "importance": 0.4,
+    "display_name": "Cementerio de Villaejemplo, invented",
+    "address": {
+     "country_code": "es"
+    },
+    "namedetails": {
+     "name": "Cementerio de Villaejemplo"
+    }
+   },
+   {
+    "lat": "40.0",
+    "lon": "-3.0",
+    "category": "place",
+    "type": "town",
+    "addresstype": "town",
+    "name": "Villaejemplo",
+    "importance": 0.4,
+    "display_name": "Villaejemplo, invented",
+    "address": {
+     "country_code": "es"
+    },
+    "namedetails": {
+     "name": "Villaejemplo"
+    }
+   }
+  ],
+  "Capilla del Ejemplo, Otroejemplo": [
+   {
+    "lat": "40.201",
+    "lon": "-3.2",
+    "category": "amenity",
+    "type": "place_of_worship",
+    "addresstype": "amenity",
+    "name": "Capilla del Ejemplo",
+    "importance": 0.4,
+    "display_name": "Capilla del Ejemplo, invented",
+    "address": {
+     "country_code": "es"
+    },
+    "namedetails": {
+     "name": "Capilla del Ejemplo"
+    }
+   }
+  ],
+  "Villa Frontera, Provincia Ejemplo, España": [
+   {
+    "lat": "40.3",
+    "lon": "-7.0",
+    "category": "place",
+    "type": "village",
+    "addresstype": "village",
+    "name": "Villa Frontera",
+    "importance": 0.4,
+    "display_name": "Villa Frontera, invented",
+    "address": {
+     "country_code": "pt"
+    },
+    "namedetails": {
+     "name": "Villa Frontera"
+    }
+   }
+  ],
+  "Calle Larga, Villaejemplo": [
+   {
+    "lat": "40.027",
+    "lon": "-3.0",
+    "category": "highway",
+    "type": "residential",
+    "addresstype": "road",
+    "name": "Calle Larga",
+    "importance": 0.4,
+    "display_name": "Calle Larga, invented",
+    "address": {
+     "country_code": "es"
+    },
+    "namedetails": {
+     "name": "Calle Larga"
+    }
+   }
+  ],
+  "Little Example, Exampleshire, Ruritania": [
+   {
+    "lat": "51.0",
+    "lon": "-1.0",
+    "category": "boundary",
+    "type": "administrative",
+    "addresstype": "village",
+    "name": "Little Example",
+    "importance": 0.3,
+    "display_name": "Little Example, invented",
+    "address": {
+     "country_code": "rr"
+    },
+    "namedetails": {
+     "name": "Little Example"
+    }
+   }
+  ],
+  "Example Farm, Little Example": [
+   {
+    "lat": "51.008",
+    "lon": "-1.0",
+    "category": "place",
+    "type": "farm",
+    "addresstype": "farm",
+    "name": "Example Farm",
+    "importance": 0.3,
+    "display_name": "Example Farm, invented",
+    "address": {
+     "country_code": "rr"
+    },
+    "namedetails": {
+     "name": "Example Farm"
+    }
+   }
+  ]
+ },
+ "ban": {
+  "Saint-Exemple-sur-Mer Département Exemple": {
+   "type": "FeatureCollection",
+   "features": [
+    {
+     "type": "Feature",
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.5,
+       44.0
+      ]
+     },
+     "properties": {
+      "label": "Saint-Exemple-sur-Mer",
+      "name": "Saint-Exemple-sur-Mer",
+      "city": "Saint-Exemple-sur-Mer",
+      "score": 0.5,
+      "type": "municipality",
+      "citycode": "97001",
+      "context": "97, Autre Département, Autre Région"
+     }
+    },
+    {
+     "type": "Feature",
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       -1.5,
+       48.5
+      ]
+     },
+     "properties": {
+      "label": "Saint-Exemple-sur-Mer",
+      "name": "Saint-Exemple-sur-Mer",
+      "city": "Saint-Exemple-sur-Mer",
+      "score": 0.95,
+      "type": "municipality",
+      "citycode": "99001",
+      "context": "98, Département Exemple, Région Exemple"
+     }
+    },
+    {
+     "type": "Feature",
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       2.0,
+       45.0
+      ]
+     },
+     "properties": {
+      "label": "Saint-Exemple",
+      "name": "Saint-Exemple",
+      "city": "Saint-Exemple",
+      "score": 0.81,
+      "type": "municipality",
+      "citycode": "99002",
+      "context": "98, Autre"
+     }
+    }
+   ]
+  }
+ },
+ "carto_candidates": {
+  "Villaejemplo": [
+   {
+    "id": "inv-pob",
+    "type": "poblacion",
+    "address": "Villaejemplo, Villaejemplo",
+    "poblacion": "Villaejemplo",
+    "muni": "Villaejemplo",
+    "muniCode": "99000",
+    "province": "Provincia Ejemplo"
+   },
+   {
+    "id": "inv0",
+    "type": "Municipio",
+    "address": "Villaejemplo, Provincia Ejemplo",
+    "muni": "Villaejemplo",
+    "muniCode": "99000",
+    "province": "Provincia Ejemplo"
+   }
+  ],
+  "Otroejemplo": [
+   {
+    "id": "inv1",
+    "type": "Municipio",
+    "address": "Otroejemplo",
+    "muni": "Otroejemplo",
+    "muniCode": "99001",
+    "province": "Provincia Ejemplo"
+   }
+  ],
+  "Villa Puesta": [
+   {
+    "id": "inv2",
+    "type": "Municipio",
+    "address": "Villa Puesta",
+    "muni": "Villa Puesta",
+    "muniCode": "99002",
+    "province": "Provincia Ejemplo"
+   }
+  ],
+  "Villa Movida": [
+   {
+    "id": "inv3",
+    "type": "Municipio",
+    "address": "Villa Movida",
+    "muni": "Villa Movida",
+    "muniCode": "99003",
+    "province": "Provincia Ejemplo"
+   }
+  ],
+  "Torre del Reloj": [
+   {
+    "id": "inv-top",
+    "type": "toponimo",
+    "address": "Torre del Reloj, Villaejemplo",
+    "muni": "Villaejemplo",
+    "muniCode": "99000",
+    "province": "Provincia Ejemplo",
+    "poblacion": "Villaejemplo"
+   }
+  ],
+  "Villa Grados": [
+   {
+    "id": "inv4",
+    "type": "Municipio",
+    "address": "Villa Grados",
+    "muni": "Villa Grados",
+    "muniCode": "99004",
+    "province": "Provincia Ejemplo"
+   }
+  ]
+ },
+ "carto_find": {
+  "inv0": {
+   "lat": 40.2,
+   "lng": -3.0
+  },
+  "inv1": {
+   "lat": 40.2,
+   "lng": -3.2
+  },
+  "inv2": {
+   "lat": 40.5002,
+   "lng": -3.5
+  },
+  "inv3": {
+   "lat": 40.61,
+   "lng": -3.61
+  },
+  "inv-pob": {
+   "lat": 40.0,
+   "lng": -3.0
+  },
+  "inv-top": {
+   "lat": 40.002,
+   "lng": -3.0
+  },
+  "inv4": {
+   "lat": 40.1667,
+   "lng": -3.1667
+  }
+ }
+}
