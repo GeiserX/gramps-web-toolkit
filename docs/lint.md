@@ -116,7 +116,7 @@ Who may be living comes from `possibly_living()` in the [shared rules](rules.md)
 |---|---|
 | `living-date` | an event of someone who may be living gets a date with a day; a year, or a year and month, passes |
 | `living-place` | an event of someone who may be living gets a place |
-| `living-quote` | a quotation (`«…»`, `“…”`, `"…"`) or a transcript attached to someone who may be living, or an `update_note` putting one in a note they carry |
+| `living-quote` | a quotation of four words or more (`«…»`, `“…”`, `"…"`; a shorter quoted span reads as a title or a name), a `Transcript` note or a transcript attached to someone who may be living, or an `update_note` putting one in a note they carry |
 | `living-marriage` | a marriage event of someone who may be living |
 | `living-id` | new text holds an identity number (DNI, NIE, NIR, codice fiscale, SSN with a valid check). The message shows its first three characters only. Leave it out; if it must stay, mark the note private |
 

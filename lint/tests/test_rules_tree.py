@@ -298,3 +298,20 @@ def test_count_quotes_the_words_that_fired():
                     F.Tree.load(TREE), {})
     [f] = T.Count().check(ctx)
     assert "'tree has 12'" in f.message
+
+
+@pytest.mark.parametrize("text,codes", [
+    ("DNA match; her online tree is called «Gil Family Tree».", []),
+    ("She wrote to us: «my mother was born in the old mill».", ["living-quote"]),
+])
+def test_living_quote_wants_a_quotation_not_a_title(text, codes):
+    # « » also mark titles and names in Spanish and French; a short quoted title is not a quotation
+    ops = [{"op": "add_note", "key": "n", "text": text, "attach": [{"person": "I12"}]}]
+    ctx = F.Context([dict(o, _line=1) for o in ops], F.Tree.load(TREE), {"living": {"this_year": 2026}})
+    assert [f.code for f in T.Living().check(ctx)] == codes
+
+
+def test_living_quote_reads_a_transcript_note_as_a_quotation():
+    ops = [{"op": "add_note", "key": "n", "type": "Transcript", "text": "Born at home.", "attach": [{"person": "I12"}]}]
+    ctx = F.Context([dict(o, _line=1) for o in ops], F.Tree.load(TREE), {"living": {"this_year": 2026}})
+    assert [f.code for f in T.Living().check(ctx)] == ["living-quote"]

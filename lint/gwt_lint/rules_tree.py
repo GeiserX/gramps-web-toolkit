@@ -23,7 +23,14 @@ from .framework import (MERGED, PROBABLE, Mutant, NothingToCheck, Rule, attach_t
 UPDATED = {"update_person": "Person", "update_family": "Family"}  # update_event has its own codes
 LINEAGE = {"", "Birth", "Unknown", "Adopted"}  # parent links that carry blood; Stepchild, Foster, Sponsored do not
 BARE_NUMBER = re.compile(r"[(\[]?\d+[)\].,;:!?]?")
-QUOTE = re.compile(r"«[^»]+»|“[^”]+”|\"[^\"]+\"")
+QUOTE = re.compile(r"«([^»]+)»|“([^”]+)”|\"([^\"]+)\"")
+QUOTE_WORDS = 4  # « » also mark titles and names; a quoted span this many words or longer reads as a quotation
+
+
+def _quotes(text):
+    return any(len(next(g for g in m.groups() if g).split()) >= QUOTE_WORDS for m in QUOTE.finditer(text))
+
+
 # The word "tree" in each locale of gwt_core; [count] words in lint.toml replaces it
 TREE_WORDS = ["tree", "árbol", "arbre", "albero", "árvore", "stammbaum", "baum", "stamboom", "zuhaitz", "árbore",
               "arbor"]
@@ -321,7 +328,7 @@ class Living(Rule):
                         out.append(self.finding("living-marriage", op, f"a marriage of {w}"))
             if kind in ("add_note", "add_transcription", "update_note"):
                 text = op.get("text") if kind != "update_note" else s.get("text")
-                if isinstance(text, str) and (kind == "add_transcription" or QUOTE.search(text)):
+                if isinstance(text, str) and (kind == "add_transcription" or op.get("type") == "Transcript" or _quotes(text)):
                     targets = attach_targets(op) if kind != "update_note" else self._note_owners(view, op.get("note"))
                     for w in alive(targets):
                         out.append(self.finding("living-quote", op, f"a quotation attached to {w}",

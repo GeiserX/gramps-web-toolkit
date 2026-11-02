@@ -22,7 +22,7 @@ gwt_lint/rules_tree.py |             h = view.resolve(i, "Person") |            
 gwt_lint/rules_tree.py |     return bool(d["dateval"][0]) |     return True | a year alone is not an exact date
 gwt_lint/rules_tree.py |                     if place: |                     if False: | a place on a living person's event is living-place
 gwt_lint/rules_tree.py |                     if etype == "Marriage": |                     if False: | a marriage of a living person is living-marriage
-gwt_lint/rules_tree.py | if isinstance(text, str) and (kind == "add_transcription" or QUOTE.search(text)): | if isinstance(text, str): | only a quotation or a transcript is living-quote, not every note
+gwt_lint/rules_tree.py | if isinstance(text, str) and (kind == "add_transcription" or op.get("type") == "Transcript" or _quotes(text)): | if isinstance(text, str): | only a quotation or a transcript is living-quote, not every note
 gwt_lint/rules_tree.py |                 for kind_, number in find_ids(t): |                 for kind_, number in []: | an identity number in new text is living-id
 gwt_lint/rules_tree.py | for h in people if living(h)[0]] | for h in people] | only people who may be living are held back
 gwt_lint/rules_tree.py | targets = attach_targets(op) if kind != "update_note" else self._note_owners(view, op.get("note")) | targets = attach_targets(op) | an update_note is judged by the people the note is on
@@ -55,3 +55,5 @@ gwt_lint/rules_tree.py |             if kind in ("add_event", "update_event", "m
 gwt_lint/rules_tree.py |         return bool((text.get("dateval") or [0])[0]) |         return False | a moved event's exact date in the snapshot counts
 gwt_lint/framework.py | "add_citation": ("page",), | "add_citation": (), | a citation page is new text the living, protect and count rules read
 gwt_lint/framework.py |     if before.status == "nothing": |     if False: | --prove fails a rule that has nothing to check under your own settings
+gwt_lint/rules_tree.py | len(next(g for g in m.groups() if g).split()) >= QUOTE_WORDS | len(next(g for g in m.groups() if g).split()) >= 0 | a short quoted title is not a quotation
+gwt_lint/rules_tree.py | op.get("type") == "Transcript" or _quotes | False or _quotes | a Transcript note is a quotation whatever its marks
