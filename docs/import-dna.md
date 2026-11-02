@@ -1,6 +1,6 @@
 # gwt-import-dna
 
-Gramps Web has a DNA view: open a person, and it lists their DNA matches with the shared segments drawn on a chromosome map. It has no importer, though, so a tester with hundreds of matches would have to type them in one by one. `gwt-import-dna` reads the match lists a testing site lets you download and writes a [gwt-apply](apply.md) change list that fills the DNA view. It never writes to Gramps itself. Python 3.11+, standard library only (`--online` needs gwt-apply).
+Gramps Web has a DNA view: open a person, and it lists their DNA matches with the shared segments drawn on a chromosome map. It has no importer, though, so a tester with hundreds of matches would have to type them in one by one. `gwt-import-dna` reads the match lists a testing site lets you download and writes a [gwt-apply](apply.md) change list that fills the DNA view. It never writes to Gramps itself. Python 3.11+, standard library only.
 
 ```sh
 gwt-apply --save-snapshot tree.json.gz                       # or a gwt-check dump
@@ -26,7 +26,7 @@ Every op names the ruling `gwt-import-dna` (change it with `--ruling`). For one 
 - **The person.** A match not yet in the tree becomes a loose person, in no family, tagged `dna-match` (`--tag`, or `--tag ''` for none). A match whose name is someone else's in the tree, or another new match's, gets `allow_namesake` with the reason "a DNA match: another person unless placed" and every namesake in `namesake_of`, so gwt-apply's preflight lets it through without merging them. A match with no usable name becomes `(no name, <site> <match id>)`.
 - **The association.** One `add_association` from the tested person with relation `DNA`, which is what the DNA view lists. gwt-apply skips it when the tested person already has it.
 - **The summary note.** A Research note on the match person: the site, the tested person and kit (`--kit`, default the tested ID), the shared cM, segments and longest segment, and the site's estimated relationship or generations and ancestral surnames when the file has them. Its first line, `gwt-import-dna site=<site> id=<match> cM=<cM>`, is how a later import finds this person again; leave it as it is.
-- **The segment note.** When segments are known, a note on the association with one segment per line, chromosome order, X after 22. This is the text the DNA view parses. Before writing, every note is read back with a copy of Gramps Web's own parser (`gramps_webapi/api/dna.py`), and the run stops if a segment would be lost. `--online` also sends each one to the server's parser, `POST /api/parsers/dna-match`, with gwt-apply's login settings (`--config`, or the `GWT_*` variables), and exits 1 when the server reads a different number of segments.
+- **The segment note.** When segments are known, a note on the association with one segment per line, chromosome order, X after 22. This is the text the DNA view parses. The format is fixed (one header, then whole numbers and a cM per line), and the tests pin it to a string Gramps Web's parser, `POST /api/parsers/dna-match`, was seen to accept, read back with a copy of that parser (`gramps_webapi/api/dna.py`).
 
 The keys hold the site and the match id, so a rerun of the same export produces the same keys and gwt-apply skips everything it already made.
 
@@ -60,7 +60,7 @@ A DNA match took a test, so they are alive ([shared rules](rules.md): a DNA matc
 
 ## Output and report
 
-`--out` is JSON Lines. When the list is longer than `--batch` ops (default 1,500), it is split into `<out>-01.jsonl`, `<out>-02.jsonl`... in order, never splitting a match's ops; apply them in that order, since a namesake of a later file only names earlier ones. `--report FILE` writes JSON with the counts, `in_tree` (and how each was found), `cross_site` (both cM), `cross_ambiguous`, `self`, `namesakes`, and under `columns` each file's columns read and ignored and its `skipped_rows` (rows with neither a name nor an id). Neither file is overwritten without `--force`. Exit 0 on success, 1 when `--online` finds a note the server reads differently, 2 on a bad file or option (a missing column, a tested ID not in the snapshot).
+`--out` is JSON Lines. When the list is longer than `--batch` ops (default 1,500), it is split into `<out>-01.jsonl`, `<out>-02.jsonl`... in order, never splitting a match's ops; apply them in that order, since a namesake of a later file only names earlier ones. `--report FILE` writes JSON with the counts, `in_tree` (and how each was found), `cross_site` (both cM), `cross_ambiguous`, `self`, `namesakes`, and under `columns` each file's columns read and ignored and its `skipped_rows` (rows with neither a name nor an id). Neither file is overwritten without `--force`. Exit 0 on success, 2 on a bad file or option (a missing column, a tested ID not in the snapshot).
 
 ## Limits
 

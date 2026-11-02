@@ -3,7 +3,7 @@
 
   gwt-import-dna --site SITE --tested I0001 --snapshot DUMP --out changes.jsonl FILE [FILE ...]
                  [--kit LABEL] [--ruling R] [--tag dna-match] [--id-map TSV] [--column FIELD=HEADER ...]
-                 [--batch 1500] [--report report.json] [--online [--config FILE]] [--force]
+                 [--batch 1500] [--report report.json] [--force]
 
 FILE is a CSV the site lets you download: a match list (one row per match), a segment file (one row per shared
 segment), or both. Which is which is read from the header: a file with a chromosome column is a segment file.
@@ -16,7 +16,7 @@ its cM, and, when segments are known, a note on the association in the segment f
 
 A match already in the tree is pointed at, not made again: by --id-map, by the mark an earlier import of the
 same site left (same match id), or by another site's mark with the same name and a close cM (one person only).
-Exit 2 on a bad file or option. Standard library only (--online needs gwt-apply).
+Exit 2 on a bad file or option. Standard library only.
 """
 from __future__ import annotations
 
@@ -262,46 +262,6 @@ def _fmt(x) -> str:
     return ("%.2f" % x).rstrip("0").rstrip(".") if isinstance(x, float) else str(x)
 
 
-def parse_like_gramps_web(text: str) -> list[dict]:
-    """The segments Gramps Web reads from a note (gramps_webapi/api/dna.py, parse_raw_dna_match_string, for a
-    comma-separated table with a header row, which every note from here has): what the DNA view will show. Used to check every note before it ships.
-    https://github.com/gramps-project/gramps-web-api/blob/77263b895c1d476dae9a655587956ec798536776/gramps_webapi/api/dna.py"""
-    rows = text.strip().split("\n")
-    if len(rows) < 2 or rows[0].count(",") < 3:
-        return []
-    head = [c.lower().strip() for c in rows[0].split(",")]
-    taken: list[int] = []
-
-    def find(cond, missing=False):
-        for i, c in enumerate(head):
-            if i not in taken and cond(c):
-                taken.append(i)
-                return i
-        if missing:
-            return None
-        raise ValueError
-
-    try:
-        chrom = find(lambda c: c.startswith("chr"))
-        start = find(lambda c: "start" in c)
-        end = find(lambda c: "end" in c or "stop" in c or ("length" in c and "morgan" not in c))
-        cm = find(lambda c: c.startswith("cm") or "centimorgan" in c or "length" in c)
-    except ValueError:
-        return []
-    snp = find(lambda c: "snp" in c, missing=True)
-    out = []
-    for row in rows[1:]:
-        f = row.split(",")
-        if not row.strip() or len(f) < 4:
-            continue
-        try:
-            out.append({"chromosome": f[chrom].strip(), "start": int(f[start]), "stop": int(f[end]),
-                        "cM": float(f[cm]), "SNPs": int(f[snp]) if snp is not None and f[snp].strip() else 0})
-        except (ValueError, IndexError):
-            continue
-    return out
-
-
 # --- the tree ------------------------------------------------------------------------------------------------
 
 def load_tree(path: str) -> dict:
@@ -438,10 +398,7 @@ def build(matches: dict, tree: dict, *, site: str, tested: str, kit: str, ruling
         ops.append({"op": "add_note", "key": f"{akey}-summary", "ruling": ruling, "type": "Research",
                     "text": "\n".join(lines), "attach": [{"person": ref}]})
         if m["segs"]:
-            text = segment_note(m["segs"])
-            if len(parse_like_gramps_web(text)) != len(m["segs"]):
-                raise AssertionError(f"segment note of {mid} does not parse as Gramps Web reads it")
-            ops.append({"op": "add_note", "key": f"{akey}-segments", "ruling": ruling, "text": text,
+            ops.append({"op": "add_note", "key": f"{akey}-segments", "ruling": ruling, "text": segment_note(m["segs"]),
                         "attach": [{"association": {"person": tested, "target": ref, "relation": "DNA"}}]})
             rep["with_segments"] += 1
         groups.append(ops)
@@ -458,24 +415,6 @@ def blocks(groups: list[list[dict]], size: int) -> list[list[dict]]:
             cur = []
         cur += g
     return out + [cur] if cur else out
-
-
-def check_online(texts: list[str], conf_path: str | None) -> list[str]:
-    """Each segment note through the server's own parser, POST /api/parsers/dna-match; the problems."""
-    from gwt_apply.cli import _client, read_config, settings_problem
-    conf = read_config(conf_path)
-    if (p := settings_problem(conf)):
-        raise BadInput(f"--online: {p}")
-    client = _client(conf, dry_run=True)
-    problems = []
-    for t in texts:
-        r = client._request("POST", "/parsers/dna-match", json={"string": t})
-        want = parse_like_gramps_web(t)
-        got = r.json() if r.status_code == 200 else None
-        if got is None or len(got) != len(want):
-            problems.append(f"the server read {len(got) if got is not None else 'HTTP %s' % r.status_code} segments, "
-                            f"want {len(want)}: {t.splitlines()[1] if len(t.splitlines()) > 1 else t!r}")
-    return problems
 
 
 def main(argv=None):
@@ -495,8 +434,6 @@ def main(argv=None):
                         sorted(set(MATCH_COLUMNS) | set(SEGMENT_COLUMNS))))
     ap.add_argument("--batch", type=int, default=BATCH, help="ops per file at most (default: %(default)s)")
     ap.add_argument("--report", help="write the report (JSON) here")
-    ap.add_argument("--online", action="store_true", help="also check every segment note with the server's parser")
-    ap.add_argument("--config", help="with --online: gwt-apply's KEY=VALUE settings file")
     ap.add_argument("--force", action="store_true", help="overwrite --out and --report")
     a = ap.parse_args(argv)
     try:
@@ -521,11 +458,6 @@ def main(argv=None):
         for n in names + ([a.report] if a.report else []):
             if os.path.exists(n) and not a.force:
                 raise BadInput(f"{n} exists; --force to overwrite")
-        if a.online:
-            problems = check_online([o["text"] for g in groups for o in g if o["key"].endswith("-segments")], a.config)
-            if problems:
-                print("\n".join(problems), file=sys.stderr)
-                return 1
         for n, ops in zip(names, files or [[]]):
             with open(n, "w", encoding="utf-8") as fh:
                 fh.writelines(json.dumps(op, ensure_ascii=False) + "\n" for op in ops)

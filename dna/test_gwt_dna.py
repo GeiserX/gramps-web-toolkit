@@ -59,6 +59,46 @@ def marked(gid, first, surname, site, mid, cm):
             {"handle": "n" + gid, "text": {"_class": "StyledText", "string": f"{D.MARK} site={site} id={mid} cM={cm}\nx"}})
 
 
+def parse_like_gramps_web(text: str) -> list[dict]:
+    """The segments Gramps Web reads from a note (gramps_webapi/api/dna.py, parse_raw_dna_match_string, for a
+    comma-separated table with a header row, which every note from here has): what the DNA view will show.
+    https://github.com/gramps-project/gramps-web-api/blob/77263b895c1d476dae9a655587956ec798536776/gramps_webapi/api/dna.py"""
+    rows = text.strip().split("\n")
+    if len(rows) < 2 or rows[0].count(",") < 3:
+        return []
+    head = [c.lower().strip() for c in rows[0].split(",")]
+    taken: list[int] = []
+
+    def find(cond, missing=False):
+        for i, c in enumerate(head):
+            if i not in taken and cond(c):
+                taken.append(i)
+                return i
+        if missing:
+            return None
+        raise ValueError
+
+    try:
+        chrom = find(lambda c: c.startswith("chr"))
+        start = find(lambda c: "start" in c)
+        end = find(lambda c: "end" in c or "stop" in c or ("length" in c and "morgan" not in c))
+        cm = find(lambda c: c.startswith("cm") or "centimorgan" in c or "length" in c)
+    except ValueError:
+        return []
+    snp = find(lambda c: "snp" in c, missing=True)
+    out = []
+    for row in rows[1:]:
+        f = row.split(",")
+        if not row.strip() or len(f) < 4:
+            continue
+        try:
+            out.append({"chromosome": f[chrom].strip(), "start": int(f[start]), "stop": int(f[end]),
+                        "cM": float(f[cm]), "SNPs": int(f[snp]) if snp is not None and f[snp].strip() else 0})
+        except (ValueError, IndexError):
+            continue
+    return out
+
+
 class Reading(unittest.TestCase):
     def test_myheritage_ops_one_group_per_match(self):
         ops, groups, rep = run("myheritage", ["myheritage-matches.csv", "myheritage-segments.csv"])
@@ -104,7 +144,7 @@ class Reading(unittest.TestCase):
         self.assertEqual(rep["matches"], 2)
         kim = next(g for g in groups if g[0].get("first_name") == "Kim")
         self.assertIn("cM=28\n", kim[2]["text"])   # 18.2 + 9.8
-        self.assertEqual(D.parse_like_gramps_web(kim[3]["text"])[0]["chromosome"], "4")
+        self.assertEqual(parse_like_gramps_web(kim[3]["text"])[0]["chromosome"], "4")
 
     def test_ftdna_two_matches_with_one_name_are_two_people_and_their_segments_wait(self):
         ops, _, rep = run("ftdna", ["ftdna-matches.csv", "ftdna-segments.csv"])
@@ -261,13 +301,21 @@ class SegmentNote(unittest.TestCase):
         _, groups, _ = run("myheritage", ["myheritage-matches.csv", "myheritage-segments.csv"])
         tom = next(g for g in groups if g[0].get("first_name") == "Tom")
         self.assertEqual(tom[3]["text"], rec["request"]["string"])
-        ours = D.parse_like_gramps_web(rec["request"]["string"])
+        ours = parse_like_gramps_web(rec["request"]["string"])
         theirs = [{k: s[k] for k in ("chromosome", "start", "stop", "cM", "SNPs")} for s in rec["response"]]
         self.assertEqual(ours, theirs)
 
+    def test_every_segment_note_reads_back_whole(self):
+        for site, files in [("myheritage", ["myheritage-matches.csv", "myheritage-segments.csv"]),
+                            ("ftdna", ["ftdna-matches.csv", "ftdna-segments.csv"]),
+                            ("gedmatch", ["gedmatch-segments.csv"])]:
+            for op in run(site, files)[0]:
+                if op["key"].endswith("-segments"):
+                    self.assertEqual(len(parse_like_gramps_web(op["text"])), op["text"].count("\n"), op["text"])
+
     def test_the_offline_reader_refuses_what_the_server_would_misread(self):
-        self.assertEqual(D.parse_like_gramps_web("1,2,3,4,5\n7,1,9,12.5,1500"), [])   # numeric header
-        self.assertEqual(D.parse_like_gramps_web("Name,Start,End,cM\n7,1,9,12.5"), [])  # no chromosome column
+        self.assertEqual(parse_like_gramps_web("1,2,3,4,5\n7,1,9,12.5,1500"), [])   # numeric header
+        self.assertEqual(parse_like_gramps_web("Name,Start,End,cM\n7,1,9,12.5"), [])  # no chromosome column
 
 
 class Files(unittest.TestCase):
