@@ -506,18 +506,22 @@ def read_told(path, audience):
     """The object ids this audience was already told. A missing file is nobody told anything yet."""
     if not os.path.exists(path):
         return set()
+    try:
+        with open(path, encoding='utf-8-sig') as fh:
+            lines = fh.readlines()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise BadInput('%s: cannot read the told file (%s)' % (path, exc))
     told = set()
-    with open(path, encoding='utf-8-sig') as fh:
-        for n, line in enumerate(fh, 1):
-            if not line.strip() or line.startswith('#'):
-                continue
-            cells = [c.strip() for c in line.rstrip('\n').split('\t')]
-            if n == 1 and cells[0].lower() == 'audience':
-                continue
-            if len(cells) < 2 or not cells[0] or not cells[1]:
-                raise BadInput('%s line %d: expected audience<TAB>object id<TAB>date' % (path, n))
-            if cells[0] == audience:
-                told.add(cells[1])
+    for n, line in enumerate(lines, 1):
+        if not line.strip() or line.startswith('#'):
+            continue
+        cells = [c.strip() for c in line.rstrip('\n').split('\t')]
+        if n == 1 and cells[0].lower() == 'audience':
+            continue
+        if len(cells) < 2 or not cells[0] or not cells[1]:
+            raise BadInput('%s line %d: expected audience<TAB>object id<TAB>date' % (path, n))
+        if cells[0] == audience:
+            told.add(cells[1])
     return told
 
 
@@ -623,13 +627,18 @@ def render(T, groups, base, lang, fmt, since=''):
 
 
 def mark(path, audience, ids):
-    new = not os.path.exists(path) or os.path.getsize(path) == 0
     today = datetime.date.today().isoformat()
-    with open(path, 'a', encoding='utf-8') as fh:
-        if new:
-            fh.write('audience\tobject\tdate\n')
-        for i in ids:
-            fh.write('%s\t%s\t%s\n' % (audience, i, today))
+    try:
+        with open(path, 'ab+') as fh:
+            fh.seek(0, os.SEEK_END)
+            if fh.tell() == 0:
+                head = 'audience\tobject\tdate\n'
+            else:
+                fh.seek(-1, os.SEEK_END)
+                head = '' if fh.read(1) == b'\n' else '\n'  # a hand-edited file may lack its last newline
+            fh.write((head + ''.join('%s\t%s\t%s\n' % (audience, i, today) for i in ids)).encode('utf-8'))
+    except OSError as exc:
+        raise BadInput('%s: cannot write the told file (%s)' % (path, exc))
 
 
 def main(argv=None):

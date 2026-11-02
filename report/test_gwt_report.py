@@ -299,6 +299,22 @@ class DigestTest(unittest.TestCase):
         self.assertIn('Nothing new.', out)
         self.assertIn('Lena', self.digest('--root', 'I1', '--told', self.told, '--audience', 'others'))
 
+    def test_mark_starts_a_new_line_when_the_file_lacks_one(self):
+        with open(self.told, 'w', encoding='utf-8') as fh:
+            fh.write('audience\tobject\tdate\nfamily\tE1\t2026-02-03')  # edited by hand, no last newline
+        self.digest('--root', 'I1', '--told', self.told, '--audience', 'family', '--mark')
+        self.assertEqual(R.read_told(self.told, 'family'), {'C1', 'E1', 'I11', 'I12', 'I8', 'O1'})
+
+    def test_unreadable_or_unwritable_told_file_exits_2(self):
+        with open(self.told, 'wb') as fh:
+            fh.write('family\tI12\tmarz\xe9\n'.encode('latin-1'))
+        folder = os.path.join(self.td.name, 'folder')
+        os.mkdir(folder)
+        for told, extra in ((self.told, ()), (folder, ()), (os.path.join(self.td.name, 'none', 'x.tsv'), ('--mark',))):
+            code, _, err = run('digest', '--from', OLD, '--to', NEW, '--told', told, '--audience', 'family', *extra)
+            self.assertEqual(code, 2, told)
+            self.assertIn('told file', err)
+
     def test_told_needs_audience(self):
         with redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit) as cm:

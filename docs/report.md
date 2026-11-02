@@ -129,7 +129,7 @@ $ gwt report digest --from report/fixtures/digest-old.json --to report/fixtures/
 
 ### What was already told
 
-`--told FILE` is a tab-separated file of `audience`, `object id` (the Gramps id) and `date`, with an optional header row. With `--audience NAME`, every object that audience was told is left out; rows of other audiences do not count. A missing file means nobody was told anything yet. `--mark` appends one row per item the digest shows, with today's date, so the next digest for that audience starts after it. A row with fewer than two cells exits `2`. `--told` needs `--audience`, and `--audience` and `--mark` need `--told`.
+`--told FILE` is a tab-separated file of `audience`, `object id` (the Gramps id) and `date`, with an optional header row. With `--audience NAME`, every object that audience was told is left out; rows of other audiences do not count. A missing file means nobody was told anything yet. `--mark` appends one row per item the digest shows, with today's date, so the next digest for that audience starts after it. A row with fewer than two cells, a told file that is not UTF-8 or cannot be read, and a `--mark` target that cannot be written exit `2`. A file edited by hand without a last newline is fine: `--mark` starts its rows on a new line. `--told` needs `--audience`, and `--audience` and `--mark` need `--told`.
 
 ```text
 audience	object	date
