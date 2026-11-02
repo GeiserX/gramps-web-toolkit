@@ -88,3 +88,26 @@ def test_expect_takes_present_or_absent_on_the_ops_that_have_it():
     assert validate([dict(DETACH, expect="present")]) == []
     assert validate([dict(DETACH, expect="gone")])
     assert validate([dict(DETACH, expect=True)])
+
+
+PAIR = [{"op": "detach", "key": "d", "ruling": R, "target": {"person": "I0001"}, "object": {"note": "N0001"}},
+        {"op": "delete", "key": "x", "ruling": R, "object": {"note": "N0001"}, "expect_unreferenced": True}]
+
+
+def test_rerun_of_a_landed_detach_then_delete_skips_with_expect_absent(fake):
+    assert [r.status for r in run(fake, PAIR)] == ["done", "done"] and "n1" not in fake.store["notes"]
+    again = run(fake, [dict(op, expect="absent") for op in PAIR])
+    assert [r.status for r in again] == ["skip", "skip"], [r.actions for r in again]
+    assert run(fake, PAIR)[0].status == "conflict"  # without expect and without an earlier log, still a conflict
+
+
+def test_a_removal_an_earlier_apply_logged_as_done_is_a_skip(fake):
+    run(fake, PAIR)
+    c = Client("https://gw.example", "u", "pw", tree="tree-test", dry_run=True, session=fake)
+    c.login()
+    res = Applier(c, retries=3, retry_wait=0, landed=frozenset({"d", "x"})).run(PAIR)
+    assert [r.status for r in res] == ["skip", "skip"], [r.actions for r in res]
+    assert "an earlier --apply of this list removed it" in res[1].actions[-1]
+    c.login()
+    res = Applier(c, retries=3, retry_wait=0, landed=frozenset({"d"})).run(PAIR)  # only the keys it logged
+    assert [r.status for r in res] == ["skip", "conflict"], [r.actions for r in res]

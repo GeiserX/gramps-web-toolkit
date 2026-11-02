@@ -144,4 +144,7 @@ gwt_apply/ops.py | if op.get("expect_unreferenced") is not True: | if False: | d
 gwt_apply/ops.py | if ("source" in f) != isinstance(op.get("expect_source"), str): | if False: | validate refuses a citation move without expect_source
 gwt_apply/ops.py | op["set"][PRIVATE], bool): | op["set"][PRIVATE], object): | validate refuses a private that is not true or false
 gwt_apply/ops.py | and r[0] < r[2] and r[1] < r[3]): | ): | validate refuses an empty region
-gwt_apply/ops.py | if self.verify and (ocls, oref) in self._list_deletes and self._find(ocls, oref) is None: | if self.verify and self._find(ocls, oref) is None: | --verify of a detach whose note is gone passes only when a delete op of the list took it
+gwt_apply/ops.py | if (ocls, oref) in self._list_deletes and self._find(ocls, oref) is None: | if self._find(ocls, oref) is None: | a detach whose note is gone passes only when a delete op of the list took it
+gwt_apply/ops.py | if (ocls, oref) in self._list_deletes and self._find(ocls, oref) is None: | if self.verify and (ocls, oref) in self._list_deletes and self._find(ocls, oref) is None: | a rerun of a landed detach-then-delete with expect absent skips, not only under --verify
+gwt_apply/ops.py | elif op["key"] in self.landed: | elif False: | a removal an earlier apply of the same list logged as done is a skip on a rerun
+gwt_apply/cli.py | or lines[0].get("list_sha256") != sha | or False | only the logs of the same list (same sha256) count as an earlier run of it

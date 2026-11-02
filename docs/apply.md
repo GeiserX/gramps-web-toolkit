@@ -134,7 +134,13 @@ Every `update_*` op takes `private` (`true` or `false`) in `set`: the object's o
 - `expect: "present"`, the default: the thing must be there.
 - `expect: "absent"`: it may already be gone, and then the op is a skip (a no-op, see [Prove a list landed](#prove-a-list-landed)).
 
-`--verify` asks whether the list landed, and there nothing left to remove is what the op leaves, so it is a skip. That holds for a `detach` whose object is gone too, when a `delete` op of the same list takes it (detach a note, then delete it); without that `delete`, an object the tree does not have is still a conflict. A retry of an op whose earlier try wrote and lost its answer reads the change back as done. A plain rerun of a list whose removals already landed stops on the first of them: check it with `--verify`, or mark the removals `expect: "absent"`.
+Three cases tell a removal that already happened from a mistyped ID, and skip it:
+
+- `--verify` asks whether the list landed, and there nothing left to remove is what the op leaves.
+- A rerun after a crash: an earlier `--apply` of the same list (the same file, by its sha256) logged the op as `done`. `gwt-apply` reads those logs where it keeps its own (under `$XDG_STATE_HOME/gwt-apply/<tree>/`, or beside `--log PATH`), so the rerun skips the removals that landed and goes on with the rest. A list edited since is a new list: mark its removals `expect: "absent"` if they may have run.
+- A retry of an op whose earlier try wrote and lost its answer reads the change back as done.
+
+A `detach` whose object is gone, when a `delete` op of the same list takes it (detach a note, then delete it), follows the same rule; without that `delete`, an object the tree does not have is a conflict.
 
 `attach_existing` is the other way round. Without `expect`, a target that already has the link is a skip; with `expect: "absent"`, the list says the link is not there yet, so finding it is a conflict.
 
@@ -177,7 +183,7 @@ The dry-run prints one block per op:
 Each op ends with one status, and the last line of the run counts them:
 
 - `done`: the op wrote something.
-- `skip`: everything it would write was already in the tree, so nothing was sent. A rerun of a list that was fully applied is all `skip`.
+- `skip`: everything it would write was already in the tree, so nothing was sent. A rerun of a list that was fully applied is all `skip`, its removals too ([Removals and expect](#removals-and-expect)).
 - `conflict`: the tree disagrees with the op in a way only a person can settle.
 - `error`: the server refused, kept failing after `--retries` tries, or the op itself failed (the error names the exception). The run stops there.
 
@@ -344,10 +350,10 @@ The header line dates a dump by when its read began (`read_started`), or by when
 - **One birth and one death.** If the person already has a `Birth` (or `Death`) in role `Primary` with another date, `add_event` is a conflict. Correct the existing event with `update_event` instead of adding a second one. `move_event` of a `Primary` birth or death onto a person who already has one is a conflict whatever the dates: merge the two with `merge_event`.
 - **One apply per tree.** `--apply` takes a lock before its first write and holds it to the end: a private note with a fixed handle and Gramps ID `GWTLOCK`, inside the tree, so it works whichever machine the apply runs on. Creating it is the test: the server refuses a second object with the same handle. The note says which run, host and process hold it and until when; the holder moves that time 15 minutes ahead while it works and deletes the note when it stops, also on Ctrl-C, `SIGTERM` or `SIGHUP`. A second `--apply` on the tree stops before writing and names the holder. A lock whose holder died (power cut, `kill -9`) expires after 15 minutes and the next apply takes it over and says so; `--break-lock` takes it at once, for when you know the holder is dead. A holder that finds its lock gone stops. A dry run takes no lock, and says so when an apply holds the tree. While the lock is held, an export of the tree includes the lock note.
 - **Stop at the first conflict or error.** Later ops are not run, because they may depend on this one.
-- **Writes are narrow.** Only a merge deletes anything, and only the loser: through Gramps' own merge, or for `merge_repository` with a `DELETE` once no source lists it. Objects are created with `POST /api/objects/`. Changes to an existing object are a `GET` followed by a `PUT` of the same object with only the named field changed. Right before the `PUT` the object is read again; if it changed since the op read it, the op starts over, so a concurrent edit is not overwritten.
+- **Writes are narrow.** Three things delete: a merge, and only the loser (through Gramps' own merge, or for `merge_repository` with a `DELETE` once no source lists it); `delete`, and only an object nothing points at, with the whole object kept in the log for `--revert`; and `unlink_child`, only the link marks it took off with the link. Objects are created with `POST /api/objects/`. Changes to an existing object are a `GET` followed by a `PUT` of the same object with only the named field changed. Right before the `PUT` the object is read again; if it changed since the op read it, the op starts over, so a concurrent edit is not overwritten.
 - **Busy server.** On "database is locked", any 5xx, a request that timed out or lost its connection, or an object that changed since it was read, the op waits `--retry-wait` seconds and starts over from fresh reads. A create whose answer never came is looked up again before the op tries it a second time, so a timeout cannot make an object twice. A login answered 429 (the server rate-limits logins) waits and tries again; a login that times out, the run's first one included, is retried like a read. The whole-tree list reads before the first op retry the same way: the duplicate check, which lists every person, event and family, and on an `--apply --snapshot` the check of what changed since the snapshot. One slow list read does not end a run that has written nothing.
 - **A log of every call.** One JSONL line per API call with the op's `key` and `ruling`, the method, path, status, and the body of every write, between a `start` and an `end` line ([The log](#the-log)). The password and the token are never logged.
-- **Re-running is safe.** After a crash, run the same list again with `--apply`: what was written is skipped, and an object that was created but not yet linked gets linked. A rerun without `--apply` is only a dry run, and it exits `0` even when ops would write; `--verify` is what proves a list landed.
+- **Re-running is safe.** After a crash, run the same list again with `--apply`: what was written is skipped, a removal an earlier apply of it logged as done is skipped, and an object that was created but not yet linked gets linked. Rerun the same file: an edited list has another sha256, and its landed removals are conflicts unless they say `expect: "absent"`. A rerun without `--apply` is only a dry run, and it exits `0` even when ops would write; `--verify` is what proves a list landed.
 
 ## Speed
 
@@ -389,7 +395,7 @@ Ten rounds of LLM-driven applies on two trees, each followed by a verification p
 | Two ops cited one page with different confidence; the second was folded into the first, and a firm event kept only the weak citation | `gwt-apply`: [reuse only what is the same](#reuse-only-what-is-the-same); one page text per role |
 | A media object was linked to one citation when two needed it | Change list: one `attach` entry per target; the second op with the same file reuses the object by MD5 |
 | Birth and death pointers left at -1 or pointing at the wrong event | `gwt-apply` sets the pointer when it adds a `Primary` birth or death and none is set. A baptism without a birth leaves it at -1, by design |
-| A correction was interrupted halfway by a usage limit | `gwt-apply`: rerun the same list; done ops skip |
+| A correction was interrupted halfway by a usage limit | `gwt-apply`: rerun the same list, unedited; done ops skip, removals included |
 | The apply printed the password in its output | `gwt-apply`: the password and token never reach the output or the log |
 | New events had no place although their description names one | Change list: give `place`. Verification: count events without a place |
 | New places used by events had no coordinates | Change list: give `lat`/`long` on `add_place`, or geocode after the apply. Verification: count places used by events without coordinates. Containers that no event uses stay without coordinates, so the map shows one marker per event |

@@ -8,7 +8,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Change lists
 
-- `gwt-apply`: `detach`, `remove_tag` and `unlink_child` of something the target does not have are a conflict now, not a skip, so a mistyped ID no longer passes a dry run. Add `expect: "absent"` to an op that may find it already gone; `--verify` still reads it as landed. `attach_existing` is unchanged unless it says `expect: "absent"`.
+- `gwt-apply`: `detach`, `remove_tag` and `unlink_child` of something the target does not have are a conflict now, not a skip, so a mistyped ID no longer passes a dry run. Add `expect: "absent"` to an op that may find it already gone; `--verify` still reads it as landed. A rerun of the same list after a crash skips the removals an earlier `--apply` of it logged as done. `attach_existing` is unchanged unless it says `expect: "absent"`.
 
 ### Added
 

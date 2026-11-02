@@ -4216,3 +4216,28 @@ def test_private_new_from_the_command_line_with_a_run_tag(fake, scan, tmp_path, 
         assert fake.store[ns][stable_handle(k)]["private"] is True, (ns, k)
     assert "private" not in fake.store["tags"][stable_handle("tag:r1")]  # a Gramps tag has no private flag
     assert not fake.store["people"]["anna"].get("private")  # changed, not created: keeps its own value
+
+
+def test_cli_rerun_of_a_list_whose_removals_landed_is_all_skip(fake, tmp_path, monkeypatch, capsys):
+    """After a crash the same list runs again with --apply: the removals an earlier apply of it logged as done find
+    nothing and skip. A list that never ran (another sha256) with the same removal is a conflict: a mistyped ID."""
+    import gwt_apply.client as clientmod
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: fake)
+    for k, v in {"GWT_URL": "https://gw.example", "GWT_USERNAME": "u", "GWT_PASSWORD": "pw", "GWT_TREE": "tree-test"}.items():
+        monkeypatch.setenv(k, v)
+    fake.add("notes", {"handle": "n1", "type": "Research", "format": 0, "text": {"string": "on Anna", "tags": []}})
+    fake.store["people"]["anna"]["note_list"] = ["n1"]
+    ops = [{"op": "detach", "key": "d", "ruling": R, "target": {"person": "I0001"}, "object": {"note": "N0001"}},
+           {"op": "delete", "key": "x", "ruling": R, "object": {"note": "N0001"}, "expect_unreferenced": True},
+           {"op": "add_note", "key": "n", "ruling": R, "text": "after the cleanup", "attach": [{"person": "I0001"}]}]
+    p = tmp_path / "changes.jsonl"
+    p.write_text("".join(json.dumps(o) + "\n" for o in ops[:2]))
+    assert main([str(p), "--apply"]) == 0 and "n1" not in fake.store["notes"]
+    p.write_text("".join(json.dumps(o) + "\n" for o in ops[:2]))  # the same list, byte for byte
+    capsys.readouterr()
+    assert main([str(p)]) == 0 and main([str(p), "--apply"]) == 0
+    assert "[conflict]" not in capsys.readouterr().out
+    other = tmp_path / "other.jsonl"
+    other.write_text("".join(json.dumps(o) + "\n" for o in ops))
+    assert main([str(other)]) == 1
+    assert "[conflict] d (detach" in capsys.readouterr().out

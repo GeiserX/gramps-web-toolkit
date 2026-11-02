@@ -674,8 +674,10 @@ class Result:
 
 class Applier:
     def __init__(self, client: Client, *, retries: int = 5, retry_wait: float = 30.0, lock=None, tag: str | None = None,
-                 verify: bool = False, private_new: bool = False):
+                 verify: bool = False, private_new: bool = False, landed: frozenset = frozenset()):
         self.c = client
+        # op keys an earlier --apply of this same list logged as done: a removal of theirs that finds nothing has landed
+        self.landed = landed
         self.verify = verify  # a Gramps ID that was merged away resolves to its winner through the merge note
         self._merges: dict[str, list[tuple[str, str]]] | None = None  # class -> (merge note text, note handle)
         self.reasons: list[str] = []
@@ -767,11 +769,14 @@ class Applier:
         """A removal (detach, remove_tag, unlink_child, delete, remove_alternate_name) that finds nothing to remove.
         A conflict unless the list says it may already be gone (expect: absent): a mistyped ID must never pass as a
         skip. --verify asks whether the list landed, and there nothing left to remove is what it left; so is the
-        retry of an op whose earlier try wrote and lost its answer."""
+        retry of an op whose earlier try wrote and lost its answer, and the rerun of an op an earlier --apply of the
+        same list logged as done."""
         if self._lost:
             self.actions.append(f"{what}: already gone")
         elif self.verify:
             self.actions.append(f"skip: {what}, as this op leaves it")
+        elif op["key"] in self.landed:
+            self.actions.append(f"skip: {what}: an earlier --apply of this list removed it")
         elif op.get("expect") == "absent":
             self.skip_noop(f"skip: {what} (expect: absent)")
         else:
@@ -1600,7 +1605,7 @@ class Applier:
         """Take a note, citation or media reference off a target. The object stays in the tree (an orphan
         that gwt-check lists), so nothing is lost and attach_existing can put it back."""
         ocls, oref, lst = _parse_object(op["object"])
-        if self.verify and (ocls, oref) in self._list_deletes and self._find(ocls, oref) is None:
+        if (ocls, oref) in self._list_deletes and self._find(ocls, oref) is None:
             # detach, then delete: once the list has landed, the object is gone, so there is nothing to detach
             self._absent(op, f"{ocls} {oref} is gone (a delete op of this list takes it)")
             return
