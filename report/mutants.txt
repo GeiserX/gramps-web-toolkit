@@ -1,0 +1,37 @@
+gwt_report.py | degree, removed = min(g1, g2) - 1, abs(g1 - g2) | degree, removed = min(g1, g2), abs(g1 - g2) | the English cousin degree is one less than the generations up from the nearer person: second cousins share great-grandparents
+gwt_report.py | degree, removed = min(g1, g2) - 1, abs(g1 - g2) | degree, removed = min(g1, g2) - 1, g1 - g2 | removed counts the generation gap either way round: B above A is as removed as B below A
+gwt_report.py | n, d = min(g1, g2), abs(g1 - g2) | n, d = min(g1, g2) - 1, abs(g1 - g2) | the Spanish ordinal counts from siblings: the child of a primo hermano is a sobrino segundo
+gwt_report.py | deg, gap = min(g1, g2) - 1, abs(g1 - g2) | deg, gap = min(g1, g2), abs(g1 - g2) | the French cousin degree: children of siblings are cousins germains
+gwt_report.py | n = 2 * n + (step[2] == 'mother') | n = 2 * n + (step[2] == 'father') | Ahnentafel numbers: a father is 2n, a mother 2n+1
+gwt_report.py | if not on_a.isdisjoint(s[0] for s in path_b): | if False: | two lines that meet below the common ancestor are the nearer ancestor's relationship, never one more per ancestor above it
+gwt_report.py | (fam_a != fam_b or len(members) == 1 and all( | (len(members) == 1 and all( | two lines that reach the shared ancestor through different families are half kin
+gwt_report.py | len(members) == 1 and all( | len(members) == 1 or all( | one shared parent of a family that records only one parent is not called half
+gwt_report.py | LINEAGE = ('', 'Birth', 'Unknown', 'Adopted') | LINEAGE = ('', 'Birth', 'Unknown', 'Adopted', 'Stepchild') | a stepchild link is never a blood path
+gwt_report.py | text_of(s[4].get('frel' if s[2] == 'father' else 'mrel')) == 'Adopted' | False | a path through an adoption says so
+gwt_report.py |         return 'weak' |         return 'unmarked' | a link whose child or family carries a weak tag counts as weak
+gwt_report.py | if any(m.startswith(PROBABLE) for m in marks): | if False: | a link with a [probable] note counts as probable
+gwt_report.py | or 0) >= 3 for c in | or 0) >= 5 for c in | a link cited at confidence 3 or 4 counts as confirmed
+gwt_report.py | len({at.get(n // 2) for n in ns}) < 2 | False | implex lists the lowest repeated couple, not every ancestor above it again
+gwt_report.py | if parent in seen: | if False: | a person recorded as their own ancestor never multiplies the paths
+gwt_report.py | if h in old[t] or (o.get('private') and not include_private): | if h in old[t]: | private people and objects stay out of a digest unless asked for
+gwt_report.py | if h in old[t] or (o.get('private') | if False or (o.get('private') | a digest lists only what the old snapshot lacks
+gwt_report.py |             if gid in told: |             if False: | the told filter: what this audience was already told is left out
+gwt_report.py | if cells[0] == audience: | if True: | only the rows of the chosen audience count as told
+gwt_report.py | g.update(side=side, distance=sum(r['generations']), | g.update(side=side, distance=0, | people are ordered by kin distance to the root, nearest first
+gwt_report.py |                     if p and new['people'][p].get('private') and not include_private: |                     if False: | a new event or citation of a private person does not show that person
+gwt_report.py | cur, path, seen = todo.popleft() | cur, path, seen = todo.pop() | the ancestor walk goes one generation at a time, so the path cap drops the most distant paths, never a whole side
+gwt_report.py |     if cut: |     if False: | a digest says when kin paths were cut, so a person filed as not blood kin may still be kin
+gwt_report.py | head = '' if fh.read(1) == b'\n' else '\n' | head = '' | a told file edited by hand without a last newline gets one before the new rows, so no id is lost
+gwt_report.py | 'weak', 'debil', 'faible') | 'weak') | a tag named with the Spanish or French word for weak marks a weak link by default
+gwt_report.py | if old['_tree'] and new['_tree'] and old['_tree'] != new['_tree']: | if False: | a digest of two different trees is refused, never thousands of lines of noise
+gwt_report.py | (a.tzinfo is None) == (b.tzinfo is None) and a > b: | False: | an OLD snapshot taken after NEW gets a warning that they may be swapped
+gwt_report.py | esc = lambda s: html.escape(s, quote=False) | esc = lambda s: s | a name or a source title with < or & never breaks the html text
+gwt_report.py | title, side_head, person_head = '<b>%s</b>', '\n<b><u>%s</u></b>', '\n<b>%s</b>%s\n' | title, side_head, person_head = '<h1>%s</h1>', '\n<h2>%s</h2>', '\n<h3>%s</h3>%s\n' | the html output keeps to the inline tags chat apps take; block tags are rejected there
+gwt_report.py | (t == 'citations' and (o.get('confidence') or 0) <= 1) | (t == 'citations' and (o.get('confidence') or 0) < 1) | a citation of confidence 0 or 1 is labelled weak
+gwt_report.py | 'both sides' if {'father', 'mother'} <= roles | 'both sides' if False | kin reached through the root's father and mother are on both sides
+gwt_report.py |             add(r.get('ref'), spouses) |             add(r.get('ref'), spouses[:1]) | a family event belongs to both spouses
+gwt_report.py | add(h, [c.get('ref')]) | add(h, spouses) | a citation on a parent link belongs to the child, not the parents
+gwt_report.py | u = u.rstrip('.,;') | u = u | a web address at the end of a sentence loses the full stop
+gwt_report.py | return d.get('year') or ( | return ( | an event date with only a year still shows the year
+gwt_report.py | if len(path) >= max_gen: | if len(path) > max_gen: | kin and implex look 30 generations up, no further
+gwt_report.py | if old['_tree'] and new['_tree'] and old['_tree'] != new['_tree']: | if old['_tree'] != new['_tree']: | a dump that names no tree is still compared, never refused as another tree
