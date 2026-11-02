@@ -24,10 +24,6 @@ particles = ["van", "de", "der", "den", "ten", "ter", "het", "t", "in"]
 [dates]
 filler = ["den", "de", "op", "in", "jaar", "des"]
 
-[gender]
-male = ["man", "mannelijk"]
-female = ["vrouw", "vrouwelijk"]
-
 [roles]
 godparent = ["peter", "meter", "doopgetuige", "doopgetuigen"]
 witness = ["getuige", "getuigen"]

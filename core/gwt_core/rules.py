@@ -26,7 +26,7 @@ PARENT_AGE = 14      # nobody has a child or marries younger than this
 PARENT_MAX_AGE = 60  # nobody is born to a parent older than this
 
 LOCALES = ("es", "en", "fr", "it", "pt", "de", "nl", "ca", "eu", "gl", "la")
-SECTIONS = ("code", "name", "fold", "months", "dates", "gender", "roles", "events", "dedication")
+SECTIONS = ("code", "name", "fold", "months", "dates", "roles", "events", "dedication")
 
 _WORD = re.compile(r"[^\W_]+")
 

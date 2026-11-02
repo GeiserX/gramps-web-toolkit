@@ -24,10 +24,6 @@ particles = []
 [dates]
 filler = ["ko", "aren", "an", "urtea", "urteko", "eguna"]
 
-[gender]
-male = ["gizona", "gizonezkoa"]
-female = ["emakumea", "emakumezkoa"]
-
 [roles]
 godparent = ["aitabitxi", "amabitxi", "aitabitxiak"]
 witness = ["lekuko", "lekukoa", "lekukoak"]

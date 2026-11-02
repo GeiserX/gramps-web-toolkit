@@ -24,10 +24,6 @@ particles = []
 [dates]
 filler = ["die", "dies", "mensis", "anno", "domini", "a"]
 
-[gender]
-male = ["vir", "masculus", "masculinus"]
-female = ["mulier", "femina", "femininus"]
-
 [roles]
 godparent = ["patrinus", "matrina", "patrini", "susceptor", "susceptrix", "levans"]
 witness = ["testis", "testes", "testibus"]

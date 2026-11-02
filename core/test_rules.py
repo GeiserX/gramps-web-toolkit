@@ -323,7 +323,7 @@ class Locales(unittest.TestCase):
     def test_values_are_word_lists(self):
         for code in rules.LOCALES:
             tab = self.raw(code)
-            for sec in ("months", "gender", "roles", "events"):
+            for sec in ("months", "roles", "events"):
                 for key, words in tab[sec].items():
                     self.assertTrue(words and all(isinstance(w, str) and w.strip() for w in words), (code, sec, key))
             for sec, key in (("fold", "pairs"), ("dedication", "pairs")):

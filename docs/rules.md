@@ -65,7 +65,6 @@ With a locale, the date may also be written out: `12 de marzo de 1890` (es), `Ma
 | `fold` | `pairs` (spelling swaps) and `particles` (words dropped from names) |
 | `months` | `"1"` to `"12"`, each with the names and abbreviations a record uses |
 | `dates` | `filler`, the words a written date has around its numbers (`de`, `le`, `anno`) |
-| `gender` | `male`, `female` |
 | `roles` | the words for `godparent`, `witness`, `father`, `mother`, `child`, `spouse`, `priest` |
 | `events` | the words for `birth`, `baptism`, `marriage`, `death`, `burial` |
 | `dedication` | `pairs` of a church-name abbreviation and its full words (`N.ª S.ª` and `Nuestra Señora`, `St.` and `Saint`) |

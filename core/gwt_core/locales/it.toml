@@ -23,10 +23,6 @@ particles = ["di", "de", "da", "del", "della", "dei", "degli", "delle", "lo", "l
 [dates]
 filler = ["il", "di", "del", "giorno", "anno", "addi", "li"]
 
-[gender]
-male = ["uomo", "maschio", "maschile"]
-female = ["donna", "femmina", "femminile"]
-
 [roles]
 godparent = ["padrino", "madrina", "compare", "comare"]
 witness = ["testimone", "testimoni"]

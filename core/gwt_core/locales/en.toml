@@ -23,10 +23,6 @@ particles = []
 [dates]
 filler = ["the", "of", "day", "in", "year"]
 
-[gender]
-male = ["male", "man"]
-female = ["female", "woman"]
-
 [roles]
 godparent = ["godfather", "godmother", "godparent", "godparents", "sponsor", "sponsors"]
 witness = ["witness", "witnesses"]
