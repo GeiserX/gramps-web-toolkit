@@ -27,7 +27,7 @@ TSV per country; `gwt-leads archives probe [--country CC]` checks its addresses 
 only.
 """
 import argparse, collections, csv, datetime, gzip, json, os, re, string, sys, time, unicodedata, urllib.parse
-import urllib.error, urllib.request, urllib.robotparser
+import http.client, urllib.error, urllib.request, urllib.robotparser
 
 KINDS = ('branch-end', 'missing-vital', 'uncited', 'unsupported-link')
 DEFAULT_KINDS = ('branch-end', 'missing-vital', 'uncited')  # unsupported-link needs --links, so it is asked for
@@ -793,7 +793,7 @@ def http_fetch(method, url, timeout=30):
             return r.status, r.read(200000).decode('utf-8', 'replace') if method == 'GET' else ''
     except urllib.error.HTTPError as exc:
         return exc.code, ''
-    except (urllib.error.URLError, OSError, ValueError) as exc:
+    except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as exc:
         return None, str(getattr(exc, 'reason', exc))
 
 
@@ -825,17 +825,18 @@ def probe(directory, codes, fetch=http_fetch, sleep=time.sleep, delay=2.0, today
             if host not in robots:
                 sleep(delay)
                 status, text = fetch('GET', host + '/robots.txt')
-                rp = urllib.robotparser.RobotFileParser()
+                rp, why = urllib.robotparser.RobotFileParser(), '-'  # '-': robots.txt itself says no
                 if status is not None and 200 <= status < 300:
                     rp.parse(text.splitlines())
                 elif status is not None and 400 <= status < 500:
                     rp.allow_all = True
                 else:
                     rp.disallow_all = True
-                robots[host] = rp
-            if not robots[host].can_fetch(PROBE_AGENT, url):
+                    why = 'robots.txt %s' % (status if status is not None else text[:80])
+                robots[host] = rp, why
+            if not robots[host][0].can_fetch(PROBE_AGENT, url):
                 failed += 1
-                print('robots\t-\t%s\t%s\t%s' % (code, row['archive'], url), file=out)
+                print('robots\t%s\t%s\t%s\t%s' % (robots[host][1], code, row['archive'], url), file=out)
                 continue
             sleep(delay)
             status, reason = fetch('HEAD', url)

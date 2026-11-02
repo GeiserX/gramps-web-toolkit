@@ -63,7 +63,7 @@ gwt_leads.py | if not asked or unknown: | if unknown: | --archives builtin: with
 gwt_leads.py | builtin = (args.archives or '').startswith(BUILTIN) | builtin = False | --archives builtin:CC reads the shipped catalogue, never a file of that name
 gwt_leads.py | ok = status is not None and 200 <= status < 400 | ok = status is not None | the probe dates only a url that answered 2xx or 3xx
 gwt_leads.py | if status in (405, 501): | if False: | the probe retries with GET when a server refuses HEAD
-gwt_leads.py | if not robots[host].can_fetch(PROBE_AGENT, url): | if False: | the probe never requests a path robots.txt forbids
+gwt_leads.py | if not robots[host][0].can_fetch(PROBE_AGENT, url): | if False: | the probe never requests a path robots.txt forbids
 gwt_leads.py | rp.disallow_all = True | rp.allow_all = True | a robots.txt that errors or does not answer forbids the whole host
 gwt_leads.py | if host not in robots: | if True: | the probe fetches robots.txt once per host
 gwt_leads.py | read_catalogue(path)  # a bad file stops here, before any request | pass | a bad catalogue file stops the probe before any request
@@ -73,3 +73,5 @@ gwt_leads.py | if follow else (_NoRedirect,) | if True else (_NoRedirect,) | the
 gwt_leads.py | if row.get('home') is not None and named & row['countries'] and not named & row['home']: | if False: | a region row of one country never fits a same-name place in another country (Barcelona, Venezuela)
 gwt_leads.py | key=lambda r: CATALOGUE_ACCESS.index(r['access'])): | key=lambda r: 0): | rows of one level go by access, so an online source comes before one reached in person
 gwt_leads.py | if not world:  # Yad Vashem's years say nothing about an 1890 death | if True: | a world row whose years miss the event is no hint and is never listed outside
+gwt_leads.py | OSError, ValueError, http.client.HTTPException) as exc: | OSError, ValueError) as exc: | a server that answers a broken status line is a failed url, not a probe crash
+gwt_leads.py | why = 'robots.txt %s' % (status if status is not None else text[:80]) | pass | a robots.txt that errors prints its status, so it never reads as a real Disallow

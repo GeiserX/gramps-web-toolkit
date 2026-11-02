@@ -1072,8 +1072,11 @@ class CatalogueTest(unittest.TestCase):
         self.assertIn('robots', out)
         failed, tested, _, _, _ = self.probe({url: (200, '')}, self.row(url=url), robots=(404, ''))
         self.assertEqual((failed, tested), (0, ['2026-11-02']))  # no robots.txt: everything allowed
-        failed, _, calls, _, _ = self.probe({url: (200, '')}, self.row(url=url), robots=(503, ''))
+        failed, _, calls, _, out = self.probe({url: (200, '')}, self.row(url=url), robots=(503, ''))
         self.assertEqual((failed, len(calls)), (1, 1))  # a robots.txt that errors forbids everything
+        self.assertIn('robots\trobots.txt 503\t', out)  # and says so, unlike a real Disallow
+        _, _, _, _, out = self.probe({}, self.row(url=url), robots=(None, 'timed out'))
+        self.assertIn('robots\trobots.txt timed out\t', out)
 
     def test_probe_changes_nothing_but_the_tested_cell(self):
         d = self.catalogue(self.row(url='https://c.example/', archive='Kept "as" is'))
@@ -1116,6 +1119,29 @@ class CatalogueTest(unittest.TestCase):
         base = 'http://127.0.0.1:%d' % server.server_port
         self.assertEqual(L.http_fetch('GET', base + '/robots.txt', timeout=5), (200, 'User-agent: *\nDisallow: /search\n'))
         self.assertEqual(L.http_fetch('GET', base + '/page', timeout=5), (302, ''))  # the checked url: a 3xx is the answer
+
+    def test_http_fetch_survives_a_broken_status_line(self):
+        import socket, threading
+        sock = socket.socket()
+        sock.bind(('127.0.0.1', 0))
+        sock.listen(2)
+        self.addCleanup(sock.close)
+
+        def serve():
+            for _ in range(2):
+                try:
+                    conn, _ = sock.accept()
+                except OSError:
+                    return
+                conn.recv(4096)
+                conn.sendall(b'HELLO THERE\r\n\r\n')
+                conn.close()
+        threading.Thread(target=serve, daemon=True).start()
+        base = 'http://127.0.0.1:%d' % sock.getsockname()[1]
+        for method in ('HEAD', 'GET'):
+            status, reason = L.http_fetch(method, base + '/page', timeout=5)
+            self.assertEqual(status, None)
+            self.assertIn('HELLO THERE', reason)
 
     def test_probe_command_refuses_a_short_delay_and_an_unknown_country(self):
         d = self.catalogue(self.row())
