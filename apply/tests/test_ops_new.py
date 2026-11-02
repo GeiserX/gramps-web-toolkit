@@ -334,7 +334,7 @@ def test_delete_refuses_an_object_something_points_at(fake):
     fake.store["people"]["anna"]["note_list"] = ["held"]
     op = {"op": "delete", "key": "d", "ruling": R, "object": {"note": "N0001"}, "expect_unreferenced": True}
     res = run(fake, [op])[0]
-    assert res.status == "conflict" and "still referenced by person anna" in res.actions[-1], res.actions
+    assert res.status == "conflict" and "still referenced by person I0001; detach it first" in res.actions[-1], res.actions
     assert "held" in fake.store["notes"] and fake.writes() == []
     # a detach earlier in the same list frees it, in the dry run as in the apply
     ops = [{"op": "detach", "key": "x", "ruling": R, "target": {"person": "I0001"}, "object": {"note": "N0001"}}, op]
@@ -344,6 +344,28 @@ def test_delete_refuses_an_object_something_points_at(fake):
     assert [r.status for r in run(fake, ops, verify=True)] == ["skip", "skip"]
     # without the delete in the list, a note that is not there is still a conflict
     assert run(fake, ops[:1], verify=True)[0].status == "conflict"
+
+
+def _offline(fake):
+    c = Client("https://gw.example", "", "", dry_run=True)
+    c.use_snapshot({"tree": "tree-test", "objects": {cls: list(fake.store[ns].values()) for cls, ns in NAMESPACE.items()
+                                                     if cls != "Tag"}}, offline=True)
+    return c
+
+
+def test_delete_on_a_snapshot_tells_a_handle_from_one_that_starts_with_it(fake):
+    """Offline, what points at an object is read from the snapshot: a note whose own handle begins with the media
+    handle does not hold the media. The conflict names the holder by Gramps ID and the op that frees it."""
+    fake.add("media", {"handle": "m1", "path": "a.jpg", "checksum": "0" * 32, "mime": "image/jpeg"})  # O0001
+    _note(fake, "m1-n", "a note whose handle starts with the media's")
+    op = {"op": "delete", "key": "d", "ruling": R, "object": {"media": "O0001"}, "expect_unreferenced": True}
+    res = Applier(_offline(fake), retries=1, retry_wait=0).run([op])[0]
+    assert res.status == "done", res.actions
+    fake.add("repositories", {"handle": "repo1", "name": "Springfield archive", "type": "Archive"})  # R0001
+    fake.store["sources"]["src1"]["reporef_list"] = [{"ref": "repo1", "call_number": "", "media_type": "Book"}]
+    op = {"op": "delete", "key": "r", "ruling": R, "object": {"repository": "R0001"}, "expect_unreferenced": True}
+    res = Applier(_offline(fake), retries=1, retry_wait=0).run([op])[0]
+    assert res.status == "conflict" and "by source S0001; unlink_repository it first" in res.actions[-1], res.actions
 
 
 def test_revert_makes_a_deleted_object_again_from_the_log_alone(fake, tmp_path):

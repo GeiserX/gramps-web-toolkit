@@ -114,6 +114,13 @@ EXPECT = ("present", "absent")  # what detach, remove_tag, unlink_child, attach_
 # a scan or a photo is a document; these are not, and add_media refuses them unless `force` says it is meant
 NOT_A_DOCUMENT = ("text/", "application/json", "message/rfc822", "application/xhtml")
 DELETABLE = {**TARGET_KINDS, "note": "Note"}  # delete's object kinds
+# what takes a reference to each kind off before a delete: the op that delete's conflict names
+UNREFERENCE = {"Note": "detach it first", "Citation": "detach it first", "Media": "detach it first",
+               "Repository": "unlink_repository it first", "Source": "merge_source, or update_citation the citations to "
+               "another source first", "Place": "merge_place, or update_event and update_place them first",
+               "Event": "merge_event or move_event first", "Person": "unlink_child, merge_person or merge_family first",
+               "Family": "unlink_child or merge_family first"}
+_QUOTED = re.compile(r'"((?:[^"\\]|\\.)*)"')  # every string in a JSON text
 FAMILYSEARCH = "_FSFTID"  # the attribute Gramps 6.1 and Gramps Web keep a FamilySearch tree id in
 CHILD_REF_FIELDS = {"frel", "mrel"}
 CONFIRMED = "[confirmed]"  # what a [probable] mark becomes once a document settles the link
@@ -700,6 +707,7 @@ class Applier:
         self._unlink_notes: dict[str, list[str]] = {}  # op key -> link marks unlink_child still has to delete
         self._lost = False
         self._list_deletes: set[tuple[str, str]] = set()  # (class, ref) of every object a delete op of the list takes
+        self._refs: dict[str, list[tuple[str, str]]] | None = None  # offline: handle -> the snapshot objects naming it
         client.touch = self._touch
 
     # -- references -------------------------------------------------------
@@ -1443,10 +1451,18 @@ class Applier:
         if not self.c.offline:
             links = (self.c.get_live(cls, handle, backlinks=True) or {}).get("backlinks") or {}
             return {(k, h) for k, hs in links.items() for h in hs or []}
-        objs = {(c, h): o for c, rows in (self.c.snapshot or {}).items() for h, o in rows.items()}
-        objs.update(self.c.pending)
-        return {(c.lower(), h) for (c, h), o in objs.items()
-                if h != handle and (c, h) not in self.c.deleted and handle in json.dumps(o)}
+        if self._refs is None:  # once per run: a handle, not a substring of one, and no scan of the tree per call
+            snap = self.c.snapshot or {}
+            known = {h for rows in snap.values() for h in rows}
+            self._refs = {}
+            for c, rows in snap.items():
+                for h, o in rows.items():
+                    for s in set(_QUOTED.findall(json.dumps(o))) & known:
+                        self._refs.setdefault(s, []).append((c, h))
+        quoted = json.dumps(handle)
+        found = {k for k in self._refs.get(handle, []) if k not in self.c.pending}
+        found |= {k for k, o in self.c.pending.items() if quoted in json.dumps(o)}
+        return {(c.lower(), h) for c, h in found if h != handle and (c, h) not in self.c.deleted}
 
     def _drop_mark(self, handle: str) -> None:
         """Delete a link mark unlink_child took off its link, unless something has taken it up since."""
@@ -2394,7 +2410,7 @@ class Applier:
             key = next(((k, h) for k in NAMESPACE_CLASSES if k.lower() == c), (c, h))
             if h == handle or key in self.c.deleted:
                 continue
-            if key in self.c.pending and handle not in json.dumps(self.c.pending[key]):
+            if key in self.c.pending and json.dumps(handle) not in json.dumps(self.c.pending[key]):
                 continue
             out.add((c, h))
         return out
@@ -2412,8 +2428,13 @@ class Applier:
         obj.setdefault("_class", cls)
         held = self._holders(cls, handle)
         if held:
-            shown = ", ".join(f"{c} {h}" for c, h in sorted(held)[:5]) + (f" and {len(held) - 5} more" if len(held) > 5 else "")
-            raise Conflict(f"{cls} {self.label(obj)} is still referenced by {shown}; detach it first, nothing was deleted")
+            names = []
+            for c, h in sorted(held)[:5]:
+                rcls = next((k for k in NAMESPACE_CLASSES if k.lower() == c), None)
+                names.append(f"{c} {((self.c.get(rcls, h) if rcls else None) or {}).get('gramps_id') or h}")
+            shown = ", ".join(names) + (f" and {len(held) - 5} more" if len(held) > 5 else "")
+            raise Conflict(f"{cls} {self.label(obj)} is still referenced by {shown}; {UNREFERENCE[cls]}, nothing was "
+                           "deleted")
         kept = {k: v for k, v in obj.items() if k not in ("_read", "_snap", "backlinks", "extended", "profile")}
         self.actions.append(f"delete {cls} {self.label(obj)}: {json.dumps(kept, ensure_ascii=False)}")
         self.reasons.append(f"missing: delete {cls} {self.label(obj)}")
