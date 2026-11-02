@@ -77,6 +77,21 @@ def _child_env(tree: str | None) -> dict:
     return env
 
 
+def _target(args) -> dict:
+    """The server and tree every step works on, as gwt-apply works them out (the environment over the --config
+    file, --tree over both). No secrets: a run.json names where it writes, never how it logs in."""
+    try:
+        from gwt_apply.cli import read_config
+    except ImportError:  # run from a clone: gwt-apply sits beside run/
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "apply"))
+        from gwt_apply.cli import read_config
+    try:
+        conf = read_config(args.config)
+    except OSError as exc:
+        raise Stop(EXIT["input"], f"--config: {exc}")
+    return {"url": conf.get("GWT_URL"), "tree": args.tree or conf.get("GWT_TREE")}
+
+
 def _last_call(logs: list[Path]) -> str:
     """The last API call in the newest of `logs`, as `METHOD path`."""
     for log in sorted(logs, key=lambda p: p.stat().st_mtime, reverse=True):
@@ -153,7 +168,9 @@ class Run:
         self.dir = Path(args.dir or f"{args.change_list}.run").resolve()
         self.state_path = self.dir / "run.json"
         self.pre = self.dir / "pre.json.gz"
+        self.prev = self.dir / "pre.prev.json.gz"  # the backup of a run that wrote nothing, for a cheap new one
         self.env = _child_env(args.tree)
+        self.target = _target(args)
         self.state: dict = {}
 
     # -- run.json --------------------------------------------------------
@@ -165,15 +182,48 @@ class Run:
 
     def load(self) -> None:
         sha = _sha256(self.list)
-        if self.state_path.exists():
-            self.state = json.loads(self.state_path.read_text(encoding="utf-8"))
-            if self.state.get("list_sha256") != sha:
-                raise Stop(EXIT["input"], f"{self.list} changed since this run began in {self.dir}; "
-                                          "a changed list is a new run: give it a new --dir")
-        else:
-            self.state = {"format": FORMAT, "list": str(self.list), "list_sha256": sha, "tree": self.args.tree,
+        if not self.state_path.exists():
+            if not self.target["tree"]:
+                raise Stop(EXIT["input"], "no tree: give --tree, or GWT_TREE in --config or the environment")
+            self.state = {"format": FORMAT, "list": str(self.list), "list_sha256": sha, "target": self.target,
                           "started": _now(), "steps": {s: {"status": "todo"} for s in STEPS}}
+            self.save()
+            return
+        try:
+            self.state = json.loads(self.state_path.read_text(encoding="utf-8"))
+            steps = self.state["steps"]
+            written = steps["apply"]["status"] not in ("todo", "refused")
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise Stop(EXIT["input"], f"{self.state_path} does not read ({exc}); give the run a new --dir")
+        if self.state.get("target") != self.target:
+            raise Stop(EXIT["input"], f"{self.dir} is a run on {self.state.get('target')}; this command points at "
+                                      f"{self.target}: give it a new --dir")
+        if self.state.get("list_sha256") != sha and written:
+            raise Stop(EXIT["input"], f"{self.list} changed since this run wrote to the tree in {self.dir}; "
+                                      "a changed list is a new run: give it a new --dir")
+        if not written and (self.state.get("list_sha256") != sha or self.state.get("status") == "stopped"):
+            self.start_over(sha)
+        elif steps["backup"]["status"] == "ok" and self._md5() != steps["backup"].get("md5"):
+            raise Stop(EXIT["input"], f"backup: {self.pre} changed or went away since it was taken; the gate and "
+                                      "--revert need the tree as it was before the run")
         self.save()
+
+    def _md5(self) -> str | None:
+        return hashlib.md5(self.pre.read_bytes()).hexdigest() if self.pre.exists() else None
+
+    def start_over(self, sha: str) -> None:
+        """Nothing was written yet: the list or the tree may have been fixed since the stop, so every step runs
+        again. The old backup, when it is intact, is the base of a new one that reads only what changed since."""
+        if self.step("backup")["status"] == "ok" and self._md5() == self.step("backup").get("md5"):
+            os.replace(self.pre, self.prev)
+        else:
+            self.pre.unlink(missing_ok=True)
+        for k in ("status", "exit", "why", "ended"):
+            self.state.pop(k, None)
+        self.state.update(list_sha256=sha, restarts=self.state.get("restarts", 0) + 1,
+                          steps={s: {"status": "todo"} for s in STEPS})
+        print("nothing was written yet: every step runs again"
+              + (", the backup from the last one" if self.prev.exists() else ""), flush=True)
 
     def step(self, name: str) -> dict:
         return self.state["steps"][name]
@@ -206,6 +256,8 @@ class Run:
         if self.pre.exists():
             self.pre.unlink()  # half a snapshot from a step that did not finish; a done step never comes here
         cmd = [sys.executable, "-m", "gwt_apply", "--save-snapshot", str(self.pre)]
+        if self.prev.exists():  # reads only what changed since the last backup of this run
+            cmd += ["--since", str(self.prev)]
         if self.args.config:
             cmd += ["--config", self.args.config]
         code, why, last = self.watch("backup", cmd)
@@ -213,15 +265,16 @@ class Run:
             raise self.stalled("backup", why, last)
         if code != 0:
             self.mark("backup", "failed", exit=code)
-            raise Stop(EXIT["failed"], f"backup: gwt-apply --save-snapshot exited {code}; see {self.dir / 'backup.out'}")
+            raise Stop(EXIT["input"] if code == 2 else EXIT["failed"],
+                       f"backup: gwt-apply --save-snapshot exited {code}; see {self.dir / 'backup.out'}")
         try:  # read it back whole: a snapshot that does not decompress or parse is no backup
             with gzip.open(self.pre, "rt", encoding="utf-8") as fh:
                 snap = json.load(fh)
         except (OSError, EOFError, ValueError) as exc:
             self.mark("backup", "failed", error=str(exc))
             raise Stop(EXIT["failed"], f"backup: {self.pre} does not read back ({exc})")
-        md5 = hashlib.md5(self.pre.read_bytes()).hexdigest()
-        self.mark("backup", "ok", file=str(self.pre), md5=md5, tree=snap.get("tree"),
+        self.prev.unlink(missing_ok=True)
+        self.mark("backup", "ok", file=str(self.pre), md5=self._md5(), tree=snap.get("tree"),
                   objects={c: len(v) for c, v in (snap.get("objects") or {}).items()})
 
     def dry_run(self) -> None:
@@ -389,7 +442,11 @@ def main(argv: list[str] | None = None) -> int:
     if not Path(args.change_list).is_file():
         print(f"gwt-run: {args.change_list}: no such file", file=sys.stderr)
         return EXIT["input"]
-    run = Run(args)
+    try:
+        run = Run(args)
+    except Stop as stop:
+        print(f"gwt-run: {stop}", file=sys.stderr)
+        return stop.code
     run.dir.mkdir(parents=True, exist_ok=True)
     lock = _lock(run.dir / "run.lock")
     if lock is None:

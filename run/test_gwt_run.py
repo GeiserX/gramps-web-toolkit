@@ -227,13 +227,63 @@ def test_the_gate_stops_on_a_new_problem(tmp_path, server):
     assert any(f["check"] == "event-order" for f in report["new"])
 
 
-def test_a_list_changed_after_the_run_began_is_refused(tmp_path, server):
-    lst, conf = setup(tmp_path, server, [JOHN, NOBODY])
-    assert gwt_run_main(lst, conf) == 3
+def test_a_list_changed_after_the_apply_wrote_is_refused(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, BIRTH])
+    server.fake.busy = 1000
+    assert gwt_run_main(lst, conf, "--apply-tries", "1") == 4
     before = Path(f"{lst}.run/run.json").read_text()
     lst.write_text(json.dumps(JOHN) + "\n")
     assert gwt_run_main(lst, conf) == 2
     assert Path(f"{lst}.run/run.json").read_text() == before
+
+
+def test_a_list_fixed_before_any_write_runs_again_from_a_cheap_backup(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, NOBODY])
+    assert gwt_run_main(lst, conf) == 3
+    lst.write_text(json.dumps(JOHN) + "\n")  # the fix: drop the op on a person the tree does not have
+    assert gwt_run_main(lst, conf) == 0
+    st = state(lst)
+    assert st["restarts"] == 1 and st["steps"]["dry_run"]["status"] == "ok"
+    assert "change stamps" in Path(f"{lst}.run/backup.out").read_text()  # read only what changed
+    assert not Path(f"{lst}.run/pre.prev.json.gz").exists()
+
+
+def test_a_tree_fixed_after_a_refused_dry_run_is_read_again(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, NOBODY])
+    assert gwt_run_main(lst, conf) == 3
+    server.fake.add("people", {"handle": "nobody", "gramps_id": "I0099", "gender": 0,
+                               "primary_name": {"first_name": "Anne", "surname_list": [{"surname": "Example"}]}})
+    assert gwt_run_main(lst, conf) == 0  # the new backup has I0099, so the dry run goes through
+    assert server.fake.by_id("people", "I0099")["primary_name"]["first_name"] == "Ann"
+
+
+def test_a_rerun_on_another_tree_is_refused(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, BIRTH])
+    server.fake.busy = 1000
+    assert gwt_run_main(lst, conf, "--apply-tries", "1") == 4
+    server.fake.busy = 0
+    made = len(server.fake.writes())
+    assert gwt_run_main(lst, conf, "--tree", "tree-other") == 2
+    assert len(server.fake.writes()) == made
+
+
+def test_a_backup_changed_after_the_apply_wrote_is_refused(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, BIRTH])
+    server.fake.busy = 1000
+    assert gwt_run_main(lst, conf, "--apply-tries", "1") == 4
+    server.fake.busy = 0
+    pre = Path(f"{lst}.run/pre.json.gz")
+    pre.write_bytes(gzip.compress(gzip.decompress(pre.read_bytes()).replace(b"Anna", b"Hana")))
+    made = len(server.fake.writes())
+    assert gwt_run_main(lst, conf) == 2
+    assert len(server.fake.writes()) == made
+
+
+def test_a_run_json_that_does_not_read_is_bad_input(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN])
+    Path(f"{lst}.run").mkdir()
+    Path(f"{lst}.run/run.json").write_text("{")
+    assert gwt_run_main(lst, conf) == 2
 
 
 def test_the_watchdog_ends_a_silent_process():
@@ -325,7 +375,8 @@ def test_an_apply_that_refuses_its_input_is_not_tried_again(tmp_path, server):
     lst, conf = setup(tmp_path, server, [JOHN])
     conf.write_text(conf.read_text().replace("GWT_TREE=tree-test\n", ""))  # gwt-apply --apply needs a tree
     assert gwt_run_main(lst, conf, "--apply-tries", "3", "--retry-wait", "5") == 2
-    assert state(lst)["steps"]["apply"].get("tries", 0) <= 1
+    run_json = Path(f"{lst}.run/run.json")
+    assert not run_json.exists() or state(lst)["steps"]["apply"].get("tries", 0) <= 1
     assert server.fake.writes() == []
 
 

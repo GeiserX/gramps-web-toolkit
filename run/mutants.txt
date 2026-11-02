@@ -4,7 +4,7 @@ gwt_run.py | refused += [r for r in rows if r["status"] == "skip" | refused += [
 gwt_run.py | and not r.get("noop") and r["key"] not in accept] | and r["key"] not in accept] | a no-op skip never stops the run
 gwt_run.py | r["status"] == "skip" and not r.get("noop") and r["key"] not in accept] | r["status"] == "skip" and not r.get("noop")] | --accept-skip lets a named skip through
 gwt_run.py | if self.step(name).get("status") == "ok": | if False: | a rerun skips the steps that are done, so the backup is never taken again over a written tree
-gwt_run.py | if self.state.get("list_sha256") != sha: | if False: | a list changed since the run began is refused
+gwt_run.py | if self.state.get("list_sha256") != sha and written: | if False: | a list changed after the run wrote to the tree is refused
 gwt_run.py | if counts["conflict"]: | if False: | an apply that meets a conflict is not tried again
 gwt_run.py | if this == self.args.apply_tries: | if True: | an apply that fails on a busy server is tried again
 gwt_run.py | if this == self.args.apply_tries: | if this == self.args.apply_tries + 1: | the apply stops after --apply-tries tries
@@ -16,3 +16,7 @@ gwt_run.py | if code == 1: | if False: | a new gwt-check finding stops the run w
 gwt_run.py | if tries == 1: | if False: | the first apply try checks the tree against the backup before any write
 gwt_run.py | if code == 2 or (rows and before and counts["not run"] == len(rows)): | if False: | an apply that stopped before its first write (a refused server backup, bad input) is not tried again
 gwt_run.py | for this in range(1, self.args.apply_tries + 1): | for this in range(step.get("tries", 0) + 1, self.args.apply_tries + 1): | --apply-tries counts the tries of this invocation, not of every run
+gwt_run.py | if self.state.get("target") != self.target: | if False: | a rerun pointed at another server or tree is refused
+gwt_run.py | elif steps["backup"]["status"] == "ok" and self._md5() != steps["backup"].get("md5"): | elif False: | a backup changed since it was taken is refused once the run has written
+gwt_run.py | self.start_over(sha) | pass | a rerun before any write reads the tree again, so a fixed tree or list goes through
+gwt_run.py | if self.prev.exists():  # reads only | if False:  # reads only | a backup taken again before any write reads only what changed since the last one
