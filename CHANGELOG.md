@@ -8,9 +8,11 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Added
 
-- `gwt-check` `homonym-birth-gap` (for information only): same-name people whose possible Primary Birth dates are more than ten years apart are flagged for review and withheld from same-name duplicate hints. Shared date intervals preserve uncertainty; unknown births and baptism alone cannot prove the gap. The strict threshold uses civil anniversaries (conservatively March 1 for February 29), not elapsed-day averages. Output is bounded to one row per normalized-name group, with an exact scoped pair count and deterministic witness for larger groups; two-person pair keys are preserved. Every incompatible pair retains the duplicate-hint guard. No automatic merge.
-
 - `gwt-report`, a new tool that reads an offline dump or snapshot. `gwt-report kin DUMP A B` lists every blood path between two people (through Birth, Adopted or Unknown parent links, never a marriage or a step link), the common ancestors with their Ahnentafel numbers from each side, the relationship name in English, Spanish and French (cousins of any degree and removal, half relations), how many links of each path are confirmed, probable, weak-tagged or unmarked, and implex in either pedigree. `gwt-report digest --from OLD --to NEW` lists the new people, events, citations and media by person and, with `--root`, by side and kin distance, with Gramps Web links (`--base-url`) and the web addresses their citations hold; `--told FILE --audience NAME` leaves out what that audience was told, and `--mark` records what it shows. Double cousins get both relationships, a big pedigree keeps both sides (the path cap drops the most distant paths first, and a digest says when it cut), tags that say `débil` or `faible` are weak by default, a digest of two different trees exits 2, and `--format html` keeps to the inline tags chat apps accept.
+
+### Changed
+
+- `gwt-check`: `dup-person-relative` and the shared-relative branch of `dup-person-fuzzy` leave out two namesakes whose Primary Birth dates cannot overlap. Before, a birth that was open (`before 1750`), a range, estimated or calculated was ignored, so a grandfather and a grandson with one name and same-named fathers came out as a duplicate. The dates are read as intervals with the slack `about`, estimated and calculated dates already get; a baptism alone, an unknown birth or an unreadable birth date never sets two people apart. `dup-person-birth` is unchanged: a shared birth or baptism year still reports the pair.
 
 ## [0.3.0] - 2026-10-31
 

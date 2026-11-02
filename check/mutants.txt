@@ -100,7 +100,9 @@ gwt_check/public.py | LEAKS = ("private-visible", "private-reference", "private-
 gwt_check/public.py | if path and x.get("private") is True: | if x.get("private") is True: | a visible private object is one row, not also a sub-object row with no path
 gwt_check/checks.py | if e and e.get("type") in ("Birth", "Baptism")] | if e and e.get("type") in ("Birth",)] | a recent baptism alone makes a person possibly living
 gwt_check/public.py | if not rep["rows"]: | if False: | a clean comparison says nothing found
-gwt_check/checks.py | and self.duplicate_guard(key): | and False: | incompatible homonyms never emit a duplicate hint
-gwt_check/homonyms.py |     return anniversary.toordinal() |     return s.hi + 10 * 365.25 | exact civil anniversaries must stay quiet even across leap years
-gwt_check/homonyms.py |             self.gap_count += 1 |             self.gap_count = 1 | summary must count every incompatible scoped pair
-gwt_check/homonyms.py |                 self.witness = (p, q, a, b) |                 self.witness = (p, q, a, b); self.out.add("homonym-birth-gap", f"{p['gramps_id']},{q['gramps_id']}") | informational pair rows must not escape the name-group output bound
+gwt_check/checks.py | and not parent_and_child(p["handle"], q["handle"]) and not apart(p, q): | and not parent_and_child(p["handle"], q["handle"]): | namesakes whose births cannot overlap get no same-relative hint
+gwt_check/checks.py | if near or (kin_shared and not (yp and yq) and not apart(P[h], P[c])): | if near or (kin_shared and not (yp and yq)): | namesakes whose births cannot overlap get no fuzzy same-relative hint
+gwt_check/checks.py | return bool(a and b) and (a[1] < b[0] or b[1] < a[0]) | return bool(a and b) and (a[1] <= b[0] or b[1] <= a[0]) | two births on the same day overlap
+gwt_check/checks.py | if readable and len(readable) == len(alts) else None | if readable else None | one unreadable birth date leaves the birth unknown
+gwt_check/checks.py | spans[p["handle"]] = (min(s.lo for s in readable), max(s.hi for s in readable)) \ | spans[p["handle"]] = (readable[-1].lo, readable[-1].hi) \ | every birth alternative widens the interval
+gwt_check/checks.py | and dates.kind(E[r["ref"]].get("type")) in dates.BIRTH] | and dates.kind(E[r["ref"]].get("type")) in dates.BIRTH.union(dates.BAPTISM)] | a baptism alone never sets two namesakes apart
