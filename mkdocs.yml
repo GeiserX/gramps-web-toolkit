@@ -143,6 +143,7 @@ nav:
       - gwt-fetch: fetch.md
       - gwt-mh: myheritage.md
       - gwt-read: read.md
+      - gwt-read sources: sources/index.md
       - gwt-rawstore: rawstore.md
       - ocr-bench: ocr-bench.md
       - gwt-spanish-poller: spanish-poller.md
@@ -152,3 +153,4 @@ nav:
       - gwt-fscache: fscache.md
   - Development:
       - Development: development.md
+      - Shared rules and locales: rules.md

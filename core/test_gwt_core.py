@@ -32,11 +32,14 @@ class Dispatcher(unittest.TestCase):
         for name in cli.TOOLS:
             self.assertIn("  " + name + " ", out)
 
+    # a mutant run (run_tests.py --mutants) copies the tree without .git, and nothing is installed there
+    @unittest.skipUnless(os.path.exists(os.path.join(ROOT, ".git")), "needs a git checkout")
     def test_version(self):
         code, out, _ = run(["--version"])
         self.assertEqual((code, out.strip()), (0, "gwt " + version()))
         self.assertNotEqual(version(), "unknown")
 
+    @unittest.skipUnless(os.path.exists(os.path.join(ROOT, ".git")), "needs a git checkout")
     def test_checkout_version_comes_from_git(self):
         # Run from a clone with nothing installed: the version names the commit, as hatch-vcs does in a build.
         import subprocess
