@@ -23,9 +23,11 @@ Then name the module in gwt_reader.SOURCE_MODULES, add its line to pyproject.tom
 read/test_gwt_<id>.py with invented fixture pages (test_registry.py tests this template the same way), add mutant
 rows to read/mutants.d/<id>.txt, and a page docs/sources/<id>.md. See docs/sources/index.md.
 
-Every request goes through R.get with page=gwt_reader.page_check(SPEC): a page with no row and without the
-site's own "nothing found" words (an empty skeleton, a block page, a new wording) is a STOP, exit 3, never
-"no results". Standard library only.
+Every request of an HTML site goes through R.get with page=gwt_reader.page_check(SPEC): a page with no row and
+without the site's own "nothing found" words (an empty skeleton, a block page, a new wording) is a STOP, exit 3,
+never "no results". A JSON API passes expect=<a function that checks the answer's shape> to R.get instead (see
+gwt_read.is_search), leaves result_markers and negative_markers empty (with empty markers every page is
+'unknown'), and tells "none" by the answer's own count field. Standard library only.
 """
 import html, re, urllib.parse
 

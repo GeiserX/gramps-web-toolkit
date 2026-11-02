@@ -6,9 +6,6 @@ import contextlib, io, json, os, unittest
 
 from test_gwt_read import Base, FakeGate, FakeNet, CAPTCHA, SEARCH, RECORD, persona
 import _template
-import gwt_boe  # noqa: E402
-import gwt_genae  # noqa: E402
-import gwt_pares  # noqa: E402
 import gwt_read  # noqa: E402
 import gwt_reader  # noqa: E402
 
@@ -64,6 +61,25 @@ class Registry(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'id already taken'):
             gwt_read.sources([Taken])
 
+    def test_an_offline_source_runs_with_no_reader(self):
+        seen = []
+
+        class Offline:
+            __name__ = 'gwt_offline'
+            SPEC = dict(_template.SPEC, id='offline-example', controls=[], offline=True)
+            add_search_args = _template.add_search_args
+
+            @staticmethod
+            def search(a, R):
+                seen.append(R)
+                return gwt_reader.EXIT_EMPTY
+
+        srcs = gwt_read.sources(list(gwt_reader.SOURCE_MODULES) + [Offline])
+        boom = lambda *a: (_ for _ in ()).throw(AssertionError('an offline source built a reader'))
+        srcs['offline-example']['build'] = boom
+        code = gwt_read.main(['offline-example', 'search', '--surname', 'X', '--out', 'o'], srcs=srcs)
+        self.assertEqual((code, seen), (gwt_reader.EXIT_EMPTY, [None]))
+
     def test_spec_problems_names_each_gap(self):
         bad = gwt_reader.spec_problems({'id': 'Not A Slug', 'controls': [{'argv': [], 'min_count': 0}]})
         for word in ('help must', 'pace must', 'cache_rules must', 'id must be a lowercase slug', 'each control'):
@@ -78,18 +94,6 @@ class Classify(unittest.TestCase):
         self.assertEqual(gwt_reader.classify(SKELETON.decode(), spec), 'unknown')
         self.assertEqual(gwt_reader.classify(CAPTCHA.decode(), spec), 'unknown')
         self.assertEqual(gwt_reader.classify('', spec), 'unknown')
-
-    def test_the_older_sources_markers_agree_with_their_own_page_checks(self):
-        srcs = gwt_read.sources()
-        cases = [('boe', gwt_boe.is_results, ['boe-results.html', 'boe-empty.html']),
-                 ('pares', gwt_pares.is_results, ['pares-search.html']),
-                 ('genae', lambda p: any(gwt_genae.is_block(p, b) for b in gwt_genae.BLOCKS),
-                  ['genae-%s.html' % b for b in gwt_genae.BLOCKS])]
-        for sid, check, names in cases:
-            for page in [fixture(n).decode() for n in names] + [SKELETON.decode(), CAPTCHA.decode()]:
-                self.assertEqual(gwt_reader.classify(page, srcs[sid]) != 'unknown', check(page), (sid, page[:80]))
-        self.assertEqual(gwt_reader.classify(fixture('boe-empty.html').decode(), srcs['boe']), 'none')
-        self.assertEqual(gwt_reader.classify(fixture('genae-casadas.html').decode(), srcs['genae']), 'none')
 
 
 class Template(Base):

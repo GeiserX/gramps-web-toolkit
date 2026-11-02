@@ -456,7 +456,7 @@ def cmd_boe_search(a, R):
     return EXIT_OK if cands else EXIT_EMPTY
 
 
-def cmd_insee_search(a):
+def cmd_insee_search(a, R=None):
     """Every line of the deaths files whose surname matches one --surname, as candidates. Offline: the files are a
     download the user made; nothing here touches the network."""
     surnames = [s for s in a.surname if gwt_insee.fold(s)]
@@ -622,13 +622,15 @@ def _fs_build(src, a, urlopen, gate):
 
 
 # Canaries: a search any working copy of the site answers with at least min_count rows, read without the cache.
-# Public and neutral on purpose: very common names, never a family's own surname.
+# Public and neutral on purpose: very common names, never a family's own surname. The older sources leave the page
+# markers empty: they check their pages with their own functions (gwt_pares.is_results, gwt_genae.is_block,
+# gwt_boe.is_results), so the markers would be a second copy of the same rule.
 LEGACY = (
     {'id': 'pares', 'help': "PARES, the Spanish state archives' catalogue; public, no account",
      'pace': gwt_pares.PACE, 'cache_rules': PARES_RULES,
      # one surname alone is too broad: the site answers "too many results" (a page with no rows) instead
      'controls': [{'argv': ['--given', 'Cristóbal', '--surname', 'Colón'], 'min_count': 10}],
-     'result_markers': [r'<p class="titulo">'], 'negative_markers': [r'No se han encontrado'],
+     'result_markers': [], 'negative_markers': [],
      'site_args': _site_args('GWT_PARES_USER_AGENT', '~/.cache/gwt-gate-pares'), 'build': _pares_build,
      'search_help': 'a catalogue search; writes the page and its candidates', 'add_search_args': _pares_search_args,
      'search': cmd_pares_search,
@@ -638,15 +640,14 @@ LEGACY = (
      'pace': gwt_genae.PACE, 'cache_rules': GENAE_RULES,
      # the site's robots.txt disallows its search pages for every robot: no automated searches beyond the user's own
      'controls': [],      # no canary on genae
-     'result_markers': [r'data-registro-tipo='],
-     'negative_markers': [r'data-aviso-cobertura="[^"]*\S', r'<tbody id="filas-\w+">\s*</tbody>'],
+     'result_markers': [], 'negative_markers': [],
      'site_args': _site_args('GWT_GENAE_USER_AGENT', '~/.cache/gwt-gate-genae'), 'build': _default_build,
      'search_help': 'a search over baptisms, marriages and burials; first page of each',
      'add_search_args': _genae_search_args, 'search': cmd_genae_search},
     {'id': 'boe', 'help': 'BOE and Gaceta de Madrid, a name in the text of official acts; public',
      'pace': gwt_boe.PACE, 'cache_rules': BOE_RULES,
      'controls': [{'argv': ['--name', 'Manuel Rodríguez'], 'min_count': 10}],
-     'result_markers': [r'<li class="resultado-busqueda">'], 'negative_markers': [r'No se han encontrado', r'no ha encontrado'],
+     'result_markers': [], 'negative_markers': [],
      'site_args': _site_args('GWT_BOE_USER_AGENT', '~/.cache/gwt-gate-boe'), 'build': _default_build,
      'search_help': 'one phrase in quotes, the first page of results', 'add_search_args': _boe_search_args,
      'search': cmd_boe_search},
@@ -769,9 +770,9 @@ def parser(srcs=None):
 def main(argv=None, urlopen=None, gate=None, srcs=None):
     srcs = sources() if srcs is None else srcs
     a = parser(srcs).parse_args(argv)
-    if a.site == 'insee':
-        return cmd_insee_search(a)      # offline: no gate, no cache, no fetcher
     src = srcs[a.site]
+    if src.get('offline'):
+        return src['search'](a, None)       # offline: no gate, no cache, no fetcher
     R = src['build'](src, a, urlopen, gate)
     if isinstance(R, int):
         return R

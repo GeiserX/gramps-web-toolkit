@@ -28,6 +28,8 @@ A source is one module, `read/gwt_<id>.py`. It sets `SOURCE`, the slug the ledge
 
 and the functions `add_search_args(sp)` and `search(a, R)`, plus `add_record_args(sp)` and `record(a, R)` when the site has a record page. `search` asks for every page through `R.get(url, headers, refresh=a.refresh, page=gwt_reader.page_check(SPEC))`, writes the envelope and candidates with `gwt_reader.write_search`, prints the lines with `gwt_reader.print_paths`, and returns 0 with rows or 2 with none.
 
+A source that reads a JSON API, not HTML pages, works the same way with one change: it passes `expect=<a function that checks the answer's shape>` to `R.get` instead of `page=`, as `familysearch` does with `is_search`. An answer of another shape is a STOP. It leaves `result_markers` and `negative_markers` empty, because with no marker every page classifies `unknown`, and tells "none" by the answer's own count field (zero rows in a well-shaped answer).
+
 ## The page classifier
 
 `gwt_reader.classify(page, SPEC)` gives one of three answers:
