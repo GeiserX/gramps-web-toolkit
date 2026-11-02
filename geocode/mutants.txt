@@ -1,0 +1,19 @@
+gwt_geocode.py |             if d is not None and d > limit: |             if False: | a church, building or street further than its limit from its town falls back to the town's point
+gwt_geocode.py | limit = STREET_KM if kind == 'street' else | limit = SPOT_KM if kind == 'street' else | a street must lie within 2 km of its town, not the 5 km of a church
+gwt_geocode.py | return len(short) >= 2 and long_[-len(short):] == short and | return len(short) >= 2 and set(short) <= set(long_) and | a parish never matches a modern namesake that only shares its words (San Ejemplo is not San Ejemplo Obrero)
+gwt_geocode.py | (len(a) >= 3 and a[1:] == b[1:]) | False | Iglesia de San Ejemplo and Parroquia de San Ejemplo are one church: only the head word differs
+gwt_geocode.py | short != rules.fold(town).split() | True | a spot named after its town never takes a result that is only the town's name
+gwt_geocode.py |             if c['kind'] != want: |             if False: | a town of the same name is never the point of a church, and a church never the point of a town
+gwt_geocode.py |         if gid in self.overrides: |         if False: | an overrides row always wins over every provider
+gwt_geocode.py |             if h not in self.used: |             if False: | a container (a place no event uses) never gets a point written
+gwt_geocode.py | if kind in ('spot', 'street') and not ref: | if False: | a spot with no town above it gets no point, since nothing checks its distance
+gwt_geocode.py | if ctx['cc'] and c['cc'] and c['cc'] != ctx['cc']: | if False: | a result in another country than the hierarchy's is refused
+gwt_geocode.py | if ref is None and any( | if False and any( | two far namesakes with no town above to choose by give no answer, never the first one
+gwt_geocode.py | return any(mine & name_forms(n) for n in names if n) | return True | a town must carry the place's name, not a longer one (Saint-Exemple is not Saint-Exemple-sur-Mer)
+gwt_geocode.py | if have and (self.only_missing or h not in self.used): | if have and (h not in self.used): | --only-missing leaves every place that has a point alone and asks no provider about it
+gwt_geocode.py | if have and abs(have[0] - r['lat']) < 1e-6 and abs(have[1] - r['lon']) < 1e-6: | if False: | a point the tree already has gives no op
+gwt_geocode.py | PACE = {'nominatim.openstreetmap.org': 1.1} | PACE = {'nominatim.openstreetmap.org': 0.5} | Nominatim gets at most one request a second
+gwt_geocode.py |             if os.path.exists(p): |             if False: | a repeated question is answered from the disk cache, not the provider
+gwt_geocode.py | and (c['group'] is None or c['group'] != first['group']) for _, c in ok[1:]): | for _, c in ok[1:]): | a town's point and its municipality's centroid with one INE code are one place, not two namesakes
+gwt_geocode.py | ok.sort(key=lambda dc: (dc[0], dc[1]['rank'])) | ok.sort(key=lambda dc: (dc[0], -dc[1]['rank'])) | a town's own point is preferred to its municipality's centroid
+gwt_geocode.py | r['name'].split(',')[0] | r['name'] | a CartoCiudad toponym is named by its address up to the comma

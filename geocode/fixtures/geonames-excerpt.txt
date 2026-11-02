@@ -1,0 +1,7 @@
+9000001	Italy	Italy	Italia,Italie,Italien	42.83333	12.83333	A	PCLI	IT						0			Europe/Rome	2026-01-01
+9000002	France	France	Francia,Frankreich	46.0	2.0	A	PCLI	FR						0			Europe/Rome	2026-01-01
+9000003	Borgo Esempio	Borgo Esempio		43.3	11.3	P	PPL	IT						0			Europe/Rome	2026-01-01
+9000004	San Esempio	San Esempio		43.305	11.3	S	CH	IT						0			Europe/Rome	2026-01-01
+9000005	Doppio	Doppio		43.0	11.0	P	PPL	IT						0			Europe/Rome	2026-01-01
+9000006	Doppio	Doppio		45.0	9.0	P	PPL	IT						0			Europe/Rome	2026-01-01
+9000007	Torre Lontana	Torre Lontana		44.0	10.0	S	TOWR	IT						0			Europe/Rome	2026-01-01

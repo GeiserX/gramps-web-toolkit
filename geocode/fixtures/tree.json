@@ -1,0 +1,550 @@
+{
+ "tree": "invented",
+ "dumped_at": "2026-11-02T10:00:00+0000",
+ "objects": {
+  "people": [],
+  "families": [],
+  "events": [
+   {
+    "handle": "heP9003",
+    "gramps_id": "E9003",
+    "type": "Baptism",
+    "place": "hP9003"
+   },
+   {
+    "handle": "heP9004",
+    "gramps_id": "E9004",
+    "type": "Baptism",
+    "place": "hP9004"
+   },
+   {
+    "handle": "heP9005",
+    "gramps_id": "E9005",
+    "type": "Baptism",
+    "place": "hP9005"
+   },
+   {
+    "handle": "heP9006",
+    "gramps_id": "E9006",
+    "type": "Baptism",
+    "place": "hP9006"
+   },
+   {
+    "handle": "heP9007",
+    "gramps_id": "E9007",
+    "type": "Baptism",
+    "place": "hP9007"
+   },
+   {
+    "handle": "heP9009",
+    "gramps_id": "E9009",
+    "type": "Baptism",
+    "place": "hP9009"
+   },
+   {
+    "handle": "heP9010",
+    "gramps_id": "E9010",
+    "type": "Baptism",
+    "place": "hP9010"
+   },
+   {
+    "handle": "heP9011",
+    "gramps_id": "E9011",
+    "type": "Baptism",
+    "place": "hP9011"
+   },
+   {
+    "handle": "heP9012",
+    "gramps_id": "E9012",
+    "type": "Baptism",
+    "place": "hP9012"
+   },
+   {
+    "handle": "heP9013",
+    "gramps_id": "E9013",
+    "type": "Baptism",
+    "place": "hP9013"
+   },
+   {
+    "handle": "heP9022",
+    "gramps_id": "E9022",
+    "type": "Baptism",
+    "place": "hP9022"
+   },
+   {
+    "handle": "heP9030",
+    "gramps_id": "E9030",
+    "type": "Baptism",
+    "place": "hP9030"
+   },
+   {
+    "handle": "heP9032",
+    "gramps_id": "E9032",
+    "type": "Baptism",
+    "place": "hP9032"
+   },
+   {
+    "handle": "heP9033",
+    "gramps_id": "E9033",
+    "type": "Baptism",
+    "place": "hP9033"
+   },
+   {
+    "handle": "heP9034",
+    "gramps_id": "E9034",
+    "type": "Baptism",
+    "place": "hP9034"
+   },
+   {
+    "handle": "heP9014",
+    "gramps_id": "E9014",
+    "type": "Burial",
+    "place": "hP9014"
+   },
+   {
+    "handle": "heP9015",
+    "gramps_id": "E9015",
+    "type": "Residence",
+    "place": "hP9015"
+   },
+   {
+    "handle": "heP9051",
+    "gramps_id": "E9051",
+    "type": "Residence",
+    "place": "hP9051"
+   }
+  ],
+  "places": [
+   {
+    "handle": "hP9001",
+    "gramps_id": "P9001",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "España"
+    },
+    "place_type": "Country",
+    "placeref_list": [],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9002",
+    "gramps_id": "P9002",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Provincia Ejemplo"
+    },
+    "place_type": "Province",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9001"
+     }
+    ],
+    "lat": "39.9",
+    "long": "-3.1"
+   },
+   {
+    "handle": "hP9003",
+    "gramps_id": "P9003",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Villaejemplo"
+    },
+    "place_type": "City",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9002"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9004",
+    "gramps_id": "P9004",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Iglesia de San Ejemplo"
+    },
+    "place_type": "Church",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9003"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9005",
+    "gramps_id": "P9005",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Ermita de Santa Prueba"
+    },
+    "place_type": "Chapel",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9003"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9006",
+    "gramps_id": "P9006",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Cementerio de Villaejemplo"
+    },
+    "place_type": "Cemetery",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9003"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9007",
+    "gramps_id": "P9007",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Aldea Ficticia"
+    },
+    "place_type": "Hamlet",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9003"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9008",
+    "gramps_id": "P9008",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Otroejemplo"
+    },
+    "place_type": "Town",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9002"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9009",
+    "gramps_id": "P9009",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Capilla del Ejemplo"
+    },
+    "place_type": "Church",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9008"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9010",
+    "gramps_id": "P9010",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Villa Frontera"
+    },
+    "place_type": "Town",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9002"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9011",
+    "gramps_id": "P9011",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Calle Larga"
+    },
+    "place_type": "Street",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9003"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9012",
+    "gramps_id": "P9012",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Villa Puesta"
+    },
+    "place_type": "Town",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9002"
+     }
+    ],
+    "lat": "40.5",
+    "long": "-3.5"
+   },
+   {
+    "handle": "hP9013",
+    "gramps_id": "P9013",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Villa Movida"
+    },
+    "place_type": "Town",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9002"
+     }
+    ],
+    "lat": "40.6",
+    "long": "-3.6"
+   },
+   {
+    "handle": "hP9020",
+    "gramps_id": "P9020",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "France"
+    },
+    "place_type": "Country",
+    "placeref_list": [],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9021",
+    "gramps_id": "P9021",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Département Exemple"
+    },
+    "place_type": "Department",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9020"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9022",
+    "gramps_id": "P9022",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Saint-Exemple-sur-Mer"
+    },
+    "place_type": "Village",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9021"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9030",
+    "gramps_id": "P9030",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Italia"
+    },
+    "place_type": "Country",
+    "placeref_list": [],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9031",
+    "gramps_id": "P9031",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Provincia di Esempio"
+    },
+    "place_type": "Province",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9030"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9032",
+    "gramps_id": "P9032",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Borgo Esempio"
+    },
+    "place_type": "Village",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9031"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9033",
+    "gramps_id": "P9033",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Chiesa di San Esempio"
+    },
+    "place_type": "Church",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9032"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9034",
+    "gramps_id": "P9034",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Doppio"
+    },
+    "place_type": "Village",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9031"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9014",
+    "gramps_id": "P9014",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Torre Lontana"
+    },
+    "place_type": "Tower",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9031"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9015",
+    "gramps_id": "P9015",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Torre del Reloj"
+    },
+    "place_type": "Tower",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9003"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9050",
+    "gramps_id": "P9050",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Ruritania"
+    },
+    "place_type": "Country",
+    "placeref_list": [],
+    "lat": "",
+    "long": ""
+   },
+   {
+    "handle": "hP9051",
+    "gramps_id": "P9051",
+    "_class": "Place",
+    "name": {
+     "_class": "PlaceName",
+     "value": "Pueblo Raro"
+    },
+    "place_type": "Town",
+    "placeref_list": [
+     {
+      "_class": "PlaceRef",
+      "ref": "hP9050"
+     }
+    ],
+    "lat": "",
+    "long": ""
+   }
+  ]
+ }
+}
