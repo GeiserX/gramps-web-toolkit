@@ -90,6 +90,21 @@ def pieces(args, size):
     return [half(size, args.half)]
 
 
+def in_root(parent_url: str, box, size) -> str:
+    """The URL of box (in a piece of `size` pixels) as one #xywh= fragment on the root image.
+
+    A piece's own row ends in #xywh=X,Y,W,H in the root's pixels; the box is scaled by W,H over
+    the piece's real size (it differs after --max) and moved by X,Y.
+    """
+    x, y, w, h = box
+    m = re.search(r"#xywh=(\d+),(\d+),(\d+),(\d+)$", parent_url)
+    if not m:
+        return f"{parent_url}#xywh={x},{y},{w},{h}"
+    X, Y, PW, PH = map(int, m.groups())
+    x0, y0, w, h = scale_box(box, size, (PW, PH))
+    return f"{parent_url[:m.start()]}#xywh={X + x0},{Y + y0},{w},{h}"
+
+
 def _ours(folder: Path) -> bool:
     """True when folder has no manifest.tsv, or one with gwt-fetch's columns."""
     m = folder / "manifest.tsv"
@@ -123,7 +138,7 @@ def run(args, client=None) -> int:
             for cut, (x, y, w, h) in pieces(args, im.size):
                 stem = f"{src.stem}_{cut}"
                 label = f"crop {x},{y},{w},{h} of {src.name} sha256:{src_sha}"
-                url = f"{row.get('image_url') or here}#xywh={x},{y},{w},{h}"
+                url = in_root(row.get("image_url") or here, (x, y, w, h), im.size)
                 if store.done(stem, label, url, row.get("manifest_url", "")):
                     continue
                 piece = im.crop((x, y, x + w, y + h))

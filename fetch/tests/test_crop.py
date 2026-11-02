@@ -150,3 +150,12 @@ def test_out_keeps_the_source_row(page, tmp_path):
     row = rows(out / "manifest.tsv")[0]
     assert row["image_url"] == "https://img.example/iiif/2/A/full/max/0/default.jpg#xywh=0,0,2000,3000"
     assert row["manifest_url"] == "https://img.example/manifest"
+
+
+def test_a_crop_of_a_crop_points_into_the_original(page):
+    """One #xywh= fragment, in the original's pixels, even when the parent piece was shrunk."""
+    assert crop.run(args([page], half="right", max=1600)) == 0
+    piece = page.parent / "0001_pag-1_right.jpg"   # 1067x1600, from 2000,0,2000,3000
+    assert crop.run(args([piece], half="left")) == 0
+    url = {r["file"]: r["image_url"] for r in rows(page.parent / "manifest.tsv")}["0001_pag-1_right_left.jpg"]
+    assert url == "https://img.example/iiif/2/A/full/max/0/default.jpg#xywh=2000,0,999,3000"

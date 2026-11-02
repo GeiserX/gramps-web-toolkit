@@ -18,3 +18,5 @@ gwt_fetch/crop.py | if args.max and max(piece.size) > args.max: | if False: | --
 gwt_fetch/crop.py | label = f"crop {x},{y},{w},{h} of {src.name} sha256:{src_sha}" | label = f"crop {x},{y},{w},{h} of {src.name}" | a piece's row names its source's sha256
 gwt_fetch/crop.py |         return 2 |         return 0 | without Pillow, crop exits 2 instead of claiming success
 gwt_fetch/crop.py |         if not _ours(out): |         if False: | crop never appends its rows to a manifest.tsv another tool wrote
+gwt_fetch/crop.py | return f"{parent_url[:m.start()]}#xywh={X + x0},{Y + y0},{w},{h}" | return f"{parent_url}#xywh={x},{y},{w},{h}" | a crop of a crop gets one #xywh= fragment on the original, not a second one
+gwt_fetch/crop.py | x0, y0, w, h = scale_box(box, size, (PW, PH)) | x0, y0, w, h = box | a crop of a shrunk piece is scaled back to the original's pixels
