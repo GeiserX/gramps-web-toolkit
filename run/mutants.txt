@@ -21,4 +21,5 @@ gwt_run.py | elif steps["backup"]["status"] == "ok" and self._md5() != steps["ba
 gwt_run.py | self.start_over(sha) | pass | a rerun before any write reads the tree again, so a fixed tree or list goes through
 gwt_run.py | if self.prev.exists():  # reads only | if False:  # reads only | a backup taken again before any write reads only what changed since the last one
 gwt_run.py | if not why and read: | if not why: | a verify that never read the tree is tried again, not reported as ops missing
-gwt_run.py | if code == 1 and new: | if code == 1: | a gate that could not read the tree is a failure, not new problems
+gwt_run.py | except BaseException:  # Ctrl-C | except ZeroDivisionError:  # Ctrl-C | Ctrl-C or a signal on gwt-run ends the step's own process too
+gwt_run.py | handlers = {sig: signal.signal(sig, _signalled) for sig in (signal.SIGTERM, signal.SIGHUP)} | handlers = {} | SIGTERM on gwt-run stops the run cleanly and marks the step stopped

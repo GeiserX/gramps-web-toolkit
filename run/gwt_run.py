@@ -48,6 +48,18 @@ BEFORE_WRITE = {
 EXIT = {"done": 0, "failed": 1, "input": 2, "refused": 3, "apply": 4, "stalled": 5, "verify": 6, "gate": 7}
 
 
+class Signalled(BaseException):
+    """gwt-run got SIGTERM or SIGHUP: the step is ended and the run stops, like after Ctrl-C."""
+
+    def __init__(self, signum: int):
+        super().__init__(signum)
+        self.signum = signum
+
+
+def _signalled(signum, frame):
+    raise Signalled(signum)
+
+
 class Stop(Exception):
     """The run stops here with this exit code; run.json keeps why."""
 
@@ -121,30 +133,34 @@ def watch(cmd: list[str], *, out: Path, stall: float, deadline: float | None = N
     threading.Thread(target=lambda: [lines.put(x) for x in proc.stdout] + [lines.put(None)], daemon=True).start()
     start = last = time.monotonic()
     last_line, sizes, why = "", {}, None
-    with open(out, "a", encoding="utf-8") as fh:
-        while True:
-            try:
-                line = lines.get(timeout=0.2)
-            except queue.Empty:
-                line = ""
-            if line is None:
-                break
-            now = time.monotonic()
-            if line:
-                fh.write(line)
-                fh.flush()
-                print("    " + line, end="", flush=True)
-                last_line, last = line.strip(), now
-            grown = {str(p): p.stat().st_size for p in logs() if p.exists()}
-            if grown != sizes:
-                sizes, last = grown, now
-            if now - last >= stall:
-                why = "stall"
-            elif deadline is not None and now - start >= deadline:
-                why = "deadline"
-            if why:
-                _end(proc)
-                break
+    try:
+        with open(out, "a", encoding="utf-8") as fh:
+            while True:
+                try:
+                    line = lines.get(timeout=0.2)
+                except queue.Empty:
+                    line = ""
+                if line is None:
+                    break
+                now = time.monotonic()
+                if line:
+                    fh.write(line)
+                    fh.flush()
+                    print("    " + line, end="", flush=True)
+                    last_line, last = line.strip(), now
+                grown = {str(p): p.stat().st_size for p in logs() if p.exists()}
+                if grown != sizes:
+                    sizes, last = grown, now
+                if now - last >= stall:
+                    why = "stall"
+                elif deadline is not None and now - start >= deadline:
+                    why = "deadline"
+                if why:
+                    _end(proc)
+                    break
+    except BaseException:  # Ctrl-C or a signal on gwt-run: the step must not go on writing alone
+        _end(proc)
+        raise
     code = proc.wait()
     call = _last_call([Path(p) for p in sizes])
     return (None if why else code), why, (f"{call} (from its log); " if call else "") + f"last line: {last_line!r}"
@@ -172,6 +188,7 @@ class Run:
         self.env = _child_env(args.tree)
         self.target = _target(args)
         self.state: dict = {}
+        self.current: str | None = None  # the step running now
 
     # -- run.json --------------------------------------------------------
 
@@ -405,6 +422,7 @@ class Run:
                 print(f"{name}: done before, skipped", flush=True)
                 continue
             print(f"{name}:", flush=True)
+            self.current = name
             getattr(self, name)()
         self.state.update(status="done", ended=_now())
         self.save()
@@ -467,6 +485,9 @@ def main(argv: list[str] | None = None) -> int:
     if lock is None:
         print(f"gwt-run: another gwt-run is using {run.dir}", file=sys.stderr)
         return EXIT["input"]
+    handlers = {}
+    if threading.current_thread() is threading.main_thread():  # signal handlers live in the main thread only
+        handlers = {sig: signal.signal(sig, _signalled) for sig in (signal.SIGTERM, signal.SIGHUP)}
     try:
         try:
             run.load()
@@ -482,7 +503,19 @@ def main(argv: list[str] | None = None) -> int:
         run.save()
         print(f"gwt-run: {stop}", file=sys.stderr)
         return stop.code
+    except (KeyboardInterrupt, Signalled) as exc:  # watch() has ended the step's process by now
+        signum = exc.signum if isinstance(exc, Signalled) else signal.SIGINT
+        why = f"{signal.Signals(signum).name} during {run.current or 'the start'}; the step was ended"
+        if run.current and run.state.get("steps"):
+            run.mark(run.current, "stopped", why=why)
+        if run.state.get("steps"):
+            run.state.update(status="stopped", exit=128 + signum, why=why, ended=_now())
+            run.save()
+        print(f"gwt-run: {why}", file=sys.stderr)
+        return 128 + signum
     finally:
+        for sig, handler in handlers.items():
+            signal.signal(sig, handler)
         lock.close()
 
 

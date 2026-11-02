@@ -6,6 +6,8 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import os
+import signal
 import subprocess
 import sys
 import threading
@@ -449,3 +451,23 @@ def test_a_gate_that_cannot_read_the_tree_is_a_failure_not_new_problems_or_bad_i
     assert gwt_run_main(lst, conf) == 1
     st = state(lst)
     assert st["steps"]["verify"]["status"] == "ok" and st["steps"]["gate"]["status"] == "failed"
+
+
+@pytest.mark.parametrize("sig", [signal.SIGTERM, signal.SIGINT])
+def test_a_signal_on_gwt_run_ends_the_step_it_runs(tmp_path, server, sig):
+    lst, conf = setup(tmp_path, server, [JOHN])
+    server.delay = lambda method, path: 30 if path == "/api/people/" else 0  # the backup's read hangs
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(str(HERE.parent / d) for d in ("apply", "check", "core"))}
+    proc = subprocess.Popen([sys.executable, str(HERE / "gwt-run"), str(lst), "--config", str(conf)],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=env, text=True)
+    out = Path(f"{lst}.run/backup.out")
+    for _ in range(100):  # until the step is reading
+        if out.exists() and "snapshot: GET /people/" in out.read_text():
+            break
+        time.sleep(0.1)
+    proc.send_signal(sig)
+    assert proc.wait(timeout=20) == 128 + sig
+    st = state(lst)
+    assert st["steps"]["backup"]["status"] == "stopped" and st["status"] == "stopped"
+    ps = subprocess.run(["ps", "-axo", "command"], capture_output=True, text=True).stdout
+    assert str(lst) not in ps  # no gwt-apply left reading (or writing) on its own
