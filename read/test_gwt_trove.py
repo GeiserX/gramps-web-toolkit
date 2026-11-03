@@ -113,6 +113,13 @@ class Search(Base):
         self.assertIn('gwt gate clear --dir ~/.cache/gwt-gate-trove', text)
         self.assertNotIn('session token', text)
 
+    def test_a_year_that_is_not_a_number_is_refused_before_any_request(self):
+        gate = FakeGate()
+        net = FakeNet(gate)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.search(net, gate, '--from', '18x0')
+        self.assertEqual(net.requests, [])
+
     def test_none_is_exit_2(self):
         gate = FakeGate()
         code, lines, text = self.search(FakeNet(gate, (200, NONE)), gate)

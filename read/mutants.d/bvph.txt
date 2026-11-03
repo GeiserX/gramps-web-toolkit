@@ -17,3 +17,4 @@ gwt_bvph.py | if d else title_date(title) | if d else '' | an issue dated only i
 gwt_bvph.py | re.sub(r'N[úu]m(?:ero|\.)?\s*\d+', ' ', title or '', flags=re.I) | (title or '') | an issue number of 1500 or more is never read as the year
 gwt_bvph.py | gwt_reader.get_api(R, url, | R.get(url, | a 5xx or no answer from the site is an outage (exit 3), never a plain error
 gwt_bvph.py |         year = int(date[:4]) if date else title_year(title) |         year = int(date[:4]) if date else None | an undated issue keeps the year its title gives
+gwt_bvph.py | return '%s-%02d-%02d' % (y, mo, d) if 1 <= mo <= 12 and 1 <= d <= 31 else '' | return '%s-%02d-%02d' % (y, mo, d) | a title with an impossible month or day gives no date, never a wrong one

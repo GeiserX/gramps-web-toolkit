@@ -127,7 +127,8 @@ class Search(Base):
         self.assertIn('the API said: Query syntax error', text)
 
     def test_a_bad_query_or_year_is_refused_before_any_request(self):
-        for extra in (('--query', 'Zorvaal and ('), ('--query', 'Zorvaal', '--from', 'abc')):
+        for extra in (('--query', 'Zorvaal and ('), ('--query', 'Zorvaal', '--from', 'abc'),
+                      ('--query', 'Zorvaal', '--to', '19x')):
             gate = FakeGate()
             net = FakeNet(gate)
             with contextlib.redirect_stderr(io.StringIO()):
@@ -147,6 +148,14 @@ class Search(Base):
         self.assertEqual((a['text'], a['ocr_status']), ('', 404))
         self.assertIn('ANNA ZORVAAL', b['text'])
         self.assertEqual(lines['results'], '2 total, 2 read, 1 with text')
+
+    def test_a_busy_ocr_request_stops_the_run(self):
+        # only a 404 or 410 means one article has no text; a 429 or 5xx on the resolver is a block
+        for status in (429, 503):
+            gate = FakeGate()
+            net = FakeNet(gate, (200, SEARCH), (status, b'busy'))
+            code, lines, text = self.search(net, gate)
+            self.assertEqual((code, self.out_files()), (gwt_reader.EXIT_WALL, []), (status, text))
 
     def test_an_ocr_page_that_is_not_ocr_stops_the_run(self):
         gate = FakeGate()

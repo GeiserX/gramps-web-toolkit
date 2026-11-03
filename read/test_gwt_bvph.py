@@ -51,6 +51,8 @@ class Classify(unittest.TestCase):
         self.assertEqual(gwt_bvph.title_date('La Gaceta de Villazul: Número 1612 - 1889 abril 3'), '1889-04-03')
         self.assertEqual(gwt_bvph.title_date('La Gaceta: Número 14 - 1842 Setiembre 17'), '1842-09-17')
         self.assertEqual(gwt_bvph.title_date('La Gaceta de Villazul: Año II'), '')
+        self.assertEqual(gwt_bvph.title_date('La Gaceta: Número 7 _ 31/13/1840'), '', 'a month past 12 made a date')
+        self.assertEqual(gwt_bvph.title_date('La Gaceta: Número 7 - 1840 abril 32'), '', 'a day past 31 made a date')
         self.assertEqual(gwt_bvph.title_year('La Gaceta de Villazul: Número 1612 - Año 1889'), 1889,
                          'the issue number was read as the year')
         page = P1.decode().replace('[s.n, 12/01/1901]', '[S.l. : s.n.').replace(
