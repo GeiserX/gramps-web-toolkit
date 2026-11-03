@@ -13,6 +13,10 @@
 | `wikitree` | WikiTree, the shared one-world tree, public profiles | [wikitree](wikitree.md) |
 | `archiveorg` | Internet Archive: scanned books and registers, catalogue and full text | [archiveorg](archiveorg.md) |
 | `matchid` | matchID: France's deaths since 1970, searched online | [matchid](matchid.md) |
+| `bvph` | BVPH: Spanish historical newspapers, searched inside their text | [bvph](bvph.md) |
+| `delpher` | Delpher: Dutch newspapers 1618-1995, searched inside their text | [delpher](delpher.md) |
+| `trove` | Trove: Australian newspapers, with your own free API key | [trove](trove.md) |
+| `kramerius` | Kramerius: Czech digital libraries' newspapers and books, searched inside their text | [kramerius](kramerius.md) |
 
 `gwt read --help` lists every source the installed version knows.
 

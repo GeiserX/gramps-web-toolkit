@@ -150,6 +150,10 @@ nav:
       - "gwt-read wikitree": sources/wikitree.md
       - "gwt-read archiveorg": sources/archiveorg.md
       - "gwt-read matchid": sources/matchid.md
+      - "gwt-read bvph": sources/bvph.md
+      - "gwt-read delpher": sources/delpher.md
+      - "gwt-read trove": sources/trove.md
+      - "gwt-read kramerius": sources/kramerius.md
       - gwt-rawstore: rawstore.md
       - ocr-bench: ocr-bench.md
       - gwt-spanish-poller: spanish-poller.md

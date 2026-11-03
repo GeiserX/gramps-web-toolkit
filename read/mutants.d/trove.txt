@@ -1,0 +1,11 @@
+# Mutations the trove tests must catch (format: see read/mutants.txt).
+gwt_trove.py |     if not key: |     if False: | no key exits 4 with a message before any request
+gwt_trove.py | dict(headers or {}, **{KEY_HEADER: key}) | dict(headers or {}) | the key is sent as the X-API-KEY header
+gwt_trove.py |     if rec['total'] == 0 and not arts: |     if not arts: | a total above zero with the articles gone is a STOP, never "none"
+gwt_trove.py |     if rec is None or not _number(rec.get('total')): |     if rec is None: | an answer with no total is a STOP, never "none"
+gwt_trove.py |     if not arts and start not in ('', '*'): |     if False: | a cursor past the last article is the end of the results
+gwt_trove.py | if arts and all(isinstance(x, dict) and x.get('id') for x in arts): | if arts: | an article with no id is a changed answer, a STOP
+gwt_trove.py | 'text': plain(x.get('articleText')) or plain(x.get('snippet'))}) | 'text': plain(x.get('snippet'))}) | the article's full text reaches the candidate
+gwt_trove.py |         params += [('reclevel', 'full'), ('include', 'articletext')] |         pass | a search asks for the article text
+gwt_trove.py |     if cands and rec.get('nextStart'): |     if False: | a search with more articles prints the next cursor
+gwt_trove.py | ('n', max(1, min(int(count), 100))) | ('n', max(1, int(count))) | a search never asks for more than the API's 100 rows

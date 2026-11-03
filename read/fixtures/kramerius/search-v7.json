@@ -1,0 +1,45 @@
+{
+ "response": {
+  "docs": [
+   {
+    "page.number": "214",
+    "root.pid": "uuid:00000000-0000-4000-8000-0000000000a1",
+    "root.title": "Adresář města Villazul 1912",
+    "own_model_path": "monograph/page",
+    "pid": "uuid:00000000-0000-4000-8000-000000000001",
+    "date.str": "1912"
+   },
+   {
+    "page.number": "3",
+    "root.pid": "uuid:00000000-0000-4000-8000-0000000000a2",
+    "root.title": "Nortijské listy",
+    "own_model_path": "periodical/periodicalvolume/periodicalitem/page",
+    "pid": "uuid:00000000-0000-4000-8000-000000000002",
+    "date.str": "15.03.1908"
+   }
+  ],
+  "numFound": 2,
+  "start": 0,
+  "numFoundExact": true
+ },
+ "responseHeader": {
+  "status": 0,
+  "QTime": 12,
+  "params": {
+   "q": "text_ocr:(Zorvalová)"
+  }
+ },
+ "highlighting": {
+  "uuid:00000000-0000-4000-8000-0000000000a1!uuid:00000000-0000-4000-8000-000000000001": {
+   "text_ocr": [
+    "<em>Zorvalová</em> Anna, vdova, Hlavní 12",
+    "<em>Zorvalová</em> Marie, švadlena"
+   ]
+  },
+  "uuid:00000000-0000-4000-8000-0000000000a2!uuid:00000000-0000-4000-8000-000000000002": {
+   "text_ocr": [
+    "Zemřela paní Anna <em>Zorvalová</em> v 71. roce věku"
+   ]
+  }
+ }
+}
