@@ -72,6 +72,7 @@ dev-mode-dirs = ["apply", "check", "fetch", "core", "ledger", "gate", "fscache",
 "rank/gwt_rank.py" = "gwt_rank.py"
 "importxl/gwt_import_excel.py" = "gwt_import_excel.py"
 "rawstore/gwt_rawstore.py" = "gwt_rawstore.py"
+"rawstore/gwt_rawstore_doctor.py" = "gwt_rawstore_doctor.py"
 "myheritage/gwt_mh.py" = "gwt_mh.py"
 "myheritage/gwt_mh_browser.py" = "gwt_mh_browser.py"
 "myheritage/gwt-mh" = "gwt_mh_cli.py"
