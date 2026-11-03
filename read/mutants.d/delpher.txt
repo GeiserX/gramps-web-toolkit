@@ -8,5 +8,11 @@ gwt_delpher.py | PACE = {'start': 3.0, 'floor': 2.0, 'ceil': 120.0} | PACE = {'s
 gwt_delpher.py |     return root is not None and root.tag == 'text' |     return root is not None or True | a resolver page that is not OCR text is a STOP, never saved as the article's text
 gwt_delpher.py |     for c in cands[:max(0, min(int(a.text), MAX_TEXT))]: |     for c in cands[:0]: | --text reads the OCR text of the first articles
 gwt_delpher.py |     return re.sub(r'^http://', 'https://', url or '') |     return url or '' | the OCR is read over https
-gwt_delpher.py |         cql += ' and date within "01-01-%s 31-12-%s"' % (year_from or '1600', year_to or '2000') |         cql += ' and date within "%s %s"' % (year_from or '1600', year_to or '2000') | --from and --to send the date filter the API reads
+gwt_delpher.py | "01-01-%s 31-12-%s"' % (cql, | "%s %s"' % (cql, | --from and --to send the date filter the API reads
 gwt_delpher.py | ('maximumRecords', max(1, min(int(count), 100))) | ('maximumRecords', max(1, int(count))) | a search never asks for more than 100 rows
+gwt_delpher.py |         cql = '(%s) and date within | cql = '%s and date within | the date filter wraps the query in brackets: a quoted phrase plus a date otherwise reads as 0 rows
+gwt_delpher.py |     if query.count('"') % 2: |     if False: | a query with an odd number of quotes is refused before any request
+gwt_delpher.py |     return 'unbalanced brackets' if depth else '' |     return '' | a query with unbalanced brackets is refused before any request, never sent to pause every lane
+gwt_delpher.py |         if diag: |         if False: | an SRU diagnostic's own words reach the user
+gwt_delpher.py |                 if e.verdict != 'http' or e.status not in (404, 410): |                 if True: | one article without OCR text keeps the other rows
+gwt_delpher.py | dest='year_from', type=int, default=None | dest='year_from', default=None | a year that is not a number is refused before any request

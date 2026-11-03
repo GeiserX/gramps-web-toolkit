@@ -14,7 +14,7 @@ API's own date filter. A row is one article, never a person. "None" is the API's
 well-shaped answer; an SRU diagnostic (the API's error, which comes with HTTP 200) or any other shape is a STOP.
 Standard library only.
 """
-import re, urllib.parse
+import re, sys, urllib.parse
 import xml.etree.ElementTree as ET
 
 import gwt_reader
@@ -37,13 +37,15 @@ SPEC = {
     'search_help': 'a CQL query over the articles\' text; one row per article, with its OCR text',
 }
 ACCEPT = 'application/xml'
+EXIT_USAGE = 64
 NS = {'srw': 'http://www.loc.gov/zing/srw/', 'dc': 'http://purl.org/dc/elements/1.1/', 'ddd': 'http://www.kb.nl/ddd'}
 
 
 def search_url(query, year_from='', year_to='', count=20, start=1):
     cql = query.strip()
     if year_from or year_to:
-        cql += ' and date within "01-01-%s 31-12-%s"' % (year_from or '1600', year_to or '2000')
+        # the brackets keep the filter on the whole query: the KB parser reads '"a b" and date within ...' as 0 rows
+        cql = '(%s) and date within "01-01-%s 31-12-%s"' % (cql, year_from or '1600', year_to or '2000')
     return API + '?' + urllib.parse.urlencode([
         ('version', '1.2'), ('operation', 'searchRetrieve'), ('x-collection', COLLECTION), ('recordSchema', 'ddd'),
         ('maximumRecords', max(1, min(int(count), 100))), ('startRecord', max(1, int(start))), ('query', cql)])
@@ -81,6 +83,31 @@ def verdict(root, start=1):
     return 'unknown'
 
 
+def diagnostic(body):
+    """The text of an SRU diagnostic in an answer ("General system error: ..."), or ''."""
+    root = parse(body or b'')
+    if root is None:
+        return ''
+    out = []
+    for d in root.iter('{http://www.loc.gov/zing/srw/diagnostic/}diagnostic'):
+        words = [(d.findtext('{http://www.loc.gov/zing/srw/diagnostic/}%s' % k) or '').strip() for k in ('message', 'details')]
+        out.append(': '.join(w for w in words if w))
+    return '; '.join(w for w in out if w)[:300]
+
+
+def query_problem(query):
+    """Why a CQL query cannot be sent (an odd number of double quotes, unbalanced brackets), or ''. The API answers
+    such a query with a diagnostic that looks the same as a failing index, so it is caught here, before any request."""
+    if query.count('"') % 2:
+        return 'an odd number of double quotes'
+    depth = 0
+    for ch in re.sub(r'"[^"]*"', '', query):
+        depth += {'(': 1, ')': -1}.get(ch, 0)
+        if depth < 0:
+            break
+    return 'unbalanced brackets' if depth else ''
+
+
 def is_ocr(page):
     """An OCR answer of the resolver: an XML <text> document."""
     root = parse(page)
@@ -114,8 +141,8 @@ def candidates(root):
 
 def add_search_args(sp):
     sp.add_argument('--query', required=True, help='CQL: words, "a phrase", and/or: \'"Jan Jansen" and overleden\'')
-    sp.add_argument('--from', dest='year_from', default='', help='first publication year')
-    sp.add_argument('--to', dest='year_to', default='', help='last publication year')
+    sp.add_argument('--from', dest='year_from', type=int, default=None, help='first publication year')
+    sp.add_argument('--to', dest='year_to', type=int, default=None, help='last publication year')
     sp.add_argument('--count', type=int, default=20, choices=range(1, 101), metavar='1-100')
     sp.add_argument('--start', type=int, default=1, help='first row, from 1')
     sp.add_argument('--text', type=int, default=5, help='read the OCR text of the first N articles (0 to %d, '
@@ -123,20 +150,37 @@ def add_search_args(sp):
 
 
 def search(a, R):
+    why = query_problem(a.query)
+    if why:
+        print('gwt-read: delpher: the query has %s; fix it before searching: %s' % (why, a.query), file=sys.stderr,
+              flush=True)
+        return EXIT_USAGE
     start = max(1, int(a.start))
-    url = search_url(a.query, a.year_from, a.year_to, a.count, start)
-    status, rh, body, cached = gwt_reader.get_api(R, url, {'accept': ACCEPT}, refresh=a.refresh,
-                                                  page=lambda p: verdict(parse(p), start) != 'unknown')
+    url = search_url(a.query, a.year_from or '', a.year_to or '', a.count, start)
+    try:
+        status, rh, body, cached = gwt_reader.get_api(R, url, {'accept': ACCEPT}, refresh=a.refresh,
+                                                      page=lambda p: verdict(parse(p), start) != 'unknown')
+    except gwt_reader.Stop as e:
+        diag = diagnostic(e.body)
+        if diag:
+            raise gwt_reader.Stop('%s; the API said: %s' % (e, diag), e.exit_code, e.verdict, e.status, e.body) from None
+        raise
     root = parse(body)
     total = int(root.findtext('srw:numberOfRecords', '0', NS).strip())
     cands = candidates(root)
     for c in cands[:max(0, min(int(a.text), MAX_TEXT))]:
         if c['ocr']:
-            _, _, ob, _ = gwt_reader.get_api(R, c['ocr'], {'accept': ACCEPT}, refresh=a.refresh, page=is_ocr)
+            try:
+                _, _, ob, _ = gwt_reader.get_api(R, c['ocr'], {'accept': ACCEPT}, refresh=a.refresh, page=is_ocr)
+            except gwt_reader.Stop as e:
+                if e.verdict != 'http' or e.status not in (404, 410):
+                    raise
+                c['ocr_status'] = e.status      # this one article has no OCR text; the other rows stand
+                continue
             c['text'] = ocr_text(ob)
     env = gwt_reader.envelope(url, None, text='\n\n'.join(c['text'] for c in cands if c['text']),
                               verdict=verdict(root, start), total=total, status=status, from_cache=cached)
-    words = [SOURCE, a.query, a.year_from, a.year_to, a.count, start]
+    words = [SOURCE, a.query, a.year_from or '', a.year_to or '', a.count, start]
     base = gwt_reader.write_search(a.out, gwt_reader.search_key(url, words), env, cands)
     gwt_reader.print_paths(SOURCE, base, print)
     print('results\t%d total, %d read, %d with text%s%s' % (

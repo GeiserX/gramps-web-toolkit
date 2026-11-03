@@ -10,7 +10,8 @@ gwt read delpher search --query '"Jan Jansen" and overleden' [--from 1900] [--to
 gwt read delpher control
 ```
 
-- `--query` is CQL, the API's query language: words, `"a phrase"`, `and`, `or`. `--from` and `--to` add the API's own date filter (`date within "01-01-1900 31-12-1910"`).
+- `--query` is CQL, the API's query language: words, `"a phrase"`, `and`, `or`. `--from` and `--to` (years) add the API's own date filter and wrap the query in brackets: `("Jan Jansen" and overleden) and date within "01-01-1900 31-12-1910"`. Without the brackets the KB's parser reads a quoted phrase followed by a date filter as 0 rows.
+- A query with an odd number of double quotes or unbalanced brackets is refused with exit 64 before any request: the API answers it with the same diagnostic as a failing index, which would pause every lane.
 - `--text N` reads the OCR text of the first N articles (default 5, at most 20), one request each, from the resolver URL the search returned. `--text 0` reads none.
 - `--start` is the first row, from 1; with `--count` it pages through a long result.
 
@@ -20,7 +21,7 @@ A row is one article, never a person. Its candidate has the newspaper's title as
 
 ## When it stops
 
-"None" is the API's own count: `numberOfRecords` 0 in a well-shaped SRU answer. The API reports its errors (a query it cannot parse, a failing index) with HTTP 200 and a `diagnostics` block; that answer, a missing count, a count with the records gone, or anything that is not an SRU answer is a STOP: nothing written or cached, exit 3. So is an OCR request that does not come back as OCR text. A `--start` past the last row is the end of the results (exit 2, `past the end` on the results line). A 5xx or no answer is an outage, exit 3, and the gate pauses every lane.
+"None" is the API's own count: `numberOfRecords` 0 in a well-shaped SRU answer. The API reports its errors (a query it cannot parse, a failing index) with HTTP 200 and a `diagnostics` block; that answer, a missing count, a count with the records gone, or anything that is not an SRU answer is a STOP: nothing written or cached, exit 3. The stop message carries the diagnostic's own words. So is an OCR request that does not come back as OCR text. An OCR URL that answers 404 or 410 leaves that one row without text (`ocr_status` says which) and keeps the others. A `--start` past the last row is the end of the results (exit 2, `past the end` on the results line). A 5xx or no answer is an outage, exit 3, and the gate pauses every lane.
 
 ## Pace, cache and terms
 

@@ -53,9 +53,18 @@ class Classify(unittest.TestCase):
     def test_the_query_and_date_filter(self):
         q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(
             gwt_delpher.search_url('"Anna Zorvaal"', '1900', '1910', 500, 0)).query))
-        self.assertEqual(q['query'], '"Anna Zorvaal" and date within "01-01-1900 31-12-1910"')
+        self.assertEqual(q['query'], '("Anna Zorvaal") and date within "01-01-1900 31-12-1910"',
+                         'without the brackets the KB parser reads a quoted phrase plus a date filter as 0 rows')
+        q2 = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(gwt_delpher.search_url('Zorvaal or Quirel')).query))
+        self.assertEqual(q2['query'], 'Zorvaal or Quirel', 'a query with no date filter goes as typed')
         self.assertEqual((q['x-collection'], q['maximumRecords'], q['startRecord']), ('DDD_artikel', '100', '1'))
         self.assertTrue(gwt_delpher.search_url('x').startswith('https://jsru.kb.nl/sru/sru?'))
+
+    def test_a_query_the_api_cannot_parse_is_caught_here(self):
+        for bad in ('Zorvaal and (', '"Anna Zorvaal', 'Zorvaal) or (Quirel'):
+            self.assertTrue(gwt_delpher.query_problem(bad), bad)
+        for good in ('"Anna Zorvaal" and overleden', '(Zorvaal or Quirel) and "a (b"', 'Zorvaal'):
+            self.assertEqual(gwt_delpher.query_problem(good), '', good)
 
     def test_ocr_text(self):
         self.assertTrue(gwt_delpher.is_ocr(OCR.decode()))
@@ -111,6 +120,33 @@ class Search(Base):
         self.assertEqual((code, self.out_files()), (gwt_reader.EXIT_WALL, []), text)
         self.search(net, gate)
         self.assertEqual(len(net.requests), 2, 'an SRU error was served from the cache')
+
+    def test_a_diagnostic_says_what_the_api_said(self):
+        gate = FakeGate()
+        code, lines, text = self.search(FakeNet(gate, (200, DIAG)), gate)
+        self.assertIn('the API said: Query syntax error', text)
+
+    def test_a_bad_query_or_year_is_refused_before_any_request(self):
+        for extra in (('--query', 'Zorvaal and ('), ('--query', 'Zorvaal', '--from', 'abc')):
+            gate = FakeGate()
+            net = FakeNet(gate)
+            with contextlib.redirect_stderr(io.StringIO()):
+                try:
+                    code, lines, text = self.run_d(net, gate, 'search', *extra, '--out', self.out)
+                except SystemExit as e:      # argparse refuses a year that is not a number
+                    code = e.code
+            self.assertIn(code, (gwt_delpher.EXIT_USAGE, 2), extra)
+            self.assertEqual((net.requests, gate.hits), ([], []), extra)
+
+    def test_one_article_without_ocr_keeps_the_other_rows(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, SEARCH), (404, b'not found'), (200, OCR))
+        code, lines, text = self.search(net, gate)
+        self.assertEqual(code, 0, text)
+        a, b = json.load(open(lines['candidates']))['candidates']
+        self.assertEqual((a['text'], a['ocr_status']), ('', 404))
+        self.assertIn('ANNA ZORVAAL', b['text'])
+        self.assertEqual(lines['results'], '2 total, 2 read, 1 with text')
 
     def test_an_ocr_page_that_is_not_ocr_stops_the_run(self):
         gate = FakeGate()
