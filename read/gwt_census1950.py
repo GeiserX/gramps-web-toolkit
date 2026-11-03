@@ -64,10 +64,17 @@ def verdict(doc, offset=0):
     # paged past the last result: the end of the results, not a changed answer
     if not res and offset >= n:
         return 'none'
-    if res and all(isinstance(r, dict) and r.get('scheduleId') and isinstance(r.get('image'), str)
-                   and isinstance(r.get('names'), list) for r in res):
+    if res and all(isinstance(r, dict) and r.get('scheduleId') and isinstance(r.get('image'), str) and _lines_ok(r)
+                   for r in res):
         return 'hits'
     return 'unknown'
+
+
+def _lines_ok(r):
+    """A page has the machine's lines (`names`), the volunteers' (`transcribe`) or both: each a list or null (a page
+    only the volunteers have read has `names` null), and at least one a list."""
+    n, t = r.get('names'), r.get('transcribe')
+    return all(x is None or isinstance(x, list) for x in (n, t)) and (isinstance(n, list) or isinstance(t, list))
 
 
 def image_url(key):
@@ -97,7 +104,7 @@ def candidates(r):
             'county': r.get('county') or '', 'ed': r.get('ed') or '', 'sheet': _sheet(r['image']),
             'image_key': r['image'], 'image': image_url(r['image']), 'iiif_info': r.get('iiifUrl') or ''}
     rows, read = [], set()
-    for machine, lines, field in ((False, r.get('transcribe'), 'transcribe.name'), (True, r['names'], 'names.name')):
+    for machine, lines, field in ((False, r.get('transcribe'), 'transcribe.name'), (True, r.get('names'), 'names.name')):
         for name, nums in _rows(lines, set(hl.get(field) or ())).items():
             for row in nums:
                 if machine and row is not None and row in read:

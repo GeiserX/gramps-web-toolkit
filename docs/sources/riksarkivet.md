@@ -10,7 +10,7 @@ gwt read riksarkivet search --query "Uppsala domkyrkoförsamling" [--type Volume
 gwt read riksarkivet control
 ```
 
-- `--query` takes the words of a catalogue entry: a parish, or a parish and a series ("husförhörslängder Uppsala").
+- `--query` takes the words of a catalogue entry, such as a parish name ("Uppsala domkyrkoförsamling"). Each row names its series (`series`: "Husförhörslängder", "Födelse- och dopböcker"), so a search by parish lists every kind of volume the parish holds.
 - By default the search keeps to volumes (`--type Volume`) that are scanned. `--all` adds the volumes that are not scanned, which have no manifest. `--type ""` searches every kind of entry: archives, series, maps.
 
 ## What a candidate is

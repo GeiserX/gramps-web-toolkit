@@ -11,7 +11,7 @@ gwt read census1950 control
 
 - `--name` is a name as the schedule writes it: a surname, or surname then given name ("garcia juan").
 - `--state` is the two-letter code (`PR`, `NY`, `FL`). `--county` is the county, or the municipio in Puerto Rico.
-- A page of results is 25 schedule pages, the API's own size.
+- A page of results is 25 schedule pages, the API's own size. The API counts at most 10,000 pages, so a broad search reads `10000 pages`: narrow it with `--county`.
 
 ## What a candidate is
 
@@ -26,7 +26,7 @@ Each page prints an `item` line: the schedule id, the S3 image and the IIIF base
 
 ## When it stops
 
-"None" is the API's own count: `total` 0 with no page. Any other answer is a STOP and nothing is written or cached: a renamed result container, no count, a count with no pages, or a page with no image key. A `--page` past the last one is the end of the results, not a STOP: exit 2, with `past the end` on the results line. A 5xx or no answer is an outage: exit 3, and the gate pauses every lane.
+"None" is the API's own count: `total` 0 with no page. Any other answer is a STOP and nothing is written or cached: a renamed result container, no count, a count with no pages, or a page with no image key or no lines. A page only the volunteers have read has no machine lines (`names` is null); that is a page like any other. A `--page` past the last one is the end of the results, not a STOP: exit 2, with `past the end` on the results line. A 5xx or no answer is an outage: exit 3, and the gate pauses every lane.
 
 ## Pace, cache and terms
 

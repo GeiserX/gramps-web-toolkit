@@ -5,10 +5,12 @@ gwt_census1950.py | if n == 0 and not res: | if not res: | a count above zero wi
 gwt_census1950.py | not _count(doc.get('total')) or | False or | an answer with no count is unknown, never "none"
 gwt_census1950.py | if not res and offset >= n: | if False: | a census page past the last one is the end of the results (exit 2), never a STOP
 gwt_census1950.py | and isinstance(r.get('image'), str) | and True | a page with no image key is unknown, a STOP
-gwt_census1950.py | and isinstance(r.get('names'), list) for r in res): | for r in res): | a page whose names are no longer a list is unknown, a STOP
+gwt_census1950.py | return all(x is None or isinstance(x, list) for x in (n, t)) and | return | a page whose names or volunteer lines are no longer a list is unknown, a STOP
+gwt_census1950.py | (isinstance(n, list) or isinstance(t, list)) | True | a page with no lines at all is unknown, a STOP
+gwt_census1950.py | and _lines_ok(r) | and r.get('names') is not None | a page only the volunteers have read (names null) is a hit, never a STOP
 gwt_census1950.py | return S3 + urllib.parse.quote(key.lstrip('/')) | return 'https://1950census.archives.gov/' + key | the image is the scan in NARA's public bucket, what gwt fetch saves
 gwt_census1950.py | if machine and row is not None and row in read: | if False: | the volunteers' line wins over the machine's misreading of the same line
-gwt_census1950.py | for machine, lines, field in ((False, r.get('transcribe'), 'transcribe.name'), (True, r['names'], 'names.name')): | for machine, lines, field in ((True, r['names'], 'names.name'),): | a row from the volunteers' transcription is read too, marked machine false
+gwt_census1950.py | for machine, lines, field in ((False, r.get('transcribe'), 'transcribe.name'), (True, r.get('names'), 'names.name')): | for machine, lines, field in ((True, r.get('names'), 'names.name'),): | a row from the volunteers' transcription is read too, marked machine false
 gwt_census1950.py | 'relatives': [], 'url': page['image'], 'row': row, 'machine': machine}, **page) | 'relatives': [], 'url': page['image'], 'row': row}, **page) | every row says whether the noisy machine index read it
 gwt_census1950.py |         rows = [(True, '', None)] |         pass | a page the API matched with no marked line is kept as the page, never dropped
 gwt_census1950.py | if not a.name.strip() or not re.fullmatch(r'[A-Za-z]{2}', a.state.strip()): | if not a.name.strip(): | a state that is not a two-letter code asks nothing

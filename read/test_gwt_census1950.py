@@ -43,6 +43,14 @@ class Classify(unittest.TestCase):
                          'a page with no image key')
         self.assertEqual(v({'total': 1, 'results': [{'scheduleId': '1', 'image': 'k.jpg', 'names': {}}]}),
                          'unknown', 'a page whose names are no longer a list')
+        self.assertEqual(v({'total': 1, 'results': [{'scheduleId': '1', 'image': 'k.jpg', 'names': None,
+                                                     'transcribe': [{'name': 'Ana Zorvalo', 'row': 3}]}]}), 'hits',
+                         'a page only the volunteers have read has names null (seen live)')
+        self.assertEqual(v({'total': 1, 'results': [{'scheduleId': '1', 'image': 'k.jpg', 'names': None}]}),
+                         'unknown', 'a page with no lines at all')
+        self.assertEqual(v({'total': 1, 'results': [{'scheduleId': '1', 'image': 'k.jpg', 'names': [],
+                                                     'transcribe': 'Ana'}]}), 'unknown',
+                         'a page whose volunteer lines are no longer a list')
 
     def test_a_page_past_the_last_row_is_the_end_never_a_stop(self):
         past = {'total': 2, 'size': 25, 'page': 2, 'results': []}
@@ -89,6 +97,13 @@ class Search(Run):
         r['highlight'] = {}
         (c,) = gwt_census1950.candidates(r)
         self.assertEqual((c['id'], c['row'], c['machine'], c['name']), ('9900002', None, True, ''))
+
+    def test_a_page_only_the_volunteers_have_read(self):
+        r = json.loads(fx('search.json'))['results'][0]
+        r['names'] = None
+        r['highlight'] = {'transcribe.name': ['Ana Zorvalo']}
+        self.assertEqual([(c['name'], c['row'], c['machine']) for c in gwt_census1950.candidates(r)],
+                         [('Ana Zorvalo', 3, False)])
 
     def test_the_apis_own_zero_is_exit_2(self):
         gate = FakeGate()

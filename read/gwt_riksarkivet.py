@@ -96,8 +96,8 @@ def candidate(item):
 
 
 def add_search_args(sp):
-    sp.add_argument('--query', required=True, help='words of the catalogue entry: a parish, "Uppsala '
-                    'domkyrkoförsamling", or a series, "husförhörslängder Uppsala"')
+    sp.add_argument('--query', required=True, help='words of the catalogue entry, such as a parish: '
+                    '"Uppsala domkyrkoförsamling"')
     sp.add_argument('--type', dest='kind', default='Volume', help='Volume (default), or "" for every kind of entry '
                     '(archives, series, maps)')
     sp.add_argument('--all', action='store_true', help='also volumes that are not scanned (no manifest)')
