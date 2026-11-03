@@ -190,3 +190,33 @@ def test_each_mutant_fires_its_own_code():
         m = rule.mutate(ctx)
         assert m.code == code
         assert [f.code for f in rule.check(ctx.but(m.ops))] == [code], name
+
+
+def test_the_full_record_wins_over_the_candidate_row_saved_beside_it():
+    # gwt-read writes <key>.json and <key>.candidates.json; the row sorts first but has no facts or relationships
+    assert os.path.exists(os.path.join(RECORDS, "baptism-ana.candidates.json"))
+    rec, persona = E.Records(RECORDS).find("1:1:QZZ9-AAA")
+    assert persona["facts"] == {"Birth", "Christening"} and len(rec["rels"]) == 2
+
+
+def test_a_marriage_fact_on_the_couple_relationship_backs_a_marriage(tmp_path):
+    ops = [{"op": "add_event", "key": "e-mar", "family": "F2", "type": "Marriage"},
+           {"op": "add_citation", "key": "c-mar", "source": "S1", "page": FS + "1:1:QZZ6-CCA",
+            "attach": [{"event": "key:e-mar"}]}]
+    assert lint(write(tmp_path, ops), "principal")[:2] == (0, {})
+
+
+def test_a_record_file_of_another_shape_is_skipped_not_a_crash(tmp_path):
+    shutil.copytree(RECORDS, tmp_path / "saved")
+    (tmp_path / "saved" / "zy.json").write_text('{"persons": [{"id": "z", "display": "oops", "names": ["x"]}]}',
+                                                encoding="utf-8")
+    (tmp_path / "saved" / "zz.json").write_text('{"persons": [{"id": "z", "gender": "Male"}]}', encoding="utf-8")
+    code, codes, _ = lint("principal-finding.jsonl", "principal", "--records", str(tmp_path / "saved"))
+    assert code == 1 and "principal-nonprincipal" in codes
+
+
+def test_a_symlinked_record_folder_is_read(tmp_path):
+    (tmp_path / "saved").mkdir()
+    (tmp_path / "saved" / "lane").symlink_to(RECORDS, target_is_directory=True)
+    code, codes, _ = lint("principal-finding.jsonl", "principal", "--records", str(tmp_path / "saved"))
+    assert code == 1 and "principal-nonprincipal" in codes

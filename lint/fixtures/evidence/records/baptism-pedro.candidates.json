@@ -1,0 +1,33 @@
+{
+ "candidates": [
+  {
+   "source": "familysearch",
+   "id": "QZZ8-BBA",
+   "name": "Pedro Lurre",
+   "role": "Principal",
+   "principal": true,
+   "given": null,
+   "surnames": null,
+   "events": {
+    "birth": {
+     "year": 1860,
+     "year_to": 1860,
+     "place": "Villazul"
+    }
+   },
+   "relatives": [
+    {
+     "role": "mother",
+     "name": "Juana Morel"
+    },
+    {
+     "role": "mother",
+     "name": "Teresa Vidán"
+    }
+   ],
+   "place_orig": [
+    "Santísimo Cristo del Valle, Villazul"
+   ]
+  }
+ ]
+}

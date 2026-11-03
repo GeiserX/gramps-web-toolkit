@@ -15,6 +15,7 @@ from __future__ import annotations
 import csv
 import gzip
 import json
+import os
 import re
 import unicodedata
 import zlib
@@ -88,14 +89,21 @@ class Records:
         self.folder = str(folder)
         self.records: list[dict] = []
         self.by_ark: dict[str, tuple[dict, dict]] = {}
+        self.thin: dict[str, tuple[dict, dict]] = {}   # candidate rows: used only for an ark no full record holds
+        self.unread: list[str] = []                     # files that look like saved answers but could not be read
         self.bound: dict[str, list[str]] = {}   # ark -> transcriptions saved for it
         self.loose: list[str] = []              # transcriptions and page texts tied to no ark
         root = Path(folder)
         if not root.is_dir():
             raise NothingToCheck(f"no folder {folder}")
-        for p in sorted(root.rglob("*")):
-            if p.is_file():
-                self._read(p)
+        for top, dirs, files in os.walk(root, followlinks=True):  # a folder of symlinks to other record folders
+            dirs.sort()
+            for name in sorted(files):
+                p = Path(top) / name
+                try:
+                    self._read(p)
+                except (AttributeError, TypeError, KeyError, IndexError):  # a JSON of another shape
+                    self.unread.append(str(p))
 
     def __len__(self):
         return len(self.records) + len(self.loose) + len(self.bound)
@@ -164,19 +172,28 @@ class Records:
             if not isinstance(p, dict):
                 continue
             arks = [a for a in ARK.findall(json.dumps(p.get("identifiers") or {})) if a.startswith("1:1:")]
-            names = ((p.get("names") or [{}])[0].get("nameForms") or [{}]) if p.get("names") else [{}]
-            name = (p.get("display") or {}).get("name") or names[0].get("fullText") or ""
+            display = p.get("display") if isinstance(p.get("display"), dict) else {}
+            names = p.get("names") if isinstance(p.get("names"), list) else []
+            forms = names[0].get("nameForms") if names and isinstance(names[0], dict) else None
+            form = forms[0] if isinstance(forms, list) and forms and isinstance(forms[0], dict) else {}
+            name = str(display.get("name") or form.get("fullText") or "")
             labels = " ".join(str(f.get("text") or f.get("value") or "") for f in p.get("fields") or []
                               if isinstance(f, dict) and re.search(r"ROLE|RELATIONSHIP", str(f.get("labelId", ""))))
             rec["personas"].append({
                 "id": "#" + str(p.get("id", "")), "arks": arks, "principal": bool(p.get("principal")),
                 "gender": _tail((p.get("gender") or {}).get("type")), "name": name,
-                "role": " ".join(x for x in ((p.get("display") or {}).get("role") or "", labels) if x),
+                "role": " ".join(x for x in (str(display.get("role") or ""), labels) if x),
                 "facts": {_tail(f.get("type")) for f in p.get("facts") or [] if isinstance(f, dict)}})
+        by_id = {p["id"]: p for p in rec["personas"]}
         for r in g.get("relationships") or []:
             if isinstance(r, dict):
-                rec["rels"].append((_tail(r.get("type")), (r.get("person1") or {}).get("resource"),
-                                    (r.get("person2") or {}).get("resource")))
+                a, b = (r.get("person1") or {}).get("resource"), (r.get("person2") or {}).get("resource")
+                rec["rels"].append((_tail(r.get("type")), a, b))
+                # FamilySearch keeps a marriage's fact on the Couple relationship, not on the bride or the groom
+                facts = {_tail(f.get("type")) for f in r.get("facts") or [] if isinstance(f, dict)}
+                for who in (a, b):
+                    if who in by_id:
+                        by_id[who]["facts"] |= facts
         self._add(rec)
 
     def _candidate(self, c):
@@ -185,27 +202,32 @@ class Records:
             return
         ark = str(c.get("id") or "")
         ark = ark if ark.startswith("1:1:") else "1:1:" + ark
-        if not ARK.fullmatch(ark) or ark in self.by_ark:
+        if not ARK.fullmatch(ark):
             return
         places = [str(e.get("place") or "") for e in (c.get("events") or {}).values() if isinstance(e, dict)]
         rec = {"personas": [{"id": "#" + ark, "arks": [ark], "principal": bool(c.get("principal")), "gender": "",
                              "name": str(c.get("name") or ""), "role": str(c.get("role") or ""), "facts": set()}],
                "rels": [], "place_orig": [x for x in c.get("place_orig") or [] if isinstance(x, str)],
                "texts": [s for s in _strings(c) if s.strip()] + places}
-        self._add(rec)
+        self._add(rec, self.thin)
 
-    def _add(self, rec):
+    def _add(self, rec, into=None):
         self.records.append(rec)
+        into = self.by_ark if into is None else into
         for p in rec["personas"]:
             for a in p["arks"]:
-                self.by_ark.setdefault(a, (rec, p))
+                into.setdefault(a, (rec, p))
 
     def find(self, ark):
-        """(record, persona) of a record ark; NothingToCheck when it was never saved (NOREC)."""
-        if ark not in self.by_ark:
-            raise NothingToCheck(f"{ark} has no saved record in {self.folder} (NOREC); save it first: "
-                                 f"gwt-read familysearch record {ark} --out {self.folder}")
-        return self.by_ark[ark]
+        """(record, persona) of a record ark: the full record when one is saved, else its candidate row (gwt-read
+        writes both, and the row has no facts or relationships); NothingToCheck when neither was saved (NOREC)."""
+        if ark in self.by_ark:
+            return self.by_ark[ark]
+        if ark in self.thin:
+            return self.thin[ark]
+        unread = f" ({len(self.unread)} files could not be read, the first {self.unread[0]})" if self.unread else ""
+        raise NothingToCheck(f"{ark} has no saved record in {self.folder} (NOREC){unread}; save it first: "
+                             f"gwt-read familysearch record {ark} --out {self.folder}")
 
     def texts_of(self, ark) -> list[str]:
         """Every field of the record an ark points into (record ark) and the transcriptions saved for it."""

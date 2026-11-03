@@ -17,17 +17,19 @@ gwt-lint --prove changes.jsonl --snapshot tree.json.gz --config lint.toml --rule
 
 ## Saved records
 
-`--records DIR` (or `records = "saved"` in lint.toml, read relative to the file) names a folder. Everything below it is read:
+`--records DIR` (or `records = "saved"` in lint.toml, read relative to the file) names a folder. Everything below it is read, through symlinked folders too, so one folder of links can gather several:
 
 | What | How it is read |
 |---|---|
 | `<key>.json` that `gwt-read` writes | the GEDCOM X records inside its `json` answer (a search or one record), and its `text` |
-| `<key>.candidates.json` | each FamilySearch candidate row: one persona, its role, its principal flag, its typed place |
-| a raw GEDCOM X record (`{"persons": [...]}`) | every persona, relationship and field |
+| `<key>.candidates.json` | each FamilySearch candidate row: one persona, its role, its principal flag, its typed place. A row is used only for an ark no full record holds: it has no facts and no relationships |
+| a raw GEDCOM X record (`{"persons": [...]}`) | every persona, relationship and field. A fact on a relationship (FamilySearch puts a marriage on the Couple) counts for both people in it |
 | a `gwt-fscache` folder | each entry's `.body`, the answer as the site sent it |
 | `*.txt` | a transcription or OCR text. It belongs to the ark in its file name or on its first line (`ark:/61903/3:1:...` for an image); with none, to every op that cites no ark |
 
-Save a record before you cite it: `gwt-read familysearch record 1:1:XXXX-XXX --out saved/`.
+Save a record before you cite it: `gwt-read familysearch record 1:1:XXXX-XXX --out saved/`. A JSON file of another shape is skipped; when an ark is then missing, the NOREC message names the first file that could not be read.
+
+Every file is read on each run, so point `--records` at the records a list cites, not at a whole `gwt-fscache` of tens of thousands of answers.
 
 **NOREC.** An op that cites a FamilySearch record ark with no saved record makes the rule exit 2, with the command that saves it. A rule that could not look at the record is not a clean rule. A missing `--records`, or a folder with no records in it, exits 2 the same way.
 

@@ -24,3 +24,7 @@ gwt_lint/rules_evidence.py |     return list(dict.fromkeys(dedication(text, loc)
 gwt_lint/rules_evidence.py |                 if quote.strip() and _found(quote, page) and isinstance(ov.get("place"), str): |                 if isinstance(ov.get("place"), str): | an override counts only with a quote that is on the page
 gwt_lint/rules_evidence.py |             elif op["op"] == "update_event" and isinstance(op.get("set"), dict) and op["set"].get("place"): |             elif False: | a place an update_event sets is judged too
 gwt_lint/cli.py |     ctx = F.Context(ops, tree, cfg, path=args.list, records=args.records or cfg.get("records")) |     ctx = F.Context(ops, tree, cfg, path=args.list, records=args.records) | records in lint.toml is read
+gwt_lint/rules_evidence.py |         self._add(rec, self.thin) |         self._add(rec) | the candidate row gwt-read saves beside a record never hides the full record (facts, relationships)
+gwt_lint/rules_evidence.py |                         by_id[who]["facts"] |= facts |                         pass | a marriage fact on the Couple relationship backs a marriage
+gwt_lint/rules_evidence.py | followlinks=True | followlinks=False | a records folder of symlinks to other record folders is read
+gwt_lint/rules_evidence.py |                     self.unread.append(str(p)) |                     raise | one record file of another shape is skipped, not a crash of every rule

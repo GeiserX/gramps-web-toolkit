@@ -5,8 +5,11 @@ Every name, place, ark and date is made up; the arks follow FamilySearch's shape
 
     records/baptism-ana.json          a gwt-read envelope: a baptism, with the principal (Ana), her father,
                                       mother and godfather as personas, and the parish as the index typed it
+    records/baptism-ana.candidates.json   the candidate row gwt-read writes beside it (gwt_read.record_candidates)
     records/baptism-pedro.json        a raw GEDCOM X baptism whose two parents are both women
-    records/fscache-copy/9f/<sha>.json/.body a gwt-fscache entry: a marriage, the bride not the principal
+    records/baptism-pedro.candidates.json its candidate row
+    records/fscache-copy/9f/<sha>.json/.body a gwt-fscache entry: a marriage, the bride not the principal, the
+                                      Marriage fact on the Couple relationship as FamilySearch serves it
     records/search.candidates.json    gwt-read candidates: a father's persona, nothing else saved for it
     records/image-ana.txt             a saved transcription of an image ark (named on its first line)
     readings.tsv                      a signed reading of a second image
@@ -14,11 +17,14 @@ Every name, place, ark and date is made up; the arks follow FamilySearch's shape
     python3 make_fixtures.py    # from lint/fixtures/evidence/; the output is the same on every run
 """
 import json
+import sys
 from pathlib import Path
 
 GX = "http://gedcomx.org/"
 FS = "https://www.familysearch.org/ark:/61903/"
 HERE = Path(__file__).resolve().parent
+sys.path[:0] = [str(HERE.parents[2] / "read"), str(HERE.parents[2] / "core")]
+import gwt_read  # noqa: E402  the candidate rows exactly as gwt-read writes them
 
 
 def persona(pid, ark, name, gender, facts=(), principal=False, role=""):
@@ -55,9 +61,11 @@ PEDRO = {"persons": [
                {"labelId": "NOTES", "text": "bauticé en la ermita del Santo Cristo del Valle por estar la "
                                            "parroquia en obras"}]}
 MARRIAGE = {"persons": [
-    persona("m1", "QZZ6-CCA", "Mario Lurre", "Male", [("Marriage", "1885", "Villazul")], True),
-    persona("m2", "QZZ6-CCB", "Elsa Quirell", "Female", [("Marriage", "1885", "Villazul")])],
-    "relationships": [{"type": GX + "Couple", "person1": {"resource": "#m1"}, "person2": {"resource": "#m2"}}]}
+    persona("m1", "QZZ6-CCA", "Mario Lurre", "Male", [("Birth", "1860", "Villazul")], True),
+    persona("m2", "QZZ6-CCB", "Elsa Quirell", "Female")],
+    "relationships": [{"type": GX + "Couple", "person1": {"resource": "#m1"}, "person2": {"resource": "#m2"},
+                       "facts": [{"type": GX + "Marriage", "date": {"original": "1885"},
+                                  "place": {"original": "Villazul"}}]}]}
 CANDIDATES = {"candidates": [
     {"source": "familysearch", "id": "QZZ7-DDA", "name": "Marcos Fenol", "role": "Father", "principal": False,
      "given": None, "surnames": None, "events": {}, "relatives": []}]}
@@ -176,7 +184,9 @@ def main():
 
     dump(rec / "baptism-ana.json", {"url": FS + "1:1:QZZ9-AAA", "final_url": FS + "1:1:QZZ9-AAA",
                                     "captured_at": "2026-01-02T03:04:05Z", "json": ANA})
+    dump(rec / "baptism-ana.candidates.json", {"candidates": gwt_read.record_candidates(ANA, "1:1:QZZ9-AAA")})
     dump(rec / "baptism-pedro.json", PEDRO)
+    dump(rec / "baptism-pedro.candidates.json", {"candidates": gwt_read.record_candidates(PEDRO, "1:1:QZZ8-BBA")})
     sha = "9f" + "0" * 62
     dump(rec / "fscache-copy" / "9f" / f"{sha}.json", {"method": "GET", "url": FS + "1:1:QZZ6-CCA", "status": 200,
                                                 "headers": {}, "fetched": 1767323045, "date": "2026-01-02T03:04:05Z"})
