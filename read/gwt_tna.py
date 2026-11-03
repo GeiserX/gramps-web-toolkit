@@ -202,7 +202,7 @@ def add_record_args(sp):
 def record(a, R):
     rid = a.id.strip().rsplit('/', 1)[-1]
     if re.fullmatch(r'[cd]\d+', rid):
-        rid = rid.upper()       # ids are case-sensitive: d682312 answers 204, D682312 the entry
+        rid = rid.upper()       # ids are case-sensitive: d123 answers 204 where D123 is the entry
     if not re.fullmatch(r'[A-Za-z0-9-]+', rid):
         print('gwt-read: tna: not a Discovery id: %r' % a.id, file=sys.stderr, flush=True)
         return EXIT_USAGE
