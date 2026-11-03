@@ -9,6 +9,10 @@
 | `genae` | Genae, a volunteer index of parish records | [gwt-read](../read.md#genae) |
 | `boe` | BOE and Gaceta de Madrid text search | [gwt-read](../read.md#boe-and-gaceta-de-madrid) |
 | `insee` | INSEE's French deaths files, offline | [gwt-read](../read.md#insee-french-deaths-files) |
+| `openarch` | Open Archives: Dutch, Belgian and other archives' person records | [openarch](openarch.md) |
+| `wikitree` | WikiTree, the shared one-world tree, public profiles | [wikitree](wikitree.md) |
+| `archiveorg` | Internet Archive: scanned books and registers, catalogue and full text | [archiveorg](archiveorg.md) |
+| `matchid` | matchID: France's deaths since 1970, searched online | [matchid](matchid.md) |
 
 `gwt read --help` lists every source the installed version knows.
 
@@ -29,6 +33,8 @@ A source is one module, `read/gwt_<id>.py`. It sets `SOURCE`, the slug the ledge
 and the functions `add_search_args(sp)` and `search(a, R)`, plus `add_record_args(sp)` and `record(a, R)` when the site has a record page. `search` asks for every page through `R.get(url, headers, refresh=a.refresh, page=gwt_reader.page_check(SPEC))`, writes the envelope and candidates with `gwt_reader.write_search`, prints the lines with `gwt_reader.print_paths`, and returns 0 with rows or 2 with none.
 
 A source that reads a JSON API, not HTML pages, works the same way with one change: it passes `expect=<a function that checks the answer's shape>` to `R.get` instead of `page=`, as `familysearch` does with `is_search`. An answer of another shape is a STOP. It leaves `result_markers` and `negative_markers` empty, because with no marker every page classifies `unknown`, and tells "none" by the answer's own count field (zero rows in a well-shaped answer).
+
+An open API calls `gwt_reader.get_api(R, url, headers, expect=...)` instead of `R.get`. It is the same call, except that a 5xx or no answer at all (a timeout, a refused connection) means the service is down: a wall (exit 3, the gate hears a hit), never an error a lane logs and moves past. A 4xx stays an error. `openarch`, `wikitree`, `archiveorg` and `matchid` read this way.
 
 ## The page classifier
 

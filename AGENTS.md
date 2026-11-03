@@ -27,6 +27,7 @@ page goes into the `mkdocs.yml` nav and `docs/index.md`, and `mkdocs build --str
 | `spanish-poller/` | `gwt-spanish-poller`, Spain-only sede and DEHú watcher | Node 18+, Playwright |
 | `ocr-bench/` | OCR, HTR and LLM reading benchmark | Python, one venv per engine |
 | `run/` | `gwt-run`, the write chain for one change list | Python standard library (runs gwt-apply and gwt-check) |
+| `dna/` | `gwt-import-dna`, DNA match lists to a change list | Python standard library (its end-to-end test needs `requests`) |
 
 ## Repository rules
 
@@ -56,6 +57,7 @@ cd importxl && python3 -m unittest test_gwt_import_excel test_end_to_end
 cd queue && python3 -m unittest test_gwt_queue
 cd leads && python3 -m unittest test_gwt_leads
 cd run && python3 -m pytest -q
+cd dna && python3 -m pytest -q
 cd spanish-poller && node --test
 ```
 

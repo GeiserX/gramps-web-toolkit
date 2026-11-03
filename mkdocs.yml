@@ -139,6 +139,7 @@ nav:
       - gwt-report: report.md
       - gwt-geocode: geocode.md
       - gwt-run: run.md
+      - gwt-import-dna: import-dna.md
   - Research tools:
       - gwt-queue: queue.md
       - gwt-ledger: ledger.md
@@ -147,6 +148,10 @@ nav:
       - gwt-mh: myheritage.md
       - gwt-read: read.md
       - gwt-read sources: sources/index.md
+      - "gwt-read openarch": sources/openarch.md
+      - "gwt-read wikitree": sources/wikitree.md
+      - "gwt-read archiveorg": sources/archiveorg.md
+      - "gwt-read matchid": sources/matchid.md
       - gwt-rawstore: rawstore.md
       - ocr-bench: ocr-bench.md
       - gwt-spanish-poller: spanish-poller.md

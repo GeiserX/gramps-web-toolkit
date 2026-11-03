@@ -1,0 +1,35 @@
+{
+ "server": "grampsweb 26.11.0 (ghcr.io/gramps-project/grampsweb:26.11.0)",
+ "request": {
+  "string": "Chromosome,Start Location,End Location,Centimorgans,Matching SNPs\n2,30000000,52000000,22.1,4000\n7,1000000,9000000,12.5,1500\nX,5000000,9000000,13.4,900"
+ },
+ "response": [
+  {
+   "SNPs": 4000,
+   "cM": 22.1,
+   "chromosome": "2",
+   "comment": "",
+   "side": "U",
+   "start": 30000000,
+   "stop": 52000000
+  },
+  {
+   "SNPs": 1500,
+   "cM": 12.5,
+   "chromosome": "7",
+   "comment": "",
+   "side": "U",
+   "start": 1000000,
+   "stop": 9000000
+  },
+  {
+   "SNPs": 900,
+   "cM": 13.4,
+   "chromosome": "X",
+   "comment": "",
+   "side": "U",
+   "start": 5000000,
+   "stop": 9000000
+  }
+ ]
+}

@@ -24,6 +24,7 @@ TOOLS = {  # name: (module with main(argv), one line)
     "report": ("gwt_report", "how two people are related, and what is new since the family was told"),
     "geocode": ("gwt_geocode", "coordinates for the places events use, as a gwt-apply change list"),
     "run": ("gwt_run", "backup, dry run, apply, verify and check of one list, resumable"),
+    "import-dna": ("gwt_dna", "DNA match lists from a testing site into Gramps Web's DNA view"),
 }
 
 

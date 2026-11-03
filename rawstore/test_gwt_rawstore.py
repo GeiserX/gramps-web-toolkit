@@ -1,6 +1,7 @@
 import datetime, hashlib, io, os, subprocess, sys, tempfile, threading, unittest, urllib.parse
 from contextlib import redirect_stderr, redirect_stdout
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from unittest import mock
 from xml.sax.saxutils import escape
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -269,12 +270,102 @@ class GitTest(Base):
         status = self.git('status', '--porcelain')
         self.assertIn('D  raw/r1/a.jpg', status)
         self.assertIn('A  raw/r1/rawstore.tsv', status)
-        self.assertIn('A  raw/r1/sub/.gitignore', status)
+        self.assertIn('A  raw/r1/.gitignore', status)
         self.assertNotIn('??', status)  # the files stay on disk, ignored
-        self.assertEqual(open(os.path.join(self.dir, 'raw/r1/.gitignore')).read(), '/a.jpg\n')
+        # one pattern per extension in the migrated folder, not one line per file in every subfolder
+        self.assertEqual(open(os.path.join(self.dir, 'raw/r1/.gitignore')).read(), '*.jpg\n*.pdf\n')
+        self.assertFalse(os.path.exists(os.path.join(self.dir, 'raw/r1/sub/.gitignore')))
+        self.assertTrue(os.path.exists(os.path.join(self.dir, 'raw/r1/a.jpg')))
         self.git('commit', '-qm', 'migrate')
         self.assertEqual(self.git('show', 'HEAD~1:raw/r1/a.jpg'), 'A' * 10)
         self.assertEqual(R.verify(self.store, [os.path.join(self.dir, 'raw')], log=self.log), 0)
+
+    def commit_scans(self, n=3):
+        for i in range(n):
+            self.write('raw/r1/%04d.jpg' % i, b'scan %d' % i)
+        self.write('raw/r1/notes.md', b'# notes')
+        self.git('add', '.')
+        self.git('commit', '-qm', 'raw')
+        return os.path.join(self.dir, 'raw/r1')
+
+    def test_migrate_evict_deletes_confirmed_copies_and_keeps_history(self):
+        folder = self.commit_scans()
+        self.assertEqual(R.migrate(self.store, folder, evict=True, log=self.log), 0)
+        self.assertEqual(sorted(os.listdir(folder)), ['.gitignore', 'notes.md', 'rawstore.tsv'])
+        status = self.git('status', '--porcelain')
+        self.assertIn('D  raw/r1/0000.jpg', status)
+        self.assertNotIn('??', status)
+        self.assertEqual(open(os.path.join(folder, '.gitignore')).read(), '*.jpg\n')  # one line for 3 files
+        # git no longer shows a new scan saved there, so the run says how to store one
+        self.assertTrue(any('gwt-rawstore put --remove' in l for l in self.stdout), self.stdout)
+        self.git('commit', '-qm', 'evict')
+        self.assertEqual(self.git('show', 'HEAD~1:raw/r1/0001.jpg'), 'scan 1')
+        self.assertEqual(R.verify(self.store, [folder], deep=True, log=self.log), 0)
+        self.assertTrue(R.get(self.store, os.path.join(folder, '0002.jpg'), os.path.join(self.dir, 'cache')))
+
+    def test_migrate_untracks_names_git_would_read_as_patterns(self):
+        # ':' starts a pathspec magic and '[1]' is a glob; each name must reach git rm as itself
+        for n in (':0001.jpg', 'p [1].jpg', 'p 1.jpg'):
+            self.write('raw/r1/' + n, n.encode())
+        self.git('add', '.')
+        self.git('commit', '-qm', 'raw')
+        self.assertEqual(R.migrate(self.store, os.path.join(self.dir, 'raw/r1'), evict=True, log=self.log), 0)
+        self.assertEqual(self.git('ls-files', 'raw/r1'), 'raw/r1/.gitignore\nraw/r1/rawstore.tsv\n')
+
+    def test_migrate_untracks_in_batches(self):
+        folder = self.commit_scans(5)
+        calls = []
+        real = R.git
+
+        def spy(*a, **kw):
+            calls.append(a)
+            return real(*a, **kw)
+        with mock.patch.object(R, 'GIT_BATCH', 2), mock.patch.object(R, 'git', spy):
+            self.assertEqual(R.migrate(self.store, folder, evict=True, log=self.log), 0)
+        self.assertEqual([len(a) - 4 for a in calls if a[:2] == ('rm', '--cached')], [2, 2, 1])
+        self.assertEqual(self.git('ls-files', 'raw/r1'), 'raw/r1/.gitignore\nraw/r1/notes.md\nraw/r1/rawstore.tsv\n')
+
+    def test_migrate_evict_heads_each_file_only_inside_put(self):
+        folder = self.commit_scans()
+        self.assertEqual(R.migrate(self.store, folder, evict=True, log=self.log), 0)
+        # put already HEADs each object before and after the upload; a second check would cost a request per file
+        self.assertEqual(sum(1 for c in FakeS3.calls if c[0] == 'HEAD'), 2 * 3)
+
+    def test_migrate_evict_deletes_and_untracks_nothing_when_an_upload_fails(self):
+        folder = self.commit_scans()
+        FakeS3.fail[R.object_key(R.sha256_file(os.path.join(folder, '0001.jpg'))[0], '0001.jpg')] = 99
+        with redirect_stderr(io.StringIO()):
+            self.assertEqual(R.migrate(self.store, folder, evict=True, log=self.log), 1)
+        self.assertTrue(all(os.path.exists(os.path.join(folder, '%04d.jpg' % i)) for i in range(3)))
+        self.assertNotIn('D  ', self.git('status', '--porcelain'))
+        self.assertFalse(os.path.exists(os.path.join(folder, '.gitignore')))
+
+    def test_ignore_patterns_start_on_their_own_line(self):
+        self.write('raw/.gitignore', b'.DS_Store')   # no newline at the end
+        R.ignore_binaries(os.path.join(self.dir, 'raw'), ['a.jpg', 'b.pdf'])
+        self.assertEqual(open(os.path.join(self.dir, 'raw/.gitignore')).read(), '.DS_Store\n*.jpg\n*.pdf\n')
+        R.ignore_binaries(os.path.join(self.dir, 'raw'), ['c.jpg'])   # a second migrate adds no duplicate
+        self.assertEqual(open(os.path.join(self.dir, 'raw/.gitignore')).read(), '.DS_Store\n*.jpg\n*.pdf\n')
+
+    def cli(self, *argv):
+        env = {k: v for k, v in os.environ.items() if not k.startswith('GWT_RAWSTORE_')}
+        env['GWT_RAWSTORE_CONFIG'] = os.path.join(self.dir, 'no-config')
+        with mock.patch.dict(os.environ, env, clear=True), redirect_stdout(io.StringIO()):
+            return R.main(list(argv), store=self.store)
+
+    def test_migrate_cli_takes_evict_and_remove(self):
+        folder = self.commit_scans()
+        self.assertEqual(self.cli('migrate', folder, '--evict'), 0)
+        self.assertEqual(sorted(os.listdir(folder)), ['.gitignore', 'notes.md', 'rawstore.tsv'])
+        self.assertIn('D  raw/r1/0000.jpg', self.git('status', '--porcelain'))
+        self.write('raw/r2/a.jpg', b'A')
+        self.git('add', '.')
+        self.git('commit', '-qm', 'r2')
+        self.assertEqual(self.cli('migrate', os.path.join(self.dir, 'raw/r2'), '--remove'), 0)
+        self.assertTrue(os.path.exists(os.path.join(self.dir, 'raw/r2/a.jpg')))
+        self.assertIn('D  raw/r2/a.jpg', self.git('status', '--porcelain'))
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.cli('migrate', folder, '--remove', '--evict')
 
     def test_migrate_without_remove_touches_no_index(self):
         self.write('r1/a.jpg', b'A')
