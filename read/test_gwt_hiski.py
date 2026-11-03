@@ -52,6 +52,19 @@ class Shape(unittest.TestCase):
         self.assertGreaterEqual(gwt_hiski.SPEC['pace']['floor'], 5.0)
         self.assertEqual(gwt_reader.spec_problems(gwt_hiski.SPEC), [])
 
+    def test_many_unclosed_scripts_are_read_in_linear_time(self):
+        import time
+        hostile = (b'<script>' * 8000)[:65536]
+        t = time.monotonic()
+        self.assertEqual(gwt_reader.classify_answer(200, {}, hostile), 'empty')
+        self.assertLess(time.monotonic() - t, 0.5, 'the beacon check is quadratic on unclosed <script> tags')
+        beacon = b'<script>x="/cdn-cgi/challenge-platform/scripts/jsd/main.js"</script>'
+        self.assertEqual(gwt_reader.classify_answer(200, {}, b'<script>' * 3000 + beacon + b'<p>ok</p>',
+                                                    page=lambda p: 'ok' in p), 'ok')
+        outside = b'<script>a</script><p>/cdn-cgi/challenge-platform/scripts/jsd/main.js</p><script>b</script>'
+        self.assertEqual(gwt_reader.classify_answer(200, {}, outside), 'wall',
+                         'the beacon path outside a <script> element is not left out')
+
 
 class Search(Run):
     def test_rows_are_entries_with_their_own_page(self):

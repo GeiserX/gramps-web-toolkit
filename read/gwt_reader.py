@@ -205,8 +205,25 @@ LOGIN_MARKERS = ('type="password"', "type='password'", 'sign in to familysearch'
 # Cloudflare adds a small script to ordinary pages it serves (its JavaScript detections beacon), and the script's path
 # holds 'challenge-platform'. It is not a challenge: a real one loads /cdn-cgi/challenge-platform/h/..., so only the
 # beacon's own <script> element is left out before the wall markers are read.
-_CF_BEACON = re.compile(r'<script\b[^>]*>(?:(?!</script>).)*?/cdn-cgi/challenge-platform/scripts/jsd/main\.js'
-                        r'(?:(?!</script>).)*</script>', re.S | re.I)
+_CF_BEACON = '/cdn-cgi/challenge-platform/scripts/jsd/main.js'
+
+
+def _drop_beacon(low):
+    """`low` (a lowercased page) without each <script> element that holds Cloudflare's beacon path. String finds, not a
+    regex: a page of many unclosed <script> tags stays linear."""
+    out, pos = [], 0
+    while True:
+        i = low.find(_CF_BEACON, pos)
+        if i < 0:
+            break
+        start, end = low.rfind('<script', pos, i), low.find('</script>', i)
+        if start < 0 or end < 0 or low.find('</script>', start, i) >= 0:     # the path is not inside a <script>
+            out.append(low[pos:i + len(_CF_BEACON)])
+            pos = i + len(_CF_BEACON)
+            continue
+        out.append(low[pos:start])
+        pos = end + len('</script>')
+    return ''.join(out) + low[pos:]
 
 
 def classify_answer(status, headers, body, expect=None, page=None):
@@ -229,7 +246,7 @@ def classify_answer(status, headers, body, expect=None, page=None):
     try:
         doc = json.loads(data)
     except ValueError:
-        low = _CF_BEACON.sub('', data[:65536].decode('utf-8', 'replace')).lower()
+        low = _drop_beacon(data[:65536].decode('utf-8', 'replace').lower())
         if any(m in low for m in WALL_MARKERS):
             return 'wall'
         if page is not None and page(data.decode('utf-8', 'replace')):

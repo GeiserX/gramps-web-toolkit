@@ -7,8 +7,9 @@ gwt_hiski.py | encoding='iso-8859-1', errors='replace' | encoding='utf-8', error
 gwt_hiski.py | ('kieli', 'en') | ('kieli', 'fi') | the search asks for the English page, whose "no events" sentence the reader knows
 gwt_hiski.py | if h in PERSON_COLUMNS and c] | if c] | a row's principal is its first person column, never its date or village
 gwt_hiski.py | if not re.fullmatch(r'\d{4}', v or ''): | if False: | a parish that is not a four-digit code is refused before any request
-gwt_reader.py | _CF_BEACON.sub('', data[:65536].decode('utf-8', 'replace')) | data[:65536].decode('utf-8', 'replace') | Cloudflare's beacon script on an ordinary page is not a wall
-gwt_reader.py | scripts/jsd/main\.js' | ' | only the beacon is left out: a real Cloudflare challenge is still a wall
+gwt_reader.py | low = _drop_beacon(data[:65536].decode('utf-8', 'replace').lower()) | low = data[:65536].decode('utf-8', 'replace').lower() | Cloudflare's beacon script on an ordinary page is not a wall
+gwt_reader.py | _CF_BEACON = '/cdn-cgi/challenge-platform/scripts/jsd/main.js' | _CF_BEACON = '/cdn-cgi/challenge-platform/' | only the beacon is left out: a real Cloudflare challenge is still a wall
+gwt_reader.py | if start < 0 or end < 0 or low.find('</script>', start, i) >= 0: | if start < 0 or end < 0: | the beacon path outside a <script> element is not left out
 gwt_hiski.py | page=gwt_reader.rows_check(SPEC, SPEC['result_markers'][0], candidates)) | page=gwt_reader.page_check(SPEC)) | a page with entry rows the reader cannot read is a STOP, never "none"
 gwt_hiski.py | _ROW = re.compile(r'<TR\b[^>]*>\s*(<TD\b[^>]*> | _ROW = re.compile(r'<TR>\s*(<TD> | a row whose <TR> or <TD> carries attributes is read
 gwt_reader.py | or 0 < len(parse(page)) == len(re.findall(rows, page))) | or len(parse(page)) > 0) | a page where one row of several cannot be read is a STOP, never a page with fewer rows
