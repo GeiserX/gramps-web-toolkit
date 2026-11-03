@@ -55,7 +55,8 @@
    "gender": 0,
    "event_ref_list": [],
    "family_list": [
-    "hF1"
+    "hF1",
+    "hF3"
    ],
    "parent_family_list": [],
    "person_ref_list": [],
@@ -134,6 +135,28 @@
      }
     ]
    }
+  },
+  {
+   "handle": "hI7",
+   "gramps_id": "I7",
+   "gender": 1,
+   "event_ref_list": [],
+   "family_list": [
+    "hF3"
+   ],
+   "parent_family_list": [],
+   "person_ref_list": [],
+   "tag_list": [],
+   "note_list": [],
+   "citation_list": [],
+   "primary_name": {
+    "first_name": "Tomás",
+    "surname_list": [
+     {
+      "surname": "Brin"
+     }
+    ]
+   }
   }
  ],
  "families": [
@@ -157,6 +180,15 @@
    "gramps_id": "F2",
    "father_handle": "hI5",
    "mother_handle": "hI6",
+   "child_ref_list": [],
+   "event_ref_list": [],
+   "tag_list": []
+  },
+  {
+   "handle": "hF3",
+   "gramps_id": "F3",
+   "father_handle": "hI7",
+   "mother_handle": "hI3",
    "child_ref_list": [],
    "event_ref_list": [],
    "tag_list": []
@@ -250,6 +282,12 @@
    "handle": "hC1",
    "gramps_id": "C1",
    "page": "https://www.familysearch.org/ark:/61903/1:1:QZZ9-AAA",
+   "source_handle": "hS1"
+  },
+  {
+   "handle": "hC2",
+   "gramps_id": "C2",
+   "page": "https://www.familysearch.org/ark:/61903/1:1:QZZ9-AAB",
    "source_handle": "hS1"
   }
  ],

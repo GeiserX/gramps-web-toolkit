@@ -1,20 +1,20 @@
 # file | exact text | replacement | what the guard protects (see docs/development.md, "Mutants"); rows of the evidence rules
-gwt_lint/rules_evidence.py |     for s in _strings(op): |     for s in [op.get("page") or ""]: | an ark in note text, a reason or a description is read, not only in a citation page
+gwt_lint/rules_evidence.py | for s in _strings(op, NOT_CITED): | for s in [op.get("page") or ""]: | an ark in note text, a reason or a description is read, not only in a citation page
 gwt_lint/rules_evidence.py |     return " ".join(unicodedata.normalize("NFC", s or "").split()) |     return fold(s) | a quotation must keep its accents and case: one changed accent is quote-notfound
 gwt_lint/rules_evidence.py | unicodedata.normalize("NFC", s or "") | (s or "") | a quotation typed decomposed (NFD) still matches the record
 gwt_lint/rules_evidence.py |                 if images and not record_arks: |                 if False: | a quotation with only an image behind it is quote-image, a STOP
 gwt_lint/rules_evidence.py |             and r[2].strip()} |             } | a reading row counts only when it names its reader
 gwt_lint/rules_evidence.py |                     out += self.cited(self.by_key[ref], depth + 1) |                     pass | a note on a citation is checked against that citation's record, not every record
 gwt_lint/rules_evidence.py |             for c in self.attaching.get(f"key:{op['key']}", []): |             for c in []: | an event's own citations give the record its placement is checked against
-gwt_lint/rules_evidence.py |         if ark not in self.by_ark: |         if False: | an ark with no saved record is NOREC, exit 2
+gwt_lint/rules_evidence.py | if ark in self.thin: | if True: | an ark with no saved record is NOREC, exit 2
 gwt_lint/rules_evidence.py |         if {"url", "status", "fetched"} <= set(doc): |         if False: | a gwt-fscache entry is read through its .body
 gwt_lint/rules_evidence.py |         if isinstance(doc.get("candidates"), list): |         if False: | gwt-read candidate rows are records
 gwt_lint/rules_evidence.py | ARK.findall(name) + ARK.findall(text.split("\n", 1)[0]) | ARK.findall(name) | a transcription binds to the ark on its first line
 gwt_lint/rules_evidence.py |                 if rel != "principal" and not (rel == "spouse" and types & {"Marriage", "Family"}): |                 if rel != "principal" and False: | citing a persona who is not the principal is principal-nonprincipal
 gwt_lint/rules_evidence.py |  and not (rel == "spouse" and types & {"Marriage", "Family"}) |  | the spouse's persona of a marriage record may be cited for the marriage
 gwt_lint/rules_evidence.py |                 if facts and wanted and not facts & wanted: |                 if False: | a record of another event type is principal-event
-gwt_lint/rules_evidence.py |                 if op["op"] in ("link_child", "add_family"): |                 if False: | a parent link to a persona the record gives as godparent is role-mismatch
-gwt_lint/rules_evidence.py |     return {r for i, r in hits if any(abs(i - j) <= window for j in at)} |     return {r for i, r in hits if at} | a role word counts only near the persona's name
+gwt_lint/rules_evidence.py | claims.add("parent") | pass | a link_child or add_family that makes the record's godparent a parent is role-mismatch
+gwt_lint/rules_evidence.py | return {r for i, rs in hits if any(abs(i - j) <= window for j in at) for r in rs} | return {r for i, rs in hits if at for r in rs} | a role word counts only near the persona's name
 gwt_lint/rules_evidence.py |         if len(sexes) >= 2 and len(set(sexes)) == 1: |         if False: | two parents of one sex is role-samesex
 gwt_lint/rules_evidence.py |             if not is_church: |             if False: | a sacrament on a town is placement-town
 gwt_lint/rules_evidence.py |                 if is_church: |                 if False: | a civil event on a church is placement-civil
@@ -29,3 +29,12 @@ gwt_lint/rules_evidence.py |                         by_id[who]["facts"] |= fact
 gwt_lint/rules_evidence.py | followlinks=True | followlinks=False | a records folder of symlinks to other record folders is read
 gwt_lint/rules_evidence.py |                     self.unread.append(str(p)) |                     raise | one record file of another shape is skipped, not a crash of every rule
 gwt_lint/rules_evidence.py | self.ctx = ctx | self.ctx = ctx; load(ctx) | a list that cites no record and quotes nothing needs no saved records (no exit 2)
+gwt_lint/rules_evidence.py | NOT_CITED = ("_line", "key", "expect") | NOT_CITED = ("_line", "key") | the old value an update replaces (`expect`) is not cited
+gwt_lint/rules_evidence.py | words.setdefault(fold(w), set()).add(role) | words[fold(w)] = {role} | «padre» is a father (es, it) as well as a priest (pt): no locale overwrites another
+gwt_lint/rules_evidence.py | return {"Family"} | return set() | a family the list adds takes a spouse's persona, like one in the snapshot
+gwt_lint/rules_evidence.py | if ark not in pages and persona["name"] and role_words(text, persona["name"]): | if False: | a persona named in free text with its role («padrino X <ark>») is role's to judge, not principal-nonprincipal
+gwt_lint/rules_evidence.py | if ark not in pages and persona["name"] | if persona["name"] | a citation page is never excused by role words
+gwt_lint/rules_evidence.py | return ev._tree_page("Citation", ref) | return [] | attach_existing of a tree citation cites that citation's page
+gwt_lint/rules_evidence.py | if persona["principal"] or not persona["name"]: | if persona["principal"] or not persona["name"] or not set(persona["arks"]) & set(op_arks(op)): | role reads every persona of a cited record, not only the one whose ark is cited
+gwt_lint/rules_evidence.py | and any(toks[j] in words and toks[j] != t for j in range(max(0, i - 2), min(len(toks), i + 3)))] | and True] | a surname alone does not name a person: a namesake is not the persona
+gwt_lint/rules_evidence.py | if w in ROLE_WORDS and not (n == 1 and w in own): | if w in ROLE_WORDS: | a person's own name is not a role word for him (Peter, Mare)

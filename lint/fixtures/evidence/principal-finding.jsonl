@@ -3,3 +3,4 @@
 {"op": "add_event", "key": "e-death", "ruling": "R-1", "person": "I1", "type": "Death", "place": "P1"}
 {"op": "add_citation", "key": "c-death", "ruling": "R-1", "source": "S1", "page": "https://www.familysearch.org/ark:/61903/1:1:QZZ9-AAA", "attach": [{"event": "key:e-death"}]}
 {"op": "add_citation", "key": "c-cand", "ruling": "R-1", "source": "S1", "page": "https://www.familysearch.org/ark:/61903/1:1:QZZ7-DDA", "attach": [{"person": "I2"}]}
+{"op": "attach_existing", "key": "a-father", "ruling": "R-1", "object": {"citation": "C2"}, "attach": [{"event": "E1"}]}

@@ -58,7 +58,9 @@ def test_principal_findings():
     code, codes, res = lint("principal-finding.jsonl", "principal")
     assert code == 1
     # the godfather's ark sits in the note text, not in a page: it is read all the same
-    assert codes == {"principal-nonprincipal": ["c-father", "n-godfather", "c-cand"], "principal-event": ["c-death"]}
+    # a-father: attach_existing hangs the tree citation C2, whose page is the father's persona, on the baptism
+    assert codes == {"principal-nonprincipal": ["c-father", "n-godfather", "c-cand", "a-father"],
+                     "principal-event": ["c-death"]}
     fixes = {f["key"]: f.get("fix", "") for f in res["findings"]}
     assert fixes["c-father"] == FS + "1:1:QZZ9-AAA", "the fix is the principal's ark"
 
@@ -66,7 +68,9 @@ def test_principal_findings():
 def test_role_findings():
     code, codes, _ = lint("role-finding.jsonl", "role")
     assert code == 1
-    assert codes == {"role-mismatch": ["n-father", "l-godfather"], "role-samesex": ["c-pedro"]}
+    # n-padre-godfather cites the principal and names the godfather as «padre»; l-godfather links Ana into the
+    # family of her godfather and her mother
+    assert codes == {"role-mismatch": ["n-father", "n-padre-godfather", "l-godfather"], "role-samesex": ["c-lucia"]}
 
 
 def test_placement_findings():
@@ -241,3 +245,31 @@ def test_the_example_list_lints_without_saved_records():
                          "--rules", ",".join(RULES), "--json"])
     assert all(r["status"] != "nothing" for r in json.loads(out.getvalue())["rules"]), out.getvalue()
     assert code in (0, 1)
+
+
+@pytest.mark.parametrize("rule", RULES)
+def test_every_clean_list_is_clean_under_all_four_rules(rule):
+    out = io.StringIO()
+    with redirect_stdout(out):
+        code = cli.main([os.path.join(FIX, f"{rule}-clean.jsonl"), "--snapshot", TREE, "--config", CONFIG,
+                         "--rules", ",".join(RULES)])
+    assert code == 0, out.getvalue()
+
+
+def test_padre_is_a_father_in_spanish_not_only_a_priest_in_portuguese(tmp_path):
+    ops = [{"op": "add_note", "key": "n", "text": f"Luis Zorvalo, padre de la bautizada, {FS}1:1:QZZ9-AAB",
+            "attach": [{"person": "I2"}]}]
+    assert lint(write(tmp_path, ops), "role")[:2] == (0, {})
+    assert E.ROLE_WORDS["padre"] == {"father", "priest"}
+
+
+def test_a_name_is_not_a_role_word_for_its_own_person():
+    assert E.role_words("Peter Brin, father of the child", "Peter Brin") == {"father"}
+    assert E.role_words("peter Brin", "Peter Brin") == set()
+
+
+def test_a_godparent_named_with_his_role_and_ark_is_not_a_principal_finding(tmp_path):
+    ops = [{"op": "add_note", "key": "n", "text": f"padrino Tomás Brin {FS}1:1:QZZ9-AAD", "attach": [{"person": "I1"}]},
+           {"op": "add_citation", "key": "c", "source": "S1", "page": f"{FS}1:1:QZZ9-AAD godfather Tomás Brin",
+            "attach": [{"person": "I1"}]}]
+    assert lint(write(tmp_path, ops), "principal")[1] == {"principal-nonprincipal": ["c"]}, "a page is never excused"

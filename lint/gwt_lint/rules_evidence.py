@@ -54,22 +54,26 @@ def _norm(s) -> str:
     return " ".join(unicodedata.normalize("NFC", s or "").split())
 
 
-def _strings(o):
+def _strings(o, skip=("_line", "key")):
     if isinstance(o, str):
         yield o
     elif isinstance(o, dict):
         for k, v in o.items():
-            if k not in ("_line", "key"):
-                yield from _strings(v)
+            if k not in skip:
+                yield from _strings(v, skip)
     elif isinstance(o, list):
         for v in o:
-            yield from _strings(v)
+            yield from _strings(v, skip)
+
+
+# `expect` holds the value an update replaces (an old page, a parent's ark being fixed): the op does not cite it
+NOT_CITED = ("_line", "key", "expect")
 
 
 def op_arks(op) -> list[str]:
-    """Every FamilySearch ark anywhere in the op: page, description, reasons, note text."""
+    """Every FamilySearch ark the op writes: page, description, reasons, note text; not the old value it expects."""
     found = []
-    for s in _strings(op):
+    for s in _strings(op, NOT_CITED):
         for a in ARK.findall(s):
             if a not in found:
                 found.append(a)
@@ -270,32 +274,55 @@ def relation(rec, persona) -> str:
 
 
 def _role_table():
-    words = {}
+    """Each role word of every locale, with every role it can mean: «padre» is a father in Spanish and Italian
+    and a priest in Portuguese."""
+    words: dict[str, set[str]] = {}
     for code in LOCALES:
         for role, ws in load_locale(code)["roles"].items():
             for w in ws:
-                words[fold(w)] = role
+                words.setdefault(fold(w), set()).add(role)
     return words
 
 
 ROLE_WORDS = _role_table()
 
 
-def role_words(text, near=None, window=3) -> set[str]:
-    """The family roles a text names (by any locale's role words); with `near`, only those within `window` words
-    of one of those words."""
+def name_words(name) -> list[str]:
+    return [w for w in fold(name).split() if len(w) > 2]
+
+
+def _mentions(toks, name) -> list[int]:
+    """Where a text names a person: a word of the name next to another of its words (Luis Zorvalo, not a
+    namesake who shares only the surname); a one-word name by itself."""
+    words = set(name_words(name))
+    if len(words) < 2:
+        return [i for i, t in enumerate(toks) if t in words]
+    return [i for i, t in enumerate(toks) if t in words
+            and any(toks[j] in words and toks[j] != t for j in range(max(0, i - 2), min(len(toks), i + 3)))]
+
+
+def role_words(text, name=None, window=3) -> set[str]:
+    """The family roles a text names (by any locale's role words); with `name`, only those within `window` words
+    of where the text names that person, the name's own words left out (Peter is a name, not a Dutch godfather)."""
     toks = fold(text).split()
+    own = set(name_words(name)) if name else set()
     hits = []
     for i in range(len(toks)):
         for n in (2, 1):  # «teniente cura» before «cura»
             w = " ".join(toks[i:i + n])
-            if w in ROLE_WORDS:
+            if w in ROLE_WORDS and not (n == 1 and w in own):
                 hits.append((i, ROLE_WORDS[w]))
                 break
-    if near is None:
-        return {r for _, r in hits}
-    at = [i for i, t in enumerate(toks) if t in near]
-    return {r for i, r in hits if any(abs(i - j) <= window for j in at)}
+    if name is None:
+        return {r for _, rs in hits for r in rs}
+    at = _mentions(toks, name)
+    return {r for i, rs in hits if any(abs(i - j) <= window for j in at) for r in rs}
+
+
+def same_person(a, b) -> bool:
+    """Whether two names are one person's: two words in common, or every word of a one-word name."""
+    x, y = set(name_words(a)), set(name_words(b))
+    return len(x & y) >= 2 or (len(x) == 1 and x <= y) or (len(y) == 1 and y <= x)
 
 
 # --- what each op cites --------------------------------------------------------------------------------------
@@ -342,6 +369,8 @@ class Evidence:
         """The event types an op speaks about: its own, or those of the events and families it attaches to."""
         if op["op"] == "add_event":
             return {str(op.get("type") or "")}
+        if op["op"] == "add_family":  # a family the list adds is a family, like one already in the snapshot
+            return {"Family"}
         out = set()
         if depth < 3:
             for cls, ref in attach_targets(op):
@@ -488,18 +517,38 @@ class Principal(Rule):
     codes = {"principal-nonprincipal": "cites the persona of someone who is not the record's principal",
              "principal-event": "the record's principal has no fact of the event type the op speaks about"}
 
+    @staticmethod
+    def _pages(ev, op) -> list[str]:
+        """The arks an op uses as a citation's page: its own page, or the page of the citation attach_existing
+        hangs on something (in the list or the snapshot)."""
+        if op["op"] == "add_citation":
+            return ARK.findall(str(op.get("page") or ""))
+        if op["op"] == "update_citation" and isinstance(op.get("set"), dict):
+            return ARK.findall(str(op["set"].get("page") or ""))
+        if op["op"] == "attach_existing" and isinstance(op.get("object"), dict):
+            ref = op["object"].get("citation")
+            if isinstance(ref, str) and ref in ev.by_key:
+                return ARK.findall(str(ev.by_key[ref].get("page") or ""))
+            return ev._tree_page("Citation", ref)
+        return []
+
     def check(self, ctx):
         ev = Evidence(ctx)
         out = []
         for op in ctx.ops:
             types = ev.event_types(op)
-            for ark in op_arks(op):
+            pages = self._pages(ev, op)
+            text = " ".join(texts(op))
+            for ark in list(dict.fromkeys(op_arks(op) + pages)):
                 if not ark.startswith("1:1:"):
                     continue
                 rec, persona = ev.records.find(ark)
                 rel = relation(rec, persona)
                 heads = principals(rec)
                 if rel != "principal" and not (rel == "spouse" and types & {"Marriage", "Family"}):
+                    # in free text, «padrino Tomás Brin <ark>» names a persona by its role: role judges that claim
+                    if ark not in pages and persona["name"] and role_words(text, persona["name"]):
+                        continue
                     fix = ", ".join(FS + a for p in heads for a in p["arks"][:1]) or "open the record and cite its principal"
                     out.append(self.finding("principal-nonprincipal", op,
                                             f"{ark} is {persona['name'] or 'a persona'} ({rel}), not the record's "
@@ -525,37 +574,74 @@ class Principal(Rule):
 
 # --- role ----------------------------------------------------------------------------------------------------
 
+def _person_name(ctx, ev, ref) -> str:
+    """The name of a person in the snapshot or added by the list."""
+    if isinstance(ref, str) and ref in ev.by_key:
+        op = ev.by_key[ref]
+        return f"{op.get('first_name') or ''} {op.get('surname') or ''}" if op["op"] == "add_person" else ""
+    h = ctx.tree.gids.get("Person", {}).get(ref) if isinstance(ref, str) else None
+    n = (ctx.tree.handles["Person"].get(h) or {}).get("primary_name") or {}
+    return " ".join([n.get("first_name") or ""] + [x.get("surname") or "" for x in n.get("surname_list") or []])
+
+
+def _family_parents(ctx, ev, ref) -> list:
+    """The father and mother refs of a family in the snapshot or added by the list."""
+    if isinstance(ref, str) and ref in ev.by_key:
+        op = ev.by_key[ref]
+        return [op.get("father"), op.get("mother")] if op["op"] == "add_family" else []
+    h = ctx.tree.gids.get("Family", {}).get(ref) if isinstance(ref, str) else None
+    fam = ctx.tree.handles["Family"].get(h) or {}
+    people = ctx.tree.handles["Person"]
+    return [(people.get(fam.get(k)) or {}).get("gramps_id") for k in ("father_handle", "mother_handle")]
+
+
 class Role(Rule):
     name = "role"
     codes = {"role-mismatch": "the list gives a persona a family role the record does not give it",
              "role-samesex": "the record gives the principal two parents of the same sex: one is likely a godparent"}
+
+    @staticmethod
+    def _parents(ctx, ev, op) -> list[str]:
+        """The names of the people an add_family or link_child makes parents."""
+        if op["op"] == "add_family":
+            refs = [op.get("father"), op.get("mother")]
+        elif op["op"] == "link_child":
+            refs = _family_parents(ctx, ev, op.get("family"))
+        else:
+            return []
+        return [n for n in (_person_name(ctx, ev, r) for r in refs if r) if n.strip()]
 
     def check(self, ctx):
         ev = Evidence(ctx)
         out = []
         for op in ctx.ops:
             arks = [a for a in ev.cited(op) if a.startswith("1:1:")]
+            if not arks:
+                continue
             text = " ".join(texts(op))
+            parents = self._parents(ctx, ev, op)
             seen = set()
             for ark in arks:
-                rec, persona = ev.records.find(ark)
-                if id(rec) not in seen:
-                    seen.add(id(rec))
-                    out += self._samesex(op, rec, ark)
-                if persona["principal"] or ark not in op_arks(op):
+                rec, _ = ev.records.find(ark)
+                if id(rec) in seen:
                     continue
-                rel = relation(rec, persona)
-                names = {w for w in fold(persona["name"]).split() if len(w) > 2}
-                claims = role_words(text, names) if names else set()
-                if op["op"] in ("link_child", "add_family"):
-                    claims.add("parent")
-                if not claims:
-                    continue
-                if rel in claims or (rel in PARENTS and claims & PARENTS):
-                    continue
-                said = ", ".join(sorted(claims))
-                out.append(self.finding("role-mismatch", op, f"the list calls {persona['name'] or ark} {said}; in "
-                                        f"{ark} the record gives {rel}", "read the record's roles again"))
+                seen.add(id(rec))
+                out += self._samesex(op, rec, ark)
+                # every persona of the record, not only the one whose ark is cited: «padre: <the godfather's name>»
+                # next to the principal's ark is the mistake this rule is for
+                for persona in rec["personas"]:
+                    if persona["principal"] or not persona["name"]:
+                        continue
+                    rel = relation(rec, persona)
+                    claims = role_words(text, persona["name"])
+                    if rel not in PARENTS | {"spouse", "other"} and any(same_person(persona["name"], n) for n in parents):
+                        claims.add("parent")
+                    if not claims or rel == "other" or rel in claims or (rel in PARENTS and claims & PARENTS):
+                        continue  # "other": the record gives no role to contradict
+                    said = ", ".join(sorted(claims))
+                    where = next((a for a in persona["arks"]), ark)
+                    out.append(self.finding("role-mismatch", op, f"the list calls {persona['name']} {said}; in "
+                                            f"{where} the record gives {rel}", "read the record's roles again"))
         return out
 
     def _samesex(self, op, rec, ark):

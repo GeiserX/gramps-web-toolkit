@@ -6,7 +6,8 @@ Every name, place, ark and date is made up; the arks follow FamilySearch's shape
     records/baptism-ana.json          a gwt-read envelope: a baptism, with the principal (Ana), her father,
                                       mother and godfather as personas, and the parish as the index typed it
     records/baptism-ana.candidates.json   the candidate row gwt-read writes beside it (gwt_read.record_candidates)
-    records/baptism-pedro.json        a raw GEDCOM X baptism whose two parents are both women
+    records/baptism-pedro.json        a raw GEDCOM X baptism, in a chapel the index typed differently
+    records/baptism-lucia.json        a raw GEDCOM X baptism whose two parents are both women
     records/baptism-pedro.candidates.json its candidate row
     records/fscache-copy/9f/<sha>.json/.body a gwt-fscache entry: a marriage, the bride not the principal, the
                                       Marriage fact on the Couple relationship as FamilySearch serves it
@@ -54,12 +55,18 @@ ANA = {"persons": [
                                            "hija legítima de Luis y Rosa"}]}
 PEDRO = {"persons": [
     persona("q1", "QZZ8-BBA", "Pedro Lurre", "Male", [("Christening", "1860", "Villazul")], True),
-    persona("q2", "QZZ8-BBB", "Juana Morel", "Female"),
+    persona("q2", "QZZ8-BBB", "Juan Morel", "Male"),
     persona("q3", "QZZ8-BBC", "Teresa Vidán", "Female")],
     "relationships": [parent("q2", "q1"), parent("q3", "q1")],
     "fields": [{"labelId": "EVENT_PLACE_ORIG", "text": "Santísimo Cristo del Valle, Villazul"},
                {"labelId": "NOTES", "text": "bauticé en la ermita del Santo Cristo del Valle por estar la "
                                            "parroquia en obras"}]}
+# the index gives Lucía two mothers: one of them is likely her godmother
+LUCIA = {"persons": [
+    persona("s1", "QZZ5-EEA", "Lucía Arnau", "Female", [("Christening", "1870", "Villazul")], True),
+    persona("s2", "QZZ5-EEB", "Clara Arnau", "Female"),
+    persona("s3", "QZZ5-EEC", "Inés Toral", "Female")],
+    "relationships": [parent("s2", "s1"), parent("s3", "s1")]}
 MARRIAGE = {"persons": [
     persona("m1", "QZZ6-CCA", "Mario Lurre", "Male", [("Birth", "1860", "Villazul")], True),
     persona("m2", "QZZ6-CCB", "Elsa Quirell", "Female")],
@@ -84,18 +91,24 @@ def tree():
                "parent_family_list": [], "person_ref_list": [], "tag_list": [], "note_list": [], "citation_list": [],
                "primary_name": {"first_name": f, "surname_list": [{"surname": n}]}}
               for g, f, n, s in (("I1", "Ana", "Zorvalo", 0), ("I2", "Luis", "Zorvalo", 1), ("I3", "Rosa", "Quirell", 0),
-                                 ("I4", "Pedro", "Lurre", 1), ("I5", "Mario", "Lurre", 1), ("I6", "Elsa", "Quirell", 0))]
+                                 ("I4", "Pedro", "Lurre", 1), ("I5", "Mario", "Lurre", 1), ("I6", "Elsa", "Quirell", 0),
+                                 ("I7", "Tomás", "Brin", 1))]
     people[0]["event_ref_list"] = [{"ref": "hE1", "role": "Primary"}]
     families = [{"handle": "hF1", "gramps_id": "F1", "father_handle": "hI2", "mother_handle": "hI3",
                  "child_ref_list": [{"ref": "hI1", "frel": "Birth", "mrel": "Birth"}], "event_ref_list": [],
                  "tag_list": []},
                 {"handle": "hF2", "gramps_id": "F2", "father_handle": "hI5", "mother_handle": "hI6",
+                 "child_ref_list": [], "event_ref_list": [], "tag_list": []},
+                # the godfather and the mother as a couple: linking Ana here makes her godfather her father
+                {"handle": "hF3", "gramps_id": "F3", "father_handle": "hI7", "mother_handle": "hI3",
                  "child_ref_list": [], "event_ref_list": [], "tag_list": []}]
     people[0]["parent_family_list"] = ["hF1"]
     for i in (1, 2):
         people[i]["family_list"] = ["hF1"]
     for i in (4, 5):
         people[i]["family_list"] = ["hF2"]
+    people[2]["family_list"] = ["hF1", "hF3"]
+    people[6]["family_list"] = ["hF3"]
     events = [{"handle": "hE1", "gramps_id": "E1", "type": "Baptism", "place": "hP2", "citation_list": ["hC1"],
                "date": {"dateval": [12, 3, 1851, False], "text": ""}}]
     places = [place("P3", "Nortia", "Province"), place("P1", "Villazul", "Town", "P3"),
@@ -103,7 +116,8 @@ def tree():
               place("P4", "Ermita del Santo Cristo del Valle", "Church", "P1"),
               place("P5", "Iglesia de Santa María", "Church", "P1")]
     return {"people": people, "families": families, "events": events, "places": places,
-            "citations": [{"handle": "hC1", "gramps_id": "C1", "page": FS + "1:1:QZZ9-AAA", "source_handle": "hS1"}],
+            "citations": [{"handle": "hC1", "gramps_id": "C1", "page": FS + "1:1:QZZ9-AAA", "source_handle": "hS1"},
+                          {"handle": "hC2", "gramps_id": "C2", "page": FS + "1:1:QZZ9-AAB", "source_handle": "hS1"}],
             "sources": [{"handle": "hS1", "gramps_id": "S1", "title": "Invented parish register"}],
             "notes": [], "media": [], "repositories": [], "tags": []}
 
@@ -141,23 +155,38 @@ LISTS = {
              {"citation": "key:c-ana"})],
     "principal-clean": [
         cite("c-ana", "1:1:QZZ9-AAA", {"event": "E1"}),
-        cite("c-bride", "1:1:QZZ6-CCB", {"family": "F2"})],
+        cite("c-bride", "1:1:QZZ6-CCB", {"family": "F2"}),
+        # a family the list adds takes the bride's persona like one already in the tree
+        {"op": "add_family", "key": "f-couple", "ruling": "R-1", "father": "I5", "mother": "I6",
+         "allow_new_couple": True, "new_couple_of": ["F2"], "new_couple_reason": f"their marriage, {FS}1:1:QZZ6-CCB"},
+        cite("c-couple", "1:1:QZZ6-CCB", {"family": "key:f-couple"}),
+        # replacing the father's ark with the principal's: the old value in `expect` is not cited
+        {"op": "update_citation", "key": "u-fix", "ruling": "R-1", "citation": "C2", "expect": FS + "1:1:QZZ9-AAB",
+         "set": {"page": FS + "1:1:QZZ9-AAA"}}],
     "principal-finding": [
         cite("c-father", "1:1:QZZ9-AAB", {"event": "E1"}),
         note("n-godfather", f"Ana's baptism, see {FS}1:1:QZZ9-AAD", {"person": "I1"}),
         event("e-death", "I1", "Death", "P1"),
         cite("c-death", "1:1:QZZ9-AAA", {"event": "key:e-death"}),
-        cite("c-cand", "1:1:QZZ7-DDA", {"person": "I2"})],
+        cite("c-cand", "1:1:QZZ7-DDA", {"person": "I2"}),
+        # C2's page in the snapshot is the father's persona; hanging it on the baptism cites it
+        {"op": "attach_existing", "key": "a-father", "ruling": "R-1", "object": {"citation": "C2"},
+         "attach": [{"event": "E1"}]}],
     "role-clean": [
         note("n-roles", f"padre: Luis Zorvalo, madre: Rosa Quirell, padrino Tomás Brin {FS}1:1:QZZ9-AAD",
              {"person": "I1"}),
-        note("n-far", f"Luis Zorvalo is named in {FS}1:1:QZZ9-AAB, a register that also lists the one godparent",
-             {"person": "I2"})],
+        note("n-padre", f"padre: Luis Zorvalo {FS}1:1:QZZ9-AAB", {"person": "I2"}),
+        note("n-far", f"Luis Zorvalo is named in {FS}1:1:QZZ9-AAA as well; a godparent is listed further down the "
+             "same entry", {"person": "I2"}),
+        note("n-namesake", f"padre: Luis Zorvalo, Brin's neighbour, {FS}1:1:QZZ9-AAA", {"person": "I2"}),
+        {"op": "link_child", "key": "l-father", "ruling": "R-1", "family": "F1", "child": "I1", "probable": True,
+         "probable_reason": f"the baptism names both parents: {FS}1:1:QZZ9-AAA"}],
     "role-finding": [
         note("n-father", f"Tomás Brin, father of the child ({FS}1:1:QZZ9-AAD)", {"person": "I1"}),
-        {"op": "link_child", "key": "l-godfather", "ruling": "R-1", "family": "F1", "child": "I1", "probable": True,
-         "probable_reason": f"the record names him: {FS}1:1:QZZ9-AAD"},
-        cite("c-pedro", "1:1:QZZ8-BBA", {"person": "I4"})],
+        note("n-padre-godfather", f"padre: Tomás Brin, see {FS}1:1:QZZ9-AAA", {"person": "I1"}),
+        {"op": "link_child", "key": "l-godfather", "ruling": "R-1", "family": "F3", "child": "I1", "probable": True,
+         "probable_reason": f"the baptism names the parents: {FS}1:1:QZZ9-AAA"},
+        cite("c-lucia", "1:1:QZZ5-EEA", {"person": "I4"})],
     "placement-clean": [
         event("e-bap-ana", "I1", "Baptism", "P2"),
         cite("c-bap-ana", "1:1:QZZ9-AAA", {"event": "key:e-bap-ana"}),
@@ -186,6 +215,7 @@ def main():
                                     "captured_at": "2026-01-02T03:04:05Z", "json": ANA})
     dump(rec / "baptism-ana.candidates.json", {"candidates": gwt_read.record_candidates(ANA, "1:1:QZZ9-AAA")})
     dump(rec / "baptism-pedro.json", PEDRO)
+    dump(rec / "baptism-lucia.json", LUCIA)
     dump(rec / "baptism-pedro.candidates.json", {"candidates": gwt_read.record_candidates(PEDRO, "1:1:QZZ8-BBA")})
     sha = "9f" + "0" * 62
     dump(rec / "fscache-copy" / "9f" / f"{sha}.json", {"method": "GET", "url": FS + "1:1:QZZ6-CCA", "status": 200,

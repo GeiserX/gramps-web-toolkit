@@ -33,7 +33,7 @@ Every file is read on each run, so point `--records` at the records a list cites
 
 **NOREC.** An op that cites a FamilySearch record ark with no saved record makes the rule exit 2, with the command that saves it. A rule that could not look at the record is not a clean rule. A missing `--records`, or a folder with no records in it, exits 2 the same way, but only when the list cites a record or quotes one. A list that does neither (a tree-only list, a DNA import, a geocoding list) needs no saved records, and `placement-town` and `placement-civil` read only the snapshot.
 
-What an op cites: every FamilySearch ark anywhere in it (citation page, note text, event description, `probable_reason`, any reason), plus the arks of what it attaches to in the same list (a note on `key:c1` cites what `c1` cites) or in the snapshot (a citation's page), plus, for an event the list adds, the arks of the citations the list puts on it.
+What an op cites: every FamilySearch ark anywhere in it (citation page, note text, event description, `probable_reason`, any reason; not `expect`, the old value an update replaces), plus the arks of what it attaches to in the same list (a note on `key:c1` cites what `c1` cites) or in the snapshot (a citation's page), plus, for an event the list adds, the arks of the citations the list puts on it.
 
 ## quote
 
@@ -53,7 +53,7 @@ nota marginal de difícil lectura aquí	3f9a0c1b2d4e	A. Reader
 
 ## principal
 
-Every FamilySearch record ark (`1:1:`) in an op must be a persona the record marks as principal. The fix printed is the principal's ark. A spouse's persona is fine for a marriage event or a family. When the op speaks about an event (an `add_event`, or a citation or note on an event), the principal must have a fact of that type: a baptism record (Christening or Baptism) backs a Baptism and, when it gives one, a Birth; it does not back a Death.
+Every FamilySearch record ark (`1:1:`) in an op must be a persona the record marks as principal. The fix printed is the principal's ark. A spouse's persona is fine for a marriage event or a family, one the list adds included. `attach_existing` of a citation checks that citation's page. In free text, a persona named with a role word next to its name («padrino Tomás Brin <ark>») is a statement about that persona: [role](#role) judges it, and principal leaves it alone. A citation's page is never excused that way. When the op speaks about an event (an `add_event`, or a citation or note on an event), the principal must have a fact of that type: a baptism record (Christening or Baptism) backs a Baptism and, when it gives one, a Birth; it does not back a Death.
 
 | Code | When |
 |---|---|
@@ -64,11 +64,11 @@ A candidate row from a search knows its persona's role and principal flag, not t
 
 ## role
 
-For each persona the op cites that is not the principal, the role the text gives it is compared with the record. The text gives a role when a role word from the [locale tables](rules.md) (padre, madrina, godfather, testis, ...) stands within three words of the persona's name; a `link_child` or `add_family` that cites the persona gives it a parent's role. The record's role comes from its relationships (father, mother, spouse, child of the principal), then the role the index gives the persona.
+For every record an op cites, each persona that is not the principal is compared with what the op says about it, whichever persona's ark the op carries. So a note that cites the principal's ark and says «padre: Tomás Brin», when the record gives Tomás Brin as the godfather, is a finding. The text gives a persona a role when a role word from the [locale tables](rules.md) (padre, madrina, godfather, testis, ...) stands within three words of where the text names it: a word of its name next to another (a namesake sharing only the surname is not the persona). A word that means several roles across locales means any of them («padre» is a father in Spanish and Italian, a priest in Portuguese). A `link_child` or `add_family` whose father or mother has the name of the record's godparent, witness or priest makes that persona a parent. The record's role comes from its relationships (father, mother, spouse, child of the principal), then the role the index gives the persona; a persona the record gives no role is not judged.
 
 | Code | When |
 |---|---|
-| `role-mismatch` | the list calls a persona father, mother or another role, and the record gives it another one (a godparent, a witness) |
+| `role-mismatch` | the list calls a persona father, mother or another role, or makes it a parent, and the record gives it another one (a godparent, a witness) |
 | `role-samesex` | a cited record gives its principal two parents of the same sex: the index likely read a godparent as a parent. Check the image |
 
 ## placement

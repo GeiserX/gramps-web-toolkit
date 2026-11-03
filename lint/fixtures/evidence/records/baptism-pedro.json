@@ -36,7 +36,7 @@
    "id": "q2",
    "principal": false,
    "gender": {
-    "type": "http://gedcomx.org/Female"
+    "type": "http://gedcomx.org/Male"
    },
    "identifiers": {
     "http://gedcomx.org/Persistent": [
@@ -47,7 +47,7 @@
     {
      "nameForms": [
       {
-       "fullText": "Juana Morel"
+       "fullText": "Juan Morel"
       }
      ]
     }

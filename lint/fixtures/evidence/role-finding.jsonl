@@ -1,3 +1,4 @@
 {"op": "add_note", "key": "n-father", "ruling": "R-1", "text": "Tomás Brin, father of the child (https://www.familysearch.org/ark:/61903/1:1:QZZ9-AAD)", "attach": [{"person": "I1"}]}
-{"op": "link_child", "key": "l-godfather", "ruling": "R-1", "family": "F1", "child": "I1", "probable": true, "probable_reason": "the record names him: https://www.familysearch.org/ark:/61903/1:1:QZZ9-AAD"}
-{"op": "add_citation", "key": "c-pedro", "ruling": "R-1", "source": "S1", "page": "https://www.familysearch.org/ark:/61903/1:1:QZZ8-BBA", "attach": [{"person": "I4"}]}
+{"op": "add_note", "key": "n-padre-godfather", "ruling": "R-1", "text": "padre: Tomás Brin, see https://www.familysearch.org/ark:/61903/1:1:QZZ9-AAA", "attach": [{"person": "I1"}]}
+{"op": "link_child", "key": "l-godfather", "ruling": "R-1", "family": "F3", "child": "I1", "probable": true, "probable_reason": "the baptism names the parents: https://www.familysearch.org/ark:/61903/1:1:QZZ9-AAA"}
+{"op": "add_citation", "key": "c-lucia", "ruling": "R-1", "source": "S1", "page": "https://www.familysearch.org/ark:/61903/1:1:QZZ5-EEA", "attach": [{"person": "I4"}]}
