@@ -415,6 +415,26 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
                 got.add((dv[2], dv[1], dv[0]))
         return got
 
+    spans: dict[str, tuple[int, int] | None] = {}
+
+    def birth_span(p: dict) -> tuple[int, int] | None:
+        """Every Primary Birth date of the person as one interval of days; None when one cannot be read."""
+        if p["handle"] not in spans:
+            alts = [dates.span(E[r["ref"]].get("date")) for r in p.get("event_ref_list", [])
+                    if r.get("ref") in E and r.get("role") == "Primary"
+                    and dates.kind(E[r["ref"]].get("type")) in dates.BIRTH]
+            readable = [s for s in alts if s]
+            spans[p["handle"]] = (min(s.lo for s in readable), max(s.hi for s in readable)) \
+                if readable and len(readable) == len(alts) else None
+        return spans[p["handle"]]
+
+    def apart(p: dict, q: dict) -> bool:
+        """Births that cannot overlap, open, range and estimated dates included: two people, whatever kin they share.
+
+        A baptism alone never counts (adults were baptized too), and neither does an unknown birth."""
+        a, b = birth_span(p), birth_span(q)
+        return bool(a and b) and (a[1] < b[0] or b[1] < a[0])
+
     def compatible(xs, ys) -> bool:
         return any(x[0] == y[0] and (not x[1] or not y[1] or x[1] == y[1]) and (not x[2] or not y[2] or x[2] == y[2])
                    for x in xs for y in ys)
@@ -463,7 +483,7 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
                 years_differ = bp and bq and not ({x[0] for x in bp} & {x[0] for x in bq})
                 # a shared relative proves nothing when one is the other's parent; a shared birth date still does
                 if (pp & pq or sp & sq or cp & cq) and not years_differ \
-                        and not parent_and_child(p["handle"], q["handle"]):
+                        and not parent_and_child(p["handle"], q["handle"]) and not apart(p, q):
                     why = "same parent" if pp & pq else "same spouse" if sp & sq else "same child"
                     out.add("dup-person-relative", pair, f"{n}, {why}")
 
@@ -536,7 +556,7 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
                 ph, qh = parents_by_name(h), parents_by_name(c)
                 pp = {n for n in pp & pq if ph[n] != qh[n]}
             kin_shared = (pp & pq or sp & sq or cp & cq) and not parent_and_child(h, c)
-            if near or (kin_shared and not (yp and yq)):
+            if near or (kin_shared and not (yp and yq) and not apart(P[h], P[c])):
                 why = "birth within 2 years" if near else (
                     "same parent" if pp & pq else "same spouse" if sp & sq else "same child")
                 pair = ",".join(sorted((P[h]["gramps_id"], P[c]["gramps_id"])))
