@@ -65,6 +65,14 @@ def test_principal_findings():
     assert fixes["c-father"] == FS + "1:1:QZZ9-AAA", "the fix is the principal's ark"
 
 
+def test_a_parent_persona_in_a_link_reason_is_nonprincipal_even_with_its_role(tmp_path):
+    # the reason is the link's evidence: «names the father Luis Zorvalo <his persona>» must cite the principal
+    ops = [{"op": "link_child", "key": "l1", "family": "F1", "child": "I1", "probable": True,
+            "probable_reason": f"the baptism names the father Luis Zorvalo: {FS}1:1:QZZ9-AAB"}]
+    code, codes, _ = lint(write(tmp_path, ops), "principal")
+    assert (code, codes) == (1, {"principal-nonprincipal": ["l1"]})
+
+
 def test_role_findings():
     code, codes, _ = lint("role-finding.jsonl", "role")
     assert code == 1
@@ -335,3 +343,178 @@ def test_an_override_holds_only_for_its_own_list(tmp_path):
     shutil.copy(os.path.join(FIX, "placement-clean.jsonl"), other)
     code, codes, _ = lint(str(other), "placement")
     assert codes == {"placement-parish": ["e-bap-pedro"]}
+
+
+# --- guards the first rounds left without a test: each test below goes red when its guard is removed ---------
+
+GX = "http://gedcomx.org/"
+
+
+def gx_record(path, people, parents=(), place=None):
+    """Write an invented raw GEDCOM X record: people are (id, ark, name, gender, principal, facts, role)."""
+    persons = []
+    for pid, ark, name, gender, principal, facts, role in people:
+        p = {"id": pid, "principal": principal, "gender": {"type": GX + gender} if gender else {},
+             "identifiers": {GX + "Persistent": [FS + "1:1:" + ark]}, "names": [{"nameForms": [{"fullText": name}]}],
+             "facts": [{"type": GX + f} for f in facts]}
+        if role:
+            p["display"] = {"name": name, "role": role}
+        persons.append(p)
+    doc = {"persons": persons, "relationships": [{"type": GX + "ParentChild", "person1": {"resource": "#" + a},
+                                                   "person2": {"resource": "#" + b}} for a, b in parents]}
+    if place:
+        doc["fields"] = [{"labelId": "EVENT_PLACE_ORIG", "text": place}]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+
+
+def saved_copy(tmp_path):
+    shutil.copytree(RECORDS, tmp_path / "saved")
+    return tmp_path / "saved"
+
+
+def tree_copy(tmp_path, edit):
+    data = json.loads(open(TREE, encoding="utf-8").read())
+    edit(data)
+    p = tmp_path / "tree.json"
+    p.write_text(json.dumps(data), encoding="utf-8")
+    return str(p)
+
+
+def test_a_sacrament_on_a_town_is_reported_even_when_its_record_is_not_saved(tmp_path):
+    ops = [{"op": "add_event", "key": "e", "person": "I1", "type": "Baptism", "place": "P1"},
+           {"op": "add_citation", "key": "c", "source": "S1", "page": FS + "1:1:QZZ1-NNA", "attach": [{"event": "key:e"}]}]
+    assert lint(write(tmp_path, ops), "placement", config=None)[:2] == (1, {"placement-town": ["e"]})
+
+
+def test_a_church_event_with_no_cited_record_is_not_a_parish_finding(tmp_path):
+    ops = [{"op": "add_event", "key": "e", "person": "I1", "type": "Baptism", "place": "P2"}]
+    assert lint(write(tmp_path, ops), "placement", config=None)[:2] == (0, {})
+
+
+def test_an_update_event_is_placed_against_the_citations_the_event_already_has(tmp_path):
+    ops = [{"op": "update_event", "key": "u", "event": "E1", "set": {"place": "P5"}}]  # E1 carries C1 (Ana's record)
+    assert lint(write(tmp_path, ops), "placement")[:2] == (1, {"placement-parish": ["u"]})
+
+
+def test_an_update_event_is_placed_against_the_citations_the_list_hangs_on_it(tmp_path):
+    def drop(data):
+        data["events"][0]["citation_list"] = []
+    ops = [{"op": "add_citation", "key": "c", "source": "S1", "page": FS + "1:1:QZZ9-AAA", "attach": [{"event": "E1"}]},
+           {"op": "update_event", "key": "u", "event": "E1", "set": {"place": "P5"}}]
+    tree = tree_copy(tmp_path, drop)
+    assert lint(write(tmp_path, ops), "placement", "--snapshot", tree)[:2] == (1, {"placement-parish": ["u"]})
+
+
+def test_a_media_on_a_tree_citation_makes_the_quotation_image_only(tmp_path):
+    def media(data):
+        c2 = next(c for c in data["citations"] if c["gramps_id"] == "C2")
+        c2["page"], c2["media_list"] = "https://images.example.org/viewer/item/9", [{"ref": "hM1"}]
+    ops = [{"op": "add_note", "key": "n", "text": "The act reads «estas palabras no tienen lectura firmada»",
+            "attach": [{"citation": "C2"}]}]
+    tree = tree_copy(tmp_path, media)
+    assert lint(write(tmp_path, ops), "quote", "--snapshot", tree)[:2] == (1, {"quote-image": ["n"]})
+
+
+def test_a_quotation_in_a_media_description_is_image_only(tmp_path):
+    (tmp_path / "act.jpg").write_bytes(b"\xff\xd8\xff\xe0 invented")
+    ops = [{"op": "add_media", "key": "m", "file": str(tmp_path / "act.jpg"), "path": "media/act.jpg",
+            "mime": "image/jpeg", "desc": "The act reads «estas palabras no tienen lectura firmada»",
+            "attach": [{"person": "I1"}]}]
+    assert lint(write(tmp_path, ops), "quote")[:2] == (1, {"quote-image": ["m"]})
+
+
+def test_a_note_on_a_tree_citation_is_checked_against_that_citations_record(tmp_path):
+    ops = [{"op": "add_note", "key": "n", "text": "The priest wrote «bauticé solemnemente a una niña que nació el día "
+            "de ayer».", "attach": [{"citation": "C1"}]}]
+    assert lint(write(tmp_path, ops), "quote")[:2] == (0, {})
+
+
+def test_attach_existing_of_a_citation_the_list_adds_cites_its_page(tmp_path):
+    ops = [{"op": "add_citation", "key": "c", "source": "S1", "page": FS + "1:1:QZZ9-AAB", "attach": [{"person": "I2"}]},
+           {"op": "attach_existing", "key": "a", "object": {"citation": "key:c"}, "attach": [{"event": "E1"}]}]
+    assert lint(write(tmp_path, ops), "principal")[:2] == (1, {"principal-nonprincipal": ["c", "a"]})
+
+
+def test_an_updated_page_with_role_words_is_still_nonprincipal(tmp_path):
+    ops = [{"op": "update_citation", "key": "u", "citation": "C2", "expect": FS + "1:1:QZZ9-AAB",
+            "set": {"page": "padre Luis Zorvalo, " + FS + "1:1:QZZ9-AAB"}}]
+    assert lint(write(tmp_path, ops), "principal")[:2] == (1, {"principal-nonprincipal": ["u"]})
+
+
+def test_a_role_word_far_from_the_personas_name_does_not_excuse_it(tmp_path):
+    ops = [{"op": "add_note", "key": "n", "text": "The father is not named in the entry; see " + FS + "1:1:QZZ9-AAD",
+            "attach": [{"person": "I1"}]}]
+    assert lint(write(tmp_path, ops), "principal")[:2] == (1, {"principal-nonprincipal": ["n"]})
+
+
+def test_a_parent_the_index_gives_no_role_is_still_a_parent(tmp_path):
+    # Pedro's record links Juan Morel as his parent and gives him no role text
+    ops = [{"op": "add_note", "key": "n", "text": "padrino: Juan Morel, " + FS + "1:1:QZZ8-BBA", "attach": [{"person": "I1"}]}]
+    assert lint(write(tmp_path, ops), "role")[:2] == (1, {"role-mismatch": ["n"]})
+
+
+def test_a_father_word_on_a_parent_of_unknown_sex_is_no_mismatch(tmp_path):
+    gx_record(tmp_path / "saved" / "rec.json", [("p1", "QZZ3-GGA", "Rita Ondaro", "Female", True, ["Christening"], ""),
+                                                ("p2", "QZZ3-GGB", "Luis Vesquel", "", False, [], "")],
+              parents=[("p2", "p1")])
+    ops = [{"op": "add_note", "key": "n", "text": "father Luis Vesquel, " + FS + "1:1:QZZ3-GGA", "attach": [{"person": "I1"}]}]
+    assert lint(write(tmp_path, ops), "role", "--records", str(tmp_path / "saved"))[:2] == (0, {})
+
+
+def test_a_one_word_name_is_found_in_the_text(tmp_path):
+    gx_record(tmp_path / "saved" / "rec.json", [("p1", "QZZ3-HHA", "Rita Ondaro", "Female", True, ["Christening"], ""),
+                                                ("p2", "QZZ3-HHB", "Anselmo", "Male", False, [], "Godparent")])
+    ops = [{"op": "add_note", "key": "n", "text": "padre: Anselmo, " + FS + "1:1:QZZ3-HHA", "attach": [{"person": "I1"}]}]
+    assert lint(write(tmp_path, ops), "role", "--records", str(tmp_path / "saved"))[:2] == (1, {"role-mismatch": ["n"]})
+
+
+def test_a_bulletin_saved_as_a_gwt_fscache_text_body_is_read(tmp_path):
+    saved = saved_copy(tmp_path)
+    url = "https://bulletin.example.org/1998/edict-12"
+    (saved / "fscache-copy" / "9f" / ("9e" + "0" * 62 + ".json")).write_text(
+        json.dumps({"url": url, "status": 200, "fetched": 1767323045}), encoding="utf-8")
+    (saved / "fscache-copy" / "9f" / ("9e" + "0" * 62 + ".body")).write_text(
+        "Se cita a los herederos desconocidos del causante para que comparezcan.", encoding="utf-8")
+    ops = [{"op": "add_citation", "key": "c", "source": "S1", "page": url, "attach": [{"person": "I1"}]},
+           {"op": "add_note", "key": "n", "text": "The edict says «herederos desconocidos del causante para que "
+            "comparezcan».", "attach": [{"citation": "key:c"}]}]
+    assert lint(write(tmp_path, ops), "quote", "--records", str(saved))[:2] == (0, {})
+
+
+def test_the_text_of_a_gwt_read_envelope_is_read(tmp_path):
+    saved = saved_copy(tmp_path)
+    url = "https://archive.example.org/act/5"
+    (saved / "act-5.json").write_text(json.dumps({"url": url, "final_url": url, "text": "En la villa de Villazul "
+                                                  "comparecieron los dos testigos del acta"}), encoding="utf-8")
+    ops = [{"op": "add_citation", "key": "c", "source": "S1", "page": url, "attach": [{"person": "I1"}]},
+           {"op": "add_note", "key": "n", "text": "The act says «comparecieron los dos testigos del acta».",
+            "attach": [{"citation": "key:c"}]}]
+    assert lint(write(tmp_path, ops), "quote", "--records", str(saved))[:2] == (0, {})
+
+
+def test_a_transcription_saved_for_the_principal_backs_a_quote_cited_on_another_persona(tmp_path):
+    saved = saved_copy(tmp_path)
+    (saved / "ana.txt").write_text("ark:/61903/1:1:QZZ9-AAA\ny fueron sus padrinos los vecinos de la villa\n",
+                                   encoding="utf-8")
+    ops = [{"op": "add_note", "key": "n", "text": "«fueron sus padrinos los vecinos de la villa» " + FS + "1:1:QZZ9-AAD",
+            "attach": [{"person": "I1"}]}]
+    assert lint(write(tmp_path, ops), "quote", "--records", str(saved))[:2] == (0, {})
+
+
+def test_a_candidate_row_of_another_source_is_not_a_familysearch_record(tmp_path):
+    saved = saved_copy(tmp_path)
+    (saved / "other.candidates.json").write_text(json.dumps({"candidates": [
+        {"source": "matchid", "id": "QZZ2-KKA", "name": "Rita Ondaro", "principal": True}]}), encoding="utf-8")
+    ops = [{"op": "add_citation", "key": "c", "source": "S1", "page": FS + "1:1:QZZ2-KKA", "attach": [{"person": "I1"}]}]
+    assert lint(write(tmp_path, ops), "principal", "--records", str(saved))[0] == 2
+
+
+def test_a_candidate_row_with_no_facts_is_no_event_finding(tmp_path):
+    saved = saved_copy(tmp_path)
+    (saved / "rita.candidates.json").write_text(json.dumps({"candidates": [
+        {"source": "familysearch", "id": "QZZ2-LLA", "name": "Rita Ondaro", "role": "Principal", "principal": True,
+         "events": {}}]}), encoding="utf-8")
+    ops = [{"op": "add_event", "key": "e", "person": "I1", "type": "Death"},
+           {"op": "add_citation", "key": "c", "source": "S1", "page": FS + "1:1:QZZ2-LLA", "attach": [{"event": "key:e"}]}]
+    assert lint(write(tmp_path, ops), "principal", "--records", str(saved))[:2] == (0, {})

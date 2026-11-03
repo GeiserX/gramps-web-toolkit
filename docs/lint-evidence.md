@@ -54,7 +54,7 @@ nota marginal de difícil lectura aquí	3f9a0c1b2d4e	A. Reader
 
 ## principal
 
-Every FamilySearch record ark (`1:1:`) in an op must be a persona the record marks as principal. The fix printed is the principal's ark. A spouse's persona is fine for a marriage event or a family, one the list adds included. `attach_existing` of a citation checks that citation's page. In free text, a persona named with a role word next to its name («padrino Tomás Brin <ark>») is a statement about that persona: [role](#role) judges it, and principal leaves it alone. A citation's page is never excused that way. When the op speaks about an event (an `add_event`, or a citation or note on an event), the principal must have a fact of that type: a baptism record (Christening or Baptism) backs a Baptism and, when it gives one, a Birth; it does not back a Death.
+Every FamilySearch record ark (`1:1:`) in an op must be a persona the record marks as principal. The fix printed is the principal's ark. A spouse's persona is fine for a marriage event or a family, one the list adds included. `attach_existing` of a citation checks that citation's page. In free text, a persona named with a role word next to its name («padrino Tomás Brin <ark>») is a statement about that persona: [role](#role) judges it, and principal leaves it alone. A citation's page or a reason (a link's `probable_reason`, `new_couple_reason`) is never excused that way: there the persona is the evidence, so it must be the principal. When the op speaks about an event (an `add_event`, or a citation or note on an event), the principal must have a fact of that type: a baptism record (Christening or Baptism) backs a Baptism and, when it gives one, a Birth; it does not back a Death.
 
 | Code | When |
 |---|---|

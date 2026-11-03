@@ -598,6 +598,9 @@ class Principal(Rule):
             types = ev.event_types(op)
             pages = self._pages(ev, op)
             text = " ".join(texts(op))
+            # a reason (a link's probable_reason, new_couple_reason) uses the persona as evidence, like a page
+            evidence = pages + [a for k, v in op.items() if k.endswith("reason")
+                                for s in _strings(v) for a in ARK.findall(s)]
             for ark in list(dict.fromkeys(op_arks(op) + pages)):
                 if not ark.startswith("1:1:"):
                     continue
@@ -606,7 +609,7 @@ class Principal(Rule):
                 heads = principals(rec)
                 if rel != "principal" and not (rel == "spouse" and types & {"Marriage", "Family"}):
                     # in free text, «padrino Tomás Brin <ark>» names a persona by its role: role judges that claim
-                    if ark not in pages and persona["name"] and role_words(text, persona["name"]):
+                    if ark not in evidence and persona["name"] and role_words(text, persona["name"]):
                         continue
                     fix = ", ".join(FS + a for p in heads for a in p["arks"][:1]) or "open the record and cite its principal"
                     out.append(self.finding("principal-nonprincipal", op,
