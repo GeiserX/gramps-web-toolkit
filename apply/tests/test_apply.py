@@ -4270,3 +4270,21 @@ def test_cli_rerun_reads_only_the_done_ops_of_an_earlier_apply(fake, tmp_path, e
     assert main(["--save-snapshot", str(snap)]) == 0
     capsys.readouterr()
     assert main([str(r), "--snapshot", str(snap), "--apply"]) == 0, capsys.readouterr().out
+
+
+def test_active_lease_diagnostic_gives_safe_recovery_without_stealing(fake):
+    from gwt_apply.lock import TreeLock, LockHeld, read_lock
+    c = Client("https://gw.example", "u", "pw", dry_run=False, session=fake)
+    owner = TreeLock(c, "owner")
+    owner.acquire()
+    before = len(fake.writes())
+    with pytest.raises(LockHeld) as exc:
+        TreeLock(c, "next").acquire()
+    message = str(exc.value)
+    assert "lease" in message and "seconds" in message and "unless renewed" in message
+    assert "host/container" in message and "--break-lock" in message
+    assert "PID alone" in message
+    assert read_lock(c)["run"] == "owner"
+    assert fake.writes()[before:] == []
+    TreeLock(c, "next").acquire(break_lock=True)
+    assert read_lock(c)["run"] == "next"
