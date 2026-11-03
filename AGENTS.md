@@ -26,6 +26,7 @@ page goes into the `mkdocs.yml` nav and `docs/index.md`, and `mkdocs build --str
 | `leads/` | `gwt-leads`, tree gaps ranked as queue tasks | Python standard library |
 | `spanish-poller/` | `gwt-spanish-poller`, Spain-only sede and DEHú watcher | Node 18+, Playwright |
 | `ocr-bench/` | OCR, HTR and LLM reading benchmark | Python, one venv per engine |
+| `dna/` | `gwt-import-dna`, DNA match lists to a change list | Python standard library (its end-to-end test needs `requests`) |
 
 ## Repository rules
 
@@ -45,7 +46,7 @@ page goes into the `mkdocs.yml` nav and `docs/index.md`, and `mkdocs build --str
 cd apply && python3 -m pytest -q
 cd check && python3 -m pytest -q
 cd fetch && python3 -m pytest -q
-cd ledger && python3 -m unittest test_gwt_ledger
+cd ledger && python3 -m unittest test_gwt_ledger test_requests
 cd fscache && python3 -m unittest test_gwt_fscache
 cd gate && python3 -m unittest test_gwt_gate
 cd rank && python3 -m unittest test_gwt_rank
@@ -54,6 +55,7 @@ cd rawstore && python3 -m unittest test_gwt_rawstore
 cd importxl && python3 -m unittest test_gwt_import_excel test_end_to_end
 cd queue && python3 -m unittest test_gwt_queue
 cd leads && python3 -m unittest test_gwt_leads
+cd dna && python3 -m pytest -q
 cd spanish-poller && node --test
 ```
 

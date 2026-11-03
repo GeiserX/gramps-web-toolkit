@@ -1,0 +1,43 @@
+# file | exact text | replacement | what the guard protects
+gwt_dna.py |             if len(cands) == 1: |             if False: | a match already in the tree from another site, same name and a close cM, is pointed at, never made twice
+gwt_dna.py | if s != site and close_cm(cm, c)} | if s != site} | a namesake from another site with a far cM is another person, not the same one
+gwt_dna.py |             elif len(cands) > 1: |             elif False: | two close candidates from other sites are reported as ambiguous
+gwt_dna.py | min(a, b) >= CROSS_CM_MIN and abs(a - b) <= CROSS_CM_REL * max(a, b) | abs(a - b) <= CROSS_CM_REL * max(a, b) | two small namesake matches on two sites are never taken as one person by name alone
+gwt_dna.py | abs(a - b) <= CROSS_CM_REL * max(a, b) | abs(a - b) <= 10 | two sites' cM for one match may differ by up to 30 percent
+gwt_dna.py | if not target and (site, mid) in tree["marks"]: | if False: | a rerun or a second kit of the same site points at the person the first import made
+gwt_dna.py |         if ref == tested: |         if False: | the tested person found as a match gets no association to themself
+gwt_dna.py |             if same: |             if False: | a new match person who shares a name with someone in the tree is waived as a namesake by name, so preflight lets it through
+gwt_dna.py |             made_names.setdefault(fold(f"{first} {surname}"), []).append(f"key:{pkey}") |             pass | two new matches with one name in a run name each other as namesakes
+gwt_dna.py |             mid = base if n == 1 else f"{base}-{n}" |             mid = base | two matches with one name and no id are two people, never one overwritten
+gwt_dna.py | sorted(same, key=lambda m: -(m["cm"] or 0)) | same | two same-name matches keep their ids, by cM, when the site reorders its export
+gwt_dna.py |             if cell(r, "id") and mid in matches: |             if False: | a match id listed twice (a list passed twice) is one person, never two
+gwt_dna.py |         if sid:  # a segment row with an id joins that id only, never a namesake's match |         if sid and sid in matches: | a segment row whose id is not in the match list never lands on a namesake's match
+gwt_dna.py |         elif len(named) > 1: |         elif False: | segments of a name two matches share are held back, never given to a new third match
+gwt_dna.py |         n = n.split("@")[0] |         pass | an e-mail used as a display name keeps only its local part
+gwt_dna.py |     n = " ".join(LONG_NUMBER.sub(" ", n).split()) |     n = " ".join(n.split()) | a phone or identity number inside a display name never reaches the tree
+gwt_dna.py | "surnames": " ".join(re.sub(r"\([^)]*\)", " ", cell(r, "surnames")).split()), | "surnames": cell(r, "surnames"), | the place a site prints next to an ancestral surname never reaches the tree
+gwt_dna.py |     "surnames": ["ancestral surnames", "ancestral names"], |     "surnames": ["ancestral surnames", "ancestral names", "contact", "country", "email"], | contact, country and e-mail columns are never read
+gwt_dna.py |         if cur and len(cur) + len(g) > size: |         if cur and len(cur) > size: | a file never holds more than --batch ops
+gwt_dna.py |             if os.path.exists(n) and not a.force: |             if False: | --out and --report are never overwritten without --force
+gwt_dna.py |         raise BadInput(f"--tested {tested}: not in the snapshot") |         pass | a tested person who is not in the snapshot stops the run
+gwt_dna.py | SEGMENT_HEADER = "Chromosome,Start Location,End Location,Centimorgans,Matching SNPs" | SEGMENT_HEADER = "Chr,Start,End,cM,SNPs" | the segment note is the string Gramps Web was seen to accept
+gwt_dna.py | rows = sorted(segs, key=lambda s: (CHROM_ORDER.get(s["chromosome"], 99), s["chromosome"], s["start"])) | rows = segs | segments are written in chromosome order, X after 22
+gwt_dna.py |         if _hfold(overrides.get(field, "")) in folded: |         if field in overrides: | --column names its column in the file that has it, so a match list and its segment file import together
+gwt_dna.py |     for field in sorted(set(overrides) - used): |     for field in []: | a --column header no file has stops the run
+gwt_dna.py |         for n in set(older) - set(names): |         for n in []: | a run with fewer batch files than the last one leaves none of the old ones to be applied
+gwt_dna.py |     if (gone := sorted(set(id_map.values()) - set(tree["ids"]))): |     if False: | an --id-map target not in the snapshot stops the run before gwt-apply
+gwt_dna.py | and names[fold(name)] > 1: | and False: | an --id-map name two matches share never merges them into one person
+gwt_dna.py | encoding="utf-8-sig") as fh:  # a TSV | encoding="utf-8") as fh:  # a TSV | an --id-map saved with a BOM keeps its first line
+gwt_dna.py |     except (BadInput, OSError) as exc: |     except BadInput as exc: | a missing file or folder is exit 2 and one line, not a traceback
+gwt_dna.py |     text = io.StringIO(text, newline=None).read() |     pass | a CSV with an old Mac's line ends reads
+gwt_dna.py |             if (cm or 0) >= CLOSE_KIN_CM: |             if False: | a new person at close-family cM (often your own kit) is reported, not made silently
+gwt_dna.py | if cm is not None and abs(cm - tree["mark_cm"][(site, mid)]) >= 0.05: | if False: | a re-export whose cM changed is reported, since gwt-apply keeps the old notes
+gwt_dna.py |     except csv.Error as exc: |     except ZeroDivisionError as exc: | a CSV the csv module cannot read is exit 2 and one line, not a traceback
+gwt_dna.py |     except (OSError, ValueError, EOFError) as exc: |     except OSError as exc: | a damaged snapshot is exit 2 and one line, not a traceback
+gwt_dna.py |         text = raw.decode("cp1252", errors="replace") |         raise | a CSV saved by Windows Excel (cp1252) reads with its accents
+gwt_dna.py |     delim = max(",;\t", key=first.count) |     delim = "," | a CSV with semicolons (Excel in most of Europe) reads
+gwt_dna.py |             if not full and not cell(r, "id"): |             if False: | a row with neither name nor id is skipped and listed, never a nameless person
+gwt_dna.py |     if len(rows) < 2: |     if False: | an empty file is exit 2 and one line
+gwt_dna.py |             if need or not ({"id", "name"} & set(found)): |             if False: | a segment file missing a column it needs is exit 2 and one line
+gwt_dna.py |     if not isinstance(people, list) or not people: |     if False: | a snapshot with no people is exit 2 and one line
+gwt_dna.py |         if a.batch < 4: |         if False: | a --batch smaller than one match's ops is exit 2
