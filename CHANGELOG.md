@@ -10,6 +10,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 - `gwt-apply`: an apply that finds the tree locked says how many seconds are left on the holder's lease, and to pass `--break-lock` only after checking on the holder's host that it stopped, since a PID checked on another machine proves nothing.
 
+### Fixed
+
+- `gwt-apply LIST --apply --save-snapshot FILE` exits 2 now. It used to save the snapshot, skip the list and exit 0, so the caller read a write that never happened. Save the snapshot, then apply in a second command.
+
 ## [1.0.0] - 2026-11-03
 
 ### Change lists
