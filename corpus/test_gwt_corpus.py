@@ -108,6 +108,87 @@ class UpdateTest(Base):
         self.assertEqual(code, 0)
         self.assertIn('book.pdf p.2', out)
 
+    def pdftotext_stub(self, script):
+        bindir = os.path.join(self.dir, 'bin')
+        os.makedirs(bindir, exist_ok=True)
+        tool = os.path.join(bindir, 'pdftotext')
+        with open(tool, 'w') as f:
+            f.write('#!/bin/sh\n' + script + '\n')
+        os.chmod(tool, os.stat(tool).st_mode | stat.S_IEXEC)
+        return {'PATH': bindir + os.pathsep + os.environ['PATH']}
+
+    def test_a_pdf_read_without_pdftotext_is_read_once_it_is_installed(self):
+        with open(os.path.join(self.dir, 'books', 'book.pdf'), 'wb') as f:
+            f.write(b'%PDF-1.4 invented')
+        with mock.patch.object(C.shutil, 'which', return_value=None):
+            run('update', '--db', self.db, *self.roots)
+        env = self.pdftotext_stub('printf "Hoja: Gregoria Merino Valverde.\\f"')
+        with mock.patch.dict(os.environ, env):
+            code, out, _ = run('update', '--db', self.db, *self.roots)
+        self.assertIn('1 new', out)
+        self.assertEqual(self.search('Gregoria Merino')[0], 0)
+
+    def test_a_pdf_pdftotext_fails_on_is_tried_again(self):
+        with open(os.path.join(self.dir, 'books', 'book.pdf'), 'wb') as f:
+            f.write(b'%PDF-1.4 invented')
+        with mock.patch.dict(os.environ, self.pdftotext_stub('exit 1')):
+            code, out, _ = run('update', '--db', self.db, *self.roots)
+        self.assertIn('1 PDFs pdftotext could not read', out)
+        with mock.patch.dict(os.environ, self.pdftotext_stub('printf "Gregoria Merino Valverde"')):
+            run('update', '--db', self.db, *self.roots)
+        self.assertEqual(self.search('Gregoria Merino')[0], 0)
+
+    def test_one_unreadable_file_never_costs_the_run(self):
+        bad = os.path.join(self.dir, 'books', 'zz-gone.txt')
+        os.symlink(os.path.join(self.dir, 'nowhere.txt'), bad)
+        d = os.path.join(self.dir, 'fscache', 'bb')
+        os.makedirs(d)
+        with open(os.path.join(d, 'bb' + '5' * 62 + '.json'), 'w') as f:
+            f.write('[1, 2]')
+        with open(os.path.join(d, 'bb' + '5' * 62 + '.body'), 'w') as f:
+            f.write('nada')
+        fresh = os.path.join(self.dir, 'idx2', 'corpus.db')
+        code, out, _ = run('update', '--db', fresh, *self.roots)
+        self.assertEqual(code, 0)
+        self.assertIn('2 files could not be read', out)
+        self.assertEqual(run('search', '--db', fresh, 'jose olmedo')[0], 0)
+
+    def test_a_zero_result_answer_never_matches_the_name_it_was_asked_for(self):
+        with open(os.path.join(self.dir, 'reader', 'none-search.json'), 'w') as f:
+            json.dump({'url': 'https://index.example.org/search?name=Juana+Perezvilla', 'json': {
+                'query': {'name': 'Juana Perezvilla'}, 'response': {'number_found': 0},
+                'responseHeader': {'params': {'q': 'Juana Perezvilla'}}}}, f)
+        run('update', '--db', self.db, *self.roots)
+        self.assertEqual(self.search('Juana Perezvilla')[0], 1)
+        self.assertEqual(self.search('Perezvilla')[0], 1)  # nor the name in the request URL
+
+    def test_a_tree_dump_under_a_root_is_not_indexed(self):
+        shutil.copy(os.path.join(FIX, 'tree.json'), os.path.join(self.dir, 'books', 'tree-dump.json'))
+        run('update', '--db', self.db, *self.roots)
+        self.assertEqual(self.search('Rosa Calvo Soto', '--phrase')[0], 1)
+
+    def test_each_entry_of_a_search_answer_keeps_its_own_record_link(self):
+        d = os.path.join(self.dir, 'fscache', 'cc')
+        os.makedirs(d)
+        with open(os.path.join(d, 'cc' + '6' * 62 + '.json'), 'w') as f:
+            json.dump({'url': 'https://records.example.org/search?q=Arrieta', 'date': '2026-01-09T00:00:00Z'}, f)
+        entries = [{'id': 'E-%d' % i, 'links': {'person': {'href': 'https://records.example.org/ark:/99999/1:1:E-%d' % i}},
+                    'content': {'gedcomx': {'persons': [{'names': [{'nameForms': [{'fullText': n}]}]}]}}}
+                   for i, n in enumerate(('Matilde Arrieta Goñi', 'Benito Arrieta Sanz'))]
+        with open(os.path.join(d, 'cc' + '6' * 62 + '.body'), 'w') as f:
+            json.dump({'entries': entries}, f)
+        run('update', '--db', self.db, *self.roots)
+        code, out, _ = self.search('Benito Arrieta')
+        self.assertEqual(code, 0)
+        self.assertIn('ark:/99999/1:1:E-1', out)
+        self.assertNotIn('E-0', out)
+
+    def test_a_trailing_form_feed_is_not_a_page(self):
+        path = os.path.join(self.dir, 'books', 'two.txt')
+        with open(path, 'w') as f:
+            f.write('uno\fdos\f')
+        self.assertEqual(len(C.extract(path, {'urls': {}})), 2)
+
     def test_a_pdf_without_pdftotext_is_counted_not_silent(self):
         with open(os.path.join(self.dir, 'books', 'book.pdf'), 'wb') as f:
             f.write(b'%PDF-1.4 invented')
@@ -132,6 +213,8 @@ class SearchTest(Base):
         code, out, _ = self.search('Olmedo+Merino')
         self.assertEqual(code, 1)
         self.assertEqual(self.search('Olmedo+Quiroga')[0], 0)
+        self.assertEqual(self.search('Quiroga+Olmedo')[0], 0)  # two words near each other, not one phrase
+        self.assertEqual(self.search('Olmedo "Quiroga')[0], 0)  # a stray quote is a separator, never FTS5 syntax
 
     def test_words_far_apart_are_not_near(self):
         self.assertEqual(self.search('Lucía Robledal', '--near', '3')[0], 1)
@@ -162,6 +245,19 @@ class SearchTest(Base):
         self.assertIn('VOID', out)
         self.assertEqual(self.search('--fts', 'olmedo OR merino', '--control', 'quiroga')[0], 0)
 
+    def test_a_sharp_s_query_matches_the_indexed_word(self):
+        with open(os.path.join(self.dir, 'books', 'weiss.txt'), 'w') as f:
+            f.write('Taufe von Johann Weiß in Grünfeld.')
+        run('update', '--db', self.db, *self.roots)
+        self.assertEqual(self.search('Johann Weiß')[0], 0)
+
+    def test_a_limit_below_one_is_refused_and_a_full_limit_says_first(self):
+        with redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                C.main(['search', '--db', self.db, 'Olmedo', '--limit', '0'])
+        code, out, _ = self.search('Villazul', '--limit', '1')
+        self.assertIn('first 1 hits', out)
+
     def test_no_index_is_bad_input(self):
         self.assertEqual(run('search', '--db', os.path.join(self.dir, 'none.db'), 'x')[0], 2)
 
@@ -177,12 +273,25 @@ class SweepTest(Base):
         self.assertEqual(code, 0, err)
         rows = [l.split('\t') for l in open(ledger, encoding='utf-8').read().splitlines()[1:]]
         got = {(r[0], r[3], r[5]) for r in rows}
-        self.assertIn(('k-olmedo', '"jose olmedo quiroga"', 'hit'), got)
-        self.assertIn(('k-merino', '"tomas merino santos"', 'hit'), got)
+        self.assertIn(('k-olmedo', '"jose olmedo quiroga"', 'partial'), got)  # a lead to read, never a finding
+        self.assertIn(('k-merino', '"tomas merino santos"', 'partial'), got)
         self.assertIn(('k-absent', '"elena zubiri calvo"', 'none'), got)
         self.assertIn(('k-absent', '"zubiri calvo"', 'none'), got)
         self.assertTrue(all(r[2] == 'corpus' and r[7] == 'lane-a' for r in rows))
+        self.assertTrue(all(r[9].startswith('corpus-sweep-') for r in rows))  # the controls that passed
         self.assertIn('Tomás Merino (the miller)', out)
+        nones = [r for r in rows if r[5] == 'none']
+        self.assertTrue(all(r[8] == r[4] and r[6] == 'corpus:corpus.db' for r in nones))
+        # a corpus miss is due again at once: it never tells gwt-ledger the person was searched
+        sys.path.insert(0, os.path.join(HERE, '..', 'ledger'))
+        import gwt_ledger
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(gwt_ledger.main(['--ledger', ledger, 'check', '--person', 'k-absent',
+                                              '--query', 'zubiri calvo']), 1)
+        # the same sweep again on the same day adds nothing
+        self.sweep('--names', os.path.join(FIX, 'persons.tsv'), '--control', 'Ana Ibarrola Zubiri',
+                   '--ledger', ledger, '--agent', 'lane-a')
+        self.assertEqual(len(open(ledger, encoding='utf-8').read().splitlines()), len(rows) + 1)
 
     def test_a_dump_is_swept_with_two_surnames_in_one_field(self):
         code, out, _ = self.sweep('--dump', os.path.join(FIX, 'tree.json'), '--control', 'José Olmedo Quiroga')
@@ -204,7 +313,7 @@ class SweepTest(Base):
 
         def flaky(db, expr, source=None, limit=20):
             calls.append(expr)
-            if expr == '"ana ibarrola zubiri"' and len(calls) > 1:
+            if expr == 'body : ("Ana Ibarrola Zubiri")' and len(calls) > 1:
                 return []  # the index went away during the run
             return real(db, expr, source, limit)
 
@@ -214,6 +323,39 @@ class SweepTest(Base):
         self.assertEqual(code, 3)
         self.assertIn('after the sweep', out)
         self.assertFalse(os.path.exists(ledger))
+
+    def test_particles_are_not_surnames_and_common_short_names_are_no_leads(self):
+        books = os.path.join(self.dir, 'books')
+        with open(os.path.join(books, 'torre.txt'), 'w') as f:
+            f.write('Se vende la torre del molino de la Torre Vieja.')
+        for i in range(8):
+            with open(os.path.join(books, 'juan-%d.txt' % i), 'w') as f:
+                f.write('Firma Juan García como testigo, hoja %d.' % i)
+        run('update', '--db', self.db, *self.roots)
+        names = os.path.join(self.dir, 'n.tsv')
+        with open(names, 'w', encoding='utf-8') as f:
+            f.write('\ufeffkey\tgiven\tsurname\r\nk-torre\tLuis\tde la Torre\r\nk-juan\tJuan\tGarcía\r\n')
+        code, out, err = self.sweep('--names', names, '--control', 'Ana Ibarrola Zubiri')
+        self.assertNotIn('\tpair\t', out)  # «de la Torre» is one surname: no pair «la torre»
+        self.assertNotIn('k-juan', out)  # on 8 pages: too common to be a lead
+        self.assertIn('1 too common', err)
+
+    def test_a_short_row_is_bad_input(self):
+        names = os.path.join(self.dir, 'n.tsv')
+        with open(names, 'w') as f:
+            f.write('key\tgiven\tsurname\nP1\tPedro\n')
+        code, _, err = self.sweep('--names', names, '--control', 'Ana Ibarrola Zubiri')
+        self.assertEqual(code, 2)
+        self.assertIn('line 2', err)
+
+    def test_a_gzipped_dump_is_read(self):
+        import gzip
+        gz = os.path.join(self.dir, 'tree.json.gz')
+        with open(os.path.join(FIX, 'tree.json'), 'rb') as src, gzip.open(gz, 'wb') as dst:
+            dst.write(src.read())
+        code, out, _ = self.sweep('--dump', gz, '--control', 'José Olmedo Quiroga')
+        self.assertEqual(code, 0)
+        self.assertIn('EX2\tLucía Valverde Ortega\tname', out)
 
     def test_no_control_is_bad_input(self):
         self.assertEqual(self.sweep('--names', os.path.join(FIX, 'persons.tsv'))[0], 2)
@@ -266,6 +408,66 @@ class XrefTest(unittest.TestCase):
                            '--format', 'tsv')
         self.assertEqual(code, 0)
         self.assertIn('name\tEX1\tJosé Olmedo Quiroga\t2\t', out)
+
+    def write(self, name, text):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        path = os.path.join(d, name)
+        with open(path, 'w', encoding='utf-8', newline='') as f:
+            f.write(text)
+        return path
+
+    def tree(self, *people):
+        objs = {'people': [], 'events': [], 'places': []}
+        for n, (given, surname, town) in enumerate(people, 1):
+            p = {'gramps_id': 'T%d' % n, 'primary_name': {'first_name': given, 'surname_list': [{'surname': surname}]},
+                 'event_ref_list': [], 'birth_ref_index': -1, 'death_ref_index': -1}
+            if town:
+                objs['events'].append({'handle': 'e%d' % n, 'place': 'pl%d' % n})
+                objs['places'].append({'handle': 'pl%d' % n, 'name': {'value': town}, 'place_type': 'Town'})
+                p['event_ref_list'], p['birth_ref_index'] = [{'ref': 'e%d' % n}], 0
+            objs['people'].append(p)
+        return self.write('tree.json', json.dumps({'objects': objs}))
+
+    def test_particles_never_make_a_pair_or_a_place_match(self):
+        tree = self.tree(('Juan', 'García de la Torre', 'Villazul'))
+        book = self.write('book.txt', 'Acta de la sesión celebrada en Villazul.\fEl molino de la torre vieja.\f')
+        code, out, err = run('xref', book, '--dump', tree, '--format', 'tsv')
+        self.assertEqual(code, 1, out)
+        self.assertIn('0 matches in 2 pages', err)
+        book = self.write('book2.txt', 'Juan García de la Torre, vecino.\fLos García de la Torre de Villazul.')
+        code, out, _ = run('xref', book, '--dump', tree, '--format', 'tsv')
+        self.assertIn('name\tT1', out)
+        self.assertIn('pair\tT1', out)
+
+    def test_a_two_word_name_on_many_pages_is_no_lead(self):
+        tree = self.tree(('Juan', 'Smith', ''), ('Mary', 'Smith', ''))
+        book = self.write('book.txt', '\f'.join(['Juan Smith signed.'] * 8 + ['Mary Smith signed.']))
+        code, out, _ = run('xref', book, '--dump', tree, '--format', 'tsv')
+        self.assertNotIn('T1', out)
+        self.assertIn('name\tT2', out)
+
+    def test_a_town_and_surname_on_many_pages_is_no_lead(self):
+        tree = self.tree(('Rosa', 'Larrinaga Soto', 'Villazul'))
+        book = self.write('book.txt', '\f'.join(['Soto y Villazul, hoja %d.' % i for i in range(8)]))
+        code, out, _ = run('xref', book, '--dump', tree, '--format', 'tsv')
+        self.assertNotIn('place', out)
+        code, out, _ = run('xref', book, '--dump', tree, '--format', 'tsv', '--max-place-pages', '8')
+        self.assertIn('place\tT1', out)
+
+    def test_a_word_broken_over_a_windows_line_end_is_joined(self):
+        tree = self.tree(('Tomasa', 'Ugarte Larrinaga', ''))
+        book = self.write('book.txt', 'Tomasa Ugar-\r\nte Larrinaga, maestra.')
+        code, out, _ = run('xref', book, '--dump', tree, '--format', 'tsv')
+        self.assertIn('name\tT1', out)
+
+    def test_a_pdf_pdftotext_cannot_read_is_bad_input(self):
+        with tempfile.NamedTemporaryFile(suffix='.pdf') as f, \
+                mock.patch.object(C.subprocess, 'run', return_value=mock.Mock(returncode=1, stdout=b'')), \
+                mock.patch.object(C.shutil, 'which', return_value='/bin/pdftotext'):
+            code, _, err = run('xref', f.name, '--dump', os.path.join(FIX, 'tree.json'))
+        self.assertEqual(code, 2)
+        self.assertIn('could not read', err)
 
     def test_a_pdf_without_pdftotext_is_bad_input(self):
         with tempfile.NamedTemporaryFile(suffix='.pdf') as f, \
