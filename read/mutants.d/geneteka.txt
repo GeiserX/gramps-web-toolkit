@@ -1,0 +1,14 @@
+# Mutations the geneteka tests must catch (format: see read/mutants.txt).
+gwt_geneteka.py | PACE = {'start': 120.0, 'floor': 120.0, 'ceil': 900.0} | PACE = {'start': 120.0, 'floor': 5.0, 'ceil': 900.0} | the site is never asked faster than its robots.txt Crawl-delay of 120 s
+gwt_geneteka.py | PACE = {'start': 120.0, 'floor': 120.0, 'ceil': 900.0} | PACE = {'start': 30.0, 'floor': 120.0, 'ceil': 900.0} | the gate starts at the crawl delay too, not below it
+gwt_geneteka.py | return 'unknown'    # the result container renamed: a STOP | return 'none' | an answer whose row list was renamed is unknown, a STOP, never "none"
+gwt_geneteka.py | if not rows and (n == 0 or start >= n): | if not rows: | a count above zero with no rows is unknown, never "none"
+gwt_geneteka.py | all(isinstance(r, list) and len(r) >= 10 for r in rows) | all(True for r in rows) | rows that are no longer the table's cells are unknown, a STOP
+gwt_geneteka.py | ('rid', parish or bdm) | ('rid', bdm) | --parish narrows the search to that parish
+gwt_geneteka.py | if a.parish and not a.parish.isdigit(): | if False: | a parish that is not the site's number is refused before any request
+gwt_geneteka.py | '%s-%s' % (KINDS[kind], gid.group(1)) if gid else None | None | each row keeps the entry's own number as its id
+gwt_geneteka.py | 'x-requested-with': 'XMLHttpRequest', | 'x-gwt-unused': 'x', | the request carries the page's own table headers, without which the site cuts its answer to a few rows
+gwt_geneteka.py | if count and rows and len(rows) < min(count, n - start): | if False: | a cut answer (fewer rows than the page should hold) is a STOP, never a short list read as complete
+gwt_geneteka.py | if not a.surname.strip(): | if False: | an empty --surname is refused before any request
+gwt_geneteka.py | c.update(events={kind[:-1]: {'year': cells[0] or None}}) | c.update(name=' '.join(cells[2:4]), events={kind[:-1]: {'year': cells[0] or None}}) | a marriage or death row gets no name guessed from an unconfirmed column order
+gwt_geneteka.py |     start = (max(1, a.page) - 1) * a.count |     start = 0 | --page asks for its own rows
