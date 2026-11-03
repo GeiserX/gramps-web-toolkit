@@ -328,7 +328,7 @@ def names(g1, g2, half, sex):
 
 
 # Digest UI strings per language. NAMERS covers the kin names; these cover everything else
-# `gwt-report digest` prints. A missing language or key falls back to English.
+# `gwt-report digest` prints. Every language here has every key (a test checks it), so a gap raises.
 DIGEST_I18N = {
     'en': {
         'title': 'New in the tree', 'since': ' since %s', 'nothing_new': 'Nothing new.',
@@ -373,8 +373,8 @@ DIGEST_I18N = {
 
 
 def s(lang, key):
-    """One digest UI string; English when the language or the key is missing."""
-    return DIGEST_I18N.get(lang, DIGEST_I18N['en']).get(key, DIGEST_I18N['en'][key])
+    """One digest UI string in `lang`."""
+    return DIGEST_I18N[lang][key]
 
 
 SIDE_KEY = {'root': 'side_root', "father's side": 'side_father', "mother's side": 'side_mother',
@@ -675,7 +675,7 @@ def render(T, groups, base, lang, fmt, since=''):
     for g in groups:
         if g['side'] != side:
             side = g['side']
-            lines.append(side_head % esc(s(lang, SIDE_KEY.get(side, 'side_other'))))
+            lines.append(side_head % esc(s(lang, SIDE_KEY[side])))
         p = g['person']
         if p:
             head = who(T, p)

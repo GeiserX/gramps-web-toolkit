@@ -406,6 +406,17 @@ class DigestTest(unittest.TestCase):
         self.assertEqual(R.describe(T, 'people', p, 'es'), 'persona nueva: Ada, n. 1901')
         self.assertEqual(R.describe(T, 'people', p), 'new person: Ada, born 1901')
 
+    def test_digest_strings_cover_every_lang_and_key(self):
+        self.assertEqual(set(R.DIGEST_I18N), set(R.NAMERS))
+        en = R.DIGEST_I18N['en']
+        for lang, table in R.DIGEST_I18N.items():
+            self.assertEqual(set(table), set(en), lang)
+            for k, v in table.items():
+                self.assertEqual(re.findall(r'%[ds]', v), re.findall(r'%[ds]', en[k]), (lang, k))
+        self.assertLessEqual(set(R.SIDE_KEY.values()), set(en))
+        with self.assertRaises(KeyError):  # no silent English for a language without a table
+            R.s('de', 'title')
+
     def test_french_digest_strings_and_english_default(self):
         out = self.digest('--root', 'I1', '--lang', 'fr')
         self.assertIn("## côté paternel", out)

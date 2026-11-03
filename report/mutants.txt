@@ -35,4 +35,4 @@ gwt_report.py | u = u.rstrip('.,;') | u = u | a web address at the end of a sent
 gwt_report.py | return d.get('year') or ( | return ( | an event date with only a year still shows the year
 gwt_report.py | if len(path) >= max_gen: | if len(path) > max_gen: | kin and implex look 30 generations up, no further
 gwt_report.py | if old['_tree'] and new['_tree'] and old['_tree'] != new['_tree']: | if old['_tree'] != new['_tree']: | a dump that names no tree is still compared, never refused as another tree
-gwt_report.py | return DIGEST_I18N.get(lang, DIGEST_I18N['en']).get(key, DIGEST_I18N['en'][key]) | return DIGEST_I18N['en'][key] | --lang es/fr must translate the digest's own strings, not only the kin names
+gwt_report.py | return DIGEST_I18N[lang][key] | return DIGEST_I18N['en'][key] | --lang es/fr must translate the digest's own strings, not only the kin names
