@@ -1,0 +1,15 @@
+# Mutations the digitalarkivet tests must catch (format: see read/mutants.txt).
+gwt_digitalarkivet.py | 'result_markers': [r'<div id="searchResultList"[^>]*>\s*<div class="unit"'], | 'result_markers': [r'<div id="searchResultList"'], | a row is a person inside the result list, never the empty list every search page has
+gwt_digitalarkivet.py | 'negative_markers': [r'data-hits="0"'], | 'negative_markers': [], | the site's own zero count is "none"
+gwt_digitalarkivet.py | PACE = {'start': 6.0, 'floor': 5.0, 'ceil': 300.0} | PACE = {'start': 6.0, 'floor': 1.0, 'ceil': 300.0} | the site is never asked faster than its robots.txt Crawl-delay of 5 s
+gwt_digitalarkivet.py | 'principal': not (fields.get('role') or ('', ''))[1], | 'principal': True, | a person with a role in the entry (a mother, a godparent) is not its principal
+gwt_digitalarkivet.py | if page and int(page) > 1: | if False: | --page asks for that page
+gwt_digitalarkivet.py | rows = gwt_reader.rows_check(SPEC, r'<div class="unit"', candidates) | rows = gwt_reader.page_check(SPEC) | a person row the reader cannot read is a STOP, never a page with fewer rows
+gwt_digitalarkivet.py | url = urllib.parse.urljoin(HOST, url) | pass | a person's page link written without the host is still a full address
+gwt_digitalarkivet.py | /([^/"?#]+))"[^>]*>(.*?)' | /([a-z]{2}\d+))"[^>]*>(.*?)' | a person id of any form is read, not only two letters and digits
+gwt_digitalarkivet.py | page=lambda p: rows(p) or past_end(p, a.page)) | page=rows) | a --page past the last one is exit 2 "past the end", never a gate pause
+gwt_digitalarkivet.py | and (number - 1) * PER_PAGE >= min(hits, MAX_PAGE * PER_PAGE)) | ) | an empty page before the last one is still a STOP, never "past the end"
+gwt_digitalarkivet.py | if not 1 <= a.page <= MAX_PAGE: | if False: | a --page the site never shows (over 200) is refused before it answers HTTP 500 and pauses the gate
+gwt_digitalarkivet.py | if not a.name.strip(): | if False: | an empty --name is refused, never sent as a search for anyone
+gwt_digitalarkivet.py |     return (number > 1 and bool(hits) and '<div class="unit"' not in page |     return (number > 1 and '<div class="unit"' not in page | an empty page with no count is a STOP, never past the end
+gwt_digitalarkivet.py |     return (number > 1 and bool(hits) and '<div class="unit"' not in page |     return (number > 1 and bool(hits) | a row the reader cannot read is a STOP even past the count, never past the end

@@ -1,0 +1,22 @@
+# Mutations the hiski tests must catch (format: see read/mutants.txt). The last two rows guard gwt_reader's reading
+# of Cloudflare's beacon, which HisKi's pages carry.
+gwt_hiski.py | 'result_markers': [r'<a href="/hiski\?[a-z]+\+\d{4}\+[a-z]+\+\d+"'], | 'result_markers': [r'<TABLE BORDER=1'], | a row is an entry link, never the result table, which the "no events" page also has
+gwt_hiski.py | 'negative_markers': [r'No events found with this search criteria'], | 'negative_markers': [], | the site's own "No events found" sentence is "none"
+gwt_hiski.py | PACE = {'start': 10.0, 'floor': 5.0, 'ceil': 300.0} | PACE = {'start': 10.0, 'floor': 1.0, 'ceil': 300.0} | the old CGI is never asked faster than one request every 5 s
+gwt_hiski.py | encoding='iso-8859-1', errors='replace' | encoding='utf-8', errors='replace' | the search is sent in ISO-8859-1, the encoding the CGI reads
+gwt_hiski.py | ('kieli', 'en') | ('kieli', 'fi') | the search asks for the English page, whose "no events" sentence the reader knows
+gwt_hiski.py | if h in PERSON_COLUMNS and c] | if c] | a row's principal is its first person column, never its date or village
+gwt_hiski.py | if not re.fullmatch(r'\d{4}', v or ''): | if False: | a parish that is not a four-digit code is refused before any request
+gwt_reader.py | low = _drop_beacon(data[:65536].decode('utf-8', 'replace').lower()) | low = data[:65536].decode('utf-8', 'replace').lower() | Cloudflare's beacon script on an ordinary page is not a wall
+gwt_reader.py | _CF_BEACON = '/cdn-cgi/challenge-platform/scripts/jsd/main.js' | _CF_BEACON = '/cdn-cgi/challenge-platform/' | only the beacon is left out: a real Cloudflare challenge is still a wall
+gwt_reader.py | if start < 0 or end < 0 or low.find('</script>', start, i) >= 0: | if start < 0 or end < 0: | the beacon path outside a <script> element is not left out
+gwt_hiski.py | rows = gwt_reader.rows_check(SPEC, SPEC['result_markers'][0], candidates) | rows = gwt_reader.page_check(SPEC) | a page with entry rows the reader cannot read is a STOP, never "none"
+gwt_hiski.py | _ROW = re.compile(r'<TR\b[^>]*>\s*(<TD\b[^>]*> | _ROW = re.compile(r'<TR>\s*(<TD> | a row whose <TR> or <TD> carries attributes is read
+gwt_reader.py | or 0 < len(parse(page)) == len(re.findall(rows, page))) | or len(parse(page)) > 0) | a page where one row of several cannot be read is a STOP, never a page with fewer rows
+gwt_hiski.py | page=lambda p: rows(p) or shell_of(p) is not None) | page=rows) | the site's empty search page (a book the parish lacks, an unknown parish) never pauses the gate
+gwt_hiski.py |     if shell: | if False: | a book the parish lacks is a usage error, never "none"
+gwt_hiski.py | if shell[0].lower() == 'unknown parish': | if False: | an unknown parish code is named as such, not as a missing book
+gwt_hiski.py |     if bad: | if False: | a --field without NAME= is refused, never dropped silently
+gwt_hiski.py |             return usage('%r has a letter | pass  # ('%r has a letter | a value outside ISO-8859-1 is refused, never sent as '?'
+gwt_hiski.py |     if not m or _TABLE.search(page) or gwt_reader.classify(page, SPEC) != 'unknown': |     if not m or gwt_reader.classify(page, SPEC) != 'unknown': | a search page with a result table the reader cannot read is a STOP, never a missing book
+gwt_hiski.py |     if not m or _TABLE.search(page) or gwt_reader.classify(page, SPEC) != 'unknown': |     if not m or _TABLE.search(page): | rows on a page titled like the empty search page are read, never a missing book

@@ -1,0 +1,15 @@
+# Mutations the dokuklik tests must catch (format: see read/mutants.txt). The first gwt_reader row guards the POST
+# path Reader.get gained for it.
+gwt_dokuklik.py | PACE = {'start': 5.0, 'floor': 3.0, 'ceil': 300.0} | PACE = {'start': 5.0, 'floor': 0.5, 'ceil': 300.0} | the archive's site is never asked faster than one request every 3 s
+gwt_dokuklik.py | return 'unknown'    # the result container renamed: a STOP | return 'none' | an answer whose row list was renamed is unknown, a STOP, never "none"
+gwt_dokuklik.py | if not isinstance(n, int) or isinstance(n, bool): | if False: | an answer with no count is unknown, never "none"
+gwt_dokuklik.py | if not rows and (n == 0 or start >= n): | if not rows: | a count above zero with no rows is unknown, never "none"
+gwt_dokuklik.py | all(isinstance(r, dict) and isinstance(r.get(pid), int) for r in rows) | all(isinstance(r, dict) for r in rows) | a row without its own kind's id is unknown, a STOP
+gwt_dokuklik.py | for c in KINDS[kind][3]] | for c in ()] | the body carries the table's columns, which the site needs to answer
+gwt_dokuklik.py | _s(r.get('mathesposope2')) | _s(r.get('matesposoape2')) | the groom's second surname is read from the site's own (misspelled) field
+gwt_dokuklik.py | start = (max(1, a.page) - 1) * a.count | start = 0 | --page asks for the right rows, and a page past the last one reads as the end
+gwt_dokuklik.py | methods=('GET', 'POST') | methods=('GET',) | a repeated search (a POST) is served from the cache, not asked again
+gwt_dokuklik.py | SPEC['build'] = build | pass | the source builds its own reader, the one whose cache keeps POST answers
+gwt_dokuklik.py | if not (a.given or a.surname or a.surname2): | if False: | a search with no name is refused before any request
+gwt_reader.py | 'GET' if data is None else 'POST' | 'GET' | Reader.get with a body sends a POST
+gwt_dokuklik.py | choices=sorted(ARCHIVES), help= | choices=[''] + sorted(ARCHIVES), help= | --archive lists only real archives, no empty choice

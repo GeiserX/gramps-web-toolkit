@@ -17,6 +17,11 @@
 | `tna` | The National Archives (UK) Discovery: wills, service records, 2,500 UK archives | [tna](tna.md) |
 | `census1950` | The 1950 US census name index (NARA), with the page scans | [census1950](census1950.md) |
 | `digitalnz` | Papers Past, New Zealand newspapers, through the DigitalNZ API | [digitalnz](digitalnz.md) |
+| `dokuklik` | Dokuklik: Basque parish baptisms, marriages and burials | [dokuklik](dokuklik.md) |
+| `hiski` | HisKi: Finnish parish registers index | [hiski](hiski.md) |
+| `digitalarkivet` | Digitalarkivet: Norway's transcribed censuses and church books | [digitalarkivet](digitalarkivet.md) |
+| `geneteka` | Geneteka: Polish parish and civil registers index | [geneteka](geneteka.md) |
+| `freeukgen` | FreeREG and FreeCEN: UK parish registers and censuses | [freeukgen](freeukgen.md) |
 | `bvph` | BVPH: Spanish historical newspapers, searched inside their text | [bvph](bvph.md) |
 | `delpher` | Delpher: Dutch newspapers 1618-1995, searched inside their text | [delpher](delpher.md) |
 | `trove` | Trove: Australian newspapers, with your own free API key | [trove](trove.md) |
