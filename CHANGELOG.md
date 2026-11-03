@@ -6,6 +6,8 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-03
+
 ### Change lists
 
 - `gwt-apply`: `detach`, `remove_tag` and `unlink_child` of something the target does not have are a conflict now, not a skip, so a mistyped ID no longer passes a dry run. Add `expect: "absent"` to an op that may find it already gone; `--verify` still reads it as landed. A rerun of the same list after a crash skips the removals an earlier `--apply` of it logged as done. The skip line of an `update_source` or `update_family` that changes nothing now reads `already has those values`. `attach_existing` is unchanged unless it says `expect: "absent"`.
@@ -44,16 +46,13 @@ Every release has a **Change lists** heading. It names each change that makes a 
 ### Changed
 
 - `gwt-rawstore migrate --remove` writes one `.gitignore` pattern per extension (`*.jpg`) in the migrated folder instead of one line per file in every subfolder.
+- `gwt-check`: `dup-person-relative` and the shared-relative branch of `dup-person-fuzzy` leave out two namesakes whose Primary Birth dates cannot overlap. Before, a birth that was open (`before 1750`), a range, estimated or calculated was ignored, so a grandfather and a grandson with one name and same-named fathers came out as a duplicate. The dates are read as intervals with the slack `about`, estimated and calculated dates already get; a baptism alone, an unknown birth or an unreadable birth date never sets two people apart. `dup-person-birth` is unchanged: a shared birth or baptism year still reports the pair.
 
 ### Fixed
 
 - `.github/scripts/check_wheel.sh` failed on macOS: it compared the venv path from `mktemp` (`/var/...`) with the module paths Python reports (`/private/var/...`). It now compares real paths, imports every source module the registry names, and runs `gwt read <source> --help` for each.
 - `gwt-fetch` no longer downloads again a file that was moved to the bucket: a row in the folder's `rawstore.tsv` counts as finished.
 - `gwt-fetch iiif` fetches Portale Antenati again. A pasted manifest URL was sent as its own Referer, and Antenati's firewall answers 403 to anything but `Referer: https://antenati.cultura.gov.it/`; every `dam-antenati` and `iiif-antenati` URL now gets the portal as Referer. Other archives get the Referer they got before.
-
-### Changed
-
-- `gwt-check`: `dup-person-relative` and the shared-relative branch of `dup-person-fuzzy` leave out two namesakes whose Primary Birth dates cannot overlap. Before, a birth that was open (`before 1750`), a range, estimated or calculated was ignored, so a grandfather and a grandson with one name and same-named fathers came out as a duplicate. The dates are read as intervals with the slack `about`, estimated and calculated dates already get; a baptism alone, an unknown birth or an unreadable birth date never sets two people apart. `dup-person-birth` is unchanged: a shared birth or baptism year still reports the pair.
 
 ## [0.3.0] - 2026-10-31
 
