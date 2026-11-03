@@ -1,0 +1,56 @@
+{
+ "version": "1x7o",
+ "session_context": {
+  "session_key": "guest",
+  "client_characterization": {
+   "client_ip": "203.0.113.7:sra",
+   "client_useragent": "gramps-web-toolkit (+https://github.com/GeiserX/gramps-web-toolkit):sua"
+  },
+  "is_guest": true
+ },
+ "request": {
+  "client_request_parameters": {
+   "user_query": "\"Ana Zorvalo\"",
+   "service_backend": "fts",
+   "hits_per_page": 50,
+   "page": 1
+  }
+ },
+ "response": {
+  "header": {
+   "succeeded": true,
+   "query_time": 120
+  },
+  "body": {
+   "hits": {
+    "total": 1,
+    "returned": 1,
+    "hits": [
+     {
+      "index": "fts_main_v2",
+      "service_backend": "fts",
+      "hit_type": "text",
+      "fields": {
+       "identifier": "registerofnortia00zzzz",
+       "title": "The parish register of Nortia, 1601-1812",
+       "creator": [
+        "Nortia Parish Register Society"
+       ],
+       "year": 1904,
+       "mediatype": "texts",
+       "page_num": 1
+      },
+      "highlight": {
+       "text": [
+        "Ana,  daughter  of  {{{Ana  Zorvalo}}},  baptized\n  9  July  1611."
+       ]
+      },
+      "_score": 12.5
+     }
+    ]
+   },
+   "aggregations": {}
+  },
+  "hit_schema": {}
+ }
+}

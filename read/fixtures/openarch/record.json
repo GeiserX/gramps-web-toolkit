@@ -1,0 +1,103 @@
+{
+ "Person": [
+  {
+   "@pid": "Person1",
+   "PersonName": {
+    "PersonNameFirstName": "Pieter",
+    "PersonNameLastName": "Velderhoek"
+   },
+   "Age": {
+    "PersonAgeLiteral": "27 jaar"
+   },
+   "Profession": "smid",
+   "BirthPlace": {
+    "Place": "Zuidwold"
+   }
+  },
+  {
+   "@pid": "Person2",
+   "PersonName": {
+    "PersonNameFirstName": "Maaike",
+    "PersonNameLastName": "Brunsveld",
+    "PersonNamePrefixLastName": "van"
+   }
+  },
+  {
+   "@pid": "Person3",
+   "PersonName": {
+    "PersonNameFirstName": "Jan",
+    "PersonNameLastName": "Velderhoek"
+   }
+  },
+  {
+   "@pid": "Person4",
+   "PersonName": {
+    "PersonNameFirstName": "Geertje",
+    "PersonNameLastName": "Oostmeer"
+   }
+  },
+  {
+   "@pid": "Person5",
+   "PersonName": {
+    "PersonNameFirstName": "Klaas",
+    "PersonNameLastName": "Rietdijk"
+   },
+   "Age": {
+    "PersonAgeLiteral": "50 jaar"
+   }
+  }
+ ],
+ "Event": {
+  "@eid": "Event1",
+  "EventType": "Huwelijk",
+  "EventDate": {
+   "LiteralDate": "03-05-1856",
+   "Year": "1856",
+   "Month": "5",
+   "Day": "3"
+  },
+  "EventPlace": {
+   "Place": "Nortdam"
+  }
+ },
+ "RelationEP": [
+  {
+   "PersonKeyRef": "Person1",
+   "EventKeyRef": "Event1",
+   "RelationType": "Bruidegom"
+  },
+  {
+   "PersonKeyRef": "Person2",
+   "EventKeyRef": "Event1",
+   "RelationType": "Bruid"
+  },
+  {
+   "PersonKeyRef": "Person3",
+   "EventKeyRef": "Event1",
+   "RelationType": "Vader van de bruidegom"
+  },
+  {
+   "PersonKeyRef": "Person4",
+   "EventKeyRef": "Event1",
+   "RelationType": "Moeder van de bruidegom"
+  },
+  {
+   "PersonKeyRef": "Person5",
+   "EventKeyRef": "Event1",
+   "RelationType": "Getuige"
+  }
+ ],
+ "Source": {
+  "SourcePlace": {
+   "Country": "Nederland",
+   "Place": "Nortdam"
+  },
+  "SourceType": "BS Huwelijk",
+  "SourceReference": {
+   "InstitutionName": "Gemeentearchief Nortdam",
+   "Archive": "0000-01",
+   "RegistryNumber": "12"
+  },
+  "RecordGUID": "{0f1e2d3c-0000-4000-8000-00000000a001}"
+ }
+}
