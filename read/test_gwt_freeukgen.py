@@ -133,6 +133,13 @@ class Search(Run):
         code, _, text = self.search(net, gate, '--site', 'freecen', '--type', 'baptisms')
         self.assertEqual((code, net.requests), (64, []), text)
 
+    def test_a_record_row_the_reader_cannot_read_is_a_stop_never_none(self):
+        page = fx('results-freereg.html').replace(b'</tr>', b'')
+        gate = FakeGate()
+        net = FakeNet(gate, (200, fx('form.html')), (200, page, REG + '/search_queries/0123456789abcdef0000aaaa'))
+        code, _, text = self.search(net, gate, '--county', 'DEV')
+        self.assertEqual((code, len(gate.hits), self.out_files()), (gwt_reader.EXIT_WALL, 1, []), text)
+
 
 if __name__ == '__main__':
     unittest.main()

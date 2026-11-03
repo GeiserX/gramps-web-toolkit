@@ -42,8 +42,10 @@ FIELDS = {'given': 'ietunimi', 'patronymic': 'ipatronyymi', 'surname': 'isukunim
 # Column headers that hold a person, the first one found is the row's principal.
 PERSON_COLUMNS = ('Man', 'Child', 'Name', 'Buried', 'Deceased', 'Person', 'Father', 'Wife', 'Mother')
 
-_ROW = re.compile(r'<TR>\s*(<TD>\s*<a href="/hiski\?[a-z]+\+(\d{4})\+([a-z]+)\+(\d+)".*?)(?=<TR>|</TABLE>)', re.S | re.I)
-_HEAD = re.compile(r'<TR>\s*(<TH>.*?)(?=<TR>|</TABLE>)', re.S | re.I)
+_ROW = re.compile(r'<TR\b[^>]*>\s*(<TD\b[^>]*>\s*<a href="/hiski\?[a-z]+\+(\d{4})\+([a-z]+)\+(\d+)".*?)(?=<TR\b|</TABLE>)',
+                  re.S | re.I)
+_HEAD = re.compile(r'<TR\b[^>]*>\s*(<TH\b.*?)(?=<TR\b|</TABLE>)', re.S | re.I)
+_CELL = re.compile(r'<TD\b[^>]*>', re.I)
 _TOTAL = re.compile(r'(?:About\s+)?(\d+)\s+events?\s+found', re.I)
 _DATE = re.compile(r'\b\d{1,2}\.\d{1,2}\.\d{3,4}\b')
 
@@ -68,14 +70,14 @@ def decode(body):
 
 def headers_of(page):
     m = _HEAD.search(page)
-    return [text(h) for h in re.split(r'<TH>', m.group(1), flags=re.I)[1:]] if m else []
+    return [text(h) for h in re.split(r'<TH\b[^>]*>', m.group(1), flags=re.I)[1:]] if m else []
 
 
 def candidates(page):
     heads = headers_of(page)
     out = []
     for row, parish, book, n in _ROW.findall(page):
-        cells = [text(c) for c in re.split(r'<TD>', row, flags=re.I)[1:]]
+        cells = [text(c) for c in _CELL.split(row)[1:]]
         cols = [[heads[i] if i < len(heads) else '', c] for i, c in enumerate(cells)]
         people = [(h, c) for h, c in cols if h in PERSON_COLUMNS and c]
         date = next((m.group(0) for _, c in cols for m in [_DATE.search(c)] if m), None)
@@ -127,14 +129,14 @@ def search(a, R):
     fields += [('alkuvuosi', a.year_from), ('loppuvuosi', a.year_to)]
     url = search_url(a.parish, book, fields, a.count, a.start)
     status, rh, body, cached = gwt_reader.get_api(R, url, {'accept': 'text/html'}, refresh=a.refresh,
-                                                  page=gwt_reader.page_check(SPEC))
+                                                  page=gwt_reader.rows_check(SPEC, SPEC['result_markers'][0], candidates))
     page = decode(body)
     cands = candidates(page)
     env = gwt_reader.envelope(url, None, text=text(page), verdict=gwt_reader.classify(page, SPEC), from_cache=cached)
     words = [SOURCE, a.parish, book] + [v for _, v in fields]
     base = gwt_reader.write_search(a.out, gwt_reader.search_key(url, words), env, cands)
     gwt_reader.print_paths(SOURCE, base, print)
-    total = total_of(page) if cands else 0
+    total = total_of(page) if cands else 0     # the page check made a page with rows and none read a STOP
     print('results\t%s total, %d read%s' % ('?' if total is None else total, len(cands), ' (cache)' if cached else ''),
           flush=True)
     return gwt_reader.EXIT_OK if cands else gwt_reader.EXIT_EMPTY

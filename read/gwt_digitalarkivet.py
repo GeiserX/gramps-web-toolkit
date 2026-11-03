@@ -34,7 +34,8 @@ SPEC = {
 }
 
 _UNIT = re.compile(r'<div class="unit"[^>]*>(.*?)(?=<div class="unit"|<ul class="pagination"|</section>|\Z)', re.S)
-_LINK = re.compile(r'<div class="name">\s*<a href="(https://www\.digitalarkivet\.no/[^"]+/([a-z]{2}\d+))"[^>]*>(.*?)'
+# the person's own page, absolute or not; its id is the last part of the path, whatever its form (pf..., pd..., ...)
+_LINK = re.compile(r'<div class="name">\s*<a href="((?:https://www\.digitalarkivet\.no)?/[^"]+/([^/"?#]+))"[^>]*>(.*?)'
                    r'<div class="born">(.*?)</div>', re.S)
 _FIELD = re.compile(r'<div class="([\w-]+)">\s*<span>([^<]*)</span>(.*?)</div>', re.S)
 _SOURCE = re.compile(r'<a href="(https://www\.digitalarkivet\.no/[^"]*source/\d+)">(.*?)</a>', re.S)
@@ -60,6 +61,7 @@ def candidates(page):
         if not m:
             continue
         url, rid, raw_name, born = m.groups()
+        url = urllib.parse.urljoin(HOST, url)
         # the site writes the given names and the surname in two runs of text, separated by tabs
         parts = [text(p) for p in re.split(r'\t{2,}|\n', html.unescape(raw_name)) if text(p)]
         fields = {cls: (label.rstrip(':'), text(val)) for cls, label, val in _FIELD.findall(unit) if cls != 'name'}
@@ -94,7 +96,7 @@ def add_search_args(sp):
 def search(a, R):
     url = search_url(a.name, a.year_from, a.year_to, a.page)
     status, rh, body, cached = gwt_reader.get_api(R, url, {'accept': 'text/html'}, refresh=a.refresh,
-                                                  page=gwt_reader.page_check(SPEC))
+                                                  page=gwt_reader.rows_check(SPEC, r'<div class="unit"', candidates))
     page = body.decode('utf-8', 'replace')
     cands = candidates(page)
     env = gwt_reader.envelope(url, (rh or {}).get('x-gwt-final-url'), text=text(page),

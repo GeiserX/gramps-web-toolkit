@@ -28,7 +28,7 @@ An index entry, a lead: read the parish register before citing it. `id` is `<par
 
 ## When it stops
 
-"None" is the site's own sentence, "No events found with this search criteria". Any other page with no row is a STOP (exit 3, the gate pauses every lane, nothing written or cached). That covers a block page, a new layout, and the parish list the site answers to a parish code it does not have.
+"None" is the site's own sentence, "No events found with this search criteria". Any other page with no row is a STOP (exit 3, the gate pauses every lane, nothing written or cached), and so is a page with an entry row the reader cannot read. That covers a block page, a new layout, and the parish list the site answers to a parish code it does not have.
 
 ## Pace, cache and terms
 

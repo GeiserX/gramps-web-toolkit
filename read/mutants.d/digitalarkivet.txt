@@ -4,3 +4,6 @@ gwt_digitalarkivet.py | 'negative_markers': [r'data-hits="0"'], | 'negative_mark
 gwt_digitalarkivet.py | PACE = {'start': 6.0, 'floor': 5.0, 'ceil': 300.0} | PACE = {'start': 6.0, 'floor': 1.0, 'ceil': 300.0} | the site is never asked faster than its robots.txt Crawl-delay of 5 s
 gwt_digitalarkivet.py | 'principal': not (fields.get('role') or ('', ''))[1], | 'principal': True, | a person with a role in the entry (a mother, a godparent) is not its principal
 gwt_digitalarkivet.py | if page and int(page) > 1: | if False: | --page asks for that page
+gwt_digitalarkivet.py | page=gwt_reader.rows_check(SPEC, r'<div class="unit"', candidates)) | page=gwt_reader.page_check(SPEC)) | a person row the reader cannot read is a STOP, never a page with fewer rows
+gwt_digitalarkivet.py | url = urllib.parse.urljoin(HOST, url) | pass | a person's page link written without the host is still a full address
+gwt_digitalarkivet.py | /([^/"?#]+))"[^>]*>(.*?)' | /([a-z]{2}\d+))"[^>]*>(.*?)' | a person id of any form is read, not only two letters and digits

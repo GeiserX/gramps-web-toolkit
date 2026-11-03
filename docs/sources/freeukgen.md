@@ -27,7 +27,7 @@ A transcription, a lead: open the record page and the register image or census p
 
 ## When it stops
 
-"None" is the site's own heading, "No results found". "Too many search results" (the sites show none past 500 rows on FreeREG, 1000 on FreeCEN) is neither: nothing is written and the search exits 1, so narrow it. Any other page is a STOP (exit 3, the gate pauses every lane): a block page, a new layout, a form with no token. The sites' maintenance page comes with HTTP 503: an outage, exit 3.
+"None" is the site's own heading, "No results found". "Too many search results" (the sites show none past 500 rows on FreeREG, 1000 on FreeCEN) is neither: nothing is written and the search exits 1, so narrow it. Any other page is a STOP (exit 3, the gate pauses every lane): a block page, a new layout, a form with no token, a result row the reader cannot read. The sites' maintenance page comes with HTTP 503: an outage, exit 3.
 
 ## Pace, cache and terms
 

@@ -129,7 +129,7 @@ def search(a, R):
     url = host + '/search_queries'
     data = urllib.parse.urlencode([('utf8', '✓'), ('authenticity_token', token)] + fields
                                   + [('commit', 'Search')]).encode()
-    check = gwt_reader.page_check(SPEC)
+    check = gwt_reader.rows_check(SPEC, r'<tr id="', lambda p: candidates(p, host, a.ukgen))
     status, rh, body, cached = gwt_reader.get_api(
         R, url, {'accept': 'text/html', 'content-type': 'application/x-www-form-urlencoded'}, refresh=True,
         page=lambda p: check(p) or bool(TOO_MANY.search(p)), data=data)

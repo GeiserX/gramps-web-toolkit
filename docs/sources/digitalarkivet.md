@@ -19,11 +19,11 @@ There is no public API. The reader reads the English search page, `/en/search/pe
 
 ## What a candidate is
 
-A transcription, a lead: open the scanned page before citing it. Each one has `id` (the site's person id, `pf...` for a census, `pd...` for a church book), the name with the given names and surname as the site splits them, `sex`, `born` (as the site writes it), the event the row is for (`events.event`: the site's label and date), `domicile`, `position` (the census's position or status), `role` (in a church book: `mor`, `far`, `fadder`, ...; a person with a role is not the principal), and the source's title and link (`record_source`, `source_url`). `url` is the person's own page.
+A transcription, a lead: open the scanned page before citing it. Each one has `id` (the site's person id, the last part of its page address: `pf...` for a census, `pd...` or `pv...` for a church book), the name with the given names and surname as the site splits them, `sex`, `born` (as the site writes it), the event the row is for (`events.event`: the site's label and date), `domicile`, `position` (the census's position or status), `role` (in a church book: `mor`, `far`, `fadder`, ...; a person with a role is not the principal), and the source's title and link (`record_source`, `source_url`). `url` is the person's own page.
 
 ## When it stops
 
-"None" is the site's own count: "Your search resulted in 0 hits". Any page with no person row and no zero count is a STOP (exit 3, the gate pauses every lane, nothing written or cached): a block page, a new layout, or an empty list with a count above zero. A `--page` past the last one is such a page too.
+"None" is the site's own count: "Your search resulted in 0 hits". Any page with no person row and no zero count is a STOP (exit 3, the gate pauses every lane, nothing written or cached): a block page, a new layout, an empty list with a count above zero, or a person row the reader cannot read (it never drops a row and reads the page as fewer persons). A `--page` past the last one is such a page too.
 
 ## Pace, cache and terms
 

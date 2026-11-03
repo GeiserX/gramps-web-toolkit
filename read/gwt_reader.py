@@ -370,6 +370,15 @@ def page_check(spec):
     return lambda page: classify(page, spec) != 'unknown'
 
 
+def rows_check(spec, rows, parse):
+    """page_check(spec), and on a page with results every row it shows read: `rows` (a regex) counts the rows the page
+    shows, `parse(page)` reads them. A row the parser cannot read (new markup, a new id form) makes the page a STOP,
+    never a page with fewer results or "none"."""
+    check = page_check(spec)
+    return lambda page: check(page) and (classify(page, spec) != 'hits'
+                                         or 0 < len(parse(page)) == len(re.findall(rows, page)))
+
+
 # ---------------------------------------------------------------- open APIs: a server error is the service down
 
 

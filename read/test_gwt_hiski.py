@@ -106,6 +106,23 @@ class Search(Run):
                           urlopen=net, gate=gate)
         self.assertEqual(net.requests, [])
 
+    def test_rows_with_attributes_are_read(self):
+        page = fx('results.html').replace(b'<TR><TD><a', b'<TR BGCOLOR="#eeeeee"><TD ALIGN=left><a')
+        gate = FakeGate()
+        code, lines, text = self.search(FakeNet(gate, (200, page)), gate)
+        self.assertEqual(code, 0, text)
+        self.assertEqual(len(json.load(open(lines['candidates']))['candidates']), 2)
+        self.assertTrue(lines['results'].startswith('2 total, 2 read'))
+
+    def test_an_entry_row_the_reader_cannot_read_is_a_stop_never_none(self):
+        page = fx('results.html').replace(b'<TR><TD><a', b'<TR><TD><span>*</span><a')
+        gate = FakeGate()
+        net = FakeNet(gate, (200, page), (200, page))
+        code, _, text = self.search(net, gate)
+        self.assertEqual((code, len(gate.hits), self.out_files()), (gwt_reader.EXIT_WALL, 1, []), text)
+        self.search(net, gate)
+        self.assertEqual(len(net.requests), 2, 'a page with an unread row was served from the cache')
+
 
 if __name__ == '__main__':
     unittest.main()

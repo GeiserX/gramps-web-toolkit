@@ -6,3 +6,4 @@ gwt_freeukgen.py | if TOO_MANY.search(page) and not re.search(SPEC['result_marke
 gwt_freeukgen.py | page=lambda p: form_token(p) is not None) | page=lambda p: True) | a form page without its token is a STOP, and nothing is posted
 gwt_freeukgen.py | if v or k.endswith('[region]')] | if v] | the form's empty trap field is sent, as the browser sends it
 gwt_freeukgen.py | if a.kind and a.kind not in ok: | if False: | a --type the site does not have is refused before any request
+gwt_freeukgen.py | check = gwt_reader.rows_check(SPEC, r'<tr id="', lambda p: candidates(p, host, a.ukgen)) | check = gwt_reader.page_check(SPEC) | a record row the reader cannot read is a STOP, never "none"

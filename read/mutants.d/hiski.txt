@@ -9,3 +9,6 @@ gwt_hiski.py | if h in PERSON_COLUMNS and c] | if c] | a row's principal is its 
 gwt_hiski.py | if not re.fullmatch(r'\d{4}', v or ''): | if False: | a parish that is not a four-digit code is refused before any request
 gwt_reader.py | _CF_BEACON.sub('', data[:65536].decode('utf-8', 'replace')) | data[:65536].decode('utf-8', 'replace') | Cloudflare's beacon script on an ordinary page is not a wall
 gwt_reader.py | scripts/jsd/main\.js' | ' | only the beacon is left out: a real Cloudflare challenge is still a wall
+gwt_hiski.py | page=gwt_reader.rows_check(SPEC, SPEC['result_markers'][0], candidates)) | page=gwt_reader.page_check(SPEC)) | a page with entry rows the reader cannot read is a STOP, never "none"
+gwt_hiski.py | _ROW = re.compile(r'<TR\b[^>]*>\s*(<TD\b[^>]*> | _ROW = re.compile(r'<TR>\s*(<TD> | a row whose <TR> or <TD> carries attributes is read
+gwt_reader.py | or 0 < len(parse(page)) == len(re.findall(rows, page))) | or len(parse(page)) > 0) | a page where one row of several cannot be read is a STOP, never a page with fewer rows

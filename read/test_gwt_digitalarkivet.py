@@ -73,6 +73,24 @@ class Search(Run):
         self.search(net, gate)
         self.assertEqual(len(net.requests), 2, 'a STOP page was served from the cache')
 
+    def test_a_relative_link_and_any_id_form_are_read(self):
+        page = fx('results.html').replace(b'href="https://www.digitalarkivet.no/en/view/255/pd00000099999002"',
+                                          b'href="/en/view/255/A0099"')
+        gate = FakeGate()
+        code, lines, text = self.search(FakeNet(gate, (200, page)), gate)
+        self.assertEqual(code, 0, text)
+        b = json.load(open(lines['candidates']))['candidates'][1]
+        self.assertEqual((b['id'], b['url']), ('A0099', 'https://www.digitalarkivet.no/en/view/255/A0099'))
+
+    def test_a_person_row_the_reader_cannot_read_is_a_stop_never_fewer_rows(self):
+        page = fx('results.html').replace(b'<div class="name">', b'<div class="person-name">', 1)
+        gate = FakeGate()
+        net = FakeNet(gate, (200, page), (200, page))
+        code, _, text = self.search(net, gate)
+        self.assertEqual((code, len(gate.hits), self.out_files()), (gwt_reader.EXIT_WALL, 1, []), text)
+        self.search(net, gate)
+        self.assertEqual(len(net.requests), 2, 'a page with an unread row was served from the cache')
+
 
 if __name__ == '__main__':
     unittest.main()
