@@ -1,0 +1,2 @@
+{"op": "add_note", "key": "n-elena-2", "ruling": "R-7", "text": "Elena appears in the 1950 census.", "attach": [{"person": "I6"}]}
+{"op": "update_event", "key": "u-luis-birth-again", "ruling": "R-7", "event": "E4b", "set": {"date": "1902-05-03"}}

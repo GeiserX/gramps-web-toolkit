@@ -1,0 +1,3 @@
+{"op": "add_event", "key": "e-luis-res", "ruling": "R-3", "person": "I4", "type": "Residence", "date": "1950"}
+{"op": "add_note", "key": "n-ana", "ruling": "R-3", "text": "Ana was born in Villaejemplo.", "attach": [{"person": "I1"}]}
+{"op": "add_tag", "key": "t-nora", "ruling": "R-3", "target": {"person": "I10"}, "name": "family"}
