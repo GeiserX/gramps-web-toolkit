@@ -91,17 +91,15 @@ gwt report digest --from OLD --to NEW [--root I0001] [--base-url URL] [--lang en
                   [--told FILE --audience NAME [--mark]] [--format md|html] [--include-private]
 ```
 
-`--lang` translates the whole digest (title, section headers, item labels, confidence and the cut note), not only the kin names; English is the default and the fallback.
-
 It lists the people, events, citations and media in `NEW` that `OLD` lacks (by handle), grouped by the person they belong to:
 
 - a new person is their own group;
 - an event belongs to the people whose event list holds it, or to both spouses of a family event;
 - a citation or a media object belongs to whoever holds it, through an event or a citation when that is where it hangs; a citation on a parent link belongs to the child.
 
-With `--root` the groups are split by side (`father's side`, `mother's side`, `both sides`, `descendants`, `not blood kin`), ordered nearest first by the number of generations between the person and the root, and headed with the relationship name in `--lang`. A person whose path to the root has a probable or weak link says how many. Without `--root` there is one group, `other`, by Gramps id. Headings and item text are in English; only the relationship name follows `--lang`.
+With `--root` the groups are split by side (`father's side`, `mother's side`, `both sides`, `descendants`, `not blood kin`), ordered nearest first by the number of generations between the person and the root, and headed with the relationship name in `--lang`. A person whose path to the root has a probable or weak link says how many. Without `--root` there is one group, `other`, by Gramps id. The side names above are the English ones. `--lang` (English by default) sets the language of the title, side headings, relationship names, item labels, `[weak]` and the cut note; event types, source titles, pages, places and descriptions are printed as the tree stores them, so a Spanish digest still says `Baptism`.
 
-Each item has its Gramps Web link (`URL/person/I0012`, `URL/event/E0045`, `URL/citation/C0012`, `URL/media/O0003`) when `--base-url` is given, and the web addresses its citations hold in their page, attributes or notes. A weak-tagged object, or a citation of confidence 0 or 1, says `[weak]`. Objects and people marked private are left out unless `--include-private`.
+Each item has its Gramps Web link (`URL/person/I0012`, `URL/event/E0045`, `URL/citation/C0012`, `URL/media/O0003`) when `--base-url` is given, and the web addresses its citations hold in their page, attributes or notes. A weak-tagged object, or a citation of confidence 0 or 1, says `[weak]` (`[débil]`, `[faible]`). Objects and people marked private are left out unless `--include-private`.
 
 Only new objects are listed. A changed name, a corrected date or an old event newly linked to someone is not. `OLD` and `NEW` must be copies of the same tree: two snapshots that name different trees exit `2`, and an `OLD` taken after `NEW` gets a warning that they may be swapped.
 

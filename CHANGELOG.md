@@ -8,6 +8,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Changed
 
+- `gwt-report digest --lang es|fr` translates the digest's own text now: title, side headings, item labels, confidence, `[weak]` and the cut note, not only the relationship names. Event types, sources, places and descriptions stay as the tree stores them. English output is unchanged.
 - `gwt-apply`: an apply that finds the tree locked says how many seconds are left on the holder's lease, and to pass `--break-lock` only after checking on the holder's host that it stopped, since a PID checked on another machine proves nothing.
 
 ### Fixed
