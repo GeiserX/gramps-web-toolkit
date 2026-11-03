@@ -21,6 +21,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 ### Fixed
 
 - `gwt-apply LIST --apply --save-snapshot FILE` exits 2 now. It used to save the snapshot, skip the list and exit 0, so the caller read a write that never happened. Save the snapshot, then apply in a second command.
+- `gwt report digest` no longer prints a web address twice on one line when the item's text already shows it, as a citation page that holds the record's address does. Only whole addresses count, so a shorter address that starts the same way is still listed. In `--format html` an address inside the text is now a link where it stands.
 
 ## [1.0.0] - 2026-11-03
 
