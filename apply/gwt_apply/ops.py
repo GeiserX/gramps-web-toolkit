@@ -1092,7 +1092,16 @@ class Applier:
         return refs
 
     def add_person(self, op):
-        if self._existing("Person", op):
+        existing = self._existing("Person", op)
+        if existing is not None:
+            name = existing.get("primary_name") or {}
+            surname = " ".join(s.get("surname", "") for s in name.get("surname_list") or [])
+            same_name = self._name_key(name.get("first_name", ""), surname) == self._name_key(op["first_name"], op["surname"])
+            same_gender = "gender" not in op or existing.get("gender") == GENDER[op["gender"]]
+            same_id = not op.get("gramps_id") or existing.get("gramps_id") == op["gramps_id"]
+            if op["key"] not in self.landed and not (same_name and same_gender and same_id):
+                raise Conflict(f"key collision: {op['key']!r} already identifies Person {self.label(existing)} "
+                               "with different identity fields; use its Gramps ID for an update, or a new key for another person")
             return
         self._check_gramps_id("Person", op)
         name = self._name_key(op["first_name"], op["surname"])

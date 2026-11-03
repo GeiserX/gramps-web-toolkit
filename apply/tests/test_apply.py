@@ -4270,3 +4270,40 @@ def test_cli_rerun_reads_only_the_done_ops_of_an_earlier_apply(fake, tmp_path, e
     assert main(["--save-snapshot", str(snap)]) == 0
     capsys.readouterr()
     assert main([str(r), "--snapshot", str(snap), "--apply"]) == 0, capsys.readouterr().out
+
+
+def test_person_key_collision_stops_before_dependent_evidence(fake):
+    original = {"op": "add_person", "key": "batch-person", "ruling": R,
+                "first_name": "Alice", "surname": "Example"}
+    assert run(fake, [original])[0].status == "done"
+    before = len(fake.writes())
+    changed = dict(original, first_name="Bob")
+    note = {"op": "add_note", "key": "bob-evidence", "ruling": R,
+            "text": "Evidence for Bob", "attach": [{"person": "key:batch-person"}]}
+    result = run(fake, [changed, note])
+    assert result[0].status == "conflict"
+    assert "key collision" in result[0].actions[-1]
+    assert len(result) == 1
+    assert fake.writes()[before:] == []
+    assert stable_handle("bob-evidence") not in fake.store["notes"]
+    assert run(fake, [original])[0].status == "skip"
+
+
+def test_person_key_collision_uses_normalized_name_but_checks_explicit_gender(fake):
+    original = {"op": "add_person", "key": "batch-person", "ruling": R,
+                "first_name": "Alice", "surname": "Example", "gender": "F"}
+    assert run(fake, [original])[0].status == "done"
+    assert run(fake, [dict(original, first_name="ALÍCE")])[0].status == "skip"
+    assert run(fake, [dict(original, gender="M")])[0].status == "conflict"
+
+
+def test_person_key_retry_uses_proven_same_list_completion_after_identity_update(fake):
+    original = {"op": "add_person", "key": "p", "ruling": R,
+                "first_name": "Alice", "surname": "Example", "gender": "U"}
+    update = {"op": "update_person", "key": "u", "ruling": R,
+              "person": "key:p", "set": {"gender": "F"}}
+    assert [r.status for r in run(fake, [original, update])] == ["done", "done"]
+    c = Client("https://gw.example", "u", "pw", tree="tree-test", dry_run=False, session=fake)
+    c.login()
+    result = Applier(c, landed=frozenset({"p", "u"})).run([original, update])
+    assert [r.status for r in result] == ["skip", "skip"]
