@@ -314,7 +314,11 @@ class Reader:
 # Every module beside gwt_read that holds a source, in the order `gwt-read --help` lists them. A module with a
 # SPEC is a source by itself; the older ones (pares, genae, boe, insee) are declared in gwt_read.LEGACY.
 SOURCE_MODULES = ('gwt_pares', 'gwt_genae', 'gwt_boe', 'gwt_insee',
-                  'gwt_openarch', 'gwt_wikitree', 'gwt_archiveorg', 'gwt_matchid')
+                  'gwt_openarch', 'gwt_wikitree', 'gwt_archiveorg', 'gwt_matchid',
+                  'gwt_riksarkivet',
+                  'gwt_tna',
+                  'gwt_census1950',
+                  'gwt_digitalnz')
 
 SPEC_KEYS = {'id': str, 'help': str, 'pace': dict, 'cache_rules': tuple, 'controls': list,
              'result_markers': list, 'negative_markers': list}

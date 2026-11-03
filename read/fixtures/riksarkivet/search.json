@@ -1,0 +1,97 @@
+{
+ "totalHits": 2,
+ "hits": 2,
+ "offset": 0,
+ "facets": [
+  {
+   "name": "ObjectType",
+   "values": [
+    {
+     "value": "Record",
+     "hits": 2
+    }
+   ]
+  }
+ ],
+ "items": [
+  {
+   "type": "Volume",
+   "metadata": {
+    "referenceCode": "SE/ZZA/90001/A I/3",
+    "hierarchy": [
+     {
+      "caption": "Granbacka församlings kyrkoarkiv",
+      "uri": "http://data.riksarkivet.se/archive/ZZarchive0001"
+     },
+     {
+      "caption": "Husförhörslängder",
+      "uri": "http://data.riksarkivet.se/archive/ZZseries0001"
+     }
+    ],
+    "provenance": [
+     {
+      "caption": "Granbacka församling",
+      "uri": "http://data.riksarkivet.se/agent/ZZagent0001"
+     }
+    ],
+    "archivalInstitution": [
+     {
+      "caption": "Riksarkivet i Granbacka",
+      "uri": "http://data.riksarkivet.se/agent/ZZagent0002"
+     }
+    ],
+    "date": "1877 - 1883",
+    "onlyDigitisedMaterials": true
+   },
+   "id": "ZZvolume0001",
+   "objectType": "Record",
+   "_links": {
+    "self": "http://data.riksarkivet.se/archive/ZZvolume0001",
+    "html": "https://sok.riksarkivet.se/arkiv/ZZvolume0001",
+    "image": [
+     "https://lbiiif.riksarkivet.se/arkis!Z0000001/manifest",
+     "https://lbiiif.riksarkivet.se/arkis!Z0000002/manifest"
+    ]
+   }
+  },
+  {
+   "type": "Volume",
+   "metadata": {
+    "referenceCode": "SE/ZZA/90001/C/1",
+    "hierarchy": [
+     {
+      "caption": "Granbacka församlings kyrkoarkiv",
+      "uri": "http://data.riksarkivet.se/archive/ZZarchive0001"
+     },
+     {
+      "caption": "Födelse- och dopböcker",
+      "uri": "http://data.riksarkivet.se/archive/ZZseries0002"
+     }
+    ],
+    "provenance": [
+     {
+      "caption": "Granbacka församling",
+      "uri": "http://data.riksarkivet.se/agent/ZZagent0001"
+     }
+    ],
+    "archivalInstitution": [
+     {
+      "caption": "Riksarkivet i Granbacka",
+      "uri": "http://data.riksarkivet.se/agent/ZZagent0002"
+     }
+    ],
+    "date": "1829 - ",
+    "onlyDigitisedMaterials": true
+   },
+   "id": "ZZvolume0002",
+   "objectType": "Record",
+   "_links": {
+    "self": "http://data.riksarkivet.se/archive/ZZvolume0002",
+    "html": "https://sok.riksarkivet.se/arkiv/ZZvolume0002"
+   }
+  }
+ ],
+ "_links": {
+  "self": "https://data.riksarkivet.se/api/records?text=Granbacka"
+ }
+}

@@ -1,0 +1,19 @@
+# Mutations the tna tests must catch (format: see read/mutants.txt).
+gwt_tna.py | PER_HOUR = 120 | PER_HOUR = 1200 | the gate keeps Discovery under its limit of about 3,000 calls a day
+gwt_tna.py | per_hour=PER_HOUR, **PACE) | **PACE) | the daily limit reaches the gate the reader uses
+gwt_tna.py | return 'unknown'    # the result container renamed: a STOP | return 'none' | a Discovery answer whose container changed is unknown, a STOP, never "none"
+gwt_tna.py | if n == 0 and not recs: | if not recs: | a count above zero with no rows is unknown, never "none"
+gwt_tna.py | not _count(doc.get('count')) or | False or | an answer with no count is unknown, never "none"
+gwt_tna.py | if not recs and offset >= n: | if False: | a Discovery page past the last row is the end of the results (exit 2), never a STOP
+gwt_tna.py | r.get('id') and isinstance(r.get('heldBy'), list) | r.get('id') | a row whose heldBy is no longer a list is unknown, a STOP
+gwt_tna.py | return isinstance(doc, dict) and doc.get('id') == rid | return isinstance(doc, dict) | a details answer for another entry is a STOP
+gwt_tna.py | if status == 204 and '/records/v1/details/' in url: | if False: | an unknown id (HTTP 204, no body) is an error for that id, never a block that pauses every lane
+gwt_tna.py | if status == 204 and '/records/v1/details/' in url: | if status == 204: | only the details API's 204 means "no such record"; an empty search answer stays a STOP
+gwt_tna.py |     R.fetcher = no_record_fetcher(R.fetcher) |     pass | the reader the command uses reads a 204 as "no such record"
+gwt_tna.py |         p.append(('sps.heldByCode', HELD[held])) |         pass | --held-by keeps the search to Kew or to the other archives
+gwt_tna.py | p += [('sps.recordSeries', s) for s in series] | p += [] | --series keeps the search to a record series (PROB 11 for wills)
+gwt_tna.py | p += [('sps.resultsPageSize', max(1, min(int(count), 100))), | p += [('sps.resultsPageSize', max(1, int(count))), | a page is never more than 100 rows
+gwt_tna.py |             out.append((f['count'], re.sub(r'^\S+\s+', '', str(f['code'])))) |             pass | the archive lines name the local archives that hold matching entries
+gwt_tna.py |         if isinstance(f, dict) and f.get('code') == 'TNA' and _count(f.get('count')): |         if isinstance(f, dict) and _count(f.get('count')): | only Kew itself is named from heldByReps; the OTH count is not an archive
+gwt_tna.py |     rid = a.id.strip().rsplit('/', 1)[-1] |     rid = a.id.strip() | a Discovery URL reads as its id
+gwt_tna.py | re.sub(r'<emph altrender="doctype">[^<]*</emph>', ' ', str(sc.get('description') or '')) | str(sc.get('description') or '') | the document-type code is not part of an entry's name

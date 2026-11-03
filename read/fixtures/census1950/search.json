@@ -1,0 +1,87 @@
+{
+ "total": 2,
+ "size": 25,
+ "page": 1,
+ "results": [
+  {
+   "scheduleId": "9900001",
+   "state": "Puerto Rico",
+   "abbr": "PR",
+   "county": "Villazul",
+   "reservation": null,
+   "ed": "99-12",
+   "image": "1950census/99999999-Puerto_Rico/99999999-Puerto_Rico-000001/99999999-Puerto_Rico-000001-0007.jpg",
+   "maps": "1",
+   "names": [
+    {
+     "row": 3,
+     "name": "Zorvalo Ana"
+    },
+    {
+     "row": 4,
+     "name": "Zorvalo Pedra"
+    },
+    {
+     "row": 5,
+     "name": "Quintel Luis"
+    },
+    {
+     "row": null,
+     "name": "Zorvalo"
+    }
+   ],
+   "transcribe": [
+    {
+     "name": "Ana Zorvalo",
+     "row": 3
+    },
+    {
+     "name": "Pedro Zorvalo",
+     "row": 4
+    },
+    {
+     "name": "Luis Quintel",
+     "row": 5
+    }
+   ],
+   "highlight": {
+    "names.name": [
+     "Zorvalo Ana",
+     "Zorvalo Pedra",
+     "Zorvalo"
+    ],
+    "transcribe.name": [
+     "Ana Zorvalo",
+     "Pedro Zorvalo"
+    ]
+   },
+   "iiifUrl": "https://1950census.archives.gov/iiif/2/1950census%2F99999999-Puerto_Rico%2F99999999-Puerto_Rico-000001%2F99999999-Puerto_Rico-000001-0007.jpg/info.json"
+  },
+  {
+   "scheduleId": "9900002",
+   "state": "Puerto Rico",
+   "abbr": "PR",
+   "county": "Villazul",
+   "reservation": null,
+   "ed": "99-13",
+   "image": "1950census/99999999-Puerto_Rico/99999999-Puerto_Rico-000002/99999999-Puerto_Rico-000002-0011.jpg",
+   "maps": "1",
+   "names": [
+    {
+     "row": 12,
+     "name": "Zorvalo Rosa"
+    },
+    {
+     "row": 13,
+     "name": "Quintel Marta"
+    }
+   ],
+   "highlight": {
+    "names.name": [
+     "Zorvalo Rosa"
+    ]
+   },
+   "iiifUrl": "https://1950census.archives.gov/iiif/2/x/info.json"
+  }
+ ]
+}

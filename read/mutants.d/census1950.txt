@@ -1,0 +1,16 @@
+# Mutations the census1950 tests must catch (format: see read/mutants.txt).
+gwt_census1950.py | PACE = {'start': 3.0, 'floor': 2.0, 'ceil': 120.0} | PACE = {'start': 3.0, 'floor': 0.5, 'ceil': 120.0} | the census API is never asked faster than its robots.txt allows
+gwt_census1950.py | return 'unknown'    # the result container renamed: a STOP | return 'none' | a census answer whose container changed is unknown, a STOP, never "none"
+gwt_census1950.py | if n == 0 and not res: | if not res: | a count above zero with no rows is unknown, never "none"
+gwt_census1950.py | not _count(doc.get('total')) or | False or | an answer with no count is unknown, never "none"
+gwt_census1950.py | if not res and offset >= n: | if False: | a census page past the last one is the end of the results (exit 2), never a STOP
+gwt_census1950.py | and isinstance(r.get('image'), str) | and True | a page with no image key is unknown, a STOP
+gwt_census1950.py | and isinstance(r.get('names'), list) for r in res): | for r in res): | a page whose names are no longer a list is unknown, a STOP
+gwt_census1950.py | return S3 + urllib.parse.quote(key.lstrip('/')) | return 'https://1950census.archives.gov/' + key | the image is the scan in NARA's public bucket, what gwt fetch saves
+gwt_census1950.py | if machine and row is not None and row in read: | if False: | the volunteers' line wins over the machine's misreading of the same line
+gwt_census1950.py | for machine, lines, field in ((False, r.get('transcribe'), 'transcribe.name'), (True, r['names'], 'names.name')): | for machine, lines, field in ((True, r['names'], 'names.name'),): | a row from the volunteers' transcription is read too, marked machine false
+gwt_census1950.py | 'relatives': [], 'url': page['image'], 'row': row, 'machine': machine}, **page) | 'relatives': [], 'url': page['image'], 'row': row}, **page) | every row says whether the noisy machine index read it
+gwt_census1950.py |         rows = [(True, '', None)] |         pass | a page the API matched with no marked line is kept as the page, never dropped
+gwt_census1950.py | if not a.name.strip() or not re.fullmatch(r'[A-Za-z]{2}', a.state.strip()): | if not a.name.strip(): | a state that is not a two-letter code asks nothing
+gwt_census1950.py | p = [('name', name), ('state', state.upper())] | p = [('name', name), ('state', state)] | the state code is sent in capitals
+gwt_census1950.py | off = (max(1, int(a.page)) - 1) * PAGE_SIZE | off = 0 | the search tells the verdict where its page starts, so the last page reads as the end

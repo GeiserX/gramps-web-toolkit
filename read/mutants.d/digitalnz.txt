@@ -1,0 +1,12 @@
+# Mutations the digitalnz tests must catch (format: see read/mutants.txt).
+gwt_digitalnz.py | PACE = {'start': 3.0, 'floor': 2.0, 'ceil': 120.0} | PACE = {'start': 3.0, 'floor': 0.5, 'ceil': 120.0} | DigitalNZ's anonymous use is kept to one request every 2 s at most
+gwt_digitalnz.py | return 'unknown'    # the result container renamed: a STOP | return 'none' | a DigitalNZ answer whose container changed is unknown, a STOP, never "none"
+gwt_digitalnz.py | if n == 0 and not res: | if not res: | a count above zero with no rows is unknown, never "none"
+gwt_digitalnz.py | not _count(s.get('result_count')) or | False or | an answer with no count is unknown, never "none"
+gwt_digitalnz.py | if not res and offset >= n: | if False: | a DigitalNZ page past the last row is the end of the results (exit 2), never a STOP
+gwt_digitalnz.py | r.get('id') and r.get('landing_url') for r in res | r.get('id') for r in res | an article with no link is unknown, a STOP
+gwt_digitalnz.py | p = [('text', query), ('and[primary_collection][]', COLLECTION)] | p = [('text', query)] | every search is kept to Papers Past
+gwt_digitalnz.py |         p.append(('and[year][]', str(int(year)))) |         pass | --year keeps the search to issues of that year
+gwt_digitalnz.py | p += [('per_page', max(1, min(int(count), 100))), | p += [('per_page', max(1, int(count))), | a page is never more than 100 rows
+gwt_digitalnz.py |             return ('...' if a else '') + text[a:b] + ('...' if b < len(text) else '') |             return text | the snippet is the words around the query, not the whole article
+gwt_digitalnz.py |             'snippet': snippet(r.get('fulltext'), query)} |             'snippet': ''} | each row carries the words around the query
