@@ -33,6 +33,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 - `.github/scripts/check_wheel.sh` failed on macOS: it compared the venv path from `mktemp` (`/var/...`) with the module paths Python reports (`/private/var/...`). It now compares real paths, imports every source module the registry names, and runs `gwt read <source> --help` for each.
 - `gwt-fetch iiif` fetches Portale Antenati again. A pasted manifest URL was sent as its own Referer, and Antenati's firewall answers 403 to anything but `Referer: https://antenati.cultura.gov.it/`; every `dam-antenati` and `iiif-antenati` URL now gets the portal as Referer. Other archives get the Referer they got before.
 
+### Changed
+
+- `gwt-check`: `dup-person-relative` and the shared-relative branch of `dup-person-fuzzy` leave out two namesakes whose Primary Birth dates cannot overlap. Before, a birth that was open (`before 1750`), a range, estimated or calculated was ignored, so a grandfather and a grandson with one name and same-named fathers came out as a duplicate. The dates are read as intervals with the slack `about`, estimated and calculated dates already get; a baptism alone, an unknown birth or an unreadable birth date never sets two people apart. `dup-person-birth` is unchanged: a shared birth or baptism year still reports the pair.
+
 ## [0.3.0] - 2026-10-31
 
 ### Change lists
