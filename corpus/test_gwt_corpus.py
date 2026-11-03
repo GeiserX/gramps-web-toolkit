@@ -20,10 +20,10 @@ class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = self.tmp.name
-        for sub in ('cache', 'reader', 'books'):
+        for sub in ('fscache', 'reader', 'books'):
             shutil.copytree(os.path.join(FIX, sub), os.path.join(self.dir, sub))
         self.db = os.path.join(self.dir, 'idx', 'corpus.db')
-        self.roots = [os.path.join(self.dir, s) for s in ('cache', 'reader', 'books')]
+        self.roots = [os.path.join(self.dir, s) for s in ('fscache', 'reader', 'books')]
         code, out, err = run('update', '--db', self.db, *self.roots)
         self.assertEqual(code, 0, err)
 
@@ -73,7 +73,7 @@ class UpdateTest(Base):
         self.assertEqual(self.search('Ibarrola')[0], 0)
 
     def test_a_body_without_its_metadata_waits_for_the_next_update(self):
-        d = os.path.join(self.dir, 'cache', 'aa')
+        d = os.path.join(self.dir, 'fscache', 'aa')
         os.makedirs(d)
         with open(os.path.join(d, 'aa' + '4' * 62 + '.body'), 'w') as f:
             f.write('Martina Escarza Olmedo')
