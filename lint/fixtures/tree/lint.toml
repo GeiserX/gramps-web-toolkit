@@ -1,0 +1,18 @@
+# Settings for the gwt-lint tests; every name and ID is invented.
+[scope]
+roots = ["I1"]
+
+[protect]
+ids = ["I10"]
+locales = ["en", "es"]
+
+[living]
+this_year = 2026
+
+[overlap]
+open = "open"
+applied = "applied"
+
+[weak]
+tag = "weak"
+machine_sources = ["S2"]

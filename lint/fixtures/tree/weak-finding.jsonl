@@ -1,0 +1,4 @@
+{"op": "add_person", "key": "p-ana-3", "ruling": "R-8", "first_name": "Ana", "surname": "Prieto Gil", "allow_namesake": true, "namesake_reason": "Another parish.", "namesake_of": ["I1"]}
+{"op": "add_citation", "key": "c-machine", "ruling": "R-8", "source": "S2", "page": "row 12", "confidence": 3, "attach": [{"person": "I4"}]}
+{"op": "update_citation", "key": "u-c1", "ruling": "R-8", "citation": "C1", "set": {"confidence": 1}}
+{"op": "update_event", "key": "u-luis", "ruling": "R-8", "event": "E4b", "set": {"date": "1902"}, "tag": "weak"}
