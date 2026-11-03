@@ -10,7 +10,7 @@ gwt_hiski.py | if not re.fullmatch(r'\d{4}', v or ''): | if False: | a parish th
 gwt_reader.py | low = _drop_beacon(data[:65536].decode('utf-8', 'replace').lower()) | low = data[:65536].decode('utf-8', 'replace').lower() | Cloudflare's beacon script on an ordinary page is not a wall
 gwt_reader.py | _CF_BEACON = '/cdn-cgi/challenge-platform/scripts/jsd/main.js' | _CF_BEACON = '/cdn-cgi/challenge-platform/' | only the beacon is left out: a real Cloudflare challenge is still a wall
 gwt_reader.py | if start < 0 or end < 0 or low.find('</script>', start, i) >= 0: | if start < 0 or end < 0: | the beacon path outside a <script> element is not left out
-gwt_hiski.py | page=gwt_reader.rows_check(SPEC, SPEC['result_markers'][0], candidates)) | page=gwt_reader.page_check(SPEC)) | a page with entry rows the reader cannot read is a STOP, never "none"
+gwt_hiski.py | rows = gwt_reader.rows_check(SPEC, SPEC['result_markers'][0], candidates) | rows = gwt_reader.page_check(SPEC) | a page with entry rows the reader cannot read is a STOP, never "none"
 gwt_hiski.py | _ROW = re.compile(r'<TR\b[^>]*>\s*(<TD\b[^>]*> | _ROW = re.compile(r'<TR>\s*(<TD> | a row whose <TR> or <TD> carries attributes is read
 gwt_reader.py | or 0 < len(parse(page)) == len(re.findall(rows, page))) | or len(parse(page)) > 0) | a page where one row of several cannot be read is a STOP, never a page with fewer rows
 gwt_hiski.py | page=lambda p: rows(p) or shell_of(p) is not None) | page=rows) | the site's empty search page (a book the parish lacks, an unknown parish) never pauses the gate
