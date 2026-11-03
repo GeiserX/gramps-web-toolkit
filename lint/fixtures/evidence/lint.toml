@@ -1,0 +1,9 @@
+# Settings for the evidence-rule tests; every name, place and ark is invented.
+records = "records"
+
+[quote]
+readings = "readings.tsv"
+
+[placement.overrides.e-bap-pedro]
+place = "Ermita del Santo Cristo del Valle"
+quote = "en la ermita del Santo Cristo del Valle"

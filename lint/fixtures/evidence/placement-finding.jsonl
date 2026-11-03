@@ -1,0 +1,7 @@
+{"op": "add_event", "key": "e-bap-town", "ruling": "R-1", "person": "I1", "type": "Baptism", "place": "P1"}
+{"op": "add_event", "key": "e-birth-church", "ruling": "R-1", "person": "I1", "type": "Birth", "place": "P2"}
+{"op": "add_event", "key": "e-bap-cristo", "ruling": "R-1", "person": "I4", "type": "Baptism", "place": "P4"}
+{"op": "add_citation", "key": "c-bap-cristo", "ruling": "R-1", "source": "S1", "page": "https://www.familysearch.org/ark:/61903/1:1:QZZ8-BBA", "attach": [{"event": "key:e-bap-cristo"}]}
+{"op": "add_event", "key": "e-bap-maria", "ruling": "R-1", "person": "I1", "type": "Baptism", "place": "P5"}
+{"op": "add_citation", "key": "c-bap-maria", "ruling": "R-1", "source": "S1", "page": "https://www.familysearch.org/ark:/61903/1:1:QZZ9-AAA", "attach": [{"event": "key:e-bap-maria"}]}
+{"op": "update_event", "key": "u-bap-town", "ruling": "R-1", "event": "E1", "set": {"place": "P1"}}

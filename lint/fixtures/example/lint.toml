@@ -1,4 +1,5 @@
 # Settings for proving the rules on examples/changes.jsonl (lint/ci-extra.sh); every name and ID is invented.
+records = "../evidence/records"   # saved records for the evidence rules (quote, principal, role, placement)
 [scope]
 roots = ["I0001"]
 

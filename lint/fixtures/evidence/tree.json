@@ -1,0 +1,267 @@
+{
+ "people": [
+  {
+   "handle": "hI1",
+   "gramps_id": "I1",
+   "gender": 0,
+   "event_ref_list": [
+    {
+     "ref": "hE1",
+     "role": "Primary"
+    }
+   ],
+   "family_list": [],
+   "parent_family_list": [
+    "hF1"
+   ],
+   "person_ref_list": [],
+   "tag_list": [],
+   "note_list": [],
+   "citation_list": [],
+   "primary_name": {
+    "first_name": "Ana",
+    "surname_list": [
+     {
+      "surname": "Zorvalo"
+     }
+    ]
+   }
+  },
+  {
+   "handle": "hI2",
+   "gramps_id": "I2",
+   "gender": 1,
+   "event_ref_list": [],
+   "family_list": [
+    "hF1"
+   ],
+   "parent_family_list": [],
+   "person_ref_list": [],
+   "tag_list": [],
+   "note_list": [],
+   "citation_list": [],
+   "primary_name": {
+    "first_name": "Luis",
+    "surname_list": [
+     {
+      "surname": "Zorvalo"
+     }
+    ]
+   }
+  },
+  {
+   "handle": "hI3",
+   "gramps_id": "I3",
+   "gender": 0,
+   "event_ref_list": [],
+   "family_list": [
+    "hF1"
+   ],
+   "parent_family_list": [],
+   "person_ref_list": [],
+   "tag_list": [],
+   "note_list": [],
+   "citation_list": [],
+   "primary_name": {
+    "first_name": "Rosa",
+    "surname_list": [
+     {
+      "surname": "Quirell"
+     }
+    ]
+   }
+  },
+  {
+   "handle": "hI4",
+   "gramps_id": "I4",
+   "gender": 1,
+   "event_ref_list": [],
+   "family_list": [],
+   "parent_family_list": [],
+   "person_ref_list": [],
+   "tag_list": [],
+   "note_list": [],
+   "citation_list": [],
+   "primary_name": {
+    "first_name": "Pedro",
+    "surname_list": [
+     {
+      "surname": "Lurre"
+     }
+    ]
+   }
+  },
+  {
+   "handle": "hI5",
+   "gramps_id": "I5",
+   "gender": 1,
+   "event_ref_list": [],
+   "family_list": [
+    "hF2"
+   ],
+   "parent_family_list": [],
+   "person_ref_list": [],
+   "tag_list": [],
+   "note_list": [],
+   "citation_list": [],
+   "primary_name": {
+    "first_name": "Mario",
+    "surname_list": [
+     {
+      "surname": "Lurre"
+     }
+    ]
+   }
+  },
+  {
+   "handle": "hI6",
+   "gramps_id": "I6",
+   "gender": 0,
+   "event_ref_list": [],
+   "family_list": [
+    "hF2"
+   ],
+   "parent_family_list": [],
+   "person_ref_list": [],
+   "tag_list": [],
+   "note_list": [],
+   "citation_list": [],
+   "primary_name": {
+    "first_name": "Elsa",
+    "surname_list": [
+     {
+      "surname": "Quirell"
+     }
+    ]
+   }
+  }
+ ],
+ "families": [
+  {
+   "handle": "hF1",
+   "gramps_id": "F1",
+   "father_handle": "hI2",
+   "mother_handle": "hI3",
+   "child_ref_list": [
+    {
+     "ref": "hI1",
+     "frel": "Birth",
+     "mrel": "Birth"
+    }
+   ],
+   "event_ref_list": [],
+   "tag_list": []
+  },
+  {
+   "handle": "hF2",
+   "gramps_id": "F2",
+   "father_handle": "hI5",
+   "mother_handle": "hI6",
+   "child_ref_list": [],
+   "event_ref_list": [],
+   "tag_list": []
+  }
+ ],
+ "events": [
+  {
+   "handle": "hE1",
+   "gramps_id": "E1",
+   "type": "Baptism",
+   "place": "hP2",
+   "citation_list": [
+    "hC1"
+   ],
+   "date": {
+    "dateval": [
+     12,
+     3,
+     1851,
+     false
+    ],
+    "text": ""
+   }
+  }
+ ],
+ "places": [
+  {
+   "handle": "hP3",
+   "gramps_id": "P3",
+   "name": {
+    "value": "Nortia"
+   },
+   "place_type": "Province",
+   "placeref_list": []
+  },
+  {
+   "handle": "hP1",
+   "gramps_id": "P1",
+   "name": {
+    "value": "Villazul"
+   },
+   "place_type": "Town",
+   "placeref_list": [
+    {
+     "ref": "hP3"
+    }
+   ]
+  },
+  {
+   "handle": "hP2",
+   "gramps_id": "P2",
+   "name": {
+    "value": "Parroquia de Santa Eulalia"
+   },
+   "place_type": "Church",
+   "placeref_list": [
+    {
+     "ref": "hP1"
+    }
+   ]
+  },
+  {
+   "handle": "hP4",
+   "gramps_id": "P4",
+   "name": {
+    "value": "Ermita del Santo Cristo del Valle"
+   },
+   "place_type": "Church",
+   "placeref_list": [
+    {
+     "ref": "hP1"
+    }
+   ]
+  },
+  {
+   "handle": "hP5",
+   "gramps_id": "P5",
+   "name": {
+    "value": "Iglesia de Santa María"
+   },
+   "place_type": "Church",
+   "placeref_list": [
+    {
+     "ref": "hP1"
+    }
+   ]
+  }
+ ],
+ "citations": [
+  {
+   "handle": "hC1",
+   "gramps_id": "C1",
+   "page": "https://www.familysearch.org/ark:/61903/1:1:QZZ9-AAA",
+   "source_handle": "hS1"
+  }
+ ],
+ "sources": [
+  {
+   "handle": "hS1",
+   "gramps_id": "S1",
+   "title": "Invented parish register"
+  }
+ ],
+ "notes": [],
+ "media": [],
+ "repositories": [],
+ "tags": []
+}
