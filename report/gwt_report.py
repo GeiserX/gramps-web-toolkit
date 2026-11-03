@@ -607,10 +607,18 @@ def render(T, groups, base, lang, fmt, since=''):
     if fmt == 'html':
         esc = lambda s: html.escape(s, quote=False)
         link = lambda u: '<a href="%s">%s</a>' % (html.escape(u), esc(u))
+
+        def body(s):  # a web address inside the text is linked where it stands; trailing .,; stays outside the link
+            out, pos = [], 0
+            for m in URL_RE.finditer(s):
+                u = m.group().rstrip('.,;')
+                out.append(esc(s[pos:m.start()]) + link(u))
+                pos = m.start() + len(u)
+            return ''.join(out) + esc(s[pos:])
         title, side_head, person_head = '<b>%s</b>', '\n<b><u>%s</u></b>', '\n<b>%s</b>%s\n'
         note_line = '\n<i>(%s)</i>'
     else:
-        esc = link = lambda s: s
+        esc = link = body = lambda s: s
         title, side_head, person_head, note_line = '# %s', '\n## %s', '\n### %s%s\n', '\n(%s)'
     lines = [title % esc('New in the tree' + (' since %s' % since if since else ''))]
     if not groups:
@@ -634,11 +642,14 @@ def render(T, groups, base, lang, fmt, since=''):
         lines.append(person_head % (esc(head), ' ' + link(url) if url else ''))
         for it in g['items']:
             text = it['text'] + (' [weak]' if it['weak'] else '')
-            shown = []  # a link already in the item's own text (e.g. in a citation's page) is not repeated
+            # a web address the item's own text already shows (a citation page holding it) is not repeated; whole
+            # addresses are compared, so .../b/1 is still listed when the text holds .../b/10
+            in_text = {u.rstrip('.,;') for u in URL_RE.findall(text)}
+            shown = []
             for u in [web_url(base, it['type'], it['id'])] + it['urls']:
-                if u and u not in text and u not in shown:
+                if u and u not in in_text and u not in shown:
                     shown.append(u)
-            lines.append('- ' + ' '.join([esc(text)] + [link(u) for u in shown]))
+            lines.append('- ' + ' '.join([body(text)] + [link(u) for u in shown]))
     cut = sum(1 for g in groups if g.get('truncated'))
     if cut:
         lines.append(note_line % esc('kin paths were cut at %d per person for %d of these people: a more distant '

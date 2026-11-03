@@ -99,7 +99,7 @@ It lists the people, events, citations and media in `NEW` that `OLD` lacks (by h
 
 With `--root` the groups are split by side (`father's side`, `mother's side`, `both sides`, `descendants`, `not blood kin`), ordered nearest first by the number of generations between the person and the root, and headed with the relationship name in `--lang`. A person whose path to the root has a probable or weak link says how many. Without `--root` there is one group, `other`, by Gramps id. Headings and item text are in English; only the relationship name follows `--lang`.
 
-Each item has its Gramps Web link (`URL/person/I0012`, `URL/event/E0045`, `URL/citation/C0012`, `URL/media/O0003`) when `--base-url` is given, and the web addresses its citations hold in their page, attributes or notes. A weak-tagged object, or a citation of confidence 0 or 1, says `[weak]`. Objects and people marked private are left out unless `--include-private`.
+Each item has its Gramps Web link (`URL/person/I0012`, `URL/event/E0045`, `URL/citation/C0012`, `URL/media/O0003`) when `--base-url` is given, and the web addresses its citations hold in their page, attributes or notes. An address the item's own text already shows, such as one written in a citation's page, is not added again. A weak-tagged object, or a citation of confidence 0 or 1, says `[weak]`. Objects and people marked private are left out unless `--include-private`.
 
 Only new objects are listed. A changed name, a corrected date or an old event newly linked to someone is not. `OLD` and `NEW` must be copies of the same tree: two snapshots that name different trees exit `2`, and an `OLD` taken after `NEW` gets a warning that they may be swapped.
 
@@ -133,7 +133,7 @@ $ gwt report digest --from report/fixtures/digest-old.json --to report/fixtures/
 - new person: Tim Reed https://gramps.example.org/person/I11
 ```
 
-`--format html` writes the same lines with only the inline tags chat apps accept: `<b>` for the headings, `<u>` for the side, `<i>` for a note and `<a href>` for every link. There is no page around it (no `<html>`, `<h1>` or `<ul>`), so it pastes as it is into a Telegram message sent in HTML mode or into an email.
+`--format html` writes the same lines with only the inline tags chat apps accept: `<b>` for the headings, `<u>` for the side, `<i>` for a note and `<a href>` for every link, including an address inside the item's text, which is linked where it stands. There is no page around it (no `<html>`, `<h1>` or `<ul>`), so it pastes as it is into a Telegram message sent in HTML mode or into an email.
 
 ### What was already told
 
