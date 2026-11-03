@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Fixed
+
+- `gwt-apply LIST --apply --save-snapshot FILE` exits 2 now. It used to save the snapshot, skip the list and exit 0, so the caller read a write that never happened. Save the snapshot, then apply in a second command.
+
 ## [1.0.0] - 2026-11-03
 
 ### Change lists

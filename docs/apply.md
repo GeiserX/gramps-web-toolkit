@@ -310,6 +310,8 @@ gwt-apply changes.jsonl --snapshot tree-0412.json.gz --apply    # checks the sna
 
 `--save-snapshot` pages through every object of every class and writes them, as the API returns them, to a new gzip JSON file; it never overwrites one. The dry run on a snapshot plans exactly as against the server, op by op, and never opens a connection.
 
+`--save-snapshot` only reads: with `--apply` it exits 2 before logging in. Save the snapshot, then apply the list in a second command.
+
 `--apply` with a snapshot first plans the whole list on the snapshot, offline. If the plan stops at a conflict, nothing is written. Then it reads the `change` stamp of every object in each class the plan touched, one request per class, and refuses to write if, since the snapshot:
 
 - an object the plan read or would change was changed, deleted or made (a keyed object made by an earlier run counts: after a crash, take a new snapshot), or
@@ -455,5 +457,3 @@ The revert never overwrites anything that differs from what the run left:
 With `--apply` the tree lock is taken before the plan reads anything. Each object is read again right before it is written, and an object that changed since the plan is skipped. Busy answers are tried again. If the revert stops halfway, run the same command again: what is already undone reads as a skip. At the end it reads every restored object back and checks every deleted one again.
 
 The exit code is 0 when the run is undone. It is 1 on a problem, when a `manual` step is left, or when an object changed since the run and was left alone. The revert writes its own log, as an apply does: with `--apply`, `gwt-apply-revert-<run id>.jsonl` in the same per-tree folder, or `<stem>.<run id><suffix>` next to `--log`; a plan writes one only with `--log`. A revert is a tree write like any other, so run it as that tree's only writer and check the tree after it.
-
-Snapshot-only mode (`--save-snapshot`) cannot be combined with `--apply`. The CLI rejects the combination before login; save the snapshot in a separate command, then apply the change list.
