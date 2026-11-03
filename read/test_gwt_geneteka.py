@@ -49,6 +49,13 @@ class Shape(unittest.TestCase):
         self.assertEqual(v({'recordsFiltered': 2, 'data': rows}, 0, 50), 'hits', 'the last rows of a search')
         self.assertEqual(v({'recordsFiltered': 12, 'data': rows}, 10, 10), 'hits', 'the last page')
 
+    def test_marriages_and_deaths_keep_their_cells_and_guess_no_name(self):
+        row = json.loads(fx('births.json'))['data'][0]
+        for kind in ('marriages', 'deaths'):
+            c = gwt_geneteka.candidate(row, kind, 'https://example.invalid/')
+            self.assertEqual((c['name'], c['given'], c['surnames']), ('', None, None), kind)
+            self.assertEqual(c['cells'][:4], [gwt_geneteka.text(x) for x in row[:4]])
+
 
 class Search(Run):
     def test_rows_are_births_with_parents_and_the_entrys_number(self):

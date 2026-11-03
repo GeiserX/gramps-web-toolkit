@@ -26,7 +26,7 @@ The search page is a shell: its table fills from a JSON endpoint, `api/getAct.ph
 
 ## What a candidate is
 
-An index entry, a lead: open the scan before citing it. `id` is the kind's letter and the entry's own number (`B-12345678`, the number of its "report a bug" link). A birth has its name, `act` (the record number), the year, place and parish, and the father and mother as `relatives`. `cells` keeps every cell of the row in order; for marriages and deaths the reader does not split the cells into names yet. `remarks` is the site's own remark; `link` is the first link the row carries (a scan on metryki.genealodzy.pl, or the site of the archive or diocese that holds the book). Geneteka has no page per entry, so `url` is the search page that shows it.
+An index entry, a lead: open the scan before citing it. `id` is the kind's letter and the entry's own number (`B-12345678`, the number of its "report a bug" link). A birth has its name, `act` (the record number), the year, place and parish, and the father and mother as `relatives`. `cells` keeps every cell of the row in order; for marriages and deaths the reader does not split the cells into names yet, and leaves `name` empty rather than guess it from a column order nobody has confirmed. `remarks` is the site's own remark; `link` is the first link the row carries (a scan on metryki.genealodzy.pl, or the site of the archive or diocese that holds the book). Geneteka has no page per entry, so `url` is the search page that shows it.
 
 ## When it stops
 

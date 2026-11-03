@@ -114,7 +114,8 @@ def candidate(row, kind, url):
                                                                                        b.get('mother_surname')) if x)})
                             if r['name']])
     else:
-        c.update(name=' '.join(cells[2:4]), events={kind[:-1]: {'year': cells[0] or None}})
+        # their column order is not confirmed: no name is guessed from it, `cells` keeps the row
+        c.update(events={kind[:-1]: {'year': cells[0] or None}})
     return c
 
 
@@ -124,7 +125,7 @@ def add_search_args(sp):
     sp.add_argument('--kind', default='births', choices=sorted(KINDS), help='default births')
     sp.add_argument('--surname', required=True, help='the site needs a surname for a search over a whole region')
     sp.add_argument('--given', default='')
-    sp.add_argument('--surname2', default='', help='a second person (a spouse, or a parent with --parents on the site)')
+    sp.add_argument('--surname2', default='', help='a second person: a spouse, or a parent')
     sp.add_argument('--given2', default='')
     sp.add_argument('--from', dest='year_from', default='')
     sp.add_argument('--to', dest='year_to', default='')
