@@ -1,0 +1,21 @@
+{
+ "request": {
+  "sort": [
+   {
+    "score": "desc"
+   }
+  ],
+  "firstName": "Ana",
+  "lastName": "Zorvalo"
+ },
+ "response": {
+  "total": 2,
+  "size": 20,
+  "page": 1,
+  "hits": [
+   {
+    "id": "zzAAAA000001"
+   }
+  ]
+ }
+}

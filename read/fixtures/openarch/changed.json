@@ -1,0 +1,14 @@
+{
+ "query": {
+  "name": "Velderhoek 1850-1860",
+  "only_results_with_scans": false,
+  "start": 0,
+  "number_show": 25,
+  "sort": 1,
+  "language": "en"
+ },
+ "result": {
+  "number_found": 2,
+  "docs": []
+ }
+}

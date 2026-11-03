@@ -1,0 +1,88 @@
+{
+ "request": {
+  "sort": [
+   {
+    "score": "desc"
+   }
+  ],
+  "firstName": "Ana",
+  "lastName": "Zorvalo"
+ },
+ "response": {
+  "total": 2,
+  "maxScoreES": 40.1,
+  "size": 20,
+  "page": 1,
+  "delay": 80,
+  "persons": [
+   {
+    "score": 0.9,
+    "source": "1985",
+    "sourceLine": 1201,
+    "id": "zzAAAA000001",
+    "name": {
+     "first": [
+      "Ana",
+      "Rosa"
+     ],
+     "last": "Zorvalo"
+    },
+    "sex": "F",
+    "birth": {
+     "date": "19020311",
+     "location": {
+      "city": [
+       "Villazul",
+       "Villazul-le-Haut"
+      ],
+      "code": "99999",
+      "departmentCode": "99",
+      "country": "France",
+      "countryCode": "FRA"
+     }
+    },
+    "death": {
+     "date": "19850704",
+     "certificateId": "42",
+     "age": 83,
+     "location": {
+      "city": "Montefrío-sur-Mer",
+      "code": "99998",
+      "country": "France",
+      "countryCode": "FRA"
+     }
+    }
+   },
+   {
+    "score": 0.5,
+    "source": "1999",
+    "sourceLine": 88,
+    "id": "zzAAAA000002",
+    "name": {
+     "first": [
+      "Ana"
+     ],
+     "last": "Zorvalo"
+    },
+    "sex": "F",
+    "birth": {
+     "date": "19100000",
+     "location": {
+      "code": "99134",
+      "country": "Espagne",
+      "countryCode": "ESP"
+     }
+    },
+    "death": {
+     "date": "19990120",
+     "location": {
+      "city": "Villazul",
+      "code": "99999",
+      "country": "France",
+      "countryCode": "FRA"
+     }
+    }
+   }
+  ]
+ }
+}

@@ -27,7 +27,9 @@ def with_template():
 class Registry(unittest.TestCase):
     def test_every_source_has_the_shape_gwt_read_builds_from(self):
         srcs = gwt_read.sources()
-        self.assertEqual(list(srcs), ['pares', 'genae', 'boe', 'insee', 'familysearch'])
+        self.assertEqual(list(srcs)[:5], ['pares', 'genae', 'boe', 'insee', 'familysearch'])
+        self.assertEqual(list(srcs)[5:], [__import__(m).SPEC['id'] for m in gwt_reader.SOURCE_MODULES
+                                          if hasattr(__import__(m), 'SPEC')])
         for src in srcs.values():
             self.assertEqual(gwt_reader.spec_problems(src), [], src['id'])
 
