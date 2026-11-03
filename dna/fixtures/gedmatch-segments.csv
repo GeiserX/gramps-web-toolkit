@@ -1,0 +1,4 @@
+PrimaryKit,MatchedKit,chr,B37Start,B37End,Segment cM,SNPs,MatchedName,Matched Sex,MatchedEmail
+XX0000001,ZZ1234567,4,20000000,35000000,18.2,2500,Kim Sample,F,kim@example.org
+XX0000001,ZZ1234567,9,1000000,8000000,9.8,1100,Kim Sample,F,kim@example.org
+XX0000001,ZZ7654321,12,40000000,52000000,14.0,1900,pat.lee@example.org,M,pat.lee@example.org

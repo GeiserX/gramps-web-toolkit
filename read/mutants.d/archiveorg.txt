@@ -1,0 +1,17 @@
+# Mutations the archiveorg tests must catch (format: see read/mutants.txt).
+gwt_archiveorg.py | kept = {'response': doc['response']}         # never session_context: it holds the caller's IP address | kept = doc | the full-text answer's session_context, with the caller's IP address, never reaches the evidence file
+gwt_archiveorg.py | c = {'source': SOURCE, 'id': ident, 'name': _text(f.get('title')) or ident, 'role': 'item', 'principal': False, | c = {'source': SOURCE, 'id': ident, 'name': _text(f.get('title')) or ident, 'role': 'item', 'principal': True, | an Internet Archive item is never a principal: it is a book, not a person
+gwt_archiveorg.py | if c['mediatype'] == 'texts': | if True: | only a text item gets an OCR link
+gwt_archiveorg.py | q = query if not mediatype else '(%s) AND mediatype:(%s)' % (query, mediatype) | q = query | a catalogue search keeps to texts unless told otherwise
+gwt_archiveorg.py | return 'unknown'    # the result container renamed: a STOP | return 'none' | a catalogue answer whose container changed is unknown, a STOP, never "none"
+gwt_archiveorg.py | if not isinstance(r, dict) or (r.get('header') or {}).get('succeeded') is not True: | if not isinstance(r, dict): | a full-text search the backend says failed is unknown, never "none"
+gwt_archiveorg.py | if not isinstance(doc, dict) or (doc.get('responseHeader') or {}).get('status') != 0: | if not isinstance(doc, dict): | a catalogue answer with an error status is unknown, never "none"
+gwt_archiveorg.py | [('rows', max(1, min(int(count), 100))), | [('rows', max(1, int(count))), | a catalogue search never asks for more than 100 rows
+gwt_archiveorg.py | return re.sub(r'\s+', ' ', s.replace('{{{', '').replace('}}}', '')).strip() | return s | a full-text snippet loses the site's {{{ }}} highlight marks
+gwt_archiveorg.py | if not r['docs'] and offset >= r['numFound']: | if False: | an archive.org catalogue page past the last row is the end of the results (exit 2), never a STOP
+gwt_archiveorg.py | if not h['hits'] and offset >= h['total']: | if False: | an archive.org full-text page past the last row is the end of the results (exit 2), never a STOP
+gwt_archiveorg.py | off = (max(1, int(a.page)) - 1) * max(1, min(int(a.count), 100)) | off = 0 | the search tells the verdict where its page starts, so the last page reads as the end
+gwt_archiveorg.py | if not isinstance(r, dict) or not _count(r.get('numFound')) or | if not isinstance(r, dict) or | a catalogue count that is not a whole number is unknown, a STOP
+gwt_archiveorg.py | if not isinstance(h, dict) or not _count(h.get('total')) or | if not isinstance(h, dict) or | a full-text count that is not a whole number is unknown, a STOP
+gwt_archiveorg.py | all(isinstance(d, dict) and d.get('identifier') for d in r['docs']) | all(isinstance(d, dict) for d in r['docs']) | a catalogue row with no identifier is unknown, a STOP
+gwt_archiveorg.py | (x.get('fields') or {}).get('identifier') for x | True for x | a full-text hit with no identifier is unknown, a STOP

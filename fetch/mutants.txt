@@ -1,0 +1,60 @@
+# Mutations the fetch tests must catch. One row each: file | exact text | replacement | why
+# `python3 .github/scripts/run_tests.py --mutants --only fetch` applies each row to a scratch copy
+# of fetch/ and fails when the tests still pass. The text must occur exactly once in the file.
+gwt_fetch/iiif.py | if host in ("dam-antenati.cultura.gov.it", "iiif-antenati.cultura.gov.it"): | if False: | an Antenati manifest or image URL is sent with the portal as Referer, which its WAF requires
+gwt_fetch/iiif.py | return url, portal_referer(url) or url | return url, url | a pasted Antenati manifest URL gets the portal Referer, not its own URL
+gwt_fetch/iiif.py | return manifest, portal_referer(manifest) or url | return manifest, url | an Antenati manifest inside a viewer's ?manifest= gets the portal Referer
+gwt_fetch/iiif.py |     if got != width: |     if got is None: | an image whose pixel width is not info.json's width is refused, never saved
+gwt_fetch/iiif.py | url = f"{base}/full/{width},/0/default.jpg" | url = f"{base}/full/max/0/default.jpg" | an Image API base is fetched at info.json's width, not at full/max
+gwt_fetch/iiif.py | if getattr(args, "native", False) and c.service: | if False: | --native fetches each canvas at its info.json width
+gwt_fetch/iiif.py | m = _is_canadiana(u.hostname or "") and re.match(r"/view/([^/?#]+)", u.path) | m = None | a Canadiana viewer URL becomes its manifest
+gwt_fetch/iiif.py | if _is_image_info(manifest): | if False: | an info.json passed as a manifest stops with a pointer to --image-base
+gwt_fetch/iiif.py |     except Exception as e:  # a missing page or a broken info.json fails this image, not the run |     except ZeroDivisionError as e: | a page with no info.json fails that page and the rest still download
+gwt_fetch/crop.py | box = scale_box(box, parse_pair(args.from_size, "--from-size"), size) | pass | a box measured on a preview is scaled to the real image
+gwt_fetch/crop.py | x0, y0, x1, y1 = round(x * sx), round(y * sy), round((x + w) * sx), round((y + h) * sy) | x0, y0, x1, y1 = round(x * sx), round(y * sy), round(x * sx) + round(w * sx), round(y * sy) + round(h * sy) | a box that ends at the preview's edge ends at the image's edge, not one pixel past it
+gwt_fetch/crop.py | if x + w > W or y + h > H: | if False: | a box past the image's edge is refused, not padded with black
+gwt_fetch/crop.py | ox, oy = round((x1 - x0) * overlap), round((y1 - y0) * overlap) | ox, oy = 0, 0 | --overlap makes grid tiles reach into their neighbours
+gwt_fetch/crop.py | if args.max and max(piece.size) > args.max: | if False: | --max shrinks a piece to its longest side
+gwt_fetch/crop.py | label = f"crop {x},{y},{w},{h} of {src.name} sha256:{src_sha}" | label = f"crop {x},{y},{w},{h} of {src.name}" | a piece's row names its source's sha256
+gwt_fetch/crop.py |         return 2 |         return 0 | without Pillow, crop exits 2 instead of claiming success
+gwt_fetch/crop.py |         if not _ours(out): |         if False: | crop never appends its rows to a manifest.tsv another tool wrote
+gwt_fetch/crop.py | return f"{parent_url[:m.start()]}#xywh={X + x0},{Y + y0},{w},{h}" | return f"{parent_url}#xywh={x},{y},{w},{h}" | a crop of a crop gets one #xywh= fragment on the original, not a second one
+gwt_fetch/crop.py | x0, y0, w, h = scale_box(box, size, (PW, PH)) | x0, y0, w, h = box | a crop of a shrunk piece is scaled back to the original's pixels
+gwt_fetch/iiif.py |     if row and not NATIVE_URL.search(row["image_url"]): |     if False: | --native after a capped full/max run in the same folder adds the native file instead of skipping
+gwt_fetch/iiif.py |     if row: |     if None: | a --native resume skips a page saved at native width without fetching its info.json
+gwt_fetch/iiif.py |     if not want: |     if False: | a --pages range that selects nothing stops with a message instead of exiting 0 with no file
+gwt_fetch/iiif.py | raise SystemExit("gwt-fetch: --pages needs {page} in --image-base; the URL has no {page}") | pass | --pages with an --image-base that has no {page} stops instead of fetching one image
+gwt_fetch/iiif.py | return [(n, PAGE.sub(lambda m: format(n, m.group(1) or ""), base)) for n in want] | return [(n, PAGE.sub(str(n), base)) for n in want] | {page:04} pads the page number with zeros
+gwt_fetch/iiif.py | return host == "canadiana.ca" or host.endswith(".canadiana.ca") | return host.endswith("canadiana.ca") | a lookalike host such as evilcanadiana.ca is not rewritten as Canadiana
+gwt_fetch/iiif.py | and client.delay < CANADIANA_DELAY: | and False: | a Canadiana run waits the 10 s its robots.txt asks for, without --delay
+gwt_fetch/crop.py |     if parse_overlap(args.overlap) and not args.grid: |     if False: | --overlap without --grid is refused, not silently ignored
+gwt_fetch/crop.py |     if args.from_size and not args.box: |     if False: | --from-size without --box is refused, not silently ignored
+gwt_fetch/iiif.py |     if not args.url: |     if False: | iiif with neither a URL nor --image-base stops with a message, not a traceback
+gwt_fetch/iiif.py | if not r.ok or ctype.startswith("text/"): | if not r.ok: | an HTML page served in place of an image is named as such and not saved
+gwt_fetch/iiif.py | referer = portal_referer(base) or f"{base}/info.json" | referer = f"{base}/info.json" | an Antenati --image-base gets the portal Referer its WAF requires
+gwt_fetch/iiif.py | if not isinstance(doc, dict) or "sequences" in doc or "items" in doc: | if not isinstance(doc, dict): | a manifest whose @context names the Image API is still read as a manifest
+gwt_fetch/iiif.py | return list(dict.fromkeys(want)) | return want | a page named twice in --pages is fetched once
+gwt_fetch/crop.py | if len(parts) != 4 or not all(re.fullmatch(r"\d+", p) for p in parts): | if False: | a malformed --box stops with a message, not a traceback
+gwt_fetch/crop.py |     if not w or not h: |     if False: | a --box of zero width or height is refused
+gwt_fetch/crop.py | if not m or not int(m.group(1)) or not int(m.group(2)): | if not m: | a --grid with zero columns or rows is refused, not an empty run that exits 0
+gwt_fetch/crop.py | if not m or float(m.group(1)) >= 50: | if not m: | an --overlap of 50% or more is refused
+gwt_fetch/crop.py |         if not src.is_file(): |         if False: | a missing image stops with a message, not a traceback
+gwt_fetch/crop.py | if piece.mode not in ("RGB", "L"): | if False: | a page with transparency or a palette is converted before it is saved as JPEG
+gwt_fetch/iiif.py |     if store.done(stem, label, url, source): |     if False: | a native file on disk without a row gets its row back, with no second image request
+gwt_fetch/iiif.py |         if marker == 0xFF:  # fill byte |         if False: | fill bytes before a JPEG marker do not hide the image's width
+gwt_fetch/iiif.py |     if data[:2] != b"\xff\xd8": |     if False: | a file that is not a JPEG is never read as one
+gwt_fetch/crop.py |                 if store.done(stem, label, url, row.get("manifest_url", "")): |                 if False: | a piece on disk without a row gets its row back and is not cut again
+gwt_fetch/iiif.py |         if data[i] != 0xFF: |         if False: | a byte that is not a marker ends the JPEG header read instead of being taken for one
+gwt_fetch/iiif.py | if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7: | if marker == 0xD8: | a restart marker, which has no length, is stepped over before the frame
+gwt_fetch/iiif.py | marker not in (0xC4, 0xC8, 0xCC): | True: | a Huffman table before the frame is not read as the frame, so its bytes are never taken for the width
+gwt_fetch/store.py | name = self.stored.get(stem) | name = None | a file whose rawstore.tsv row says it is in the bucket is not downloaded again
+gwt_fetch/store.py | if p and p.name not in self.rows and p.exists(): | if p and p.name not in self.rows: | done() never hashes a file that lives only in the bucket
+gwt_fetch/cli.py | if rs.is_binary_name(f) and (folder / f).is_file() | if (folder / f).is_file() | --rawstore moves binaries only; text files stay in git
+gwt_fetch/cli.py | if rs.is_binary_name(f) and (folder / f).is_file() | if rs.is_binary_name(f) | a second --rawstore run does not fail on files already in the bucket
+gwt_fetch/cli.py | rc = max(rc, 1) | rc = rc | --rawstore exits 1 when the bucket does not confirm a file
+gwt_fetch/cli.py | and not getattr(args, "list", False) | and True | --list with --rawstore moves nothing
+gwt_fetch/cli.py | if rawstore and bucket is None: | if False: | a missing bucket config stops the run before any download
+gwt_fetch/store.py | if len(r) == 4 and | if len(r) >= 1 and | a short line in rawstore.tsv does not crash the run
+gwt_fetch/cli.py | to_bucket(args.out, bucket, prefix, log=print) | to_bucket(args.out, bucket, "", log=print) | --rawstore stores under the configured GWT_RAWSTORE_PREFIX, like gwt-rawstore put
+gwt_fetch/store.py | r[0] != "sha256" and "/" | "/" | the header line of rawstore.tsv is not taken for a file
+gwt_fetch/store.py | and "/" not in r[3]} | } | a rawstore.tsv row for a file in a subfolder does not count as this folder's file

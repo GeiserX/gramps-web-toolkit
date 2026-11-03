@@ -118,6 +118,16 @@ Two shared files keep parallel agents from paying twice:
 - **The ledger** ([`ledger/`](https://github.com/GeiserX/gramps-web-toolkit/tree/main/ledger)): every agent checks it before a search and appends after, negatives included. A negative leaves nothing in the tree, so without the ledger nobody knows it was done.
 - **The cache** ([`fscache/`](https://github.com/GeiserX/gramps-web-toolkit/tree/main/fscache)): every good API answer is kept on disk. A repeated request costs no network call and no rate budget. Errors and blocks are never cached.
 
+## Source images live in the bucket
+
+A research repo that commits every scanned page slows every `git status`, commit and backup, because each one walks thousands of images. Keep the images in an S3-compatible bucket with [gwt-rawstore](rawstore.md) and only its `rawstore.tsv` manifests in git:
+
+1. New downloads: `gwt-fetch iiif URL --out raw/<folder> --rawstore`. Each image goes to the bucket and is deleted locally once the bucket confirms it; a later run of the same command skips it.
+2. Images already committed: on a full clone (a server is a good place), `gwt-rawstore migrate raw --evict`, review `git status`, commit. History is not rewritten.
+3. Pull that commit on the laptop. Git deletes the untracked images there and keeps the manifests, so no sparse-checkout rule is needed; `gwt-rawstore get <path|sha256>` fetches any one image when you need to read it.
+
+After the migration git ignores new images in those folders, so a scan saved without `--rawstore` is neither committed nor stored; sweep with `gwt-rawstore put --remove raw`.
+
 ## Rate-limit gates
 
 Every lane that touches a rate-limited site goes through one shared gate ([`gate/`](https://github.com/GeiserX/gramps-web-toolkit/tree/main/gate), [gwt-gate](gate.md)):

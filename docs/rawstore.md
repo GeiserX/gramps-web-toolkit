@@ -51,9 +51,21 @@ gwt-rawstore verify [dirs] [--deep]
 Every row of every `rawstore.tsv` under the given directories: the key carries the sha256, the object exists, the size and the stored sha256 match. `--deep` also downloads and hashes every object. Exit status 1 when any row is bad.
 
 ```sh
-gwt-rawstore migrate <dir> [--remove] [-j 4]
+gwt-rawstore migrate <dir> [--remove | --evict] [-j 4]
 ```
-For binaries already committed. Uploads every binary git tracks under `dir` and writes the manifests. With `--remove` it also runs `git rm --cached` on them, adds them by exact name to the folder's `.gitignore`, and stages the manifest and `.gitignore`. The files stay on disk and the history is not rewritten; commit when the diff looks right. If any upload fails, nothing is untracked. It refuses to run when tracked files are missing from the working tree (a sparse checkout), since it cannot hash what it cannot read.
+For binaries already committed. Uploads every binary git tracks under `dir` and writes the manifests. With `--remove` it also runs `git rm --cached` on them, adds one pattern per extension (`*.jpg`, `*.pdf`) to `dir/.gitignore`, which covers every subfolder, and stages the manifests and `.gitignore`. The files stay on disk. `--evict` does the same and then deletes the local copies. Every upload is confirmed by a `HEAD` that checks the size and the sha256 before anything is untracked or deleted. The history is not rewritten in either case; commit when the diff looks right. If any upload fails, nothing is untracked.
+
+It refuses to run when tracked files are missing from the working tree (a sparse checkout), since it cannot hash what it cannot read. Run it on a full clone, for example on a server, then pull the commit on the laptop.
+
+### Images that live in the bucket
+
+To keep a folder of source images (say `raw/`) out of git for good:
+
+1. Download new ones with `gwt-fetch ... --out raw/<folder> --rawstore`: each file goes to the bucket and is deleted locally once confirmed, and `gwt-fetch` reads `rawstore.tsv` so it never downloads it again ([gwt-fetch](fetch.md)).
+2. Move the ones already committed with `gwt-rawstore migrate raw --evict` on a full clone, then commit.
+3. Pull that commit on the laptop. Git deletes the untracked images from its working tree and keeps the `rawstore.tsv` and `manifest.tsv` files, which `gwt-fetch --rawstore` reads to skip what is in the bucket. `gwt-rawstore get <path|sha256>` brings back one image when you need it.
+
+After `--remove` or `--evict`, git ignores every file under `dir` with a migrated extension, including scans saved there later without `--rawstore`: they never show in `git status` and are in no bucket. Store them with `gwt-rawstore put --remove <dir>`; it is safe to repeat, since files already in the bucket come back as `have`. Migrate prints the same reminder.
 
 ```sh
 gwt-rawstore check-staged [--max-kb N]

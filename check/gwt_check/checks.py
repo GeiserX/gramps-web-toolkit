@@ -8,6 +8,7 @@ import unicodedata
 from collections import defaultdict
 
 from . import dates
+from .media import media_checks
 from .tree import Tree
 
 # list of handles -> type they point at
@@ -95,11 +96,16 @@ CHECKS = {
     "marriage-age": "bride under 12 or groom under 14 at the marriage",
     "sibling-spacing": "two children of one mother born less than 240 days apart, not twins",
     "lifespan": "a life of more than 105 years",
+    "media-non-viewable": "media Gramps Web shows only as an icon: text, JSON, HTML, mail or an archive",
+    "media-file-missing": "media object whose file the server does not have",
+    "media-tiny": "image whose longer side is under 200 px (with --download)",
+    "media-uniform": "image that is mostly one tone: blank, grey or a failed scan (with --download)",
+    "media-dup-page": "two different files of nearly the same image on one citation (with --download)",
 }
 
 # Checks reported without failing: a finding of these is never new, so it never sets the exit code.
 INFO_CHECKS = {"unconnected", "parent-age", "marriage-age", "sibling-spacing", "lifespan", "dup-citation",
-               "place-vs-description", "note-marker-no-tag"}
+               "place-vs-description", "note-marker-no-tag", "media-uniform", "media-dup-page"}
 
 # words in a note that a tag of the same stem is meant to mark; matched without accents, whole word
 NOTE_MARKERS = ("hipotesis", "homonimo")
@@ -409,6 +415,26 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
                 got.add((dv[2], dv[1], dv[0]))
         return got
 
+    spans: dict[str, tuple[int, int] | None] = {}
+
+    def birth_span(p: dict) -> tuple[int, int] | None:
+        """Every Primary Birth date of the person as one interval of days; None when one cannot be read."""
+        if p["handle"] not in spans:
+            alts = [dates.span(E[r["ref"]].get("date")) for r in p.get("event_ref_list", [])
+                    if r.get("ref") in E and r.get("role") == "Primary"
+                    and dates.kind(E[r["ref"]].get("type")) in dates.BIRTH]
+            readable = [s for s in alts if s]
+            spans[p["handle"]] = (min(s.lo for s in readable), max(s.hi for s in readable)) \
+                if readable and len(readable) == len(alts) else None
+        return spans[p["handle"]]
+
+    def apart(p: dict, q: dict) -> bool:
+        """Births that cannot overlap, open, range and estimated dates included: two people, whatever kin they share.
+
+        A baptism alone never counts (adults were baptized too), and neither does an unknown birth."""
+        a, b = birth_span(p), birth_span(q)
+        return bool(a and b) and (a[1] < b[0] or b[1] < a[0])
+
     def compatible(xs, ys) -> bool:
         return any(x[0] == y[0] and (not x[1] or not y[1] or x[1] == y[1]) and (not x[2] or not y[2] or x[2] == y[2])
                    for x in xs for y in ys)
@@ -457,7 +483,7 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
                 years_differ = bp and bq and not ({x[0] for x in bp} & {x[0] for x in bq})
                 # a shared relative proves nothing when one is the other's parent; a shared birth date still does
                 if (pp & pq or sp & sq or cp & cq) and not years_differ \
-                        and not parent_and_child(p["handle"], q["handle"]):
+                        and not parent_and_child(p["handle"], q["handle"]) and not apart(p, q):
                     why = "same parent" if pp & pq else "same spouse" if sp & sq else "same child"
                     out.add("dup-person-relative", pair, f"{n}, {why}")
 
@@ -530,7 +556,7 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
                 ph, qh = parents_by_name(h), parents_by_name(c)
                 pp = {n for n in pp & pq if ph[n] != qh[n]}
             kin_shared = (pp & pq or sp & sq or cp & cq) and not parent_and_child(h, c)
-            if near or (kin_shared and not (yp and yq)):
+            if near or (kin_shared and not (yp and yq) and not apart(P[h], P[c])):
                 why = "birth within 2 years" if near else (
                     "same parent" if pp & pq else "same spouse" if sp & sq else "same child")
                 pair = ",".join(sorted((P[h]["gramps_id"], P[c]["gramps_id"])))
@@ -749,6 +775,7 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
                     f"{len(ids)} people: {', '.join(ids[:5])}{', ...' if len(ids) > 5 else ''}; "
                     f"main component ({lowest[main]}) has {len(comps[main])}")
 
+    media_checks(T, tree.media_status, out, in_scope, info, label)
     dated_checks(T, out, info)
     return out.items, info
 

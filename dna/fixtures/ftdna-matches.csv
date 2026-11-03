@@ -1,0 +1,5 @@
+Full Name,First Name,Middle Name,Last Name,Match Date,Relationship Range,Shared DNA,Longest Block,Linked Relationship,Ancestral Surnames,Y-DNA Haplogroup,mtDNA Haplogroup,Notes,Matching Bucket,X-Match,Autosomal Transfer,Email
+Tom Sample,Tom,,Sample,1/2/2024,2nd Cousin - 4th Cousin,41.5,19,,Sample (Elsewhere),R-M269,H1,,Both,,,tom.sample@example.org
+Jane Doe,Jane,,Doe,3/4/2024,1st Cousin - 2nd Cousin,200,60,,,,,,Paternal,,,jane@example.org
+Lee Ward,Lee,,Ward,5/6/2024,3rd Cousin - 5th Cousin,30,15,,,,,,Maternal,,,
+Lee Ward,Lee,,Ward,5/6/2024,4th Cousin - Remote Cousin,22,9,,,,,,Maternal,,,

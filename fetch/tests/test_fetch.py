@@ -318,3 +318,162 @@ def test_geo_filters_types_and_province():
     assert out == [{"query": "Betanzos", "type": "Municipio", "name": "Betanzos, A Coruña", "municipality": "Betanzos",
                     "ine_code": "15009", "province": "A Coruña", "lat": "43.275233", "lng": "-8.223139",
                     "cartociudad_id": "15009"}]
+
+
+# ---------------------------------------------------------------- images that live in the bucket
+
+def bucket_row(folder, name, data=b"x"):
+    import hashlib
+    sha = hashlib.sha256(data).hexdigest()
+    with open(folder / "rawstore.tsv", "w", encoding="utf-8") as f:
+        f.write("sha256\tsize\tkey\tpath\n")
+        f.write(f"{sha}\t{len(data)}\t{sha[:2]}/{sha}/{name}\t{name}\n")
+
+
+def iiif_routes():
+    return {"https://m/manifest": Resp(json.dumps(V2), "application/json"),
+            "https://img/iiif/2/A/full/max/0/default.jpg": Resp(b"A-max", "image/jpeg"),
+            "https://img/iiif/2/B/full/max/0/default.jpg": Resp(b"B-max", "image/jpeg")}
+
+
+def test_a_file_moved_to_the_bucket_is_not_fetched_again(tmp_path):
+    bucket_row(tmp_path, "0001_pag-1.jpg")   # uploaded by gwt-rawstore, local copy deleted
+    c = FakeClient(iiif_routes())
+    assert iiif.run(ns(url="https://m/manifest", out=str(tmp_path), pages="1-2"), c) == 0
+    assert "https://img/iiif/2/A/full/max/0/default.jpg" not in [u for u, *_ in c.calls]
+    assert not (tmp_path / "0001_pag-1.jpg").exists() and (tmp_path / "0002_pag-2.jpg").exists()
+    # positive control: without the row the same run downloads it again
+    (tmp_path / "rawstore.tsv").unlink()
+    c = FakeClient(iiif_routes())
+    assert iiif.run(ns(url="https://m/manifest", out=str(tmp_path), pages="1-2"), c) == 0
+    assert (tmp_path / "0001_pag-1.jpg").read_bytes() == b"A-max"
+
+
+def test_store_finds_bucket_files_without_a_manifest_row(tmp_path):
+    bucket_row(tmp_path, "0003_x.pdf")
+    s = Store(tmp_path)
+    assert s.done("0003_x", "x", "", "").name == "0003_x.pdf"   # no crash hashing a file that is not on disk
+    assert s.find("0003") is None and s.find("0003_x.pd") is None
+    assert not (tmp_path / "manifest.tsv").exists()
+
+
+def test_store_find_does_not_scan_every_bucket_name(tmp_path):
+    import time
+    n = 10000   # a folder of ten thousand scans; scanning every name on every call took 17 s here
+    with open(tmp_path / "rawstore.tsv", "w", encoding="utf-8") as f:
+        f.write("sha256\tsize\tkey\tpath\n")
+        f.writelines(f"{i:064x}\t1\tk/{i:05d}_p.jpg\t{i:05d}_p.jpg\n" for i in range(n))
+    s = Store(tmp_path)
+    start = time.monotonic()
+    assert all(s.find(f"{i:05d}_p").name == f"{i:05d}_p.jpg" for i in range(n))
+    assert time.monotonic() - start < 3
+
+
+class Bucket:
+    """In-memory stand-in for gwt-rawstore's S3: head() and put_file() are all put() needs."""
+    def __init__(self, keeps=True):
+        self.objects, self.keeps = {}, keeps
+
+    def head(self, key):
+        return self.objects.get(key) if self.keeps else None
+
+    def put_file(self, key, path, sha, size):
+        self.objects[key] = (size, sha)
+
+
+def test_rawstore_flag_moves_each_download_to_the_bucket(tmp_path, monkeypatch, capsys):
+    from gwt_fetch import cli
+
+    def fake_run(args, client):
+        s = Store(args.out)
+        s.write("0001_a", [b"scan"], "image/jpeg", "a", "http://i/1", "http://m")
+        s.write("0001_a_text", [b"words"], "text/plain", "a", "http://i/1", "http://m")
+        return 0
+    monkeypatch.setattr(iiif, "run", fake_run)
+    bucket = Bucket()
+    assert cli.main(["iiif", "https://m/manifest", "--out", str(tmp_path), "--rawstore"], bucket=bucket) == 0
+    assert not (tmp_path / "0001_a.jpg").exists()           # in the bucket now
+    assert (tmp_path / "0001_a_text.txt").exists()          # text stays in git
+    assert len(bucket.objects) == 1
+    assert Store(tmp_path).done("0001_a", "a", "", "")      # and the next run counts it as done
+
+
+def test_rawstore_flag_keeps_the_file_when_the_bucket_does_not_confirm(tmp_path, monkeypatch, capsys):
+    from gwt_fetch import cli
+    rs = cli.rawstore_module()
+    monkeypatch.setattr(rs, "WAIT", 0)
+    Store(tmp_path).write("0001_a", [b"scan"], "image/jpeg", "a", "http://i/1", "http://m")
+    assert cli.to_bucket(tmp_path, Bucket(keeps=False)) == 1
+    assert (tmp_path / "0001_a.jpg").read_bytes() == b"scan"
+    assert not (tmp_path / "rawstore.tsv").exists()
+    assert "not confirmed" in capsys.readouterr().err
+
+
+def scan_once(args, client):
+    Store(args.out).write("0001_a", [b"scan"], "image/jpeg", "a", "http://i/1", "http://m")
+    return 0
+
+
+def test_rawstore_run_again_has_nothing_to_move(tmp_path):
+    from gwt_fetch import cli
+    scan_once(ns(out=str(tmp_path)), None)
+    bucket = Bucket()
+    assert cli.to_bucket(tmp_path, bucket) == 0
+    assert cli.to_bucket(tmp_path, bucket) == 0   # the manifest row's file is in the bucket now, not a failure
+
+
+def test_rawstore_exits_1_when_the_bucket_does_not_confirm(tmp_path, monkeypatch, capsys):
+    from gwt_fetch import cli
+    monkeypatch.setattr(cli.rawstore_module(), "WAIT", 0)
+    monkeypatch.setattr(iiif, "run", scan_once)
+    assert cli.main(["iiif", "https://m/manifest", "--out", str(tmp_path), "--rawstore"], bucket=Bucket(keeps=False)) == 1
+    assert (tmp_path / "0001_a.jpg").exists()
+
+
+def test_rawstore_with_list_moves_nothing(tmp_path, monkeypatch):
+    from gwt_fetch import cli
+    scan_once(ns(out=str(tmp_path)), None)
+    monkeypatch.setattr(iiif, "run", lambda args, client: 0)
+    bucket = Bucket()
+    assert cli.main(["iiif", "https://m/manifest", "--out", str(tmp_path), "--list", "--rawstore"], bucket=bucket) == 0
+    assert (tmp_path / "0001_a.jpg").exists() and not bucket.objects
+
+
+def test_rawstore_without_bucket_config_stops_before_downloading(tmp_path, monkeypatch):
+    from gwt_fetch import cli
+    for k in [k for k in __import__("os").environ if k.startswith("GWT_RAWSTORE_")]:
+        monkeypatch.delenv(k)
+    monkeypatch.setenv("GWT_RAWSTORE_CONFIG", str(tmp_path / "no-config"))
+    ran = []
+    monkeypatch.setattr(iiif, "run", lambda args, client: ran.append(1) or 0)
+    with pytest.raises(SystemExit, match="missing config"):
+        cli.main(["iiif", "https://m/manifest", "--out", str(tmp_path), "--rawstore"])
+    assert not ran
+
+
+def test_store_skips_short_rawstore_lines(tmp_path):
+    bucket_row(tmp_path, "0003_x.pdf")
+    with open(tmp_path / "rawstore.tsv", "a", encoding="utf-8") as f:
+        f.write("\n")   # a blank line left by a hand edit
+    assert Store(tmp_path).find("0003_x").name == "0003_x.pdf"
+
+
+def test_rawstore_keeps_the_configured_key_prefix(tmp_path, monkeypatch):
+    from gwt_fetch import cli
+    rs = cli.rawstore_module()
+    bucket = Bucket()
+    monkeypatch.setenv("GWT_RAWSTORE_CONFIG", str(tmp_path / "no-config"))
+    monkeypatch.setenv("GWT_RAWSTORE_PREFIX", "archive/")
+    monkeypatch.setattr(rs, "store_from_config", lambda cfg: bucket)
+    monkeypatch.setattr(iiif, "run", scan_once)
+    assert cli.main(["iiif", "https://m/manifest", "--out", str(tmp_path), "--rawstore"]) == 0
+    assert [k.split("/")[0] for k in bucket.objects] == ["archive"]   # same keys as `gwt-rawstore put`
+
+
+def test_store_ignores_the_rawstore_header_and_rows_from_subfolders(tmp_path):
+    with open(tmp_path / "rawstore.tsv", "w", encoding="utf-8") as f:
+        f.write("sha256\tsize\tkey\tpath\n")
+        f.write(f"{'a' * 64}\t1\tk/0001_a.jpg\tsub/0001_a.jpg\n")   # a file in a subfolder, not this one
+    s = Store(tmp_path)
+    assert s.find("path") is None
+    assert s.find("sub/0001_a") is None

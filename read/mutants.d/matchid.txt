@@ -1,0 +1,21 @@
+# Mutations the matchid tests must catch (format: see read/mutants.txt). The last rows guard gwt_reader.get_api, the
+# outage rule every open-API source uses.
+gwt_matchid.py | PACE = {'start': 2.0, 'floor': 1.0, 'ceil': 300.0} | PACE = {'start': 2.0, 'floor': 0.2, 'ceil': 300.0} | matchID is never asked faster than its anonymous limit of one request a second
+gwt_matchid.py | return 'unknown'    # the result container renamed: a STOP | return 'none' | a matchID answer whose container changed is unknown, a STOP, never "none"
+gwt_matchid.py | if n == 0 and not r['persons']: | if not r['persons']: | a count above zero with no rows is unknown, never "none"
+gwt_matchid.py | if not isinstance(n, int) or isinstance(n, bool): | if False: | an answer with no count is unknown, never "none"
+gwt_matchid.py | if token: | if False: | $MATCHID_TOKEN is sent as a Bearer header
+gwt_matchid.py | return ', '.join(x for x in (city, country if country != 'France' or not city else '') if x) | return city | a birth or death abroad keeps its country as the place
+gwt_reader.py | if e.status == 0 or 500 <= (e.status or 0) < 600 or (wall is not None and wall(e.status, e.body or b'')): | if False: | an open API's 5xx is a block (exit 3), never an error a lane logs and moves past
+gwt_reader.py | if e.status == 0 or 500 <= (e.status or 0) < 600 or (wall is not None and wall(e.status, e.body or b'')): | if 500 <= (e.status or 0) < 600 or (wall is not None and wall(e.status, e.body or b'')): | no answer at all (a timeout, a refused connection) is a block too
+gwt_reader.py | if e.status == 0 or 500 <= (e.status or 0) < 600 or (wall is not None and wall(e.status, e.body or b'')): | if e.status == 0 or 400 <= (e.status or 0) < 600: | a 4xx (a bad request, one missing record) stays an error, never a block that pauses every lane
+gwt_reader.py |             R.gate.hit(R.lane, what) | pass | the gate hears about an outage, so every lane on the source pauses
+gwt_matchid.py | return re.sub(r'\s*-\s*', '-', str(v).strip()) if v else '' | return str(v).strip() if v else '' | a date range typed with spaces is sent without them; matchID refuses it with HTTP 400 otherwise
+gwt_reader.py | (wall is not None and wall(e.status, e.body or b'')) | False | a source's own refusal that means "stop" (matchID's spent quota) is a block too
+gwt_matchid.py | return status == 422 and b'usage expired' in (body or b'').lower() | return False | matchID's spent anonymous quota (HTTP 422) pauses every lane, never an error a lane moves past
+gwt_reader.py | why = ': %s' % why if why else '' | why = '' | an API's error answer says why in the STOP text ("invalid birthDate value"), not only "the site answered an error"
+gwt_matchid.py | if not r['persons'] and offset >= n: | if False: | a matchID page past the last row is the end of the results (exit 2), never a STOP
+gwt_matchid.py | off = (max(1, int(a.page)) - 1) * max(1, min(int(a.count), 100)) | off = 0 | the search tells the verdict where its page starts, so the last page reads as the end
+gwt_matchid.py | x.get('id') and isinstance(x.get('name'), dict) | x.get('id') | a row whose name is no longer an object is unknown, a STOP
+gwt_matchid.py | status == 422 and b'usage expired' | b'usage expired' | only the 422 of a spent quota is a wall; another status with those words stays an error
+gwt_reader.py | if e.verdict != 'http': | if False: | a Stop that Reader.get already judged (a wall it told the gate about) is passed on as is, never counted twice

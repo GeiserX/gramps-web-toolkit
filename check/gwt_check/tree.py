@@ -59,7 +59,8 @@ class BadInput(Exception):
 
 
 class Tree:
-    def __init__(self, data: dict[str, list[dict]], *, partial: bool = False, source: str = ""):
+    def __init__(self, data: dict[str, list[dict]], *, partial: bool = False, source: str = "",
+                 media_status: dict | None = None):
         self.objs: dict[str, dict[str, dict]] = {}
         for t in TYPES:
             rows = data.get(t)
@@ -72,6 +73,8 @@ class Tree:
         self.tree_id: str | None = None  # the tree the file says it was read from
         self.read_started: int | None = None  # Unix time the read began, to compare with change stamps
         self.read_started_guessed = False  # True when worked out from dumped_at or taken minus READ_MARGIN
+        # what the server said about each media object's file, kept beside the objects: {handle: {...}}
+        self.media_status: dict[str, dict] = media_status or {}
 
     def gid(self, t: str, handle: str) -> str:
         o = self.objs[t].get(handle)
@@ -127,7 +130,8 @@ def load(path: str) -> Tree:
             raise BadInput(f"{path}: a gwt-apply snapshot without {', '.join(missing)}; take a new one")
         data = {t: data["objects"].get(cls) for cls, t in APPLY_CLASSES.items()}
     data = data.get("objects", data)
-    tree = Tree(data, source=path)
+    status = meta.get("media_status")
+    tree = Tree(data, source=path, media_status=status if isinstance(status, dict) else None)
     tree.tree_id = meta.get("tree")
     tree.read_started, tree.read_started_guessed = _read_started(meta)
     return tree

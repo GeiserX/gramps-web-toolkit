@@ -40,3 +40,9 @@ gwt_rawstore_doctor.py | except (FileNotFoundError, subprocess.TimeoutExpired) a
 gwt_rawstore_doctor.py | raise CannotRun('git is not installed') from None | raise | no git exits 2
 gwt_rawstore_doctor.py | head[:4] == b'MIDX' | True | a file that is not a midx covers no pack
 gwt_rawstore_doctor.py | if os.path.isdir(chain): | if False: | an incremental midx chain counts its packs
+gwt_rawstore.py | m.add_argument('--evict', action='store_true' | m.add_argument('--evict-later', action='store_true' | gwt-rawstore migrate takes --evict from the command line
+gwt_rawstore.py | if failures: | if False: | migrate --evict deletes and untracks nothing when an upload fails
+gwt_rawstore.py | f.write(('\n' if text and not text.endswith('\n') else '') + | f.write('' + | a new ignore pattern never joins the last line of a .gitignore that has no final newline
+gwt_rawstore.py | - set(text.splitlines())) | ) | a second migrate does not repeat an ignore pattern
+gwt_rawstore.py | *(':(literal)' + n for n in | *(n for n in | migrate untracks a scan whose name git would read as a pathspec pattern or magic
+gwt_rawstore.py | for i in range(0, len(names), GIT_BATCH): | for i in range(0, len(names), len(names)): | migrate passes names to git rm in batches, so a big folder stays under the argument limit

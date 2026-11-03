@@ -1,0 +1,14 @@
+﻿0 HEAD
+1 SOUR OPENARCH
+2 NAME Open Archieven
+1 GEDC
+2 VERS 7.0
+0 @I1@ INDI
+1 NAME Pieter /Velderhoek/
+2 GIVN Pieter
+2 SURN Velderhoek
+1 SEX M
+0 @I2@ INDI
+1 NAME Maaike /van Brunsveld/
+1 SEX F
+0 TRLR

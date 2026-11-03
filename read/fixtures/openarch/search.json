@@ -1,0 +1,57 @@
+{
+ "query": {
+  "name": "Velderhoek 1850-1860",
+  "only_results_with_scans": false,
+  "start": 0,
+  "number_show": 25,
+  "sort": 1,
+  "language": "en"
+ },
+ "response": {
+  "number_found": 2,
+  "docs": [
+   {
+    "pid": "Person:0f1e2d3c-0000-4000-8000-00000000a001",
+    "identifier": "0f1e2d3c-0000-4000-8000-00000000a001",
+    "archive_code": "zzarch",
+    "archive_org": "Gemeentearchief Nortdam",
+    "archive": "Nortdam Municipal Archives",
+    "personname": "Pieter Velderhoek",
+    "relationtype": "Groom",
+    "_relationtype": "Bruidegom",
+    "eventtype": "Marriage",
+    "_eventtype": "Huwelijk",
+    "eventdate": {
+     "day": 3,
+     "month": 5,
+     "year": 1856
+    },
+    "eventplace": [
+     "Nortdam"
+    ],
+    "sourcetype": "Civil registration marriages",
+    "url": "https://www.openarchieven.nl/zzarch:0f1e2d3c-0000-4000-8000-00000000a001/en"
+   },
+   {
+    "pid": "Person:0f1e2d3c-0000-4000-8000-00000000a002",
+    "identifier": "0f1e2d3c-0000-4000-8000-00000000a002",
+    "archive_code": "zzarch",
+    "archive_org": "Gemeentearchief Nortdam",
+    "archive": "Nortdam Municipal Archives",
+    "personname": "Jan Velderhoek",
+    "relationtype": "Father",
+    "_relationtype": "Vader",
+    "eventtype": "Birth",
+    "_eventtype": "Geboorte",
+    "eventdate": {
+     "year": 1859
+    },
+    "eventplace": [
+     "Zuidwold"
+    ],
+    "sourcetype": "Civil registration births",
+    "url": "https://www.openarchieven.nl/zzarch:0f1e2d3c-0000-4000-8000-00000000a002/en"
+   }
+  ]
+ }
+}

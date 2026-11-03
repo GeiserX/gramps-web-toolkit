@@ -1,0 +1,7 @@
+{"tree": "example", "objects": {
+ "places": [], "citations": [], "sources": [], "repositories": [], "media": [], "tags": [],
+ "people": [
+  {"handle": "h0001", "gramps_id": "I0001", "gender": 0, "primary_name": {"first_name": "Ana", "surname_list": [{"surname": "Example", "primary": true}]}, "note_list": [], "person_ref_list": []},
+  {"handle": "h0002", "gramps_id": "I0002", "gender": 0, "primary_name": {"first_name": "Jane", "surname_list": [{"surname": "Doe", "primary": true}]}, "note_list": [], "person_ref_list": []}
+ ],
+ "families": [], "events": [], "notes": []}}
