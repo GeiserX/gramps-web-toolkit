@@ -376,6 +376,14 @@ class DigestTest(unittest.TestCase):
         self.assertIn('Lena &lt;x&gt; &amp; Co', out)
         self.assertIn('<a href="https://g.example.org/?t=1&amp;u=2/person/I12">', out)
 
+    def test_a_link_already_in_the_item_text_is_not_repeated(self):
+        # a citation whose page text already carries the act's url: the digest shows the url once, not twice
+        old, new = R.load(OLD), R.load(NEW)
+        new['citations']['hC7'] = dict(new['citations']['hC1'], handle='hC7', gramps_id='C7',
+                                       page='see https://archive.example.org/b/7.')
+        out = R.render(new, R.digest(old, new), '', 'en', 'md')
+        self.assertEqual(out.count('https://archive.example.org/b/7'), 1)  # once, in the page text, not again as a link
+
     def test_who_owns_what(self):
         old, new = R.load(OLD), R.load(NEW)
         # a family event belongs to both spouses; a citation on a parent link belongs to the child alone

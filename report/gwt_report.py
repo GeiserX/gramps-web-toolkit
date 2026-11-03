@@ -634,8 +634,11 @@ def render(T, groups, base, lang, fmt, since=''):
         lines.append(person_head % (esc(head), ' ' + link(url) if url else ''))
         for it in g['items']:
             text = it['text'] + (' [weak]' if it['weak'] else '')
-            lines.append('- ' + ' '.join([esc(text)] + [link(u) for u in [web_url(base, it['type'], it['id'])]
-                                                         + it['urls'] if u]))
+            shown = []  # a link already in the item's own text (e.g. in a citation's page) is not repeated
+            for u in [web_url(base, it['type'], it['id'])] + it['urls']:
+                if u and u not in text and u not in shown:
+                    shown.append(u)
+            lines.append('- ' + ' '.join([esc(text)] + [link(u) for u in shown]))
     cut = sum(1 for g in groups if g.get('truncated'))
     if cut:
         lines.append(note_line % esc('kin paths were cut at %d per person for %d of these people: a more distant '
