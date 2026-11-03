@@ -1,0 +1,21 @@
+{
+ "total": 2,
+ "hits": 2,
+ "offset": 0,
+ "facets": [
+  {
+   "name": "ObjectType",
+   "values": [
+    {
+     "value": "Record",
+     "hits": 2
+    }
+   ]
+  }
+ ],
+ "records": [
+  {
+   "id": "ZZvolume0001"
+  }
+ ]
+}
