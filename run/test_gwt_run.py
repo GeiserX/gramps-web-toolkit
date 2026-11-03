@@ -474,7 +474,8 @@ def test_a_signal_on_gwt_run_ends_the_step_it_runs(tmp_path, server, sig):
     assert proc.wait(timeout=20) == 128 + sig
     st = state(lst)
     assert st["steps"]["backup"]["status"] == "stopped" and st["status"] == "stopped"
-    ps = subprocess.run(["ps", "-axo", "command"], capture_output=True, text=True).stdout
+    # ww: the whole command line; Linux ps cuts it at 80 columns in a pipe, and then the path never matches
+    ps = subprocess.run(["ps", "-axww", "-o", "command"], capture_output=True, text=True).stdout
     assert str(lst) not in ps  # no gwt-apply left reading (or writing) on its own
 
 
