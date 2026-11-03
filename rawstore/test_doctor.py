@@ -112,7 +112,7 @@ class Clean(Base):
         """A non-UTF-8 name read from git is printed with U+FFFD, never as a lone surrogate that crashes print()."""
         report = {'repo': self.repo, 'git': '2.54.0', 'partial_clone': False, 'findings': 1,
                   'checks': [{'check': 'binaries', 'level': 'warn', 'message': 'arch\udcff/ 2.0 MB',
-                              'fix': 'gwt-rawstore migrate arch\udcff --remove'}]}
+                              'fix': 'gwt-rawstore migrate arch\udcff --evict'}]}
         out = []
         with mock.patch.object(D, 'doctor', return_value=report):
             D.main(argparse.Namespace(repo=self.repo, json=False, max_packs=1, max_tmp_gb=1, max_binary_gb=1),
@@ -191,7 +191,7 @@ class Findings(Base):
         c = by_check(self.doctor(max_binary_gb=TINY))['binaries'][0]
         self.assertEqual(c['level'], 'warn')
         self.assertIn('1 tracked binaries', c['message'])
-        self.assertIn('gwt-rawstore migrate raw --remove', c['fix'])
+        self.assertIn('gwt-rawstore migrate raw --evict', c['fix'])
         self.assertFalse(by_check(self.doctor(max_binary_gb=0.0000021))['binaries'][0]['level'] == 'warn')
 
     def test_big_scratch_folder(self):
@@ -262,7 +262,7 @@ class FixCommands(Base):
                 self.assertNotIn('(', c['fix'], c)
         fixes = {c['check']: c['fix'] for c in rep['checks']}
         self.assertEqual(fixes['packs'], 'git repack --geometric=2 -d && git multi-pack-index write')
-        self.assertEqual(shlex.split(fixes['binaries']), ['gwt-rawstore', 'migrate', 'My Scans', '--remove'])
+        self.assertEqual(shlex.split(fixes['binaries']), ['gwt-rawstore', 'migrate', 'My Scans', '--evict'])
         tm = [shlex.split(x) for x in fixes['time-machine'].split(' && ')]
         self.assertIn(['tmutil', 'addexclusion', os.path.join(self.repo, 'tmp')], tm)
         self.assertIn(['tmutil', 'addexclusion', os.path.join(self.repo, 'My Scans')], tm)   # big binary folder

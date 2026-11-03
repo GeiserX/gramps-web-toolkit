@@ -187,7 +187,7 @@ def doctor(repo='.', max_packs=PACKS, max_tmp_gb=TMP_GB, max_binary_gb=BINARY_GB
     if binary_total > max_binary_gb * GB:
         add('binaries', 'warn', '%d tracked binaries, %s (%s); after migrating, commit the rawstore.tsv files'
             % (binary_files, gb(binary_total), named),
-            ' && '.join('gwt-rawstore migrate %s --remove' % shlex.quote(f) for f, _ in biggest))
+            ' && '.join('gwt-rawstore migrate %s --evict' % shlex.quote(f) for f, _ in biggest))
     else:
         add('binaries', 'ok', '%d tracked binaries, %s' % (binary_files, gb(binary_total)))
 
