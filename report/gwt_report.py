@@ -351,7 +351,7 @@ DIGEST_I18N = {
         'not_attached': 'no ligado a una persona',
         'path_line': '(camino: confirmados %d, probables %d, débiles %d, sin marcar %d)',
         'new_person': 'persona nueva: %s', 'born': ', n. %s', 'new_event': 'evento nuevo: ', 'event': 'evento',
-        'new_citation': 'cita nueva: ', 'confidence': 'confianza %s', 'new_media': 'medio nuevo: ',
+        'new_citation': 'cita nueva: ', 'confidence': 'confianza %s', 'new_media': 'archivo nuevo: ',
         'weak_mark': '[débil]',
         'cut_note': ('los caminos de parentesco se cortaron en %d por persona para %d de estas personas: '
                      'puede faltar una relación más lejana, o la única'),
@@ -363,7 +363,7 @@ DIGEST_I18N = {
         'side_not_kin': 'sans lien de parenté', 'side_other': 'autres',
         'not_attached': 'non rattaché à une personne',
         'path_line': '(chemin : confirmés %d, probables %d, faibles %d, non marqués %d)',
-        'new_person': 'nouvelle personne : %s', 'born': ', n. %s', 'new_event': 'nouvel événement : ', 'event': 'événement',
+        'new_person': 'nouvelle personne : %s', 'born': ', ° %s', 'new_event': 'nouvel événement : ', 'event': 'événement',
         'new_citation': 'nouvelle citation : ', 'confidence': 'confiance %s', 'new_media': 'nouveau média : ',
         'weak_mark': '[faible]',
         'cut_note': ('les chemins de parenté ont été coupés à %d par personne pour %d de ces personnes : '

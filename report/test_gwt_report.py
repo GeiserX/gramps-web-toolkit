@@ -388,6 +388,7 @@ class DigestTest(unittest.TestCase):
         # label before number, so a count of 1 reads right
         self.assertIn('(camino: confirmados 0, probables 0, débiles 1, sin marcar 2)', out)
         self.assertNotIn('new person', out)
+        self.assertIn('- archivo nuevo: Register page 12', out)
 
     def test_untyped_event_word_follows_lang(self):
         old, new = R.load(OLD), R.load(NEW)
@@ -397,6 +398,13 @@ class DigestTest(unittest.TestCase):
         self.assertTrue(R.describe(new, 'events', ev, 'es').startswith('evento nuevo: evento, '))
         self.assertTrue(R.describe(new, 'events', ev, 'fr').startswith('nouvel événement : événement, '))
         self.assertTrue(R.describe(new, 'events', ev).startswith('new event: event, '))
+
+    def test_born_mark_per_lang(self):
+        T = {'events': {'hE': {'date': {'year': 1901}}}}
+        p = {'primary_name': {'first_name': 'Ada'}, 'event_ref_list': [{'ref': 'hE'}], 'birth_ref_index': 0}
+        self.assertEqual(R.describe(T, 'people', p, 'fr'), 'nouvelle personne : Ada, ° 1901')
+        self.assertEqual(R.describe(T, 'people', p, 'es'), 'persona nueva: Ada, n. 1901')
+        self.assertEqual(R.describe(T, 'people', p), 'new person: Ada, born 1901')
 
     def test_french_digest_strings_and_english_default(self):
         out = self.digest('--root', 'I1', '--lang', 'fr')
