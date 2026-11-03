@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import sys
 from datetime import datetime, timezone
 
 from .client import NAMESPACE, ApiError, Client
@@ -27,11 +28,14 @@ CHUNK = 100  # handles per read of changed objects
 
 def save(client: Client, path: str) -> dict[str, int]:
     """Read every object of the tree, page by page, into a new gzip file. Returns counts per class."""
+    started = datetime.now(timezone.utc)
     objects: dict[str, list[dict]] = {}
     for cls, ns in NAMESPACE.items():
         rows: list[dict] = []
         page = 1
         while True:
+            # one line per page before it is read: a read that hangs names the page it hangs on
+            print(f"snapshot: GET /{ns}/ page {page} ({len(rows)} {cls} so far)", file=sys.stderr, flush=True)
             r = client._request("GET", f"/{ns}/", params={"page": page, "pagesize": PAGE})
             if r.status_code != 200:
                 raise ApiError(f"GET {cls} page {page}: HTTP {r.status_code}", r.status_code)
@@ -41,7 +45,7 @@ def save(client: Client, path: str) -> dict[str, int]:
                 break
             page += 1
         objects[cls] = rows
-    _write(path, client.tree, datetime.now(timezone.utc), objects)
+    _write(path, client.tree, datetime.now(timezone.utc), objects, started)
     return {cls: len(rows) for cls, rows in objects.items()}
 
 
@@ -55,6 +59,7 @@ def refresh(client: Client, old: dict, path: str) -> dict[str, tuple[int, int, i
     objects: dict[str, list[dict]] = {}
     counts = {}
     for cls, ns in NAMESPACE.items():
+        print(f"snapshot: GET /{ns}/ change stamps", file=sys.stderr, flush=True)
         r = client._request("GET", f"/{ns}/", params={"keys": "handle,change"})
         if r.status_code != 200:
             raise ApiError(f"GET {cls} list: HTTP {r.status_code}", r.status_code)
@@ -70,12 +75,14 @@ def refresh(client: Client, old: dict, path: str) -> dict[str, tuple[int, int, i
         # a stale object the second read did not return was deleted in between
         objects[cls] = [fresh[h] if h in fresh else then[h] for h in now if h in fresh or h not in stale]
         counts[cls] = (len(objects[cls]), len(fresh), len(set(then) - set(now)))
-    _write(path, client.tree, taken, objects)
+    _write(path, client.tree, taken, objects, taken)
     return counts
 
 
-def _write(path: str, tree: str | None, taken: datetime, objects: dict[str, list[dict]]) -> None:
-    data = {"format": FORMAT, "tree": tree, "taken": taken.isoformat(timespec="seconds"), "objects": objects}
+def _write(path: str, tree: str | None, taken: datetime, objects: dict[str, list[dict]], started: datetime) -> None:
+    # read_started: Unix time the read began, as in a gwt-check dump, so `gwt-check --from` need not guess it
+    data = {"format": FORMAT, "tree": tree, "taken": taken.isoformat(timespec="seconds"),
+            "read_started": int(started.timestamp()), "objects": objects}
     with gzip.open(path, "xt", encoding="utf-8") as fh:  # never over another snapshot
         json.dump(data, fh, ensure_ascii=False)
 
