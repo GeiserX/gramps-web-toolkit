@@ -34,8 +34,6 @@ A test that passes whether or not the code works proves nothing. So:
 - Behaviour that changes updates the tool's page under `docs/` in the same pull request.
 - Every change reaches `main` with green CI. Do not force push a branch someone is reviewing.
 
-Pull requests written with an AI agent are welcome. Say so in the description, and have a person read the whole diff and the description before posting. Do not add AI attribution trailers or "Generated with" lines to commits.
-
 ## Privacy
 
 Family trees hold real people, many of them alive. The rules:

@@ -19,4 +19,3 @@
 <!-- For each new test: the line it guards, and the test failing with that line removed (paste the red output). -->
 
 - [ ] One concern, branched from `main`, not stacked on another pull request
-- [ ] Written with an AI agent: yes / no. If yes, a person read the whole diff and this description
