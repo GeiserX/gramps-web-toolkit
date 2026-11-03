@@ -115,6 +115,6 @@ locales = ["es", "en"]               # dedication abbreviations from these table
 
 ## Proving the rules
 
-Each rule's mutant is built from your saved records, so `--prove` shows the rule can still go red on them: quote quotes a saved field with one accent changed, principal cites a parent's or godparent's persona, role calls a persona by a role the record does not give it, and placement puts a baptism on a new town. A folder with no persona that is not a principal cannot prove principal or role.
+Each rule's mutant is built from your saved records, so `--prove` shows the rule can still go red on them: quote quotes a saved field with one accent changed, principal cites a parent's or godparent's persona, role calls a persona by a role the record does not give it, and placement puts a baptism on a new town. A folder with no persona that is not a principal cannot prove principal or role, and with no saved records only placement can be proved.
 
 The tests use invented records in [lint/fixtures/evidence](https://github.com/GeiserX/gramps-web-toolkit/tree/main/lint/fixtures/evidence), written by `make_fixtures.py` there. Every name, place and ark in them is made up.
