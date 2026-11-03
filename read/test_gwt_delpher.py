@@ -1,7 +1,7 @@
 """Tests for `gwt-read delpher`. Answers in fixtures/delpher/ keep the SRU API's shape with invented newspapers and
 people; a fake transport and a fake gate: no request leaves this machine. Run: cd read && python3 -m pytest -q
 test_gwt_delpher.py"""
-import contextlib, io, json, os, unittest, urllib.parse
+import contextlib, io, json, os, shutil, unittest, urllib.parse
 
 from test_gwt_read import Base, FakeGate, FakeNet
 import gwt_delpher  # noqa: E402
@@ -140,14 +140,16 @@ class Search(Base):
             self.assertEqual((net.requests, gate.hits), ([], []), extra)
 
     def test_one_article_without_ocr_keeps_the_other_rows(self):
-        gate = FakeGate()
-        net = FakeNet(gate, (200, SEARCH), (404, b'not found'), (200, OCR))
-        code, lines, text = self.search(net, gate)
-        self.assertEqual(code, 0, text)
-        a, b = json.load(open(lines['candidates']))['candidates']
-        self.assertEqual((a['text'], a['ocr_status']), ('', 404))
-        self.assertIn('ANNA ZORVAAL', b['text'])
-        self.assertEqual(lines['results'], '2 total, 2 read, 1 with text')
+        for status in (404, 410):
+            shutil.rmtree(self.cache, ignore_errors=True)
+            gate = FakeGate()
+            net = FakeNet(gate, (200, SEARCH), (status, b'not found'), (200, OCR))
+            code, lines, text = self.search(net, gate)
+            self.assertEqual(code, 0, text)
+            a, b = json.load(open(lines['candidates']))['candidates']
+            self.assertEqual((a['text'], a['ocr_status']), ('', status))
+            self.assertIn('ANNA ZORVAAL', b['text'])
+            self.assertEqual(lines['results'], '2 total, 2 read, 1 with text')
 
     def test_a_busy_ocr_request_stops_the_run(self):
         # only a 404 or 410 means one article has no text; a 429 or 5xx on the resolver is a block

@@ -14,3 +14,5 @@ gwt_kramerius.py |                     'iiif': lib['host'] + lib['iiif'] % pid i
 gwt_kramerius.py |         date = iso_date(str(d.get(f['date']) or '')) |         date = str(d.get(f['date']) or '') | a dd.mm.yyyy date is given as ISO, as the other sources give it
 gwt_kramerius.py | library=a.library, total=doc['response']['numFound'], | library=a.library, | the evidence file says Solr's total, as the other sources do
 gwt_kramerius.py | dest='year_to', type=int, default=None | dest='year_to', default=None | a year that is not a number is refused before any request
+gwt_kramerius.py | dest='year_from', type=int, default=None | dest='year_from', default=None | a --from that is not a number is refused before any request, never a traceback
+gwt_kramerius.py | if e.verdict == 'http' and 'bad request' in why.lower(): | if 'bad request' in why.lower(): | a 429 is a wall whatever its body says, never a query error that leaves the gate unpaused

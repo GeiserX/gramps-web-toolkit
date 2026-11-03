@@ -18,3 +18,4 @@ gwt_delpher.py |                 if e.verdict != 'http' or e.status not in (404,
 gwt_delpher.py | dest='year_from', type=int, default=None | dest='year_from', default=None | a year that is not a number is refused before any request
 gwt_delpher.py | dest='year_to', type=int, default=None | dest='year_to', default=None | a --to that is not a number is refused before any request
 gwt_delpher.py | if e.verdict != 'http' or e.status not in (404, 410): | if e.verdict not in ('http', 'wall'): | a 429 or 5xx on an article's OCR is a block, never an article without text
+gwt_delpher.py | e.status not in (404, 410) | e.status not in (404,) | a 410 on one article's OCR, like a 404, leaves that row without text and keeps the others

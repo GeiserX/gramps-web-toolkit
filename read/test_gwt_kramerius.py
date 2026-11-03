@@ -107,8 +107,9 @@ class Search(Base):
     def test_a_year_that_is_not_a_number_is_refused_before_any_request(self):
         gate = FakeGate()
         net = FakeNet(gate)
-        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            self.search(net, gate, '--to', '19x')
+        for flag in ('--from', '--to'):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit, msg=flag):
+                self.search(net, gate, flag, '19x')
         self.assertEqual(net.requests, [])
 
     def test_none_is_exit_2(self):
@@ -128,6 +129,11 @@ class Search(Base):
                                         gate)
         self.assertEqual((code, gate.hits, self.out_files()), (gwt_reader.EXIT_ERROR, [], []), text)
         self.assertIn('could not read the query', text)
+
+    def test_a_429_is_a_wall_whatever_its_body_says(self):
+        gate = FakeGate()
+        code, lines, text = self.search(FakeNet(gate, (429, b'{"message": "Bad Request"}')), gate)
+        self.assertEqual((code, len(gate.hits)), (gwt_reader.EXIT_WALL, 1), text)
 
     def test_any_other_5xx_is_an_outage(self):
         gate = FakeGate()

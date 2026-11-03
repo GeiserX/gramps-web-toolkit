@@ -13,3 +13,4 @@ gwt_trove.py |         q = '(%s) date:[%s-01-01T00:00:00Z TO %s-12-31T23:59:59Z]
 gwt_trove.py |         if e.verdict != 'dead': |         if True: | a 401 says the API key was refused and how to end the pause, not "session token"
 gwt_trove.py | dest='year_from', type=int, default=None | dest='year_from', default=None | a year that is not a number is refused before any request
 gwt_trove.py | `gwt gate --dir ~/.cache/gwt-gate-trove clear "new key"` | `gwt gate clear --dir ~/.cache/gwt-gate-trove "new key"` | the 401 message prints a gate command that runs as written (--dir before the subcommand)
+gwt_trove.py | dest='year_to', type=int, default=None | dest='year_to', default=None | a --to that is not a number is refused before any request

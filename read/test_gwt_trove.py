@@ -122,8 +122,9 @@ class Search(Base):
     def test_a_year_that_is_not_a_number_is_refused_before_any_request(self):
         gate = FakeGate()
         net = FakeNet(gate)
-        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            self.search(net, gate, '--from', '18x0')
+        for flag in ('--from', '--to'):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit, msg=flag):
+                self.search(net, gate, flag, '18x0')
         self.assertEqual(net.requests, [])
 
     def test_none_is_exit_2(self):
