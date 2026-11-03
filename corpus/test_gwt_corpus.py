@@ -385,6 +385,18 @@ class SweepTest(Base):
         self.assertNotIn('\tpair\t', out)  # «de la Torre» is one surname: no pair «la torre»
         self.assertNotIn('k-juan', out)  # on 8 pages: too common to be a lead
         self.assertIn('1 too common', err)
+        # listing one hit per phrase still counts every page before it calls a phrase rare
+        code, out, err = self.sweep('--names', names, '--control', 'Ana Ibarrola Zubiri', '--limit', '1')
+        self.assertNotIn('k-juan', out)
+        self.assertIn('1 too common', err)
+
+    def test_a_sweep_that_finds_nobody_exits_1(self):
+        names = os.path.join(self.dir, 'n.tsv')
+        with open(names, 'w', encoding='utf-8') as f:
+            f.write('key\tgiven\tsurname\nk-absent\tElena\tZubiri Calvo\n')
+        code, out, err = self.sweep('--names', names, '--control', 'Ana Ibarrola Zubiri')
+        self.assertEqual(code, 1, err)
+        self.assertIn('0 of 2 phrases found', err)
 
     def test_a_short_row_is_bad_input(self):
         names = os.path.join(self.dir, 'n.tsv')
@@ -485,6 +497,14 @@ class XrefTest(unittest.TestCase):
         code, out, _ = run('xref', book, '--dump', tree, '--format', 'tsv')
         self.assertIn('name\tT1', out)
         self.assertIn('pair\tT1', out)
+
+    def test_one_match_per_person_and_page(self):
+        tree = self.tree(('Juan', 'García Olmedo', 'Villazul'))
+        book = self.write('book.txt', 'Juan García Olmedo, vecino de Villazul.')
+        code, out, _ = run('xref', book, '--dump', tree, '--format', 'tsv')
+        self.assertEqual(code, 0)
+        rows = [l.split('\t') for l in out.splitlines()[1:]]
+        self.assertEqual([(r[0], r[1], r[3]) for r in rows], [('name', 'T1', '1')])  # name, pair and place: one row
 
     def test_a_two_word_name_on_many_pages_is_no_lead(self):
         tree = self.tree(('Juan', 'Smith', ''), ('Mary', 'Smith', ''))

@@ -47,3 +47,6 @@ gwt_corpus.py |         raise BadInput('--dump %s: not a gwt-check dump (no obje
 gwt_corpus.py |             r['label'] = r['label'] or ('%s %s' % (r['given'], r['surname'])).strip() |             pass | a names row with an empty label is labelled with the name
 gwt_corpus.py | evidence='%s%s' % (first[2] or first[3], | evidence='%s%s' % ('', | a sweep lead names the URL or file to read
 gwt_corpus.py | fcntl.flock(lock, | (lock, | a second update exits 2 while the first holds the lock
+gwt_corpus.py | return EXIT_HITS if hits else EXIT_NONE | return EXIT_HITS | a sweep that finds nobody exits 1, never success
+gwt_corpus.py | None, max(a.limit, a.max_pages + 1)) | None, a.limit) | a sweep with a small --limit still counts the pages of a two-word phrase before it calls it rare
+gwt_corpus.py | if i not in done: | if True: | xref gives at most one match per person and page
