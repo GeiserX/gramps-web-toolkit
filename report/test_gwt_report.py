@@ -414,8 +414,12 @@ class DigestTest(unittest.TestCase):
             for k, v in table.items():
                 self.assertEqual(re.findall(r'%[ds]', v), re.findall(r'%[ds]', en[k]), (lang, k))
         self.assertLessEqual(set(R.SIDE_KEY.values()), set(en))
+        for side, k in R.SIDE_KEY.items():  # English side headings stay the side names
+            self.assertEqual(en[k], side)
         with self.assertRaises(KeyError):  # no silent English for a language without a table
             R.s('de', 'title')
+        with self.assertRaises(KeyError):  # a side with no heading raises, never prints as "other"
+            R.render({}, [{'side': 'cousins', 'person': None, 'items': [], 'truncated': False}], '', 'es', 'md')
 
     def test_empty_unattached_and_cut_lines_follow_lang(self):
         g = [{'side': 'other', 'person': None, 'items': [], 'truncated': True}]
