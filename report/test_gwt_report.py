@@ -368,13 +368,78 @@ class DigestTest(unittest.TestCase):
     def test_html_uses_only_inline_tags_chat_apps_take(self):
         out = self.digest('--root', 'I1', '--format', 'html', '--base-url', 'https://g.example.org', '--lang', 'es')
         self.assertIn('<b>Lena Gale (I12), prima hermana</b> <a href="https://g.example.org/person/I12">', out)
-        self.assertIn("<b><u>father's side</u></b>", out)
+        self.assertIn('<b><u>rama paterna</u></b>', out)
         self.assertLessEqual(set(re.findall(r'</?([a-z0-9]+)', out)), {'b', 'u', 'i', 'a'})
         old, new = R.load(OLD), R.load(NEW)
         new['people']['hI12']['primary_name']['first_name'] = 'Lena <x> & Co'
         out = R.render(new, R.digest(old, new), 'https://g.example.org/?t=1&u=2', 'en', 'html')
         self.assertIn('Lena &lt;x&gt; &amp; Co', out)
         self.assertIn('<a href="https://g.example.org/?t=1&amp;u=2/person/I12">', out)
+
+    def test_spanish_digest_strings(self):
+        out = self.digest('--root', 'I1', '--lang', 'es')
+        self.assertIn('# Novedades en el árbol desde el ', out)
+        self.assertIn('## rama paterna', out)
+        self.assertIn('## rama materna', out)
+        self.assertIn('## sin parentesco de sangre', out)
+        self.assertIn('- evento nuevo: Baptism, 1890, Greenford', out)
+        self.assertIn('- cita nueva: Greenford parish register, folio 12, confianza 3', out)
+        self.assertIn('- persona nueva: Rosa Pine [débil]', out)
+        # label before number, so a count of 1 reads right
+        self.assertIn('(camino: confirmados 0, probables 0, débiles 1, sin marcar 2)', out)
+        self.assertNotIn('new person', out)
+        self.assertIn('- archivo nuevo: Register page 12', out)
+
+    def test_untyped_event_word_follows_lang(self):
+        old, new = R.load(OLD), R.load(NEW)
+        ev = next(o for o in new['events'].values() if o.get('gramps_id') not in
+                  {x.get('gramps_id') for x in old['events'].values()})
+        ev['type'] = ''
+        self.assertTrue(R.describe(new, 'events', ev, 'es').startswith('evento nuevo: evento, '))
+        self.assertTrue(R.describe(new, 'events', ev, 'fr').startswith('nouvel événement : événement, '))
+        self.assertTrue(R.describe(new, 'events', ev).startswith('new event: event, '))
+
+    def test_born_mark_per_lang(self):
+        T = {'events': {'hE': {'date': {'year': 1901}}}}
+        p = {'primary_name': {'first_name': 'Ada'}, 'event_ref_list': [{'ref': 'hE'}], 'birth_ref_index': 0}
+        self.assertEqual(R.describe(T, 'people', p, 'fr'), 'nouvelle personne : Ada, ° 1901')
+        self.assertEqual(R.describe(T, 'people', p, 'es'), 'persona nueva: Ada, n. 1901')
+        self.assertEqual(R.describe(T, 'people', p), 'new person: Ada, born 1901')
+
+    def test_digest_strings_cover_every_lang_and_key(self):
+        self.assertEqual(set(R.DIGEST_I18N), set(R.NAMERS))
+        en = R.DIGEST_I18N['en']
+        for lang, table in R.DIGEST_I18N.items():
+            self.assertEqual(set(table), set(en), lang)
+            for k, v in table.items():
+                self.assertEqual(re.findall(r'%[ds]', v), re.findall(r'%[ds]', en[k]), (lang, k))
+        self.assertLessEqual(set(R.SIDE_KEY.values()), set(en))
+        for side, k in R.SIDE_KEY.items():  # English side headings stay the side names
+            self.assertEqual(en[k], side)
+        with self.assertRaises(KeyError):  # no silent English for a language without a table
+            R.s('de', 'title')
+        with self.assertRaises(KeyError):  # a side with no heading raises, never prints as "other"
+            R.render({}, [{'side': 'cousins', 'person': None, 'items': [], 'truncated': False}], '', 'es', 'md')
+
+    def test_empty_unattached_and_cut_lines_follow_lang(self):
+        g = [{'side': 'other', 'person': None, 'items': [], 'truncated': True}]
+        es, fr = R.render({}, g, '', 'es', 'text'), R.render({}, g, '', 'fr', 'text')
+        self.assertIn('### no ligado a una persona', es)
+        self.assertIn('(los caminos de parentesco se cortaron en %d por persona para 1 ' % R.MAX_PATHS, es)
+        self.assertIn('### non rattaché à une personne', fr)
+        self.assertIn('(les chemins de parenté ont été coupés à %d par personne pour 1 ' % R.MAX_PATHS, fr)
+        self.assertIn('Nada nuevo.', R.render({}, [], '', 'es', 'text'))
+        self.assertIn('Rien de nouveau.', R.render({}, [], '', 'fr', 'text'))
+
+    def test_french_digest_strings_and_english_default(self):
+        out = self.digest('--root', 'I1', '--lang', 'fr')
+        self.assertIn("## côté paternel", out)
+        self.assertIn('- nouvelle personne : Rosa Pine [faible]', out)
+        self.assertIn('confiance 3', out)
+        self.assertIn('(chemin : confirmés 0, probables 0, faibles 1, non marqués 2)', out)
+        out = self.digest('--root', 'I1')
+        self.assertIn("## father's side", out)
+        self.assertIn('- new person: Rosa Pine [weak]', out)
 
     def test_a_link_already_in_the_item_text_is_not_repeated(self):
         # a citation whose page text already carries the act's url: the digest shows the url once, not twice
