@@ -1,0 +1,23 @@
+{"tree": "example", "dumped_at": "2026-01-10T00:00:00Z", "objects": {
+ "people": [
+  {"handle": "h1", "gramps_id": "EX1", "primary_name": {"first_name": "José", "surname_list": [{"surname": "Olmedo"}, {"surname": "Quiroga"}]},
+   "event_ref_list": [{"ref": "e1", "role": "Primary"}], "birth_ref_index": 0, "death_ref_index": -1},
+  {"handle": "h2", "gramps_id": "EX2", "primary_name": {"first_name": "Lucía", "surname_list": [{"surname": "Valverde Ortega"}]},
+   "event_ref_list": [{"ref": "e2", "role": "Primary"}], "birth_ref_index": -1, "death_ref_index": 0},
+  {"handle": "h3", "gramps_id": "EX3", "primary_name": {"first_name": "Rosa", "surname_list": [{"surname": "Calvo Soto"}]},
+   "event_ref_list": [], "birth_ref_index": -1, "death_ref_index": -1},
+  {"handle": "h4", "gramps_id": "EX4", "primary_name": {"first_name": "Ana", "surname_list": [{"surname": "Ibarrola Zubiri"}]},
+   "event_ref_list": [], "birth_ref_index": -1, "death_ref_index": -1},
+  {"handle": "h5", "gramps_id": "EX5", "primary_name": {"first_name": "Pedro", "surname_list": [{"surname": "Merino Olmedo"}]},
+   "event_ref_list": [], "birth_ref_index": -1, "death_ref_index": -1}
+ ],
+ "events": [
+  {"handle": "e1", "type": "Birth", "place": "pl2"},
+  {"handle": "e2", "type": "Death", "place": "pl3"}
+ ],
+ "places": [
+  {"handle": "pl1", "name": {"value": "Provincia de Ejemplo"}, "place_type": "Province", "placeref_list": []},
+  {"handle": "pl2", "name": {"value": "Villazul"}, "place_type": "Town", "placeref_list": [{"ref": "pl1"}]},
+  {"handle": "pl3", "name": {"value": "Iglesia de San Ejemplo"}, "place_type": "Building", "placeref_list": [{"ref": "pl4"}]},
+  {"handle": "pl4", "name": {"value": "Robledal"}, "place_type": "Village", "placeref_list": [{"ref": "pl1"}]}
+ ]}}

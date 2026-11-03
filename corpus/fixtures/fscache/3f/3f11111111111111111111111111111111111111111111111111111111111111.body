@@ -1,0 +1,1 @@
+{"entries": [{"id": "AAAA-111", "content": {"gedcomx": {"persons": [{"id": "p1", "principal": true, "names": [{"nameForms": [{"fullText": "José Olmedo Quiroga"}]}], "facts": [{"type": "http://gedcomx.org/Baptism", "date": {"original": "3 marzo 1871"}, "place": {"original": "Villazul"}}]}]}}}]}
