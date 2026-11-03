@@ -22,3 +22,7 @@ gwt_census1950.py | row if row is not None else '%s%d' % ('m' if machine else 't
 gwt_census1950.py | if isinstance(x, dict) and isinstance(x.get('name'), str)] | if isinstance(x, dict) and x.get('name')] | a line whose name is not text is skipped, never a crash
 gwt_census1950.py | if a.page > MAX_PAGE: | if False: | a page past the 400 the API serves asks nothing and says why
 gwt_census1950.py | MAX_PAGE = 400 | MAX_PAGE = 401 | the API serves 400 pages of a search, never more
+gwt_census1950.py | or (machine and row in read) or (machine, name, row) in seen: | or (machine and row in read): | a line the API lists twice is one row, never two
+gwt_census1950.py | '%s%d' % ('m' if machine else 't', n) | '%s%d' % ('m', n) | a volunteer line with no number is a t id, a machine one an m id
+gwt_census1950.py | r.get('scheduleId') and isinstance | isinstance | a page with no schedule id is unknown, a STOP
+gwt_census1950.py | if not a.name.strip() or not | if not | an empty name asks nothing

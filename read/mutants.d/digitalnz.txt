@@ -12,3 +12,4 @@ gwt_digitalnz.py |             return ('...' if a else '') + text[a:b] + ('...' 
 gwt_digitalnz.py |             'snippet': snippet(r.get('fulltext'), query)} |             'snippet': ''} | each row carries the words around the query
 gwt_digitalnz.py |     if a.page > MAX_PAGE: |     if False: | a page past the 100 anonymous use may read asks nothing and says why
 gwt_digitalnz.py | MAX_PAGE = 100 | MAX_PAGE = 101 | anonymous use reads pages 1 to 100, never more
+gwt_digitalnz.py |     if not a.query.strip(): |     if False: | an empty query asks nothing

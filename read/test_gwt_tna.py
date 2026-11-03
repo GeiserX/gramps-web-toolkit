@@ -69,6 +69,11 @@ class Classify(unittest.TestCase):
         self.assertNotIn('sps.heldByCode', dict(query(gwt_tna.search_url('x'))))
 
 
+    def test_an_archive_line_needs_a_count(self):
+        self.assertEqual(gwt_tna.archives({'heldByReps': [{'code': 'TNA', 'count': None}],
+                                           'repositories': [{'code': '201 Westbury Record Office', 'count': '3'}]}),
+                         [])
+
 class Gate(Base):
     def test_the_gate_keeps_under_the_apis_daily_limit(self):
         # about 3,000 calls a day: the default gate allows 120 an hour, 2,880 a day
@@ -126,6 +131,12 @@ class Search(Run):
         code, _, _, text = self.search(FakeNet(gate, (200, fx('search.json'))), gate, '--count', '100', '--page', '100')
         self.assertNotEqual(code, gwt_tna.EXIT_USAGE, text)
 
+    def test_an_empty_query_asks_nothing(self):
+        gate = FakeGate()
+        net = FakeNet(gate)
+        code, _, _, _ = self.run_tna(['search', '--query', '  '], net, gate)
+        self.assertEqual((code, net.requests), (gwt_tna.EXIT_USAGE, []))
+
     def test_an_outage_is_a_block_never_zero_results(self):
         for status in (500, 503):
             with self.subTest(status):
@@ -158,6 +169,12 @@ class Record(Run):
         code, _, _, text = self.run_tna(['record', 'd900001'], net, gate)
         self.assertEqual(code, 0, text)
         self.assertTrue(net.requests[0].full_url.endswith('/details/D900001'))
+
+    def test_a_string_that_is_not_an_id_asks_nothing(self):
+        gate = FakeGate()
+        net = FakeNet(gate)
+        code, _, _, _ = self.run_tna(['record', 'D900001?x=1'], net, gate)
+        self.assertEqual((code, net.requests), (gwt_tna.EXIT_USAGE, []))
 
     def test_an_unknown_id_is_an_error_never_a_block(self):
         # Discovery answers an id it does not have with HTTP 204 and no body

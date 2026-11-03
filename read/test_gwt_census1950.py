@@ -52,6 +52,10 @@ class Classify(unittest.TestCase):
                                                      'transcribe': 'Ana'}]}), 'unknown',
                          'a page whose volunteer lines are no longer a list')
 
+    def test_a_page_with_no_schedule_id_is_unknown(self):
+        self.assertEqual(gwt_census1950.verdict({'total': 1, 'results': [{'scheduleId': None, 'image': 'k.jpg',
+                                                                          'names': []}]}), 'unknown')
+
     def test_a_page_past_the_last_row_is_the_end_never_a_stop(self):
         past = {'total': 2, 'size': 25, 'page': 2, 'results': []}
         self.assertEqual(gwt_census1950.verdict(past, 25), 'none')
@@ -115,6 +119,18 @@ class Search(Run):
         r['highlight']['names.name'].append('Zorvalo Luis')
         self.assertNotIn(5, [c['row'] for c in gwt_census1950.candidates(r)])
 
+    def test_the_same_line_listed_twice_is_one_row(self):
+        r = json.loads(fx('search.json'))['results'][1]
+        r['names'].append(dict(r['names'][0]))
+        self.assertEqual([c['id'] for c in gwt_census1950.candidates(r)], ['9900002:12'])
+
+    def test_a_volunteer_line_with_no_number_is_known_by_its_place(self):
+        r = json.loads(fx('search.json'))['results'][0]
+        r['names'] = None
+        r['transcribe'] = [{'name': 'Ana Zorvalo'}]
+        r['highlight'] = {'transcribe.name': ['Ana Zorvalo']}
+        self.assertEqual([(c['id'], c['machine']) for c in gwt_census1950.candidates(r)], [('9900001:t1', False)])
+
     def test_a_line_whose_name_is_not_text_is_skipped(self):
         r = json.loads(fx('search.json'))['results'][1]
         r['names'].append({'row': 14, 'name': ['Zorvalo']})
@@ -167,6 +183,12 @@ class Search(Run):
         code, _, _, _ = self.search(net, gate, state='Puerto Rico')
         self.assertEqual((code, net.requests), (gwt_census1950.EXIT_USAGE, []))
 
+
+    def test_an_empty_name_asks_nothing(self):
+        gate = FakeGate()
+        net = FakeNet(gate)
+        code, _, _, _ = self.search(net, gate, name='  ')
+        self.assertEqual((code, net.requests), (gwt_census1950.EXIT_USAGE, []))
 
 if __name__ == '__main__':
     unittest.main()

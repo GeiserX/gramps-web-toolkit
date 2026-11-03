@@ -12,3 +12,5 @@ gwt_riksarkivet.py | p += [('offset', (max(1, int(page)) - 1) * n), ('limit', n)
 gwt_riksarkivet.py | for k in ('totalHits', 'hits', 'offset', 'items') if k in doc} | for k in doc} | the evidence file keeps the rows, never the facets that are most of every answer
 gwt_riksarkivet.py | return (ys[0], ys[-1] if len(ys) > 1 else None) if ys else (None, None) | return (ys[0], ys[-1]) if ys else (None, None) | an open-ended volume ("1829 - ") has no last year, not its first year twice
 gwt_riksarkivet.py | for m in c['iiif_manifests'] or ['']: | for m in c['iiif_manifests'][:1] or ['']: | every manifest of a volume gets its item line, not only the first
+gwt_riksarkivet.py |     if not a.query.strip(): |     if False: | an empty query asks nothing
+gwt_riksarkivet.py | images = [images] if isinstance(images, str) else | images = | a single manifest link is one manifest, not a list of letters

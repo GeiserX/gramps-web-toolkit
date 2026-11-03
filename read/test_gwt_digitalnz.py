@@ -118,6 +118,12 @@ class Search(Run):
         self.search(net, gate)
         self.assertEqual(len(net.requests), 2, 'a changed answer was served from the cache')
 
+    def test_an_empty_query_asks_nothing(self):
+        gate = FakeGate()
+        net = FakeNet(gate)
+        code, _, _, _ = self.search(net, gate, '--query', '  ')
+        self.assertEqual((code, net.requests), (gwt_digitalnz.EXIT_USAGE, []))
+
     def test_an_outage_is_a_block_never_zero_results(self):
         gate = FakeGate()
         code, _, _, text = self.search(FakeNet(gate, (503, b'<html>Service Unavailable</html>')), gate)
