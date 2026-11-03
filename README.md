@@ -35,6 +35,7 @@ The toolkit works for genealogy in any country. One module, `spanish-poller`, is
 - `gwt-geocode`: puts coordinates on the places a tree's events use, in any country, as a change list for `gwt-apply`, so the Gramps Web map fills in
 - `gwt-run`: takes one change list through backup, dry run, apply, verify and check in one command, ends a step that hangs, and goes on where it stopped when run again
 - `gwt-import-dna`: turns the DNA match lists a testing site lets you download into a gwt-apply change list for Gramps Web's DNA view
+- `gwt-lint`: checks a change list against the tree before it is applied, with rules that each prove they can still fail
 
 ## Quick start
 

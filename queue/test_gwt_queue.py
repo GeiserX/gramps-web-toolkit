@@ -88,6 +88,16 @@ class QueueTest(unittest.TestCase):
         self.assertEqual(len(self.rows()), 1)
         self.assertTrue(out.startswith('q1\t'))
 
+    def test_done_takes_every_ledger_result_and_dedupe_counts_the_same_ones(self):
+        for n, (result, skipped) in enumerate((('out-of-coverage', True), ('unproven', False), ('restricted', False))):
+            path = self.path = os.path.join(self.dir.name, 'cola-%d.tsv' % n)
+            self.add()
+            run('--queue', path, 'claim', '--lane', 'l1')
+            code, _, _ = run('--queue', path, 'done', '--id', 'q1', '--token', self.tok('q1'), '--result', result)
+            self.assertEqual(code, 0, result)
+            self.add('--dedupe')
+            self.assertEqual(len(self.rows()), 1 if skipped else 2, result)
+
     def park(self, task_id='q1'):
         for _ in range(5):
             run('--queue', self.path, 'claim', '--lane', 'l1')

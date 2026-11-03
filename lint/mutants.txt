@@ -1,0 +1,78 @@
+# file | exact text | replacement | what the guard protects (see docs/development.md, "Mutants")
+gwt_lint/framework.py |     if any(r.status == "nothing" for r in results): |     if False: | a rule that had nothing to check makes the run exit 2, even beside findings
+gwt_lint/framework.py |     return 1 if any(r.findings for r in results) else 0 |     return 0 | a finding makes the run exit 1
+gwt_lint/framework.py |     if a <= b: |     if a < b: | --prove fails when the mutant fires the code no more often than the list itself
+gwt_lint/framework.py |     if after.status == "nothing": |     if False: | --prove fails when a rule has nothing to check on its own mutant
+gwt_lint/framework.py | skip = os.path.realpath(skip) if skip else None | skip = None | the list being linted is never compared with itself in the open folder
+gwt_lint/framework.py |             self._link(self.resolve(op.get("family"), "Family"), self.resolve(op.get("child"), "Person"), |             self._link(None, None, | a child the list links counts as family before the list is applied
+gwt_lint/framework.py |         if raw[:2] == b"\x1f\x8b": |         if False: | a gzipped snapshot is read
+gwt_lint/framework.py | or (op["op"] == "link_child" and bool(op.get("probable"))) |  | a probable link_child makes a note, so its tag is not inert
+gwt_lint/rules_tree.py | LINEAGE = {"", "Birth", "Unknown", "Adopted"} | LINEAGE = {"", "Birth", "Unknown", "Adopted", "Stepchild"} | a step link is never a blood line
+gwt_lint/rules_tree.py |                 for side, rel in (("father", "frel"), ("mother", "mrel")): |                 for side, rel in (("father", "frel"),): | scope climbs through mothers too
+gwt_lint/rules_tree.py |                         reach[s] = f"{path} > spouse {view.gid(s)}" |                         pass | the spouse of a blood relative is in scope
+gwt_lint/rules_tree.py |         return reach, fams |         return {h: "" for h in view.people}, fams | a person outside the blood line and its spouses is scope-out
+gwt_lint/rules_tree.py |                 if unknown is not None: |                 if False: | a reference neither the snapshot nor the list has is scope-unknown
+gwt_lint/rules_tree.py |             if kind in ("add_event", "move_event"): |             if False: | an event added to a protected person is protect-event
+gwt_lint/rules_tree.py | code = "protect-date" if "date" in s else | code = "protect-event" if "date" in s else | a date change on a protected person's event is protect-date
+gwt_lint/rules_tree.py |             elif kind in ("link_child", "unlink_child", "add_family", "update_child_ref"): |             elif False: | a family link to a protected person is protect-link
+gwt_lint/rules_tree.py |                 for who in (w for cls, ref in targets for w in hit(cls, ref)): |                 for who in (): | an attachment to a protected person is protect-attach
+gwt_lint/rules_tree.py |                 if _mentions(t, names, words): |                 if False: | new text naming a protected person near a life word is protect-text
+gwt_lint/rules_tree.py |         if any(abs(i - j) <= window for i in hits for j in life): |         if hits and life: | the life word must be near the name, not anywhere in the text
+gwt_lint/rules_tree.py |             h = view.resolve(i, "Person") |             h = view.resolve(i, "Person") or "hI1" | a protected ID the snapshot lacks is protect-unknown, never silently unprotected
+gwt_lint/rules_tree.py |     return bool(d["dateval"][0]) |     return True | a year alone is not an exact date
+gwt_lint/rules_tree.py |                     if place: |                     if False: | a place on a living person's event is living-place
+gwt_lint/rules_tree.py |                     if etype == "Marriage": |                     if False: | a marriage of a living person is living-marriage
+gwt_lint/rules_tree.py | if isinstance(text, str) and (kind == "add_transcription" or op.get("type") == "Transcript" or _quotes(text)): | if isinstance(text, str): | only a quotation or a transcript is living-quote, not every note
+gwt_lint/rules_tree.py |                 for kind_, number in find_ids(t): |                 for kind_, number in []: | an identity number in new text is living-id
+gwt_lint/rules_tree.py | for h in people if living(h)[0]] | for h in people] | only people who may be living are held back
+gwt_lint/rules_tree.py | targets = attach_targets(op) if kind != "update_note" else self._note_owners(view, op.get("note")) | targets = attach_targets(op) | an update_note is judged by the people the note is on
+gwt_lint/rules_tree.py |                 if both: |                 if False: | an object another open list touches is overlap-open
+gwt_lint/rules_tree.py | if (op["op"].startswith("update_") or op["op"] in REPEATABLE) and _same(op) in done: | if False: | an update repeated from an applied list is overlap-applied
+gwt_lint/rules_tree.py | OVERLAP_KINDS = ("Person", "Family", "Event", "Note", "Citation", "Media") | OVERLAP_KINDS = ("Person", "Family", "Event", "Note", "Citation", "Media", "Place", "Source") | lists may share places and sources
+gwt_lint/rules_tree.py |             if tags_of(op) and not creates(op): |             if False: | a tag on an op that makes nothing is weak-inert-tag
+gwt_lint/rules_tree.py |             if kind == "add_person" and op.get("allow_namesake"): |             if False: | a namesake kept apart needs the weak tag
+gwt_lint/rules_tree.py | (_low(op.get("confidence")) or str(op.get("source")) in machine) | (_low(op.get("confidence"))) | a citation of a machine-index source needs the weak tag
+gwt_lint/rules_tree.py |                 if refs_ and all(c == "ChildRef" and probable(*r) for c, r in refs_): |                 if False: | a weak citation on a [probable] child_ref needs no tag
+gwt_lint/rules_tree.py |             return any(weak(view.tree.tag_names.get(t)) for t in obj.get("tag_list") or []) |             return False | an object the snapshot already tags weak needs no new tag
+gwt_lint/rules_tree.py |             if (cls, ref) in tagged: |             if False: | an add_tag of the weak tag in the same list counts
+gwt_lint/rules_tree.py |     return isinstance(conf, (int, float)) and conf in (0, 1) |     return isinstance(conf, (int, float)) and conf in (0,) | confidence 1 is weak too
+gwt_lint/rules_tree.py |     return isinstance(conf, (int, float)) and conf in (0, 1) |     return isinstance(conf, int) and not isinstance(conf, bool) and conf in (0, 1) | confidence 1.0 or true is weak, as gwt-apply stores int(...)
+gwt_lint/rules_tree.py | any(w and w in fold(name) for w in folded) | any(w == fold(name) for w in folded) | any tag whose name holds a weak tag counts, as in gwt-report
+gwt_lint/rules_tree.py | and not (len(w.strip("()[].,;:!?")) == 4 | and not (False | a year next to the word tree is not a count
+gwt_lint/rules_tree.py | for j in nums if abs(i - j) <= 8] | for j in nums if abs(i - j) <= 5] | a count a few words from the word tree is still a count
+gwt_lint/rules_tree.py |         words = {fold(w) for w in ctx.section("count").get("words") or TREE_WORDS} |         words = {fold(w) for w in TREE_WORDS} | [count] words in the config replace the built-in words
+gwt_lint/rules_tree.py | if words & set(fold(w).split())] | if any(fold(w).startswith(x) for x in words)] | a surname or place that starts with a tree word is no tree
+gwt_lint/rules_tree.py | if BARE_NUMBER.fullmatch(w) | if any(c.isdigit() for c in w) | the digits of a date or an ID are no count
+gwt_lint/cli.py |                 cfg.setdefault(sec, {})[field] = _ids(getattr(args, key)) |                 pass | --root and --protect reach the rules
+gwt_lint/framework.py | errors = validate([op for _, op in numbered]) if check else [] | errors = [] | a list gwt-apply would refuse exits 2, never lints clean
+gwt_lint/framework.py |     if isinstance(data, (list, dict)): |     if False: | a JSON array or {"ops": [...]} list is read like gwt-apply reads it
+gwt_lint/cli.py |                 where[key] = v = [v] |                 pass | one name in lint.toml may be a bare string
+gwt_lint/cli.py |         return _fail(args, f"{type(e).__name__}: {e}") |         raise | an unexpected error exits 2, never 1 (findings)
+gwt_lint/cli.py |     if getattr(args, "json", False): |     if False: | --json prints an input error as JSON on stdout too
+gwt_lint/framework.py | "children": "Person", "media": "Media"} | "children": "Person", "media": "Media", "namesake_of": "Person", "new_couple_of": "Family"} | the namesakes an op says it is not are not people or families it touches
+gwt_lint/rules_tree.py |             elif kind in UPDATED or kind in MERGED: |             elif False: | an update or merge of a protected person is protect-update
+gwt_lint/rules_tree.py |             if kind in ("add_event", "update_event", "move_event"): |             if kind in ("add_event", "update_event"): | an event moved onto someone who may be living is judged like a new one
+gwt_lint/rules_tree.py |         return bool((text.get("dateval") or [0])[0]) |         return False | a moved event's exact date in the snapshot counts
+gwt_lint/framework.py | "add_citation": ("page",), | "add_citation": (), | a citation page is new text the living, protect and count rules read
+gwt_lint/framework.py |     if before.status == "nothing": |     if False: | --prove fails a rule that has nothing to check under your own settings
+gwt_lint/rules_tree.py | len(next(g for g in m.groups() if g).split()) >= QUOTE_WORDS | len(next(g for g in m.groups() if g).split()) >= 0 | a short quoted title is not a quotation
+gwt_lint/rules_tree.py | op.get("type") == "Transcript" or _quotes | False or _quotes | a Transcript note is a quotation whatever its marks
+gwt_lint/rules_tree.py | else text_of(ev.get("type")) | else "" | a marriage moved onto someone who may be living is a marriage of theirs
+gwt_lint/rules_tree.py | kind == "add_transcription" or op.get("type") | False or op.get("type") | a transcription attached to someone who may be living is a quotation
+gwt_lint/framework.py | "add_source": ("title", "author", "pubinfo") | "add_source": ("author", "pubinfo") | a source title is new text
+gwt_lint/rules_tree.py |                 own = False | pass | an update_citation's own tag lands nowhere, so it is no weak tag
+gwt_lint/rules_tree.py | return any(weak(view.tree.tag_names.get(t)) | return any(view.tree.tag_names.get(t) in names | a snapshot tag whose name holds a weak tag counts
+gwt_lint/framework.py | except (OSError, UnicodeDecodeError) as e: | except OSError as e: | a list that is not UTF-8 is named as unreadable, not caught by the last-resort handler
+gwt_lint/framework.py | except (OSError, ValueError, EOFError, zlib.error) as e: | except (OSError, ValueError) as e: | a cut gzip snapshot is named as unreadable
+gwt_lint/cli.py | if sec in cfg and not isinstance(cfg[sec], dict): | if False: | a rule's setting that is not a section is named
+gwt_lint/cli.py | if v is not None and not (isinstance(v, list) and all(isinstance(x, str) for x in v)): | if False: | a list of names with a non-name in it is named
+gwt_lint/cli.py | if v is not None and (not isinstance(v, kind) or isinstance(v, bool)): | if False: | a number or text setting of the wrong type is named
+gwt_lint/rules_tree.py | shown_date, shown_place = _ymd(date), | shown_date, shown_place = date, | a moved event's date is said as a date, not as the snapshot's object
+gwt_lint/cli.py |     except BrokenPipeError: |     except KeyboardInterrupt: | a reader that closes the pipe early, such as head, gets a quiet exit 2, not a traceback
+gwt_lint/rules_tree.py | [(MERGED[kind], op.get(f)) for f in ("winner", "loser")] | [(MERGED[kind], op.get(f)) for f in ("winner",)] | a protected person merged away as the loser is protect-update
+gwt_lint/rules_tree.py | QUOTE_WORDS = 4 | QUOTE_WORDS = 5 | a quoted span of four words is a quotation
+gwt_lint/framework.py | "children": "Person", "media": "Media"} | "children": "Person"} | an op that names a media object touches it, for overlap
+gwt_lint/framework.py |             raise InputError(f"{path}: not a snapshot") |             return cls({}) | a snapshot that is not an object exits 2, never lints clean
+gwt_lint/rules_tree.py |             if op["op"] == "add_note" and str(op.get("text") or "").startswith(PROBABLE): |             if False: | a [probable] note on a child_ref in the same list makes its weak citation need no tag
+gwt_lint/rules_tree.py |             if isinstance(r, str) and not r.startswith("key:"): |             if isinstance(r, str): | the same list key in two lists is two objects, never an overlap
+gwt_lint/rules_tree.py |                     if s not in reach: |                     if True: | a blood relative married to another keeps the blood path in -v

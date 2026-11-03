@@ -65,6 +65,7 @@ The toolkit works for genealogy in any country. `gwt-spanish-poller` and some `g
 - [gwt-geocode](geocode.md): coordinates for the places events use, in any country, as a change list for gwt-apply.
 - [gwt-run](run.md): one change list through backup, dry run, apply, verify and check, in one command that goes on where it stopped.
 - [gwt-import-dna](import-dna.md): turns the DNA match lists a testing site lets you download into a change list for Gramps Web's DNA view.
+- [gwt-lint](lint.md): checks a change list against the tree before it is applied: scope, protected and living people, overlap with other lists, weak claims; every rule proves it can fail.
 
 ## Research tools
 

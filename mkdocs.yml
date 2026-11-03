@@ -140,6 +140,7 @@ nav:
       - gwt-geocode: geocode.md
       - gwt-run: run.md
       - gwt-import-dna: import-dna.md
+      - gwt-lint: lint.md
   - Research tools:
       - gwt-queue: queue.md
       - gwt-ledger: ledger.md
