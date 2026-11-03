@@ -289,6 +289,8 @@ def main(argv: list[str] | None = None) -> int:
         return _revert(args, argv)
     if args.pre:
         ap.error("--pre goes with --revert")
+    if args.apply and args.save_snapshot:
+        ap.error("--apply and --save-snapshot are separate modes: save the snapshot first, then apply")
     if args.server_backup and not args.apply:
         ap.error("--server-backup goes with --apply: a dry run writes nothing, so it needs no backup")
     if args.verify and (args.apply or args.save_snapshot):
