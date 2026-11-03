@@ -26,7 +26,7 @@ The gate compares the whole tree with the backup. A new problem from anyone else
 
 ### Skips in the dry run
 
-A first dry run of a new list should find nothing already done. A skip whose op finds the tree already as it asks (gwt-apply calls it a no-op, `"noop": true` in its JSON) is harmless and never stops the run. Any other skip, such as `already made by key`, means the list or part of it ran before; the run stops at the dry run unless that op's key is named with `--accept-skip KEY` (repeatable).
+A first dry run of a new list should find nothing already done. A skip whose op finds the tree already as it asks (gwt-apply calls it a no-op, `"noop": true` in its JSON) is harmless and never stops the run. Any other skip means the tree already holds that object: the list or part of it ran before (`already made by key`), or the op matched an object the tree had (`reused ...`, `already has that child`). The run stops at the dry run unless that op's key is named with `--accept-skip KEY` (repeatable).
 
 ### Run it again
 

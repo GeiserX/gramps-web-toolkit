@@ -101,6 +101,21 @@ gramps-web-toolkit/<version> (gwt-apply; +https://github.com/GeiserX/gramps-web-
 
     `--since` reads the live tree, diffs it against the snapshot and checks only what is new or changed since then.
 
+## Using it from an AI agent
+
+The repository ships an [Agent Skills](https://agentskills.io/specification) skill, [`skills/gramps-web-toolkit/SKILL.md`](https://github.com/GeiserX/gramps-web-toolkit/blob/main/skills/gramps-web-toolkit/SKILL.md). It teaches an agent the safe order of steps (snapshot, change list, lint, dry run, `gwt run`, verify) and the traps, such as a dry run that exits 0 while nothing is written yet. For options it sends the agent to `--help` and to these pages.
+
+Install it with either command:
+
+```sh
+npx skills add GeiserX/gramps-web-toolkit --skill gramps-web-toolkit
+gh skill install GeiserX/gramps-web-toolkit gramps-web-toolkit --pin v<version> --agent claude-code
+```
+
+`--pin` takes a release tag, so the skill matches the toolkit version you installed. `--agent` names your agent (`claude-code`, `cursor`, `codex`, ...): without it, an install that runs without a terminal goes to `.agents/skills`, which some agents never read. The first release with the skill is the one after 1.0.0. The skill does not install the tools: install the toolkit as above.
+
+CI checks the skill against the code: every tool and option it names must be in that tool's `--help`, and every link to this site must reach a real page and heading.
+
 ## Next
 
 - [The research pipeline](pipeline.md) explains who researches, who verifies, who decides and who writes.

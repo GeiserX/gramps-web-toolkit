@@ -441,6 +441,44 @@ class DigestTest(unittest.TestCase):
         self.assertIn("## father's side", out)
         self.assertIn('- new person: Rosa Pine [weak]', out)
 
+    def test_a_link_already_in_the_item_text_is_not_repeated(self):
+        # a citation whose page text already carries the act's url: the digest shows the url once, not twice
+        old, new = R.load(OLD), R.load(NEW)
+        new['citations']['hC7'] = dict(new['citations']['hC1'], handle='hC7', gramps_id='C7',
+                                       page='see https://archive.example.org/b/7.')
+        out = R.render(new, R.digest(old, new), '', 'en', 'md')
+        self.assertEqual(out.count('https://archive.example.org/b/7'), 1)  # once, in the page text, not again as a link
+
+    def test_a_link_is_kept_when_the_text_only_holds_a_longer_address(self):
+        # whole addresses are compared: .../b/1 in a note is not the .../b/10 of the page, nor C7 the C70 of the page
+        old, new = R.load(OLD), R.load(NEW)
+        new['notes']['hN7'] = dict(new['notes']['hN1'], handle='hN7', gramps_id='N7',
+                                   text={'string': 'https://archive.example.org/b/1'})
+        new['citations']['hC7'] = dict(new['citations']['hC1'], handle='hC7', gramps_id='C7', note_list=['hN7'],
+                                       page='see https://archive.example.org/b/10 and https://g.example.org/citation/C70')
+        out = R.render(new, R.digest(old, new), 'https://g.example.org', 'en', 'md')
+        line = next(x for x in out.splitlines() if 'b/10' in x)
+        self.assertIn(' https://archive.example.org/b/1', line.replace('b/10', ''))
+        self.assertIn(' https://g.example.org/citation/C7', line.replace('C70', ''))
+
+    def test_html_links_an_address_in_the_item_text_where_it_stands(self):
+        # html keeps <a href> for every link: the address in the page is linked in place, the trailing dot outside
+        old, new = R.load(OLD), R.load(NEW)
+        new['citations']['hC7'] = dict(new['citations']['hC1'], handle='hC7', gramps_id='C7',
+                                       page='see https://archive.example.org/b/7?a=1&b=2.')
+        out = R.render(new, R.digest(old, new), '', 'en', 'html')
+        a = '<a href="https://archive.example.org/b/7?a=1&amp;b=2">https://archive.example.org/b/7?a=1&amp;b=2</a>'
+        self.assertIn('see %s., confidence' % a, out)
+        self.assertEqual(out.count('https://archive.example.org/b/7'), 2)  # the href and the anchor text, once
+
+    def test_one_address_held_by_two_citations_of_an_event_is_listed_once(self):
+        old, new = R.load(OLD), R.load(NEW)
+        new['citations']['hC8'] = dict(new['citations']['hC1'], handle='hC8', gramps_id='C8')
+        new['events']['hE1'] = dict(new['events']['hE1'], citation_list=['hC1', 'hC8'])
+        out = R.render(new, R.digest(old, new), '', 'en', 'md')
+        line = next(x for x in out.splitlines() if x.startswith('- new event: Baptism'))
+        self.assertEqual(line.count('https://archive.example.org/register/12.jpg'), 1)
+
     def test_who_owns_what(self):
         old, new = R.load(OLD), R.load(NEW)
         # a family event belongs to both spouses; a citation on a parent link belongs to the child alone

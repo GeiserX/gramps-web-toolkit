@@ -6,6 +6,14 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+- `gwt-apply`: an `add_person` whose key already names a person in the tree with a different first name, surname, or given gender or Gramps ID is a conflict now, not a skip, so evidence that follows it is never hung on someone else. Updates in the same list and a rerun proven by the list's own apply log still pass. The conflict names each differing field: make the op match the tree, or give it a new key.
+
+### Added
+
+- An agent skill, `skills/gramps-web-toolkit/SKILL.md` in the Agent Skills format. It teaches an AI agent the safe order of steps for changing a tree (snapshot, change list, lint, dry run, `gwt run`, verify) and the traps, and points to `--help` and the docs for the rest. Install it with `npx skills add GeiserX/gramps-web-toolkit --skill gramps-web-toolkit` or `gh skill install`. A test in `skills/` fails when the skill names a tool, subcommand or option the tools do not have, or links a docs page or heading that does not exist.
+
 ### Changed
 
 - `gwt-report digest --lang es|fr` translates the digest's own text now: title, side headings, item labels, confidence, `[weak]` and the cut note, not only the relationship names. Event types, sources, places and descriptions stay as the tree stores them. English output is unchanged.
@@ -14,6 +22,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 ### Fixed
 
 - `gwt-apply LIST --apply --save-snapshot FILE` exits 2 now. It used to save the snapshot, skip the list and exit 0, so the caller read a write that never happened. Save the snapshot, then apply in a second command.
+- `gwt report digest` no longer prints a web address twice on one line when the item's text already shows it, as a citation page that holds the record's address does. Only whole addresses count, so a shorter address that starts the same way is still listed. In `--format html` an address inside the text is now a link where it stands.
 
 ## [1.0.0] - 2026-11-03
 

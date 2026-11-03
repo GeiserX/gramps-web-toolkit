@@ -36,3 +36,7 @@ gwt_report.py | return d.get('year') or ( | return ( | an event date with only a
 gwt_report.py | if len(path) >= max_gen: | if len(path) > max_gen: | kin and implex look 30 generations up, no further
 gwt_report.py | if old['_tree'] and new['_tree'] and old['_tree'] != new['_tree']: | if old['_tree'] != new['_tree']: | a dump that names no tree is still compared, never refused as another tree
 gwt_report.py | return DIGEST_I18N[lang][key] | return DIGEST_I18N['en'][key] | --lang es/fr must translate the digest's own strings, not only the kin names
+gwt_report.py | if u and u not in in_text and u not in shown: | if u and u not in shown: | a link the item text already carries (a citation page holding the act's url) must not be printed a second time
+gwt_report.py | in_text = {u.rstrip('.,;') for u in URL_RE.findall(text)} | in_text = text | a link is kept when the item text only holds a longer address that starts with it
+gwt_report.py | if u and u not in in_text and u not in shown: | if u and u not in in_text: | one address held by two citations of an event is listed once
+gwt_report.py | out.append(esc(s[pos:m.start()]) + link(u)) | out.append(esc(s[pos:m.start()]) + esc(u)) | in html an address in the item text stays a link
