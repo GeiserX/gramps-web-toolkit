@@ -48,6 +48,7 @@ gwt-mh = "gwt_core.cli:mh"
 gwt-read = "gwt_read:main"
 gwt-report = "gwt_report:main"
 gwt-geocode = "gwt_geocode:main"
+gwt-import-dna = "gwt_dna:main"
 
 # The version comes from the git tag: `v0.2.0` builds 0.2.0; a commit after it builds 0.2.1.devN+g<sha>.
 [tool.hatch.version]
@@ -57,7 +58,7 @@ source = "vcs"
 packages = ["apply/gwt_apply", "check/gwt_check", "fetch/gwt_fetch", "core/gwt_core"]
 # `pip install -e .` puts these folders on sys.path instead of copying files
 dev-mode-dirs = ["apply", "check", "fetch", "core", "ledger", "gate", "fscache", "queue", "leads", "rank",
-                 "importxl", "rawstore", "myheritage", "read", "report", "geocode"]
+                 "importxl", "rawstore", "myheritage", "read", "report", "geocode", "dna"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "ledger/gwt_ledger.py" = "gwt_ledger.py"
@@ -89,3 +90,4 @@ dev-mode-dirs = ["apply", "check", "fetch", "core", "ledger", "gate", "fscache",
 "read/gwt_kramerius.py" = "gwt_kramerius.py"
 "report/gwt_report.py" = "gwt_report.py"
 "geocode/gwt_geocode.py" = "gwt_geocode.py"
+"dna/gwt_dna.py" = "gwt_dna.py"

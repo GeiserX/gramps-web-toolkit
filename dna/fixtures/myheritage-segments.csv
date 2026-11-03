@@ -1,0 +1,5 @@
+DNA Match ID,Name,Match name,Chromosome,Start Location,End Location,Start RSID,End RSID,Centimorgans,SNPs
+D-11AA,Ana Example,Tom Sample,7,1000000,9000000,rs1,rs2,12.5,1500
+D-11AA,Ana Example,Tom Sample,2,30000000,52000000,rs3,rs4,22.1,4000
+D-11AA,Ana Example,Tom Sample,X,5000000,9000000,rs5,rs6,13.4,900
+D-33CC,Ana Example,Ruth Example,1,1200000,40000000,rs7,rs8,41.2,8000
