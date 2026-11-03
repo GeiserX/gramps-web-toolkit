@@ -175,3 +175,13 @@ The judge starts the next round by reading:
 - how far back each branch of each tree reaches.
 
 Branches that reach the fewest generations get more lanes. Each round also has fixed lanes: property and wills per tree, missing civil death records for direct ancestors, and a coverage lane per tree that works the empty cells of the source-coverage table.
+
+## The repo every lane shares
+
+Many lanes read and commit to one research repo, often a `blob:none` partial clone. Three habits keep it from filling the disk ([hard-won.md](hard-won.md#git-and-disk), lessons 55 to 57):
+
+- Every agent runs with `GIT_NO_LAZY_FETCH=1`, so a command that would download history fails instead. `checkout`, `switch` and `pull` then need the batch prefetch after each `git fetch` (lesson 56).
+- Lanes read a fresh file over the forge's raw URL, or the main thread fetches what changed in one batch; never one `git show origin/main:<path>` per read.
+- Packs are merged only with `git repack --geometric=2 -d`, then `git multi-pack-index write`, at a quiet time.
+
+Run `gwt-rawstore doctor` at the start of each round ([rawstore.md](rawstore.md#repo-health-doctor)). It never fetches, and it exits 1 when packs, lazy fetching, tracked binaries, scratch or caches, or Time Machine need attention.

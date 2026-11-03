@@ -64,9 +64,11 @@ flowchart LR
            gwt-queue release --id "$id" --token "$token"; echo "gwt-ledger exit $rc" >&2; break
        fi
        if [ "$rc" -eq 0 ]; then
-           # score, person, label, source, query, date, RESULT, EVIDENCE, agent, NEXT_DATE
-           top=$(head -1 <<<"$prior"); result=$(cut -f7 <<<"$top"); next=$(cut -f10 <<<"$top")
-           if [ "$result" != blocked ] && { [ -z "$next" ] || [[ "$next" > "$(date +%F)" ]]; }; then
+           # score, person, label, source, query, date, RESULT, EVIDENCE, agent, NEXT_DATE, control
+           # the first row that counts as done (hit, none, partial, out-of-coverage) and is not due again
+           top=$(awk -F'\t' -v today="$(date +%F)" '$7 ~ /^(hit|none|partial|out-of-coverage)$/ &&
+                     ($10 == "" || $10 > today) { print; exit }' <<<"$prior"); result=$(cut -f7 <<<"$top")
+           if [ -n "$top" ]; then
                gwt-queue done --id "$id" --token "$token" --result "$result" \
                    --evidence "$(cut -f8 <<<"$top")" --note "reused the ledger row of $(cut -f6 <<<"$top")"
                continue
@@ -77,8 +79,11 @@ flowchart LR
        # paused mid-task: `gwt-queue fail` if anything was fetched, `release` if nothing was, then `continue`.
        # On a long task, call `gwt-queue renew --id "$id" --token "$token"` before the lease runs out.
        # On a block, see below, then `continue`.
+       # $ctl: this batch's saved `gwt read <source> control` output (runs/<source>-control.txt), the proof a none
+       # needs; without it the none is logged as unproven in the ledger and the queue alike, and searched again.
+       [ "$result" = none ] && [ -z "$ctl" ] && result=unproven
        gwt-ledger add --person "$person" --source="$lsrc" --query "$lquery" \
-           --result "$result" --evidence "ev/$id.txt" ||
+           --result "$result" --evidence "ev/$id.txt" ${ctl:+--control-ok "$ctl"} ||
            { gwt-queue fail --id "$id" --token "$token" --note "gwt-ledger add failed"; break; }
        gwt-queue done --id "$id" --token "$token" --result "$result" --evidence "ev/$id.txt"
    done
@@ -88,7 +93,7 @@ flowchart LR
 
    The ledger has no task-kind column, so the loop gives each kind its own ledger source: `familysearch` for a search, `familysearch-verify`, `familysearch-sweep` and `familysearch-followup` for the others, and `any` in place of an empty source. A task with no source logs its rows under `any` but never reuses one: the reuse step runs only when the task names its source. Without that, a `verify` task would share the row of a `search` task on the same person, source and query, and close with a result nobody checked. The suffixes are reserved in [gwt-ledger](ledger.md). Pass the value as `--source="$lsrc"`, with the `=`, so it can never be read as a flag.
 
-   The ledger query is the task's query plus its gap code, so each gap of a person has its own row: a `none` for "no parents recorded" does not close the "no death" task. A ledger row stands in for a search only when it is an exact match (`check --exact`: same source, identical normalized query), its result is not `blocked`, and its `next_date`, if any, is still in the future. `check` lists equal rows newest first, so a later `hit` wins over an older `none`. A fuzzy match is a hint for a person, never a result for a script: the search runs. A reused row's result and evidence go into the task unchanged. Nothing here turns a block into an absence.
+   The ledger query is the task's query plus its gap code, so each gap of a person has its own row: a `none` for "no parents recorded" does not close the "no death" task. A ledger row stands in for a search only when it is an exact match (`check --exact`: same source, identical normalized query), its result [counts as done](ledger.md#results) (`hit`, `none`, `partial` or `out-of-coverage`; never `blocked`, `denied` or `unproven`), and its `next_date`, if any, is still in the future. The loop reuses the first such row, not simply the first row printed: a newer `blocked` or `unproven` row can sit above it. A `none` is logged with the control run of the batch ([gwt-read canary controls](read.md#canary-controls)), or as `unproven`. `check` lists equal rows newest first, so a later `hit` wins over an older `none`. A fuzzy match is a hint for a person, never a result for a script: the search runs. A reused row's result and evidence go into the task unchanged. Nothing here turns a block into an absence.
 
    **On a block** (a 429, a captcha, a block page): `gwt-gate hit "$GWT_AGENT" "<what>"` pauses every lane on that site; log the try with `gwt-ledger add ... --result blocked`, a row the loop above skips when it looks for one to reuse; then `gwt-queue fail`, so the task backs off and returns later. For an IP or account block that lasts hours, `gwt-gate block <hours> "<why>"` stops every lane on that gate for that long. On a 403 that refuses one record, `gwt-gate denied "$GWT_AGENT" "<what>"` logs it without pausing anyone. On a 401, `gwt-gate dead` pauses every lane without slowing the pace and exits 4: the session is gone, so stop the lane. A "no result" from a site that was blocking is a `fail`, not a `none`. `gwt-queue release` is only for an attempt where nothing ran.
 4. **Verify and judge.** The evidence files go to the verifier and then the judge exactly as in the [pipeline](pipeline.md). A `hit` creates a `followup` task (`gwt-queue add --kind followup`) for whatever it opens next: the parents named in an act, the parish of a marriage.

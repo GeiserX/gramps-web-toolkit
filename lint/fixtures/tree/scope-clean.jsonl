@@ -1,0 +1,6 @@
+{"op": "add_event", "key": "e-luis-res", "ruling": "R-1", "person": "I4", "type": "Residence", "date": "1950"}
+{"op": "add_note", "key": "n-carlos", "ruling": "R-1", "text": "Carlos worked at the mill.", "attach": [{"person": "I5"}]}
+{"op": "add_person", "key": "p-new-son", "ruling": "R-1", "first_name": "Juan", "surname": "Vega Prieto", "gender": "M"}
+{"op": "link_child", "key": "l-new-son", "ruling": "R-1", "family": "F2", "child": "key:p-new-son"}
+{"op": "add_tag", "key": "t-iker", "ruling": "R-1", "target": {"person": "I9"}, "name": "checked"}
+{"op": "add_event", "key": "e-elena-marr", "ruling": "R-1", "family": "F3", "type": "Residence", "date": "1960"}

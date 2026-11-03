@@ -139,6 +139,7 @@ nav:
       - gwt-report: report.md
       - gwt-geocode: geocode.md
       - gwt-import-dna: import-dna.md
+      - gwt-lint: lint.md
       - gwt-import-gedcom: import-gedcom.md
   - Research tools:
       - gwt-queue: queue.md
