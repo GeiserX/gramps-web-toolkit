@@ -117,6 +117,15 @@ class Search(Run):
         self.search(net, gate)
         self.assertEqual(len(net.requests), 2, 'a changed answer was served from the cache')
 
+    def test_rows_past_what_discovery_serves_ask_nothing(self):
+        gate = FakeGate()
+        net = FakeNet(gate)
+        code, _, _, text = self.search(net, gate, '--count', '100', '--page', '101')
+        self.assertEqual((code, net.requests), (gwt_tna.EXIT_USAGE, []), text)
+        self.assertIn('10000 rows', text)
+        code, _, _, text = self.search(FakeNet(gate, (200, fx('search.json'))), gate, '--count', '100', '--page', '100')
+        self.assertNotEqual(code, gwt_tna.EXIT_USAGE, text)
+
     def test_an_outage_is_a_block_never_zero_results(self):
         for status in (500, 503):
             with self.subTest(status):
@@ -142,6 +151,13 @@ class Record(Run):
         code, _, _, text = self.run_tna(['record', 'https://discovery.nationalarchives.gov.uk/details/r/D900001'],
                                         net, gate)
         self.assertEqual(code, 0, text)
+
+    def test_a_short_id_in_lower_case_asks_for_the_id_in_capitals(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, fx('record.json')))
+        code, _, _, text = self.run_tna(['record', 'd900001'], net, gate)
+        self.assertEqual(code, 0, text)
+        self.assertTrue(net.requests[0].full_url.endswith('/details/D900001'))
 
     def test_an_unknown_id_is_an_error_never_a_block(self):
         # Discovery answers an id it does not have with HTTP 204 and no body

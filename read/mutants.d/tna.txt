@@ -17,3 +17,6 @@ gwt_tna.py |             out.append((f['count'], re.sub(r'^\S+\s+', '', str(f['c
 gwt_tna.py |         if isinstance(f, dict) and f.get('code') == 'TNA' and _count(f.get('count')): |         if isinstance(f, dict) and _count(f.get('count')): | only Kew itself is named from heldByReps; the OTH count is not an archive
 gwt_tna.py |     rid = a.id.strip().rsplit('/', 1)[-1] |     rid = a.id.strip() | a Discovery URL reads as its id
 gwt_tna.py | re.sub(r'<emph altrender="doctype">[^<]*</emph>', ' ', str(sc.get('description') or '')) | str(sc.get('description') or '') | the document-type code is not part of an entry's name
+gwt_tna.py |     if a.page * a.count > MAX_ROWS: |     if False: | a page past the 10,000 rows Discovery serves asks nothing and says why
+gwt_tna.py | MAX_ROWS = 10000 | MAX_ROWS = 10100 | Discovery serves 10,000 rows of a search, never more
+gwt_tna.py |         rid = rid.upper() |         pass | a short id typed in lower case asks for the id in capitals

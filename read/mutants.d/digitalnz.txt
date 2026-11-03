@@ -10,3 +10,5 @@ gwt_digitalnz.py |         p.append(('and[year][]', str(int(year)))) |         p
 gwt_digitalnz.py | p += [('per_page', max(1, min(int(count), 100))), | p += [('per_page', max(1, int(count))), | a page is never more than 100 rows
 gwt_digitalnz.py |             return ('...' if a else '') + text[a:b] + ('...' if b < len(text) else '') |             return text | the snippet is the words around the query, not the whole article
 gwt_digitalnz.py |             'snippet': snippet(r.get('fulltext'), query)} |             'snippet': ''} | each row carries the words around the query
+gwt_digitalnz.py |     if a.page > MAX_PAGE: |     if False: | a page past the 100 anonymous use may read asks nothing and says why
+gwt_digitalnz.py | MAX_PAGE = 100 | MAX_PAGE = 101 | anonymous use reads pages 1 to 100, never more

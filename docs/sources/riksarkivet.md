@@ -17,7 +17,7 @@ gwt read riksarkivet control
 
 A row is a volume, never a person: role `volume`, never `principal`, so gwt-rank ranks it weak. It carries `reference_code` (`SE/ULA/11632/A I ac/5`), `archive` (the parish archive), `series` (the series path below it, such as "Husförhörslängder"), `date` as the catalogue writes it with `year` and `year_to` (empty for an open end), `held_by` (the archive that keeps it), `url` (the volume's page on sok.riksarkivet.se) and `iiif_manifests`, the manifest of each scanned copy (`https://lbiiif.riksarkivet.se/arkis!<id>/manifest`).
 
-Each manifest prints an `item` line: the reference code and the manifest URL. A scanned volume without a manifest link prints its reference code with an empty URL.
+Each manifest prints an `item` line: the reference code and the manifest URL. A scanned volume without a manifest link prints its reference code with an empty URL; open its `url` on sok.riksarkivet.se to view it. Finding the manifest of those volumes is not done yet.
 
 ## When it stops
 

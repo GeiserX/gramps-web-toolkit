@@ -29,6 +29,7 @@ DAY = 86400
 HELD = {'all': 'ALL', 'tna': 'TNA', 'other': 'OTH'}
 ACCEPT = 'application/json'
 EXIT_USAGE = 64
+MAX_ROWS = 10000        # Discovery answers HTTP 400 when page times page size passes 10,000
 
 
 def no_record_fetcher(fetch):
@@ -173,6 +174,10 @@ def search(a, R):
     if not a.query.strip():
         print('gwt-read: tna: --query is empty', file=sys.stderr, flush=True)
         return EXIT_USAGE
+    if a.page * a.count > MAX_ROWS:
+        print('gwt-read: tna: Discovery serves the first %d rows of a search; narrow with --series, --from/--to or '
+              '--held-by' % MAX_ROWS, file=sys.stderr, flush=True)
+        return EXIT_USAGE
     url = search_url(a.query, a.series, a.held_by, a.year_from or '', a.year_to or '', a.count, a.page)
     off = (max(1, int(a.page)) - 1) * max(1, min(int(a.count), 100))
     status, rh, body, cached = gwt_reader.get_api(R, url, {'accept': ACCEPT},
@@ -196,6 +201,8 @@ def add_record_args(sp):
 
 def record(a, R):
     rid = a.id.strip().rsplit('/', 1)[-1]
+    if re.fullmatch(r'[cd]\d+', rid):
+        rid = rid.upper()       # ids are case-sensitive: d682312 answers 204, D682312 the entry
     if not re.fullmatch(r'[A-Za-z0-9-]+', rid):
         print('gwt-read: tna: not a Discovery id: %r' % a.id, file=sys.stderr, flush=True)
         return EXIT_USAGE

@@ -36,6 +36,7 @@ SPEC = {
 ACCEPT = 'application/json'
 EXIT_USAGE = 64
 AROUND = 200            # characters of article text kept on each side of the first match
+MAX_PAGE = 100          # without a key the API refuses a page above 100 (HTTP 400)
 
 
 def search_url(query, year='', count=20, page=1):
@@ -110,6 +111,10 @@ def add_search_args(sp):
 def search(a, R):
     if not a.query.strip():
         print('gwt-read: digitalnz: --query is empty', file=sys.stderr, flush=True)
+        return EXIT_USAGE
+    if a.page > MAX_PAGE:
+        print('gwt-read: digitalnz: without an API key DigitalNZ serves pages 1 to %d; narrow with --year or more '
+              'words, or raise --count' % MAX_PAGE, file=sys.stderr, flush=True)
         return EXIT_USAGE
     url = search_url(a.query, a.year or '', a.count, a.page)
     off = (max(1, int(a.page)) - 1) * max(1, min(int(a.count), 100))

@@ -14,7 +14,7 @@ gwt read tna control
 - `--series` keeps the search to a record series; repeat it for more.
 - `--held-by tna` searches Kew only, `--held-by other` the other archives only.
 - `--from` and `--to` are years of the record.
-- `record` takes an entry's id (`C1234`, `D280526`, the long id of a local archive's entry) or its Discovery URL.
+- `record` takes an entry's id (`C1234`, `D280526`, the long id of a local archive's entry) or its Discovery URL. Ids are case-sensitive; a short id typed in lower case (`d280526`) is asked in capitals.
 
 ## Which archive holds it
 
@@ -26,7 +26,7 @@ A row is a catalogue entry, never a person: role `item`, never `principal`, so g
 
 ## When it stops
 
-"None" is the API's own count: `count` 0 with no record. Any other answer is a STOP and nothing is written or cached: a renamed result container, no count, or a count with no rows. A `--page` past the last row is the end of the results, not a STOP: exit 2, with `past the end` on the results line. A 5xx or no answer is an outage: exit 3, and the gate pauses every lane.
+"None" is the API's own count: `count` 0 with no record. Any other answer is a STOP and nothing is written or cached: a renamed result container, no count, or a count with no rows. Discovery serves the first 10,000 rows of a search, so a `--page` whose rows pass 10,000 (`--page` times `--count`) asks nothing and exits 64: narrow with `--series`, `--from`/`--to` or `--held-by`. A `--page` past the last row is the end of the results, not a STOP: exit 2, with `past the end` on the results line. A 5xx or no answer is an outage: exit 3, and the gate pauses every lane.
 
 The details API answers an id it does not have with HTTP 204 and no body. `record` reads that as "no record with this id", exit 1, and the gate hears nothing. Anywhere else an empty answer is still a STOP that pauses the lanes.
 

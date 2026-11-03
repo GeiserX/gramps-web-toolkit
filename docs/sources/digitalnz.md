@@ -20,7 +20,7 @@ Each row prints an `item` line: the id, the Papers Past link and the text link.
 
 ## When it stops
 
-"None" is the API's own count: `result_count` 0 with no row. Any other answer is a STOP and nothing is written or cached: a renamed result container, no count, a count with no rows, or an article with no link. A `--page` past the last row is the end of the results, not a STOP: exit 2, with `past the end` on the results line. A 5xx or no answer is an outage: exit 3, and the gate pauses every lane.
+"None" is the API's own count: `result_count` 0 with no row. Any other answer is a STOP and nothing is written or cached: a renamed result container, no count, a count with no rows, or an article with no link. Without an API key DigitalNZ serves pages 1 to 100, so a `--page` above 100 asks nothing and exits 64: narrow with `--year` or more words, or raise `--count`. A `--page` past the last row is the end of the results, not a STOP: exit 2, with `past the end` on the results line. A 5xx or no answer is an outage: exit 3, and the gate pauses every lane.
 
 ## Pace, cache and terms
 

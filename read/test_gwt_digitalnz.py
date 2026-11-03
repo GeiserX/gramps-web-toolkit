@@ -101,6 +101,15 @@ class Search(Run):
         self.assertEqual((code, gate.hits), (gwt_reader.EXIT_EMPTY, []), text)
         self.assertIn('past the end', lines['results'])
 
+    def test_a_page_past_what_anonymous_use_may_read_asks_nothing(self):
+        gate = FakeGate()
+        net = FakeNet(gate)
+        code, _, _, text = self.search(net, gate, '--page', '101')
+        self.assertEqual((code, net.requests), (gwt_digitalnz.EXIT_USAGE, []), text)
+        self.assertIn('pages 1 to 100', text)
+        code, _, _, text = self.search(FakeNet(gate, (200, fx('search.json'))), gate, '--page', '100')
+        self.assertNotEqual(code, gwt_digitalnz.EXIT_USAGE, text)
+
     def test_a_changed_answer_is_a_stop_never_zero_results(self):
         gate = FakeGate()
         net = FakeNet(gate, (200, fx('changed.json')), (200, fx('changed.json')))
