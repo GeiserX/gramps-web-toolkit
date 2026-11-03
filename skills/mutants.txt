@@ -11,3 +11,4 @@ gramps-web-toolkit/SKILL.md | name: gramps-web-toolkit | name: gramps-web-tools 
 gramps-web-toolkit/SKILL.md | description: Change | description: Use when: Change | a description a YAML loader reads as a mapping
 gramps-web-toolkit/SKILL.md | `gwt corpus search | `gwt corpse search | a tool that does not exist
 gramps-web-toolkit/SKILL.md | gwt ledger check --exact | gwt ledger check --ledger L --exact | a tool-level flag after the subcommand
+gramps-web-toolkit/SKILL.md | changes.jsonl --verify --config | changes.jsonl --verify_all --config | a flag the pattern used to cut short at the underscore

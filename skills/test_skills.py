@@ -9,7 +9,8 @@ what it says, so a renamed flag or a moved docs heading must fail here, not in a
   one of that tool's subcommands when the tool has any; in prose, a word right after it that is close to a
   subcommand's name must be that subcommand;
 - every `--flag` belongs to the tool named last before it, and is in that tool's --help, or, after a subcommand,
-  in that subcommand's --help only (argparse rejects a tool-level option after the subcommand);
+  in that subcommand's --help only (argparse rejects a tool-level option after the subcommand; in a code span a
+  tool-level option may come before the subcommand);
 - every link to the docs site names a page under docs/ and, with `#anchor`, a heading on that page.
 """
 import contextlib
@@ -34,7 +35,7 @@ from gwt_core import cli  # noqa: E402
 NAME = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 FIELDS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
 TOOL = re.compile(r"\bgwt[ -]([a-z][a-z0-9-]*[a-z0-9])")
-FLAG = re.compile(r"(?<![\w-])--([a-z][a-z0-9-]*)")
+FLAG = re.compile(r"(?<![\w-])--([A-Za-z0-9_][A-Za-z0-9_-]*)")
 URL = re.compile(re.escape(SITE) + r"([A-Za-z0-9_./-]*)(?:#([A-Za-z0-9_-]+))?")
 CODE = re.compile(r"```.*?```|`[^`\n]+`", re.S)
 
@@ -109,7 +110,7 @@ def commands(text):
     code = [(m.start(), m.end()) for m in CODE.finditer(text)]
     events = sorted([(m.start(), "tool", m) for m in TOOL.finditer(text)] +
                     [(m.start(), "flag", m) for m in FLAG.finditer(text)], key=lambda e: e[0])
-    current = None
+    current, after = None, None  # after: (tool end, code span end) while a subcommand may still follow tool flags
     for pos, kind, m in events:
         line = text.count("\n", 0, pos) + 1
         if kind == "tool":
@@ -131,6 +132,7 @@ def commands(text):
                     problems.append(f"line {line}: `gwt {tool} {word}`: no such subcommand "
                                     f"(known: {', '.join(sorted(subs))})")
             current = (tool, sub)
+            after = (m.end(), span[1]) if span and subs and sub is None else None
             named.append((tool, sub, None))
         else:
             flag = m.group(1)
@@ -138,6 +140,12 @@ def commands(text):
                 problems.append(f"line {line}: --{flag} follows no gwt tool, so nothing proves it exists")
                 continue
             tool, sub = current
+            if after and pos < after[1]:
+                # `gwt ledger --ledger L check --exact`: a tool flag first, then the subcommand and its flags
+                word = next((w for w in text[after[0]:pos].split() if w in subcommands(tool)), None)
+                if word:
+                    sub, current, after = word, (tool, word), None
+                    named.append((tool, sub, None))
             known = flags(tool_help(tool, sub)) if sub else flags(tool_help(tool))
             if flag not in known:
                 where = f"gwt {tool}" + (f" {sub}" if sub else "")
@@ -230,6 +238,17 @@ class Skills(unittest.TestCase):
                 self.assertEqual(problems, [])
                 self.assertTrue(any("#" in u for u in seen), "no docs link with an anchor: the scan is broken")
 
+    def test_install_command_names_the_skill(self):
+        # the repo also tracks other skills (.agents/skills/); `npx skills add` without --skill installs them all
+        found = 0
+        for rel in ("README.md", "CHANGELOG.md", os.path.join("docs", "getting-started.md")):
+            with open(os.path.join(ROOT, rel), encoding="utf-8") as f:
+                for n, line in enumerate(f, 1):
+                    for cmd in re.findall(r"npx skills add[^`\n]*", line):
+                        found += 1
+                        self.assertIn("--skill gramps-web-toolkit", cmd, f"{rel}:{n}")
+        self.assertTrue(found, "no `npx skills add` line found: the scan is broken")
+
 
 class TheCheckerCanFail(unittest.TestCase):
     """Each check goes red on a planted break, so a green run means the skill was read."""
@@ -251,6 +270,16 @@ class TheCheckerCanFail(unittest.TestCase):
         # argparse: `gwt-ledger check --ledger L` is "unrecognized arguments"; --ledger goes before the subcommand
         self.assertIn("ledger", flags(tool_help("ledger")))
         self.assertTrue(commands("`gwt ledger check --ledger L --exact`")[0])
+
+    def test_tool_flag_before_subcommand(self):
+        self.assertEqual(commands("`gwt ledger --ledger L check --exact`")[0], [])
+        self.assertTrue(commands("`gwt ledger --ledger L check --no-such-flag`")[0])
+        self.assertTrue(commands("`gwt ledger --exact check`")[0])
+
+    def test_flag_spelled_past_the_pattern(self):
+        # `--verify_all` must not read as --verify, and `--Verify` must be seen at all
+        self.assertTrue(commands("`gwt apply changes.jsonl --verify_all`")[0])
+        self.assertTrue(commands("`gwt apply changes.jsonl --Verify`")[0])
 
     def test_subcommand_typo_in_prose(self):
         self.assertTrue(commands("log it (gwt ledger chek, a person)")[0])

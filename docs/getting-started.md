@@ -108,7 +108,7 @@ The repository ships an [Agent Skills](https://agentskills.io/specification) ski
 Install it with either command:
 
 ```sh
-npx skills add GeiserX/gramps-web-toolkit
+npx skills add GeiserX/gramps-web-toolkit --skill gramps-web-toolkit
 gh skill install GeiserX/gramps-web-toolkit gramps-web-toolkit --pin v<version> --agent claude-code
 ```
 

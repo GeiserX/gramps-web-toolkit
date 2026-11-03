@@ -59,7 +59,7 @@ gwt leads --root I0001 --limit 10 tree.json.gz   # the gaps to research next, Lu
 
 `./demo.sh` in `examples/` runs the same commands and checks each exit code. Nothing above writes to a tree: without `--apply`, `gwt apply` only prints the plan. Every tool runs as `gwt <tool>` and keeps its old `gwt-<tool>` command too. `gwt mh` needs the `mh` extra (`pipx install '.[mh]'`) and a Chrome it reaches over CDP. `gwt-spanish-poller` needs Node 18+ and Playwright and is not in the package. PyPI gets the package with the first release. [Getting started](https://geiserx.github.io/gramps-web-toolkit/getting-started/) connects the tools to your own tree.
 
-For an AI agent, `npx skills add GeiserX/gramps-web-toolkit` installs a skill that teaches it the safe order of steps and the traps; [Getting started](https://geiserx.github.io/gramps-web-toolkit/getting-started/) has the other ways to install it.
+For an AI agent, `npx skills add GeiserX/gramps-web-toolkit --skill gramps-web-toolkit` installs a skill that teaches it the safe order of steps and the traps; [Getting started](https://geiserx.github.io/gramps-web-toolkit/getting-started/) has the other ways to install it.
 
 ## Documentation
 

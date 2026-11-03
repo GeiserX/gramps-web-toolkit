@@ -12,7 +12,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Added
 
-- An agent skill, `skills/gramps-web-toolkit/SKILL.md` in the Agent Skills format. It teaches an AI agent the safe order of steps for changing a tree (snapshot, change list, lint, dry run, `gwt run`, verify) and the traps, and points to `--help` and the docs for the rest. Install it with `npx skills add GeiserX/gramps-web-toolkit` or `gh skill install`. A test in `skills/` fails when the skill names a tool, subcommand or option the tools do not have, or links a docs page or heading that does not exist.
+- An agent skill, `skills/gramps-web-toolkit/SKILL.md` in the Agent Skills format. It teaches an AI agent the safe order of steps for changing a tree (snapshot, change list, lint, dry run, `gwt run`, verify) and the traps, and points to `--help` and the docs for the rest. Install it with `npx skills add GeiserX/gramps-web-toolkit --skill gramps-web-toolkit` or `gh skill install`. A test in `skills/` fails when the skill names a tool, subcommand or option the tools do not have, or links a docs page or heading that does not exist.
 
 ### Changed
 
