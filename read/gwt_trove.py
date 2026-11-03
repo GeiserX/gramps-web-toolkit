@@ -139,7 +139,7 @@ def search(a, R):
         if e.verdict != 'dead':
             raise
         raise gwt_reader.Stop('Trove refused the API key in $%s (HTTP 401): check or renew it, then end the pause with '
-                              '`gwt gate clear --dir ~/.cache/gwt-gate-trove "new key"`; never retry in a loop'
+                              '`gwt gate --dir ~/.cache/gwt-gate-trove clear "new key"`; never retry in a loop'
                               % KEY_ENV, e.exit_code, e.verdict, e.status, e.body) from None
     doc = json.loads(body)
     rec = records(doc)

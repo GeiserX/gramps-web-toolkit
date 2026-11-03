@@ -1,8 +1,9 @@
 """Tests for `gwt-read trove`. Answers in fixtures/trove/ keep the v3 API's shape with invented newspapers and people;
 a fake transport and a fake gate: no request leaves this machine. Run: cd read && python3 -m pytest -q test_gwt_trove.py"""
-import contextlib, io, json, os, unittest, urllib.parse
+import contextlib, io, json, os, re, shlex, unittest, urllib.parse
 
 from test_gwt_read import Base, FakeGate, FakeNet
+import gwt_gate  # noqa: E402
 import gwt_read  # noqa: E402
 import gwt_reader  # noqa: E402
 import gwt_trove  # noqa: E402
@@ -110,8 +111,13 @@ class Search(Base):
         code, lines, text = self.search(FakeNet(gate, (401, UNAUTH)), gate)
         self.assertEqual((code, len(gate.deads), self.out_files()), (gwt_reader.EXIT_DEAD, 1, []), text)
         self.assertIn('refused the API key in $GWT_TROVE_KEY', text)
-        self.assertIn('gwt gate clear --dir ~/.cache/gwt-gate-trove', text)
+        self.assertIn('gwt gate --dir ~/.cache/gwt-gate-trove clear', text)
         self.assertNotIn('session token', text)
+        # the printed command must run as written: gwt-gate takes --dir before the subcommand
+        argv = shlex.split(re.search(r'`gwt gate ([^`]+)`', text).group(1).replace('~/.cache/gwt-gate-trove',
+                                                                                    self.gatedir))
+        with contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
+            self.assertIn(gwt_gate.main(argv), (None, 0), 'the 401 message prints a gate command that does not run')
 
     def test_a_year_that_is_not_a_number_is_refused_before_any_request(self):
         gate = FakeGate()

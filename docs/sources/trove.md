@@ -13,7 +13,7 @@ export GWT_TROVE_KEY=...            # yours; never commit it
 The key is sent only as the `X-API-KEY` header, added inside the fetcher, so it never reaches [gwt-fscache](../fscache.md), the evidence files or the URL. Without `GWT_TROVE_KEY` every command exits 4 with a message and makes no request. A 401 (a wrong, expired or revoked key) exits 4 too, says Trove refused the key, and the gate hears `dead`, which pauses every trove lane for 20 minutes. Fix the key, then end the pause yourself, or a rerun with the right key exits 6 until it runs out:
 
 ```sh
-gwt gate clear --dir ~/.cache/gwt-gate-trove "new key"
+gwt gate --dir ~/.cache/gwt-gate-trove clear "new key"
 ```
 
 Never retry in a loop.
