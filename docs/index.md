@@ -63,6 +63,7 @@ The toolkit works for genealogy in any country. `gwt-spanish-poller` and some `g
 - [Archives catalogue](archives.md): where records are kept in about 80 countries, for `gwt-leads --archives builtin:CC`.
 - [gwt-report](report.md): how two people are related, in English, Spanish and French, and what is new since the family was last told.
 - [gwt-geocode](geocode.md): coordinates for the places events use, in any country, as a change list for gwt-apply.
+- [gwt-corpus](corpus.md): search everything already downloaded before going back to a site, and cross a book or gazette with the tree.
 
 ## Research tools
 

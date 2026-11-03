@@ -1,0 +1,18 @@
+gwt_corpus.py | TOKENIZE = 'unicode61 remove_diacritics 2' | TOKENIZE = 'unicode61 remove_diacritics 0' | a search folds accents: «jose» finds «José»
+gwt_corpus.py | return 'NEAR(%s, %d)' % (' '.join('"%s"' % w for w in ws), near) | return ' OR '.join('"%s"' % w for w in ws) | a search needs every word, never OR
+gwt_corpus.py | return rules.fold(text).split() | return text.split() | a + in a query separates words that must all appear, it never turns the search into OR or a syntax error
+gwt_corpus.py |         if not run_query(db, expr, a.source, 1): |         if False: | --fts with a control that finds nothing is void, exit 3
+gwt_corpus.py |     if a.fts and not a.control: |     if False: | --fts without a known-positive control is refused
+gwt_corpus.py |         return EXIT_NONE |         return EXIT_HITS | 0 hits exits 1 and says «not downloaded yet», never success
+gwt_corpus.py |     if not controls('before'): |     if False: | a sweep whose control is missing before it starts is void and writes no ledger row
+gwt_corpus.py |     if not controls('after'): |     if False: | a sweep whose control is lost by the end is void and writes no ledger row
+gwt_corpus.py | 'result': 'hit' if found else 'none' | 'result': 'hit' | a sweep negative is a «none» ledger row, never a hit
+gwt_corpus.py |             extra.append('%s %s' % (right, left.title())) |             pass | an inverted dictionary heading «SURNAME, Given» matches the full name
+gwt_corpus.py |             if len(pair_pages[pair]) <= max_pair_pages: |             if True: | a surname pair on more than --max-pair-pages pages gives no match
+gwt_corpus.py |             if carriers[s] > max_surname_people: |             if False: | a surname that many people carry gives no surname-and-place match
+gwt_corpus.py | if path not in seen and any(path.startswith(r + os.sep) for r in roots): | if path not in seen: | an update of one root never drops the files of another
+gwt_corpus.py |         if old and old[0] == st.st_mtime and old[1] == st.st_size: |         if old: | a file whose size or time changed is read again
+gwt_corpus.py |             return None  # its metadata is not written yet |             return []  # its metadata is not written yet | a cache body whose metadata is not written yet is retried at the next update
+gwt_corpus.py | s = re.sub(r'(?is)<(script|style)\b.*?</\1>', ' ', s) | s = s | a page's scripts and styles are not indexed as its text
+gwt_corpus.py |             return []  # an fscache entry's metadata | pass  # an fscache entry's metadata | a reader's candidates file is not indexed twice
+gwt_corpus.py |             ctx['no_pdftotext'] += 1 |             pass | an update that could not read PDFs says how many

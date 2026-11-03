@@ -23,6 +23,7 @@ TOOLS = {  # name: (module with main(argv), one line)
     "read": ("gwt_read", "FamilySearch and PARES record search and records, slow and cached"),
     "report": ("gwt_report", "how two people are related, and what is new since the family was told"),
     "geocode": ("gwt_geocode", "coordinates for the places events use, as a gwt-apply change list"),
+    "corpus": ("gwt_corpus", "search everything already downloaded before going back to a site"),
 }
 
 

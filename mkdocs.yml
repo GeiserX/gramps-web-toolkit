@@ -138,6 +138,7 @@ nav:
       - Archives catalogue: archives.md
       - gwt-report: report.md
       - gwt-geocode: geocode.md
+      - gwt-corpus: corpus.md
   - Research tools:
       - gwt-queue: queue.md
       - gwt-ledger: ledger.md
