@@ -51,16 +51,18 @@ gwt-geocode = "gwt_geocode:main"
 gwt-run = "gwt_run:main"
 gwt-import-dna = "gwt_dna:main"
 gwt-lint = "gwt_lint.cli:main"
+gwt-import-gedcom = "gwt_gedcom.cli:main"
+gwt-corpus = "gwt_corpus:main"
 
 # The version comes from the git tag: `v0.2.0` builds 0.2.0; a commit after it builds 0.2.1.devN+g<sha>.
 [tool.hatch.version]
 source = "vcs"
 
 [tool.hatch.build.targets.wheel]
-packages = ["apply/gwt_apply", "check/gwt_check", "fetch/gwt_fetch", "core/gwt_core"]
+packages = ["apply/gwt_apply", "check/gwt_check", "fetch/gwt_fetch", "core/gwt_core", "gedcom/gwt_gedcom"]
 # `pip install -e .` puts these folders on sys.path instead of copying files
 dev-mode-dirs = ["apply", "check", "fetch", "core", "ledger", "gate", "fscache", "queue", "leads", "rank",
-                 "importxl", "rawstore", "myheritage", "read", "report", "geocode", "run", "dna", "lint"]
+                 "importxl", "rawstore", "myheritage", "read", "report", "geocode", "gedcom", "dna", "lint", "corpus", "run"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "ledger/gwt_ledger.py" = "gwt_ledger.py"
@@ -88,8 +90,13 @@ dev-mode-dirs = ["apply", "check", "fetch", "core", "ledger", "gate", "fscache",
 "read/gwt_wikitree.py" = "gwt_wikitree.py"
 "read/gwt_archiveorg.py" = "gwt_archiveorg.py"
 "read/gwt_matchid.py" = "gwt_matchid.py"
+"read/gwt_riksarkivet.py" = "gwt_riksarkivet.py"
+"read/gwt_tna.py" = "gwt_tna.py"
+"read/gwt_census1950.py" = "gwt_census1950.py"
+"read/gwt_digitalnz.py" = "gwt_digitalnz.py"
 "report/gwt_report.py" = "gwt_report.py"
 "geocode/gwt_geocode.py" = "gwt_geocode.py"
 "run/gwt_run.py" = "gwt_run.py"
 "dna/gwt_dna.py" = "gwt_dna.py"
 "lint/gwt_lint" = "gwt_lint"
+"corpus/gwt_corpus.py" = "gwt_corpus.py"
