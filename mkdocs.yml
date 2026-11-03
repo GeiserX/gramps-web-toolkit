@@ -140,6 +140,7 @@ nav:
       - gwt-geocode: geocode.md
       - gwt-import-dna: import-dna.md
       - gwt-lint: lint.md
+      - gwt-import-gedcom: import-gedcom.md
   - Research tools:
       - gwt-queue: queue.md
       - gwt-ledger: ledger.md
@@ -152,6 +153,10 @@ nav:
       - "gwt-read wikitree": sources/wikitree.md
       - "gwt-read archiveorg": sources/archiveorg.md
       - "gwt-read matchid": sources/matchid.md
+      - "gwt-read riksarkivet": sources/riksarkivet.md
+      - "gwt-read tna": sources/tna.md
+      - "gwt-read census1950": sources/census1950.md
+      - "gwt-read digitalnz": sources/digitalnz.md
       - "gwt-read bvph": sources/bvph.md
       - "gwt-read delpher": sources/delpher.md
       - "gwt-read trove": sources/trove.md

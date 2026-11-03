@@ -315,6 +315,10 @@ class Reader:
 # SPEC is a source by itself; the older ones (pares, genae, boe, insee) are declared in gwt_read.LEGACY.
 SOURCE_MODULES = ('gwt_pares', 'gwt_genae', 'gwt_boe', 'gwt_insee',
                   'gwt_openarch', 'gwt_wikitree', 'gwt_archiveorg', 'gwt_matchid',
+                  'gwt_riksarkivet',
+                  'gwt_tna',
+                  'gwt_census1950',
+                  'gwt_digitalnz',
                   'gwt_bvph',
                   'gwt_delpher',
                   'gwt_trove',
