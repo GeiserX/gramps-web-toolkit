@@ -1,0 +1,55 @@
+0 HEAD
+1 GEDC
+2 VERS 7.0
+1 SOUR INVENTED_TEST_FILE
+0 @I1@ INDI
+1 NAME Jean /Martin/
+2 GIVN Jean
+2 SURN Martin
+1 NAME Jean-Baptiste /Martin/
+1 SEX M
+1 BIRT
+2 DATE FRENCH_R 18 BRUM 8
+2 PLAC Saint-Denis, Seine, France
+3 MAP
+4 LATI N48.9356
+4 LONG E2.3539
+1 DEAT
+2 DATE 2 JAN 1850
+1 EXID 1234567
+2 TYPE https://www.wikitree.com/wiki/
+1 SNOTE @N1@
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Marie /Dubois/
+1 SEX F
+1 BIRT
+2 DATE JULIAN 1 MAR 1801
+1 DEAT
+2 DATE 1860
+1 FAMS @F1@
+0 @I3@ INDI
+1 NAME Louis /Martin/
+1 SEX M
+1 BIRT
+2 DATE FROM 1825 TO 1826
+1 OCCU Blacksmith
+2 DATE 1850
+1 DEAT
+2 DATE AFT 1880
+1 FAMC @F1@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I3@
+1 MARR
+2 DATE 10 JUN 1824
+2 PLAC Saint-Denis, Seine, France
+2 SOUR @S1@
+3 PAGE acte 52
+3 DATA
+4 TEXT Le dix juin mil huit cent vingt-quatre
+0 @N1@ SNOTE @@home: the family lived above the forge.
+0 @S1@ SOUR
+1 TITL État civil, mariages 1824
+0 TRLR
