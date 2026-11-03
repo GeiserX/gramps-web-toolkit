@@ -9,6 +9,7 @@ that expires, and the next run takes it over then (or at once with --break-lock)
 from __future__ import annotations
 
 import json
+import math
 import os
 import socket
 import time
@@ -94,10 +95,14 @@ class TreeLock:
         if held is not None and held.get("run") == self.run_id:
             return None  # an earlier try made it, but its answer was lost
         if held is not None:
-            alive = float(held.get("expires_ts") or 0) > _now()
+            now = _now()
+            alive = float(held.get("expires_ts") or 0) > now
             who = f"run {held.get('run')} on {held.get('host')} (pid {held.get('pid')}), expires {held.get('expires')}"
             if alive and not break_lock:
-                raise LockHeld(f"another apply holds this tree: {who}; wait, or pass --break-lock if it is dead")
+                remaining = math.ceil(float(held.get("expires_ts") or 0) - now)
+                raise LockHeld(f"another apply holds this tree: {who}; about {remaining} seconds left on its lease; wait, "
+                               f"or pass --break-lock once you have checked on {held.get('host')} that it stopped "
+                               "(a PID alone proves nothing)")
             self.c.delete("Note", LOCK_HANDLE)
             taken_over = f"took over the lock of {who}"
         self.expires = _now() + self.ttl
