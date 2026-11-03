@@ -33,7 +33,7 @@ Decide each one and run again:
 A real re-import can hold hundreds of people, so the decisions can go in a file, one per line, `#` for comments:
 
 ```sh
-gwt import-gedcom cousin.ged --tree tree.json.gz --batch cousin-ana --out changes.jsonl \
+gwt import-gedcom cousin.ged --tree tree.json.gz --batch cousin-ana --out changes.jsonl --force \
     --write-decisions decisions.txt     # every held look-alike, each choice commented out
 # edit decisions.txt: remove the # of one line per person
 gwt import-gedcom cousin.ged --tree tree.json.gz --batch cousin-ana --out changes.jsonl --force \
