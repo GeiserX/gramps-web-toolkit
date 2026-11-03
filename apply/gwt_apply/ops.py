@@ -690,6 +690,28 @@ class Result:
 
 
 
+def _stored_name(person: dict) -> tuple[str, str]:
+    """A stored person's first name and surname, the surname list joined with spaces."""
+    name = person.get("primary_name") or {}
+    return name.get("first_name", ""), " ".join(s.get("surname", "") for s in name.get("surname_list") or [])
+
+
+def _amended_people(ops: list[dict]) -> dict[str, set[str]]:
+    """add_person key -> the identity fields (first_name, surname, gender) an update_person of the same list sets on
+    that person, named as key:<key> or by the Gramps ID the add_person gives."""
+    ids = {op["gramps_id"]: op["key"] for op in ops if op.get("op") == "add_person" and op.get("gramps_id")}
+    out: dict[str, set[str]] = {}
+    for op in ops:
+        if op.get("op") != "update_person":
+            continue
+        ref = str(op.get("person", ""))
+        key = ref[4:] if ref.startswith("key:") else ids.get(ref)
+        fields = {"first_name", "surname", "gender"} & set(op.get("set") or {})
+        if key and fields:
+            out.setdefault(key, set()).update(fields)
+    return out
+
+
 class Applier:
     def __init__(self, client: Client, *, retries: int = 5, retry_wait: float = 30.0, lock=None, tag: str | None = None,
                  verify: bool = False, private_new: bool = False, landed: frozenset = frozenset()):
@@ -718,6 +740,7 @@ class Applier:
         self._unlink_notes: dict[str, list[str]] = {}  # op key -> link marks unlink_child still has to delete
         self._lost = False
         self._list_deletes: set[tuple[str, str]] = set()  # (class, ref) of every object a delete op of the list takes
+        self._amended: dict[str, set[str]] = {}  # add_person key -> identity fields a later update_person of the list sets
         self._refs: dict[str, list[tuple[str, str]]] | None = None  # offline: handle -> the snapshot objects naming it
         client.touch = self._touch
 
@@ -909,6 +932,7 @@ class Applier:
 
     def _run(self, ops: list[dict], results: list[Result]) -> None:
         self._list_deletes = {_delete_object(op["object"]) for op in ops if op.get("op") == "delete"}
+        self._amended = _amended_people(ops)
         for op in ops:
             res = Result(op["key"], op["op"], op["ruling"])
             self._op_tags = list(dict.fromkeys(t for t in [self.run_tag, *_tag_names(op.get("tag"))] if t))
@@ -1076,9 +1100,7 @@ class Applier:
         if self._names is None:
             self._names = {}
             for row in self.c.list_all("Person", ["primary_name", "gramps_id"]):
-                n = row.get("primary_name") or {}
-                surname = " ".join(s.get("surname", "") for s in n.get("surname_list") or [])
-                name = self._name_key(n.get("first_name", ""), surname)
+                name = self._name_key(*_stored_name(row))
                 self._names.setdefault(name, []).append(row.get("gramps_id") or row["handle"])
         return self._names
 
@@ -1092,7 +1114,10 @@ class Applier:
         return refs
 
     def add_person(self, op):
-        if self._existing("Person", op):
+        existing = self._existing("Person", op)
+        if existing is not None:
+            if op["key"] not in self.landed:
+                self._same_person(existing, op)
             return
         self._check_gramps_id("Person", op)
         name = self._name_key(op["first_name"], op["surname"])
@@ -1129,6 +1154,27 @@ class Applier:
         )
         self.keymap[op["key"]] = h
         self._names.setdefault(name, []).append(op.get("gramps_id") or f"key:{op['key']}")
+
+    def _same_person(self, person: dict, op: dict) -> None:
+        """A key an earlier list made stands for that person only: a Conflict when the op names someone else.
+
+        Compared: the folded first name and surname, and the gender and Gramps ID when the op gives them. A field an
+        update_person of this same list sets on key:<key> is left out, since the list itself changes it."""
+        first, surname = _stored_name(person)
+        rows = [("first_name", fold(first) == fold(op["first_name"]), first, op["first_name"]),
+                ("surname", fold(surname) == fold(op["surname"]), surname, op["surname"])]
+        if "gender" in op:
+            stored = next((g for g, v in GENDER.items() if v == person.get("gender")), person.get("gender"))
+            rows.append(("gender", stored == op["gender"], stored, op["gender"]))
+        if op.get("gramps_id"):
+            rows.append(("gramps_id", person.get("gramps_id") == op["gramps_id"], person.get("gramps_id"), op["gramps_id"]))
+        amended = self._amended.get(op["key"], set())
+        diffs = [r for r in rows if not r[1] and r[0] not in amended]
+        if diffs:
+            said = "; ".join(f"{f} {theirs!r} in the tree, {ours!r} in this op" for f, _, theirs, ours in diffs)
+            raise Conflict(f"key collision: {op['key']!r} already made Person {self.label(person)}, and it differs: {said}. "
+                           "If it is the same person, corrected since, make this op match the tree or drop it "
+                           f"(key:{op['key']} still finds the person); if it is another person, give it a new key")
 
     def update_person(self, op):
         person = self.obj("Person", op["person"])

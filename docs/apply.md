@@ -216,7 +216,20 @@ conflict: Citation C0123 has the same source and page with confidence 1; this op
 
 Within one list the same pair is refused before any request. **One page text per role**: give each role its own page text, for example `book 3, folio 12v, no. 40 (baptism)` and `book 3, folio 12v, no. 40 (godparent)`, so each citation keeps its own confidence and date.
 
-`add_media` still reuses by MD5 alone, the `[probable]` mark of `link_child` is still found by its prefix, and an object an earlier run made by the same key is skipped as before, so a rerun of an applied list is still all `skip`.
+`add_media` still reuses by MD5 alone, the `[probable]` mark of `link_child` is still found by its prefix, and an object an earlier run made by the same key is skipped as before (an `add_person` only when it still names the same person, below), so a rerun of an applied list is still all `skip`.
+
+**A person key stands for one person.** An `add_person` whose key already made a person is a skip only when that person still has the op's first name and surname (compared without case and accents) and, when the op gives them, its gender and Gramps ID. Otherwise the op is a key collision: it names each field that differs, with the tree's value and the op's, and the list stops before the ops that would hang evidence on the wrong person. A key reused in another list for someone else is caught this way. Two cases still skip:
+
+- a field an `update_person` of the same list sets on that person (`key:<key>`, or the Gramps ID the `add_person` gives), since the list itself changes it;
+- an op an earlier `--apply` of this same list logged as `done` (the logs `--apply` reads to resume, in the default folder or next to the same `--log` stem), so an unchanged list skips even after a later edit by hand.
+
+Outside those cases, a person corrected since the list landed (by hand or by another list) is a collision too, for example when a changed list is run again or verified with a `--log` that has no apply log beside it. If it is the same person, make the `add_person` match the tree or drop it from the list: later ops that say `key:<key>` still find the person. If it is another person, give it a new key.
+
+```
+conflict: key collision: 'p-john' already made Person I0042, and it differs: first_name 'Jon' in the tree, 'John' in this op. If it is the same person, corrected since, make this op match the tree or drop it (key:p-john still finds the person); if it is another person, give it a new key
+```
+
+The other `add_*` ops do not compare what a key already made yet: a reused key there is a skip whatever the object says, so keep keys unique across lists too.
 
 ### DNA matches
 
@@ -274,7 +287,7 @@ What it does not see:
 
 - A family Gramps merged on its own, because a person merge left two families with the same spouses. Our merge op wrote no note for it, so an op that names it is a `conflict`. Check those with `gwt-check` instead ([lesson 18](hard-won.md#18-a-merge-brings-the-losers-events-along-and-a-second-run-of-the-list-does-not-skip)).
 - An object a list made by key and that was later merged away: its key no longer finds it, so the op reads `missing`.
-- A field changed after the apply on an object a list made by key: the key finds the object and the op skips, as in any rerun ([Reuse only what is the same](#reuse-only-what-is-the-same)). An `update_*` op does compare its fields, so a value someone changed back reads `differs`.
+- A field changed after the apply on an object a list made by key: the key finds the object and the op skips, as in any rerun ([Reuse only what is the same](#reuse-only-what-is-the-same)). An `add_person` is the exception: a changed name, gender or Gramps ID reads `conflict`, unless this list's own `update_person` set it or the verify reads this list's apply log. An `update_*` op does compare its fields, so a value someone changed back reads `differs`.
 
 `--json FILE` writes one object per op of the list, in order, for scripts. It works with any run that has a change list, not only `--verify`:
 
