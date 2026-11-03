@@ -66,6 +66,7 @@ The toolkit works for genealogy in any country. `gwt-spanish-poller` and some `g
 - [gwt-import-dna](import-dna.md): turns the DNA match lists a testing site lets you download into a change list for Gramps Web's DNA view.
 - [gwt-lint](lint.md): checks a change list against the tree before it is applied: scope, protected and living people, overlap with other lists, weak claims; every rule proves it can fail.
 - [gwt-import-gedcom](import-gedcom.md): a GEDCOM file as a change list for review, with anyone already in the tree held for a decision; audit and split.
+- [gwt-corpus](corpus.md): search everything already downloaded before going back to a site, and cross a book or gazette with the tree.
 
 ## Research tools
 

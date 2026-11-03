@@ -1,0 +1,52 @@
+gwt_corpus.py | TOKENIZE = 'unicode61 remove_diacritics 2' | TOKENIZE = 'unicode61 remove_diacritics 0' | a search folds accents: «jose» finds «José»
+gwt_corpus.py | return 'body : (NEAR(%s, %d))' % (' '.join('"%s"' % w for w in ws), near) | return 'body : (%s)' % ' OR '.join('"%s"' % w for w in ws) | a search needs every word, never OR
+gwt_corpus.py | return WORD.findall(text or '') | return (text or '').split() | a + or a quote in a query separates words that must all appear, never a phrase or an FTS5 syntax error
+gwt_corpus.py |         if not run_query(db, expr, a.source, 1): |         if False: | --fts with a control that finds nothing is void, exit 3
+gwt_corpus.py |     if a.fts and not a.control: |     if False: | --fts without a known-positive control is refused
+gwt_corpus.py |         return EXIT_NONE |         return EXIT_HITS | 0 hits exits 1 and says «not downloaded yet», never success
+gwt_corpus.py |     if not controls('before'): |     if False: | a sweep whose control is missing before it starts is void and writes no ledger row
+gwt_corpus.py |     if not controls('after'): |     if False: | a sweep whose control is lost by the end is void and writes no ledger row
+gwt_corpus.py |             extra.append('%s %s' % (right, left.title())) |             pass | an inverted dictionary heading «SURNAME, Given» matches the full name
+gwt_corpus.py |             if not short or len(where) <= max_pair_pages: |             if True: | a surname pair or a two-word name on more than --max-pair-pages pages gives no match
+gwt_corpus.py |             if carriers[s] > max_surname_people: |             if False: | a surname that many people carry gives no surname-and-place match
+gwt_corpus.py | if path not in seen and any(path.startswith(r + os.sep) for r in roots): | if path not in seen: | an update of one root never drops the files of another
+gwt_corpus.py |                 if old and old[0] == st.st_mtime and old[1] == st.st_size: |                 if old: | a file whose size or time changed is read again
+gwt_corpus.py |             return None  # its metadata is not written yet |             return []  # its metadata is not written yet | a cache body whose metadata is not written yet is retried at the next update
+gwt_corpus.py | s = re.sub(r'(?is)<(script|style)\b.*?</\1>', ' ', s) | s = s | a page's scripts and styles are not indexed as its text
+gwt_corpus.py |             return []  # an fscache entry's metadata | pass  # an fscache entry's metadata | a reader's candidates file is not indexed twice
+gwt_corpus.py |             ctx['no_pdftotext'] += 1 |             pass | an update that could not read PDFs says how many
+gwt_corpus.py | return WORD.findall(text or '') | return rules.fold(text).split() | a query word with ß matches the same word in the index; Python's fold would turn it into ss
+gwt_corpus.py |             return None  # not recorded: the next update tries it again |             return []  # not recorded: the next update tries it again | a PDF pdftotext failed on is read again at the next update
+gwt_corpus.py |             return None  # not recorded: read once pdftotext is installed |             return []  # not recorded: read once pdftotext is installed | a PDF met before pdftotext was installed is read once it is
+gwt_corpus.py |     if r.returncode: |     if False: | a pdftotext that fails is a failed read, never a PDF with no words
+gwt_corpus.py | 'final_url', 'query', 'q', 'params', 'responseHeader'} | 'final_url'} | a 0-result answer that repeats the query never matches the name it was asked for
+gwt_corpus.py |         return 'body : ("%s")' % ' '.join(ws) |         return '"%s"' % ' '.join(ws) | a search looks at the page text, never at the request URL that holds the name asked for
+gwt_corpus.py |             return []  # the tree itself |             pass  # the tree itself | a tree dump under a root is not indexed, so people never find themselves
+gwt_corpus.py | isinstance(o.get('entries'), list) and len(o['entries']) > 1 | isinstance(o.get('entries'), list) and len(o['entries']) > 999 | each entry of a search answer is its own row with its own record link
+gwt_corpus.py |             except (OSError, ValueError, AttributeError, TypeError) as e: |             except ZeroDivisionError as e: | one unreadable file is counted and skipped, never the end of the run
+gwt_corpus.py |     return pages[:-1] if len(pages) > 1 and not pages[-1].strip() else pages |     return pages | the empty page after a final form feed is not a page
+gwt_corpus.py | decode('utf-8-sig', 'replace') | decode('utf-8', 'replace') | a names TSV saved with a byte order mark is read
+gwt_corpus.py | .replace('\r\n', '\n') | .replace('\r\n', '\r\n') | a word broken over a Windows line end is joined
+gwt_corpus.py |     if any(cols.index(c) >= len(cells) for c in ('key', 'given', 'surname')): |     if False: | a names row short of columns is bad input, never a traceback
+gwt_corpus.py |             gz = f.read(2) == b'\x1f\x8b' |             gz = False | a gzipped dump is read
+gwt_corpus.py |     real = [i for i, w in enumerate(sur) if rules.fold(w) not in PARTICLES] |     real = list(range(len(sur))) | a particle (de, la, van) is never a surname of its own for pairs and places
+gwt_corpus.py |             if short and len(found) > a.max_pages: |             if False: | a two-word phrase on more than --max-pages pages is no lead in a sweep
+gwt_corpus.py |                 if len(where) <= max_place_pages: |                 if True: | a surname and town on more than --max-place-pages pages gives no match
+gwt_corpus.py | row.update(result='partial', | row.update(result='hit', | a corpus match is a lead to read (partial), never a finding
+gwt_corpus.py | row.update(result='none', evidence='corpus:%s' % os.path.basename(a.db), next_date=today) | row.update(result='none', evidence='corpus:%s' % os.path.basename(a.db)) | a corpus miss is due again at once and never marks the person as searched
+gwt_corpus.py | 'agent': a.agent, 'control': run_id} | 'agent': a.agent} | sweep rows name the run whose controls passed
+gwt_corpus.py |         have = {(r['person_key'], r['source'], r['query'], r['result'], r['date']) for r in led.read_rows(a.ledger)} |         have = set() | the same sweep twice on one day adds no rows
+gwt_corpus.py |     if n < 1: |     if False: | a --limit below 1 is refused
+gwt_corpus.py |             raise BadInput('%s: pdftotext could not read it (%s)' % (path, e)) |             pages = [] | xref on a PDF pdftotext cannot read says so
+gwt_corpus.py |         ctx['pdf_no_text'] += 1 |         pass | an update says how many PDFs have no text layer (scans to OCR)
+gwt_corpus.py | except (OSError, subprocess.TimeoutExpired) as e: | except ZeroDivisionError as e: | a pdftotext that times out is a failed read, tried again at the next update
+gwt_corpus.py |             if (n['new'] + n['changed']) % 1000 == 0: |             if False: | a long first index keeps what it has read if it stops before the end
+gwt_corpus.py |             raise BadInput('%s has no text layer; OCR it first (see ocr-bench)' % path) |             pass | xref on a PDF with no text layer says so, never «0 matches»
+gwt_corpus.py | if ' %s ' % needle in pages[i - 1]) | if True) | xref needs the words of a name side by side, not anywhere on the page
+gwt_corpus.py |         raise BadInput('--dump %s: not a gwt-check dump (no objects.people)' % path) |         pass | a --dump that is not a dump is bad input, never «0 matches»
+gwt_corpus.py |             r['label'] = r['label'] or ('%s %s' % (r['given'], r['surname'])).strip() |             pass | a names row with an empty label is labelled with the name
+gwt_corpus.py | evidence='%s%s' % (first[2] or first[3], | evidence='%s%s' % ('', | a sweep lead names the URL or file to read
+gwt_corpus.py | fcntl.flock(lock, | (lock, | a second update exits 2 while the first holds the lock
+gwt_corpus.py | return EXIT_HITS if hits else EXIT_NONE | return EXIT_HITS | a sweep that finds nobody exits 1, never success
+gwt_corpus.py | None, max(a.limit, a.max_pages + 1)) | None, a.limit) | a sweep with a small --limit still counts the pages of a two-word phrase before it calls it rare
+gwt_corpus.py | if i not in done: | if True: | xref gives at most one match per person and page
