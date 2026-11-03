@@ -26,7 +26,6 @@ gwt_apply/dupes.py | return _person_pass(ops, tree, ids, new) + _couple_pass(ops
 gwt_apply/ops.py | if not str(op.get("new_couple_reason") or "").strip() or not op.get("new_couple_of"): | if False: | validate refuses an allow_new_couple without its reason and compared families
 gwt_apply/cli.py | if not writes: | if False: | a dry run or a snapshot leaves no log anywhere unless --log is given
 gwt_apply/cli.py | outcome.setdefault("error", f"{type(exc).__name__}: {exc}"[:500]) | pass | the end line of a crashed or killed run carries the error
-gwt_apply/cli.py | writes=args.apply and not args.save_snapshot) | writes=args.apply) | --save-snapshot --apply keeps no log unless --log is given
 gwt_apply/cli.py | prefix="gwt-apply-revert", writes=args.apply) | prefix="gwt-apply-revert", writes=True) | a revert plan keeps no log unless --log is given
 gwt_apply/client.py | self.log(method="DELETE", path=f"/{NAMESPACE[cls]}/{handle}", planned=True) | self.log(method="DELETE", path=f"/{NAMESPACE[cls]}/{handle}", status=None) | a dry-run delete is logged as planned, never status null
 gwt_apply/client.py | self.log(method="POST", path=path, body=body or {}, planned=True) | self.log(method="POST", path=path, body=body or {}, status=None) | a dry-run merge is logged as planned, never status null
@@ -173,3 +172,4 @@ gwt_apply/ops.py | self._private(person, s) | pass | update_person sets private
 gwt_apply/client.py | self.unsnapped |= {"Person", "Family", "Note"} if cls in ("Person", "Family", "Event") else set(NAMESPACE) | self.unsnapped |= {"Person", "Family", "Note"} | a place, source or citation merge stops trusting the snapshot for every class
 gwt_apply/client.py |         if r.status_code == 412: | if False: | a file the server says changed (412) is named as such
 gwt_apply/ops.py | found |= {k for k, o in self.c.pending.items() if quoted in json.dumps(o)} | pass | offline, delete sees a reference an earlier op of the list adds
+gwt_apply/lock.py | remaining = math.ceil(float(held.get("expires_ts") or 0) - now) | remaining = int(float(held.get("expires_ts") or 0) - now) + 1 | a fresh lock reports its 900 seconds, not 901

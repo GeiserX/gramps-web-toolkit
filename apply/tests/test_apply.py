@@ -3349,7 +3349,10 @@ def test_a_dry_run_and_a_snapshot_leave_no_log_anywhere(fake, tmp_path, env, sta
     changes = _changes(tmp_path, [{"op": "add_note", "key": "n", "ruling": R, "text": "x", "attach": [{"person": "I0001"}]}])
     assert main([str(changes)]) == 0
     assert main(["--save-snapshot", str(tmp_path / "s.json.gz")]) == 0
-    assert main(["--save-snapshot", str(tmp_path / "s2.json.gz"), "--apply"]) == 0  # --apply does not make it a write
+    with pytest.raises(SystemExit) as exc:
+        main(["--save-snapshot", str(tmp_path / "s2.json.gz"), "--apply"])
+    assert exc.value.code == 2
+    assert not (tmp_path / "s2.json.gz").exists()
     assert list(cwd.iterdir()) == []
     assert not state_home.exists()
 
@@ -4270,6 +4273,37 @@ def test_cli_rerun_reads_only_the_done_ops_of_an_earlier_apply(fake, tmp_path, e
     assert main(["--save-snapshot", str(snap)]) == 0
     capsys.readouterr()
     assert main([str(r), "--snapshot", str(snap), "--apply"]) == 0, capsys.readouterr().out
+
+
+def test_apply_rejects_snapshot_only_mode_before_any_read(tmp_path, monkeypatch):
+    import gwt_apply.cli as cli
+    def unexpected(*args, **kwargs):
+        pytest.fail("conflicting modes must fail before configuration or API access")
+    monkeypatch.setattr(cli, "read_config", unexpected)
+    for argv in (["--apply", "--save-snapshot", str(tmp_path / "s.json.gz")],
+                 [str(tmp_path / "missing.json"), "--apply", "--save-snapshot", str(tmp_path / "s.json.gz")]):
+        with pytest.raises(SystemExit) as exc:
+            main(argv)
+        assert exc.value.code == 2
+    assert not (tmp_path / "s.json.gz").exists()
+
+
+def test_a_held_lock_names_its_host_and_the_seconds_left(fake, monkeypatch):
+    import gwt_apply.lock as lockmod
+    from gwt_apply.lock import LockHeld, TreeLock, read_lock
+    c = Client("https://gw.example", "u", "pw", dry_run=False, session=fake)
+    clock = [1_800_000_000.0]
+    monkeypatch.setattr(lockmod, "_now", lambda: clock[0])
+    TreeLock(c, "owner").acquire()
+    host = read_lock(c)["host"]
+    for advance, left in ((0, 900), (299.5, 601), (899.25, 1)):
+        clock[0] = 1_800_000_000.0 + advance
+        with pytest.raises(LockHeld) as exc:
+            TreeLock(c, "next").acquire()
+        message = str(exc.value)
+        assert message.startswith("another apply holds this tree: run owner")
+        assert f"about {left} seconds left on its lease" in message
+        assert f"--break-lock once you have checked on {host} that it stopped" in message
 
 
 def test_person_key_collision_stops_before_dependent_evidence(fake):
