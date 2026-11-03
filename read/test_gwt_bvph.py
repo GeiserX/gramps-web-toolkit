@@ -42,8 +42,20 @@ class Classify(unittest.TestCase):
         self.assertEqual(b['text'].count('Ana Zorvalo'), 2, 'the second fragment of a page was lost')
         self.assertEqual((c['id'], c['date'], c['page']), ('70000003', '1901-01-12', 'Página 1'))
         undated = P1.decode().replace('[s.n, 12/01/1901]', '[s.n.')
-        self.assertEqual([(x['date'], x['year']) for x in gwt_bvph.candidates(undated)][2], ('', 1901),
-                         'an issue with no date lost the year its title gives')
+        self.assertEqual([(x['date'], x['year']) for x in gwt_bvph.candidates(undated)][2], ('1901-01-12', 1901),
+                         'an issue with no date lost the date its title gives')
+
+    def test_an_issue_dated_only_in_its_title(self):
+        # the live markup often has no date in datos_publicacion, only in the title
+        self.assertEqual(gwt_bvph.title_date('Boletín de Villazul: Número 91 _ 12/11/1840'), '1840-11-12')
+        self.assertEqual(gwt_bvph.title_date('La Gaceta de Villazul: Número 1612 - 1889 abril 3'), '1889-04-03')
+        self.assertEqual(gwt_bvph.title_date('La Gaceta: Número 14 - 1842 Setiembre 17'), '1842-09-17')
+        self.assertEqual(gwt_bvph.title_date('La Gaceta de Villazul: Año II'), '')
+        self.assertEqual(gwt_bvph.title_year('La Gaceta de Villazul: Número 1612 - Año 1889'), 1889,
+                         'the issue number was read as the year')
+        page = P1.decode().replace('[s.n, 12/01/1901]', '[S.l. : s.n.').replace(
+            'La Voz de Nortia A&ntilde;o I N&uacute;mero 20 - 1901 enero 12', 'La Voz de Nortia N&uacute;mero 1612 _ 05/02/1889')
+        self.assertEqual([(x['date'], x['year']) for x in gwt_bvph.candidates(page)][2], ('1889-02-05', 1889))
 
     def test_the_total_and_the_pager(self):
         self.assertEqual(gwt_bvph.total_of(P1.decode()), 1203, 'a total with a thousands dot')
@@ -131,6 +143,20 @@ class Search(Base):
         self.assertEqual(code, gwt_reader.EXIT_WALL, text)
         self.assertNotIn('candidates', lines)
         self.assertEqual(len(gate.hits), 1)
+
+    def test_hits_with_no_readable_row_are_a_stop_never_zero(self):
+        # the result marker is there but the row markup changed: no row parses, which must never read as none
+        for old, new in (('<span class="titulo">', '<span class="titulo-x">'), ('idImagen=', 'imagenId=')):
+            gate = FakeGate()
+            changed = P1.decode().replace(old, new).encode()
+            code, lines, text = self.search(FakeNet(gate, (200, changed)), gate)
+            self.assertEqual((code, self.out_files()), (gwt_reader.EXIT_ERROR, []), text)
+            self.assertIn('no row could be read', text)
+
+    def test_a_server_error_is_an_outage(self):
+        gate = FakeGate()
+        code, lines, text = self.search(FakeNet(gate, (503, b'<html>Service Unavailable</html>')), gate)
+        self.assertEqual((code, len(gate.hits), self.out_files()), (gwt_reader.EXIT_WALL, 1, []), text)
 
     def test_a_429_on_a_later_page_writes_nothing(self):
         gate = FakeGate()

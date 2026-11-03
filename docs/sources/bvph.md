@@ -16,7 +16,7 @@ gwt read bvph control
 
 ## What a candidate is
 
-A row is one page that holds the phrase, never a person. Its candidate has the newspaper issue's title as `name`, role `mention`, and is never `principal`, so gwt-rank ranks it weak. It carries `url` (the page viewer, `https://prensahistorica.mcu.es/es/catalogo_imagenes/grupo.do?path=<issue>&idImagen=<page>`), `date` (`YYYY-MM-DD`, empty for an undated issue), `year` (from the date, or from the issue's title when the issue has no date), `page` ("Página 3") and `text`, the words the site shows around the phrase. The envelope's `text` holds every row's words, for a corpus; `total` is the number of issues the site counts, `pages` the URLs read. `gwt fetch digibib` downloads the page images.
+A row is one page that holds the phrase, never a person. Its candidate has the newspaper issue's title as `name`, role `mention`, and is never `principal`, so gwt-rank ranks it weak. It carries `url` (the page viewer, `https://prensahistorica.mcu.es/es/catalogo_imagenes/grupo.do?path=<issue>&idImagen=<page>`), `date` (`YYYY-MM-DD`; many issues give their date only in the title, as `Número 91 _ 12/11/1840` or `Número 14 - 1842 febrero 17`, and it is read from there; empty when neither has one), `year` (from the date, or from a year the title names, never from its issue number), `page` ("Página 3") and `text`, the words the site shows around the phrase. The envelope's `text` holds every row's words, for a corpus; `total` is the number of issues the site counts, `pages` the URLs read. `gwt fetch digibib` downloads the page images.
 
 ## When it stops
 
@@ -29,6 +29,8 @@ The site has failed in ways that read as "no results" more than once, so every p
 | HTTP 429 | a wall: exit 3, the gate pauses every lane |
 | HTTP 200 with neither hits nor "No hay resultados" (the soft-block skeleton, which still says `resultados_ocr` in its scripts, or a new layout) | a STOP: exit 3, nothing written or cached |
 | "No hay resultados" on a later page, after the first said there was more | a STOP, exit 3 |
+| a page that shows hits but whose rows cannot be read (the site changed its markup) | a STOP: exit 1, nothing written, never "no results" |
+| a 5xx or no answer at all | an outage: exit 3, the gate pauses every lane |
 
 A STOP anywhere in the walk writes nothing, so a half-read search never looks complete.
 

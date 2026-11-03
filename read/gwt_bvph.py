@@ -52,6 +52,12 @@ _TOTAL = re.compile(r'class="nav_descrip">\s*[\d.]+\s+al\s+[\d.]+\s+de\s+([\d.]+
 _DATE = re.compile(r'class="datos_publicacion"><bdi>[^<]*?(\d\d)/(\d\d)/(\d{4})')
 _PAGE_LABEL = re.compile(r'>\s*(P[áa]gina\s+[^<]+?)\s*</a>')
 _FRAGMENTS = re.compile(r'<ul class="texto_ocurrencias">(.*?)</ul>', re.S)
+# Many issues carry their date only in the title: "Número 91 _ 12/11/1840" or "Número 14 - 1842 febrero 17".
+MONTHS = {m: i + 1 for i, m in enumerate(('enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto',
+                                          'septiembre', 'octubre', 'noviembre', 'diciembre'))}
+MONTHS['setiembre'] = 9
+_TITLE_DMY = re.compile(r'(?<!\d)(\d{1,2})/(\d{1,2})/(1[5-9]\d\d)(?!\d)')
+_TITLE_YMD = re.compile(r'(?<!\d)(1[5-9]\d\d)\s+(%s)\s+(\d{1,2})(?!\d)' % '|'.join(MONTHS), re.I)
 
 
 def text(fragment):
@@ -86,6 +92,25 @@ def later_page(page):
     return gwt_reader.classify(page, SPEC) == 'hits'
 
 
+def title_date(title):
+    """The issue date a title gives, as YYYY-MM-DD, or ''."""
+    m = _TITLE_DMY.search(title or '')
+    if m:
+        d, mo, y = int(m.group(1)), int(m.group(2)), m.group(3)
+    else:
+        m = _TITLE_YMD.search(title or '')
+        if not m:
+            return ''
+        y, mo, d = m.group(1), MONTHS[m.group(2).lower()], int(m.group(3))
+    return '%s-%02d-%02d' % (y, mo, d) if 1 <= mo <= 12 and 1 <= d <= 31 else ''
+
+
+def title_year(title):
+    """A year the title names, skipping the issue number ("Número 1612"), or None."""
+    y = re.search(r'(?<!\d)(1[5-9]\d\d)(?!\d)', re.sub(r'N[úu]m(?:ero|\.)?\s*\d+', ' ', title or '', flags=re.I))
+    return int(y.group(1)) if y else None
+
+
 def candidates(page):
     """One candidate per page hit: the issue's title and date, the page, and the words around the phrase."""
     out = []
@@ -93,8 +118,8 @@ def candidates(page):
         t = re.search(r'<bdi>(.*?)</bdi>', chunk, re.S)
         title = text(t.group(1)) if t else ''
         d = _DATE.search(chunk)
-        date = '%s-%s-%s' % (d.group(3), d.group(2), d.group(1)) if d else ''
-        y = re.search(r'(?<!\d)(1[5-9]\d\d)(?!\d)', date or title)     # an issue with no date may name its year
+        date = '%s-%s-%s' % (d.group(3), d.group(2), d.group(1)) if d else title_date(title)
+        year = int(date[:4]) if date else title_year(title)     # an issue with no date may name its year
         for unit in chunk.split('class="unidad_textual"')[1:]:
             im = re.search(r'idImagen=(\d+)', unit)
             path = re.search(r'grupo\.do\?path=(\d+)', unit)
@@ -107,7 +132,7 @@ def candidates(page):
                                                                              im.group(1))
             out.append({'source': SOURCE, 'id': im.group(1), 'name': title, 'role': 'mention', 'principal': False,
                         'given': None, 'surnames': None, 'events': {}, 'relatives': [], 'url': url, 'date': date,
-                        'year': int(y.group(1)) if y else None, 'page': label.group(1) if label else '',
+                        'year': year, 'page': label.group(1) if label else '',
                         'text': ' / '.join(w for w in words if w)})
     return out
 
@@ -130,11 +155,16 @@ def search(a, R):
     for n in range(pages):
         url = search_url(phrase, pos)
         check = gwt_reader.page_check(SPEC) if pos == 1 else later_page
-        status, rh, body, cached = R.get(url, {'accept': ACCEPT}, refresh=a.refresh, page=check)
+        status, rh, body, cached = gwt_reader.get_api(R, url, {'accept': ACCEPT}, refresh=a.refresh, page=check)
         page = body.decode('utf-8', 'replace')
         if pos == 1:
             total, verdict = total_of(page), gwt_reader.classify(page, SPEC)
-        cands += candidates(page)
+        rows = candidates(page)
+        if not rows and gwt_reader.classify(page, SPEC) == 'hits':
+            raise gwt_reader.Stop('bvph: the page shows hits but no row could be read: the site changed its markup; '
+                                  'nothing saved, never read as no results (%s)' % url, gwt_reader.EXIT_ERROR,
+                                  'unexpected', status, body)
+        cands += rows
         urls.append(url)
         cached_all = cached_all and cached
         if not has_next(page, pos):

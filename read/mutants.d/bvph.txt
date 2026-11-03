@@ -13,3 +13,7 @@ gwt_bvph.py |     pages = max(1, min(int(a.pages), MAX_PAGES)) |     pages = max
 gwt_bvph.py | return int(m.group(1).replace('.', '')) if m else None | return int(m.group(1).split('.')[0]) if m else None | a total with a thousands dot (1.203) is read whole
 gwt_bvph.py | words = [text(li) for li in re.findall(r'<li>(.*?)</li>', frags.group(1), re.S)] if frags else [] | words = [text(li) for li in re.findall(r'<li>(.*?)</li>', frags.group(1), re.S)][:1] if frags else [] | every fragment of a page reaches the candidate text
 gwt_bvph.py |         y = re.search(r'(?<!\d)(1[5-9]\d\d)(?!\d)', date or title) |         y = re.search(r'(?<!\d)(1[5-9]\d\d)(?!\d)', date) | an undated issue keeps the year its title gives
+gwt_bvph.py |         if not rows and gwt_reader.classify(page, SPEC) == 'hits': |         if False: | a page that shows hits but yields no row (changed markup) is a STOP, never "none"
+gwt_bvph.py | if d else title_date(title) | if d else '' | an issue dated only in its title keeps that date
+gwt_bvph.py | re.sub(r'N[úu]m(?:ero|\.)?\s*\d+', ' ', title or '', flags=re.I) | (title or '') | an issue number of 1500 or more is never read as the year
+gwt_bvph.py | gwt_reader.get_api(R, url, | R.get(url, | a 5xx or no answer from the site is an outage (exit 3), never a plain error
