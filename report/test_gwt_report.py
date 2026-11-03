@@ -385,7 +385,8 @@ class DigestTest(unittest.TestCase):
         self.assertIn('- evento nuevo: Baptism, 1890, Greenford', out)
         self.assertIn('- cita nueva: Greenford parish register, folio 12, confianza 3', out)
         self.assertIn('- persona nueva: Rosa Pine [débil]', out)
-        self.assertIn('1 débiles', out)
+        # label before number, so a count of 1 reads right
+        self.assertIn('(camino: confirmados 0, probables 0, débiles 1, sin marcar 2)', out)
         self.assertNotIn('new person', out)
 
     def test_french_digest_strings_and_english_default(self):
@@ -393,6 +394,7 @@ class DigestTest(unittest.TestCase):
         self.assertIn("## côté paternel", out)
         self.assertIn('- nouvelle personne : Rosa Pine [faible]', out)
         self.assertIn('confiance 3', out)
+        self.assertIn('(chemin : confirmés 0, probables 0, faibles 1, non marqués 2)', out)
         out = self.digest('--root', 'I1')
         self.assertIn("## father's side", out)
         self.assertIn('- new person: Rosa Pine [weak]', out)
