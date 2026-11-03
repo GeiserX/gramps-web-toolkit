@@ -1,0 +1,10 @@
+# Breaks the skills tests must catch. One row each: file | exact text | replacement | why
+# `python3 .github/scripts/run_tests.py --mutants --only skills` applies each row to a scratch copy
+# and fails when the tests still pass. The text must occur exactly once in the file.
+gramps-web-toolkit/SKILL.md | changes.jsonl --verify --config | changes.jsonl --verify-all --config | a flag the tool does not have
+gramps-web-toolkit/SKILL.md | gwt run changes.jsonl --config gw.env --tag r12 | gwt run changes.jsonl --config gw.env --tag r12 --break-lock | a flag of another tool (gwt apply has it, gwt run does not)
+gramps-web-toolkit/SKILL.md | gwt ledger check --exact | gwt ledger add --exact | a flag of another subcommand
+gramps-web-toolkit/SKILL.md | `gwt gate hit LANE` | `gwt gate hits LANE` | a subcommand the tool does not have
+gramps-web-toolkit/SKILL.md | /apply/#undo-a-run | /apply/#undo-one-run | a docs anchor no heading has
+gramps-web-toolkit/SKILL.md | /run/#exit-codes | /runs/#exit-codes | a docs page that does not exist
+gramps-web-toolkit/SKILL.md | name: gramps-web-toolkit | name: gramps-web-tools | the name must equal the folder name
