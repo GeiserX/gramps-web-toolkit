@@ -7,3 +7,9 @@ gwt_freeukgen.py | page=lambda p: form_token(p) is not None) | page=lambda p: Tr
 gwt_freeukgen.py | if v or k.endswith('[region]')] | if v] | the form's empty trap field is sent, as the browser sends it
 gwt_freeukgen.py | if a.kind and a.kind not in ok: | if False: | a --type the site does not have is refused before any request
 gwt_freeukgen.py | check = gwt_reader.rows_check(SPEC, r'<tr id="', lambda p: candidates(p, host, a.ukgen)) | check = gwt_reader.page_check(SPEC) | a record row the reader cannot read is a STOP, never "none"
+gwt_freeukgen.py |     if why: | if False: | a search the site's own rules refuse is refused before any request, never a gate pause
+gwt_freeukgen.py | if not counties and not (kind and year_from and year_to): | if False: | FreeREG with no county needs a record type and both years, as the site says
+gwt_freeukgen.py | if len(counties) > 3 and list(counties) != CHANNEL_ISLANDS: | if len(counties) > 3: | the four Channel Islands go together, as the site allows
+gwt_freeukgen.py | bool(TOO_MANY.search(p) or REFUSED.search(p)) | bool(TOO_MANY.search(p)) | the form shown again with the site's reasons is a usage error, never a gate pause
+gwt_freeukgen.py | return gwt_read._pares_build(src, a, urlopen, gate) | return gwt_read._default_build(src, a, urlopen, gate) | the form token's session cookie lives in a cookie jar, or every search is refused
+gwt_freeukgen.py | SPEC['build'] = build | pass | freeukgen builds its reader with the cookie jar

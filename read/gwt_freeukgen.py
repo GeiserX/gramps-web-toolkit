@@ -14,11 +14,13 @@ A row is a transcription, a lead: open the record page and the register image or
 citing it. A candidate's `url` is the record's own page, /search_records/<id>/<name>.
 
 "none" is the site's own heading, "No results found". "Too many search results" (500 rows on FreeREG, 1000 on
-FreeCEN) is neither: nothing is written and the search exits 1, so narrow it. Any other page (a maintenance page,
-a block page, a new layout) is a STOP. The cookie and the form token live in memory for the run only. Standard
+FreeCEN) is neither: nothing is written and the search exits 1, so narrow it. A search the site's own rules refuse
+is refused here before any request (exit 64); if the site still refuses one, it shows its form again with its
+reasons, and that is exit 64 too, never a block. Any other page (a maintenance page, a block page, a new layout) is
+a STOP. The cookie and the form token live in memory for the run only. Standard
 library only.
 """
-import html, re, sys, urllib.parse, urllib.request
+import html, re, sys, urllib.parse
 
 import gwt_reader
 
@@ -43,6 +45,10 @@ SPEC = {
     'negative_markers': [r'>\s*No results found\s*<'],
 }
 TOO_MANY = re.compile(r'>\s*Too many search results\s*<')
+# the form shown again with the site's reasons, when it refuses a search
+REFUSED = re.compile(r'prohibited this search from being processed')
+_REASON = re.compile(r'<li class="validation-list__error[^"]*"\s*>(.*?)</li>', re.S)
+CHANNEL_ISLANDS = ['ALD', 'GSY', 'JSY', 'SRK']     # the one set of four counties FreeREG takes together
 TYPES = {'baptisms': 'ba', 'marriages': 'ma', 'burials': 'bu'}
 CENSUS = ('1841', '1851', '1861', '1871', '1881', '1891', '1901', '1911')
 FREEREG_COLUMNS = ('persons', 'record_type', 'date', 'county', 'place')
@@ -113,13 +119,39 @@ def add_search_args(sp):
                     'repeat for more')
 
 
+def refusal(site, surname, year_from, year_to, kind, counties):
+    """The sentence the site would refuse this search with, or None. The rules are the sites' own (MyopicVicar
+    app/models/search_query.rb): https://github.com/FreeUKGen/MyopicVicar/blob/51d429fecf01daa7d626e555922602f306645699/app/models/search_query.rb#L839-L842
+    and #L1367-L1380 for the county rules, #L410-L422 for the years."""
+    if not surname.strip():
+        # without a surname the site needs a forename, a county and a place; a place is not a search option here
+        return 'give --surname: without one the site needs a forename, a county and a place'
+    for y in (year_from, year_to):
+        if y and not str(y).isdigit():
+            return 'a year is a number (%r)' % y
+    if year_from and not year_to:
+        return 'You have specified a start year but no end year'
+    if year_to and not year_from:
+        return 'You have specified an end year but no start year'
+    if year_from and int(year_from) > int(year_to):
+        return 'First year must precede last year.'
+    if site == 'freereg':
+        if not counties and not (kind and year_from and year_to):
+            return ('A date range and record type must be part of your search if you do not select a county '
+                    '(--type, --from and --to, or --county)')
+        if len(counties) > 3 and list(counties) != CHANNEL_ISLANDS:
+            return 'You cannot select more than 3 counties.'
+    return None
+
+
 def search(a, R):
-    if not (a.surname or a.given):
-        print('gwt-read: freeukgen: give --surname or --given', file=sys.stderr, flush=True)
-        return EXIT_USAGE
     ok = sorted(TYPES) if a.ukgen == 'freereg' else CENSUS
     if a.kind and a.kind not in ok:
         print('gwt-read: freeukgen: --type for %s is one of %s' % (a.ukgen, ', '.join(ok)), file=sys.stderr, flush=True)
+        return EXIT_USAGE
+    why = refusal(a.ukgen, a.surname, a.year_from, a.year_to, a.kind, a.county)
+    if why:
+        print('gwt-read: freeukgen: %s: %s' % (a.ukgen, why), file=sys.stderr, flush=True)
         return EXIT_USAGE
     host = HOSTS[a.ukgen]
     _, _, body, _ = gwt_reader.get_api(R, host + '/search_queries/new', {'accept': 'text/html'}, refresh=True,
@@ -132,9 +164,13 @@ def search(a, R):
     check = gwt_reader.rows_check(SPEC, r'<tr id="', lambda p: candidates(p, host, a.ukgen))
     status, rh, body, cached = gwt_reader.get_api(
         R, url, {'accept': 'text/html', 'content-type': 'application/x-www-form-urlencoded'}, refresh=True,
-        page=lambda p: check(p) or bool(TOO_MANY.search(p)), data=data)
+        page=lambda p: check(p) or bool(TOO_MANY.search(p) or REFUSED.search(p)), data=data)
     page = body.decode('utf-8', 'replace')
     final = (rh or {}).get('x-gwt-final-url')
+    if REFUSED.search(page) and gwt_reader.classify(page, SPEC) == 'unknown':
+        why = '; '.join(text(r) for r in _REASON.findall(page)) or 'no reason given'
+        print('gwt-read: freeukgen: the site refused the search: %s; nothing written' % why, file=sys.stderr, flush=True)
+        return EXIT_USAGE
     if TOO_MANY.search(page) and not re.search(SPEC['result_markers'][0], page):
         print('gwt-read: freeukgen: too many results (the site shows none past its limit); add --given, --from/--to, '
               '--type or --county; nothing written (%s)' % (final or url), file=sys.stderr, flush=True)
@@ -151,11 +187,10 @@ def search(a, R):
 
 
 def build(src, a, urlopen, gate):
-    """The default reader, with a cookie jar in memory for this run only: the form token is tied to the session
-    cookie, which never reaches the cache or a file."""
+    """PARES's reader: a cookie jar in memory for this run only. The form token is tied to the session cookie, which
+    never reaches the cache or a file."""
     import gwt_read
-    opener = urlopen or urllib.request.build_opener(urllib.request.HTTPCookieProcessor()).open
-    return gwt_read._default_build(src, a, opener, gate)
+    return gwt_read._pares_build(src, a, urlopen, gate)
 
 
 SPEC['build'] = build

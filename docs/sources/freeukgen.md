@@ -5,13 +5,17 @@ Free UK Genealogy's volunteers transcribe English, Welsh and Scottish records. F
 ## Commands
 
 ```sh
-gwt read freeukgen search [--site freereg|freecen] [--surname S] [--given G] [--from 1800] [--to 1820] \
+gwt read freeukgen search [--site freereg|freecen] --surname S [--given G] [--from 1800] [--to 1820] \
                           [--type baptisms|marriages|burials|1841..1911] [--county DEV ...] --out DIR
 gwt read freeukgen control
 ```
 
 - `--site` is `freereg` (the default) or `freecen`.
-- A search needs `--surname` or `--given`.
+- A search needs `--surname`. Without one the sites want a forename, a county and a place, and the reader has no place option.
+- `--from` and `--to` go together, the first not after the second.
+- On FreeREG, a search with no `--county` needs `--type`, `--from` and `--to`, and three counties is the most it takes (the four Channel Islands, `ALD GSY JSY SRK`, are the one exception).
+
+These are the sites' own rules (`search_query.rb` in MyopicVicar: https://github.com/FreeUKGen/MyopicVicar/blob/51d429fecf01daa7d626e555922602f306645699/app/models/search_query.rb). The reader refuses a search that breaks one before any request, with the site's own sentence (exit 64).
 - `--type` is a FreeREG record type (`baptisms`, `marriages`, `burials`) or a FreeCEN census year (`1841` to `1911`).
 - `--county` is a county's Chapman code (`DEV`, `CON`, `LAN`, ...); repeat it for more.
 
@@ -27,7 +31,7 @@ A transcription, a lead: open the record page and the register image or census p
 
 ## When it stops
 
-"None" is the site's own heading, "No results found". "Too many search results" (the sites show none past 500 rows on FreeREG, 1000 on FreeCEN) is neither: nothing is written and the search exits 1, so narrow it. Any other page is a STOP (exit 3, the gate pauses every lane): a block page, a new layout, a form with no token, a result row the reader cannot read. The sites' maintenance page comes with HTTP 503: an outage, exit 3.
+"None" is the site's own heading, "No results found". "Too many search results" (the sites show none past 500 rows on FreeREG, 1000 on FreeCEN) is neither: nothing is written and the search exits 1, so narrow it. Any other page is a STOP (exit 3, the gate pauses every lane): a block page, a new layout, a form with no token, a result row the reader cannot read. If the site still refuses a search, it shows its form again with its reasons: the reader prints them and exits 64, without telling the gate. The sites' maintenance page comes with HTTP 503: an outage, exit 3.
 
 ## Pace, cache and terms
 

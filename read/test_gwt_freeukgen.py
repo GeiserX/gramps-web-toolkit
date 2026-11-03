@@ -1,7 +1,7 @@
 """Tests for `gwt-read freeukgen` (FreeREG and FreeCEN). Pages in fixtures/freeukgen/ follow the markup of the sites'
 open-source templates (MyopicVicar) with invented people and ids; a fake transport and a fake gate: no request leaves
 this machine. Run: cd read && python3 -m pytest -q test_gwt_freeukgen.py"""
-import contextlib, io, json, os, unittest, urllib.parse
+import contextlib, io, json, os, unittest, unittest.mock, urllib.parse, urllib.request
 
 from test_gwt_read import Base, FakeGate, FakeNet
 import gwt_freeukgen  # noqa: E402
@@ -20,8 +20,10 @@ def fx(name):
 
 
 class Run(Base):
-    def search(self, net, gate, *extra):
+    def search(self, net, gate, *extra, county=('--county', 'DEV')):
+        """A FreeREG search needs a county (or a type and both years): DEV unless a test says otherwise."""
         o, e = io.StringIO(), io.StringIO()
+        extra = extra if '--county' in extra else extra + tuple(county)
         argv = ['freeukgen', '--cache-dir', self.cache, '--lane', 't', 'search', '--surname', 'Wexcombe', *extra,
                 '--out', self.out]
         with contextlib.redirect_stdout(o), contextlib.redirect_stderr(e):
@@ -137,8 +139,59 @@ class Search(Run):
         page = fx('results-freereg.html').replace(b'</tr>', b'')
         gate = FakeGate()
         net = FakeNet(gate, (200, fx('form.html')), (200, page, REG + '/search_queries/0123456789abcdef0000aaaa'))
-        code, _, text = self.search(net, gate, '--county', 'DEV')
+        code, _, text = self.search(net, gate)
         self.assertEqual((code, len(gate.hits), self.out_files()), (gwt_reader.EXIT_WALL, 1, []), text)
+
+    def refused(self, *extra, county=()):
+        gate = FakeGate()
+        net = FakeNet(gate)
+        code, _, text = self.search(net, gate, *extra, county=county)
+        self.assertEqual((code, net.requests, gate.hits), (64, [], []), (extra, text))
+        return text
+
+    def test_what_the_site_would_refuse_is_refused_before_any_request(self):
+        self.assertIn('date range and record type', self.refused())
+        self.assertIn('date range and record type', self.refused('--from', '1800', '--to', '1801'))
+        self.assertIn('more than 3 counties', self.refused(*'--county DEV --county CON --county SOM --county DOR'.split()))
+        self.assertIn('no start year', self.refused('--to', '1800', county=('--county', 'DEV')))
+        self.assertIn('precede', self.refused('--from', '1810', '--to', '1800', county=('--county', 'DEV')))
+        self.assertIn('surname', self.refused('--surname', '', '--given', 'Thomas', county=('--county', 'DEV')))
+
+    def test_what_the_site_accepts_is_sent(self):
+        for extra in (('--type', 'baptisms', '--from', '1800', '--to', '1801'),
+                      tuple('--county ALD --county GSY --county JSY --county SRK'.split()),
+                      ('--site', 'freecen')):
+            gate = FakeGate()
+            net = FakeNet(gate, (200, fx('form.html')), self.results('none.html'))
+            code, _, text = self.search(net, gate, *extra, county=())
+            self.assertEqual((code, len(net.requests)), (gwt_reader.EXIT_EMPTY, 2), (extra, text))
+
+    def test_the_form_shown_again_with_the_sites_errors_is_a_usage_error_not_a_block(self):
+        page = fx('form.html').replace(b'<form', b'<h2 class="gamma text--center">1 error prohibited this search from '
+                                       b'being processed:</h2><ul class="validation-list"><li class="validation-list__'
+                                       b'error text--center" >Two letters must precede any wildcard in a surname.</li>'
+                                       b'</ul><form', 1)
+        gate = FakeGate()
+        code, _, text = self.search(FakeNet(gate, (200, fx('form.html')), (200, page)), gate)
+        self.assertEqual((code, gate.hits, self.out_files()), (64, [], []), text)
+        self.assertIn('Two letters must precede any wildcard in a surname.', text)
+
+    def test_the_session_cookie_lives_in_a_cookie_jar(self):
+        handlers = []
+        gate = FakeGate()
+        net = FakeNet(gate, (200, fx('form.html')), self.results('none.html'))
+
+        def build_opener(*hs):
+            handlers.extend(hs)
+            return unittest.mock.Mock(open=net)
+        plain = unittest.mock.Mock(side_effect=AssertionError('a request without the cookie jar'))
+        with unittest.mock.patch.object(urllib.request, 'build_opener', build_opener), \
+                unittest.mock.patch.object(urllib.request, 'urlopen', plain), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            code = gwt_read.main(['freeukgen', '--cache-dir', self.cache, 'search', '--surname', 'Wexcombe',
+                                  '--county', 'DEV', '--out', self.out], gate=gate)
+        self.assertEqual((code, len(net.requests)), (gwt_reader.EXIT_EMPTY, 2))
+        self.assertTrue(any(isinstance(h, urllib.request.HTTPCookieProcessor) for h in handlers), handlers)
 
 
 if __name__ == '__main__':
