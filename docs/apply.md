@@ -310,6 +310,8 @@ gwt-apply changes.jsonl --snapshot tree-0412.json.gz --apply    # checks the sna
 
 `--save-snapshot` pages through every object of every class and writes them, as the API returns them, to a new gzip JSON file; it never overwrites one. The dry run on a snapshot plans exactly as against the server, op by op, and never opens a connection.
 
+`--save-snapshot` only reads: with `--apply` it exits 2 before logging in. Save the snapshot, then apply the list in a second command.
+
 `--apply` with a snapshot first plans the whole list on the snapshot, offline. If the plan stops at a conflict, nothing is written. Then it reads the `change` stamp of every object in each class the plan touched, one request per class, and refuses to write if, since the snapshot:
 
 - an object the plan read or would change was changed, deleted or made (a keyed object made by an earlier run counts: after a crash, take a new snapshot), or

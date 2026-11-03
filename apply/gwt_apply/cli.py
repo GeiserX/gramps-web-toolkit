@@ -289,6 +289,8 @@ def main(argv: list[str] | None = None) -> int:
         return _revert(args, argv)
     if args.pre:
         ap.error("--pre goes with --revert")
+    if args.apply and args.save_snapshot:
+        ap.error("--apply and --save-snapshot are separate modes: save the snapshot first, then apply")
     if args.server_backup and not args.apply:
         ap.error("--server-backup goes with --apply: a dry run writes nothing, so it needs no backup")
     if args.verify and (args.apply or args.save_snapshot):
@@ -331,7 +333,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     run_id = f"{datetime.now():%Y%m%d-%H%M%S}-{secrets.token_hex(3)}"
     log = _log_path(args, run_id, conf.get("GWT_TREE"), prefix="gwt-apply",
-                    writes=args.apply and not args.save_snapshot)
+                    writes=args.apply)
     client = _client(conf, dry_run=not args.apply, log_path=log)
     _first_line(run_id, log)
     outcome: dict = {}
