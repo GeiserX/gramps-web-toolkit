@@ -278,7 +278,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="with --apply: ask the server to store a backup of the tree before the first write, and write "
                     "nothing if it refuses (never restores one)")
     ap.add_argument("--break-lock", action="store_true",
-                    help="take the tree's lock even if another apply's lock has not expired (only if that apply is dead)")
+                    help="take the tree's lock even if another apply's lock has not expired (only once you have checked on "
+                    "its host that it stopped; a PID alone proves nothing)")
     argv = list(sys.argv[1:] if argv is None else argv)
     args = ap.parse_args(argv)
     if args.revert:

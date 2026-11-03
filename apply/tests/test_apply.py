@@ -4286,3 +4286,21 @@ def test_apply_rejects_snapshot_only_mode_before_any_read(tmp_path, monkeypatch)
             main(argv)
         assert exc.value.code == 2
     assert not (tmp_path / "s.json.gz").exists()
+
+
+def test_a_held_lock_names_its_host_and_the_seconds_left(fake, monkeypatch):
+    import gwt_apply.lock as lockmod
+    from gwt_apply.lock import LockHeld, TreeLock, read_lock
+    c = Client("https://gw.example", "u", "pw", dry_run=False, session=fake)
+    clock = [1_800_000_000.0]
+    monkeypatch.setattr(lockmod, "_now", lambda: clock[0])
+    TreeLock(c, "owner").acquire()
+    host = read_lock(c)["host"]
+    for advance, left in ((0, 900), (299.5, 601), (899.25, 1)):
+        clock[0] = 1_800_000_000.0 + advance
+        with pytest.raises(LockHeld) as exc:
+            TreeLock(c, "next").acquire()
+        message = str(exc.value)
+        assert message.startswith("another apply holds this tree: run owner")
+        assert f"about {left} seconds left on its lease" in message
+        assert f"--break-lock once you have checked on {host} that it stopped" in message
