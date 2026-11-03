@@ -13,6 +13,11 @@
 | `wikitree` | WikiTree, the shared one-world tree, public profiles | [wikitree](wikitree.md) |
 | `archiveorg` | Internet Archive: scanned books and registers, catalogue and full text | [archiveorg](archiveorg.md) |
 | `matchid` | matchID: France's deaths since 1970, searched online | [matchid](matchid.md) |
+| `dokuklik` | Dokuklik: Basque parish baptisms, marriages and burials | [dokuklik](dokuklik.md) |
+| `hiski` | HisKi: Finnish parish registers index | [hiski](hiski.md) |
+| `digitalarkivet` | Digitalarkivet: Norway's transcribed censuses and church books | [digitalarkivet](digitalarkivet.md) |
+| `geneteka` | Geneteka: Polish parish and civil registers index | [geneteka](geneteka.md) |
+| `freeukgen` | FreeREG and FreeCEN: UK parish registers and censuses | [freeukgen](freeukgen.md) |
 
 `gwt read --help` lists every source the installed version knows.
 

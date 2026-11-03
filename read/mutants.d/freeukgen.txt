@@ -1,0 +1,8 @@
+# Mutations the freeukgen tests must catch (format: see read/mutants.txt).
+gwt_freeukgen.py | 'result_markers': [r'<tr id="[0-9a-f]{24}">'], | 'result_markers': [r'<table class="table--bordered'], | a row is a record's own row, never the result table
+gwt_freeukgen.py | 'negative_markers': [r'>\s*No results found\s*<'], | 'negative_markers': [], | the site's own "No results found" is "none"
+gwt_freeukgen.py | PACE = {'start': 10.0, 'floor': 5.0, 'ceil': 600.0} | PACE = {'start': 10.0, 'floor': 1.0, 'ceil': 600.0} | the volunteer sites are never asked faster than one request every 5 s
+gwt_freeukgen.py | if TOO_MANY.search(page) and not re.search(SPEC['result_markers'][0], page): | if False: | "too many results" is neither rows nor "none": nothing written, exit 1
+gwt_freeukgen.py | page=lambda p: form_token(p) is not None) | page=lambda p: True) | a form page without its token is a STOP, and nothing is posted
+gwt_freeukgen.py | if v or k.endswith('[region]')] | if v] | the form's empty trap field is sent, as the browser sends it
+gwt_freeukgen.py | if a.kind and a.kind not in ok: | if False: | a --type the site does not have is refused before any request

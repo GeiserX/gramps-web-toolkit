@@ -1,0 +1,6 @@
+# Mutations the digitalarkivet tests must catch (format: see read/mutants.txt).
+gwt_digitalarkivet.py | 'result_markers': [r'<div id="searchResultList"[^>]*>\s*<div class="unit"'], | 'result_markers': [r'<div id="searchResultList"'], | a row is a person inside the result list, never the empty list every search page has
+gwt_digitalarkivet.py | 'negative_markers': [r'data-hits="0"'], | 'negative_markers': [], | the site's own zero count is "none"
+gwt_digitalarkivet.py | PACE = {'start': 6.0, 'floor': 5.0, 'ceil': 300.0} | PACE = {'start': 6.0, 'floor': 1.0, 'ceil': 300.0} | the site is never asked faster than its robots.txt Crawl-delay of 5 s
+gwt_digitalarkivet.py | 'principal': not (fields.get('role') or ('', ''))[1], | 'principal': True, | a person with a role in the entry (a mother, a godparent) is not its principal
+gwt_digitalarkivet.py | if page and int(page) > 1: | if False: | --page asks for that page
