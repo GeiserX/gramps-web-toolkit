@@ -273,3 +273,57 @@ def test_a_godparent_named_with_his_role_and_ark_is_not_a_principal_finding(tmp_
            {"op": "add_citation", "key": "c", "source": "S1", "page": f"{FS}1:1:QZZ9-AAD godfather Tomás Brin",
             "attach": [{"person": "I1"}]}]
     assert lint(write(tmp_path, ops), "principal")[1] == {"principal-nonprincipal": ["c"]}, "a page is never excused"
+
+
+def test_short_and_empty_spans_next_to_a_cited_record_are_checked(tmp_path):
+    ops = [{"op": "add_note", "key": "n-short", "text": f"surname «Zorvalla», born «3 Mar 1801», father «» {FS}1:1:QZZ9-AAA",
+            "attach": [{"person": "I1"}]},
+           {"op": "add_note", "key": "n-none", "text": f"godmother «None» {FS}1:1:QZZ9-AAA", "attach": [{"person": "I1"}]},
+           {"op": "add_note", "key": "n-ok", "text": f"father «Luis Zorvalo» {FS}1:1:QZZ9-AAA", "attach": [{"person": "I1"}]},
+           {"op": "add_note", "key": "n-title", "text": "see the «Libro de Bautismos»", "attach": [{"person": "I1"}]}]
+    code, codes, _ = lint(write(tmp_path, ops), "quote")
+    assert (code, codes) == (1, {"quote-short": ["n-short", "n-short", "n-short", "n-none"]})
+
+
+def test_a_quotation_that_cites_nothing_is_not_matched_against_unrelated_records(tmp_path):
+    # the words are in Pedro's record, which this note does not cite
+    ops = [{"op": "add_note", "key": "n", "text": "The priest wrote «bauticé en la ermita del Santo Cristo del Valle».",
+            "attach": [{"person": "I1"}]}]
+    assert lint(write(tmp_path, ops), "quote")[1] == {"quote-notfound": ["n"]}
+
+
+BULLETIN = "https://bulletin.example.org/1998/12/edict.pdf"
+
+
+def test_a_quotation_from_a_source_with_no_saved_text_is_norec(tmp_path):
+    ops = [{"op": "add_citation", "key": "c", "source": "S1", "page": BULLETIN, "attach": [{"person": "I1"}]},
+           {"op": "add_note", "key": "n", "text": "The edict calls «a los herederos de la finca del molino»",
+            "attach": [{"citation": "key:c"}]}]
+    code, _, res = lint(write(tmp_path, ops), "quote")
+    assert (code, res["status"]) == (2, "nothing") and BULLETIN in res["reason"], res
+    shutil.copytree(RECORDS, tmp_path / "saved")
+    (tmp_path / "saved" / "edict.txt").write_text(f"{BULLETIN}\nSe cita a los herederos de la finca del molino.\n",
+                                                  encoding="utf-8")
+    assert lint(write(tmp_path, ops), "quote", "--records", str(tmp_path / "saved"))[:2] == (0, {})
+    ops[1]["text"] = "The edict calls «a los herederos de la casa del molino»"
+    code, codes, _ = lint(write(tmp_path, ops), "quote", "--records", str(tmp_path / "saved"))
+    assert codes == {"quote-notfound": ["n"]}
+
+
+def test_a_media_on_the_cited_citation_makes_the_quotation_image_only(tmp_path):
+    (tmp_path / "act-77.jpg").write_bytes(b"\xff\xd8\xff\xe0 invented")
+    ops = [{"op": "add_citation", "key": "c", "source": "S1", "page": "https://images.example.org/viewer/item/77",
+            "attach": [{"person": "I1"}]},
+           {"op": "add_media", "key": "m", "file": str(tmp_path / "act-77.jpg"), "path": "media/act-77.jpg", "mime": "image/jpeg",
+            "attach": [{"citation": "key:c"}]},
+           {"op": "add_note", "key": "n", "text": "The act reads «estas palabras no tienen lectura firmada»",
+            "attach": [{"citation": "key:c"}]}]
+    assert lint(write(tmp_path, ops), "quote")[1] == {"quote-image": ["n"]}
+
+
+def test_a_readings_file_saved_with_a_bom_still_counts_its_first_row(tmp_path):
+    rows = tmp_path / "readings.tsv"
+    rows.write_bytes("﻿estas palabras no tienen lectura firmada\tabcdef12\tA. Reader\r\n".encode("utf-8"))
+    ops = [{"op": "add_note", "key": "n", "text": f"«estas palabras no tienen lectura firmada» {FS}3:1:QZZ9-IMG2",
+            "attach": [{"person": "I1"}]}]
+    assert lint(write(tmp_path, ops), "quote", "--readings", str(rows))[:2] == (0, {})

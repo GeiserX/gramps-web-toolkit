@@ -25,7 +25,7 @@ gwt-lint --prove changes.jsonl --snapshot tree.json.gz --config lint.toml --rule
 | `<key>.candidates.json` | each FamilySearch candidate row: one persona, its role, its principal flag, its typed place. A row is used only for an ark no full record holds: it has no facts and no relationships |
 | a raw GEDCOM X record (`{"persons": [...]}`) | every persona, relationship and field. A fact on a relationship (FamilySearch puts a marriage on the Couple) counts for both people in it |
 | a `gwt-fscache` folder | each entry's `.body`, the answer as the site sent it |
-| `*.txt` | a transcription or OCR text. It belongs to the ark in its file name or on its first line (`ark:/61903/3:1:...` for an image); with none, to every op that cites no ark |
+| `*.txt` | a transcription or OCR text. It belongs to the ark in its file name or on its first line (`ark:/61903/3:1:...` for an image), else to the web address on its first line (a bulletin's PDF, an archive's image viewer); with neither, to ops that cite nothing |
 
 Save a record before you cite it: `gwt-read familysearch record 1:1:XXXX-XXX --out saved/`. A JSON file of another shape is skipped; when an ark is then missing, the NOREC message names the first file that could not be read.
 
@@ -37,9 +37,9 @@ What an op cites: every FamilySearch ark anywhere in it (citation page, note tex
 
 ## quote
 
-Every quotation in new text (`«…»`, `“…”`, `"…"`, four words or more, the same spans [living](lint.md#living) reads) must occur, inside one field, in what the op cites: the cited record's fields and the transcriptions saved for its arks. An op that cites no ark is checked against every saved text. The only change allowed is Unicode NFC and runs of spaces or line breaks: case and accents must match. `…`, `...`, `[…]` or `[...]` inside a quotation skip words; the parts must appear in order.
+Every quotation in new text (`«…»`, `“…”`, `"…"`, four words or more, the same spans [living](lint.md#living) reads) must occur, inside one field, in what the op cites: the cited record's fields, the transcriptions saved for its arks, and the transcriptions saved for the other web addresses it cites. A quotation from a source with no saved text (a bulletin, an archive's image) makes the rule exit 2 (NOREC) with the address: save a `.txt` whose first line is that address. A quotation in an op that cites nothing at all is `quote-notfound` unless a transcription tied to nothing holds it: it is never matched against unrelated records. Shorter spans (one to three words, and an empty `«»`, the usual index-field drift such as a surname, a date or `None`) are checked only when the op cites a record ark, as `quote-short`; elsewhere `«…»` also marks titles and names. The only change allowed is Unicode NFC and runs of spaces or line breaks: case and accents must match. `…`, `...`, `[…]` or `[...]` inside a quotation skip words; the parts must appear in order.
 
-A quotation whose only source is an image (it cites a `3:1:` image ark or a media object, and no record ark) and that no saved transcription holds needs a **signed reading**: a row in the `--readings` TSV (or `[quote] readings` in lint.toml) with the quotation, the image's sha (hex, 8 characters or more) and who read it. A row without a reader or a sha does not count.
+A quotation whose only source is an image (it cites a `3:1:` image ark or a media object, or a media sits on the citation it hangs on, and it cites no record ark) and that no saved transcription holds needs a **signed reading**: a row in the `--readings` TSV (or `[quote] readings` in lint.toml) with the quotation, the image's sha (hex, 8 characters or more) and who read it. A row without a reader or a sha does not count. A file saved with a byte-order mark (Excel) reads the same.
 
 ```text
 quote	image sha	reader
@@ -48,7 +48,8 @@ nota marginal de difícil lectura aquí	3f9a0c1b2d4e	A. Reader
 
 | Code | When |
 |---|---|
-| `quote-notfound` | the quotation is in none of the cited record's fields or transcriptions |
+| `quote-notfound` | the quotation is in none of the cited record's fields or transcriptions, or the op cites no source at all |
+| `quote-short` | a short or empty quoted span next to a cited record is not in it |
 | `quote-image` | a STOP: an image-only quotation without a signed reading. Read the image, add the row, or drop the quote marks |
 
 ## principal

@@ -27,6 +27,8 @@ from .framework import InputError, Mutant, NothingToCheck, Rule, attach_targets,
 from .rules_tree import QUOTE, QUOTE_WORDS
 
 ARK = re.compile(r"(?:ark:/61903/)?\b([13]:1:[A-Z0-9]{2,}(?:-[A-Z0-9]+)+)")
+URL = re.compile(r"https?://[^\s«»“”\"'<>()\[\]]+")
+EMPTY_QUOTE = re.compile(r"«\s*»|“\s*”")
 FS = "https://www.familysearch.org/ark:/61903/"
 ELLIPSIS = re.compile(r"\s*(?:\[\s*(?:…|\.\.\.)\s*\]|…|\.\.\.)\s*")
 # the facts of the record's principal that back an event of each type
@@ -80,6 +82,16 @@ def op_arks(op) -> list[str]:
     return found
 
 
+def urls_in(text) -> list[str]:
+    """The web addresses in a text that are not FamilySearch arks (those are read as arks), as one form."""
+    out = []
+    for u in URL.findall(text or ""):
+        u = u.rstrip(".,;:!?").rstrip("/")
+        if not ARK.search(u) and u not in out:
+            out.append(u)
+    return out
+
+
 def _tail(uri) -> str:
     return str(uri or "").rstrip("/").rsplit("/", 1)[-1]
 
@@ -95,8 +107,8 @@ class Records:
         self.by_ark: dict[str, tuple[dict, dict]] = {}
         self.thin: dict[str, tuple[dict, dict]] = {}   # candidate rows: used only for an ark no full record holds
         self.unread: list[str] = []                     # files that look like saved answers but could not be read
-        self.bound: dict[str, list[str]] = {}   # ark -> transcriptions saved for it
-        self.loose: list[str] = []              # transcriptions and page texts tied to no ark
+        self.bound: dict[str, list[str]] = {}   # ark or web address -> transcriptions saved for it
+        self.loose: list[str] = []              # transcriptions and page texts tied to no ark or address
         root = Path(folder)
         if not root.is_dir():
             raise NothingToCheck(f"no folder {folder}")
@@ -116,7 +128,8 @@ class Records:
         name = p.name
         if name.endswith(".txt"):
             text = p.read_text(encoding="utf-8", errors="replace")
-            self._bind(ARK.findall(name) + ARK.findall(text.split("\n", 1)[0]), text)
+            first = text.lstrip("\ufeff").split("\n", 1)[0]
+            self._bind(ARK.findall(name) + ARK.findall(first) or urls_in(first), text)
             return
         if not (name.endswith(".json") or name.endswith(".json.gz")):
             return
@@ -138,7 +151,7 @@ class Records:
             try:
                 self._walk(json.loads(data))
             except ValueError:
-                self._bind(ARK.findall(doc["url"]), data.decode("utf-8", "replace"))
+                self._bind(ARK.findall(doc["url"]) or urls_in(doc["url"]), data.decode("utf-8", "replace"))
             return
         if isinstance(doc.get("candidates"), list):
             for c in doc["candidates"]:
@@ -146,12 +159,12 @@ class Records:
             return
         url = doc.get("final_url") or doc.get("url") or ""
         if isinstance(doc.get("text"), str) and doc["text"].strip():
-            self._bind(ARK.findall(str(url)), doc["text"])
+            self._bind(ARK.findall(str(url)) or urls_in(str(url)), doc["text"])
         self._walk(doc.get("json") if "json" in doc else doc)
 
-    def _bind(self, arks, text):
-        if arks:
-            for a in arks:
+    def _bind(self, keys, text):
+        if keys:
+            for a in keys:
                 self.bound.setdefault(a, []).append(text)
         else:
             self.loose.append(text)
@@ -244,9 +257,6 @@ class Records:
                     if a != ark:
                         out += self.bound.get(a, [])
         return out
-
-    def every_text(self) -> list[str]:
-        return [t for r in self.records for t in r["texts"]] + [t for v in self.bound.values() for t in v] + self.loose
 
 
 def principals(rec):
@@ -345,25 +355,52 @@ class Evidence:
     def records(self) -> Records:
         return load(self.ctx)
 
-    def _tree_page(self, cls, ref):
-        if cls != "Citation" or not isinstance(ref, str):
-            return []
-        h = self.ctx.tree.gids.get("Citation", {}).get(ref)
-        return ARK.findall(str((self.ctx.tree.handles["Citation"].get(h) or {}).get("page") or ""))
+    def _tree_citation(self, ref) -> dict:
+        h = self.ctx.tree.gids.get("Citation", {}).get(ref) if isinstance(ref, str) else None
+        return self.ctx.tree.handles["Citation"].get(h) or {}
 
-    def cited(self, op, depth=0) -> list[str]:
-        """The arks behind an op: its own, those of what it attaches to, and those of citations on an event it adds."""
-        out = list(op_arks(op))
+    def _tree_page(self, cls, ref):
+        if cls != "Citation":
+            return []
+        return ARK.findall(str(self._tree_citation(ref).get("page") or ""))
+
+    def _strings_cited(self, op, depth=0) -> list[str]:
+        """The text behind an op: its own, that of what it attaches to (in the list, or a citation's page in the
+        snapshot), and that of the citations the list puts on an event it adds."""
+        out = list(_strings(op, NOT_CITED))
         if depth < 3:
             for cls, ref in attach_targets(op):
                 if isinstance(ref, str) and ref in self.by_key:
-                    out += self.cited(self.by_key[ref], depth + 1)
-                else:
-                    out += self._tree_page(cls, ref)
+                    out += self._strings_cited(self.by_key[ref], depth + 1)
+                elif cls == "Citation":
+                    out.append(str(self._tree_citation(ref).get("page") or ""))
         if op["op"] == "add_event" and op.get("key"):
             for c in self.attaching.get(f"key:{op['key']}", []):
-                out += op_arks(c)
-        return list(dict.fromkeys(out))
+                out += list(_strings(c, NOT_CITED))
+        return out
+
+    def cited(self, op) -> list[str]:
+        """The arks behind an op: its own, those of what it attaches to, and those of citations on an event it adds."""
+        return list(dict.fromkeys(a for s in self._strings_cited(op) for a in ARK.findall(s)))
+
+    def cited_urls(self, op) -> list[str]:
+        """The other web addresses behind an op, the same way: a bulletin, an archive's image viewer."""
+        return list(dict.fromkeys(u for s in self._strings_cited(op) for u in urls_in(s)))
+
+    def has_media(self, op) -> bool:
+        """Whether an image stands behind an op: it adds or hangs a media object, or one sits on its citation (a
+        media the list attaches to it, or the citation's own media in the snapshot)."""
+        if op["op"] == "add_media" or any(c == "Media" for c, _ in attach_targets(op)):
+            return True
+        refs = [f"key:{op['key']}"] if op.get("key") else []
+        refs += [r for c, r in attach_targets(op) if c == "Citation" and isinstance(r, str)]
+        for r in refs:
+            for o in self.attaching.get(r, []):
+                if o["op"] == "add_media" or (o["op"] == "attach_existing" and "media" in (o.get("object") or {})):
+                    return True
+            if self._tree_citation(r).get("media_list"):
+                return True
+        return False
 
     def event_types(self, op, depth=0) -> set[str]:
         """The event types an op speaks about: its own, or those of the events and families it attaches to."""
@@ -434,10 +471,13 @@ def _found(quote, fields) -> bool:
 
 
 def quotations(text):
+    """Every quoted span: (the words, whether it is long enough to read as a quotation by itself). An empty «» is
+    a span too: an index field copied while empty."""
     for m in QUOTE.finditer(text):
         q = next(g for g in m.groups() if g)
-        if len(q.split()) >= QUOTE_WORDS:
-            yield q
+        yield q, len(q.split()) >= QUOTE_WORDS
+    for _ in EMPTY_QUOTE.finditer(text):
+        yield "", False
 
 
 def readings(ctx) -> set[str]:
@@ -446,7 +486,7 @@ def readings(ctx) -> set[str]:
     if not path:
         return set()
     try:
-        with open(path, encoding="utf-8", newline="") as fh:
+        with open(path, encoding="utf-8-sig", newline="") as fh:  # -sig: a file Excel saved starts with a BOM
             rows = list(csv.reader(fh, delimiter="\t"))
     except (OSError, UnicodeDecodeError) as e:
         raise InputError(f"readings {path}: {e}") from None
@@ -454,49 +494,68 @@ def readings(ctx) -> set[str]:
             and r[2].strip()}
 
 
+def _short(q):
+    return q if len(q) <= 60 else q[:57] + "..."
+
+
 class Quote(Rule):
     name = "quote"
     codes = {"quote-notfound": "a quotation is in none of the cited records' fields or saved transcriptions",
+             "quote-short": "a short quoted span (one to three words, or empty) next to a cited record is not in it",
              "quote-image": "a quotation whose only source is an image has no signed reading row (STOP)"}
 
     def check(self, ctx):
         ev = Evidence(ctx)
         signed = readings(ctx)
-        out = []
+        out, unsaved = [], []
         for op in ctx.ops:
-            spans = [q for t in texts(op) for q in quotations(t)]
+            spans = [s for t in texts(op) for s in quotations(t)]
+            if not any(long for _, long in spans):
+                spans = spans if spans and any(a.startswith("1:1:") for a in ev.cited(op)) else []
             if not spans:
                 continue
-            arks = ev.cited(op)
-            images = [a for a in arks if a.startswith("3:1:")] + \
-                [r for c, r in attach_targets(op) if c == "Media"] + (["media"] if op["op"] == "add_media" else [])
+            arks, urls = ev.cited(op), ev.cited_urls(op)
             record_arks = [a for a in arks if a.startswith("1:1:")]
-            fields = [t for a in arks for t in ev.records.texts_of(a)] if arks else ev.records.every_text()
-            for q in spans:
-                if _found(q, fields) or _norm(q) in signed:
+            images = [a for a in arks if a.startswith("3:1:")] or ev.has_media(op)
+            fields = [t for a in arks for t in ev.records.texts_of(a)] + [t for u in urls for t in ev.records.bound.get(u, [])]
+            for q, long in spans:
+                if not long and not record_arks:  # a title or a name in «»: checked only next to a cited record
                     continue
-                short = q if len(q) <= 60 else q[:57] + "..."
-                if images and not record_arks:
-                    out.append(self.finding("quote-image", op, f"«{short}» has only an image behind it and no signed "
-                                            "reading", "add a row to the readings file: quote, image sha, reader"))
-                else:
-                    where = ", ".join(record_arks) if record_arks else "any saved record"
-                    out.append(self.finding("quote-notfound", op, f"«{short}» is not in {where}",
+                if _found(q, fields) or (long and _norm(q) in signed):
+                    continue
+                if not long:
+                    out.append(self.finding("quote-short", op, f"«{_short(q)}» is not in {', '.join(record_arks)}",
+                                            "copy the field from the record, or drop the quote marks"))
+                elif images and not record_arks:
+                    out.append(self.finding("quote-image", op, f"«{_short(q)}» has only an image behind it and no "
+                                            "signed reading", "add a row to the readings file: quote, image sha, reader"))
+                elif record_arks or (urls and fields):
+                    where = ", ".join(record_arks or urls)
+                    out.append(self.finding("quote-notfound", op, f"«{_short(q)}» is not in {where}",
                                             "copy the words from the record, accents and all, or drop the quote marks"))
+                elif urls:  # a source with no saved text: the rule could not look
+                    unsaved += [u for u in urls if u not in unsaved]
+                elif not _found(q, ev.records.loose if ctx.records else []):
+                    out.append(self.finding("quote-notfound", op, f"«{_short(q)}» cites no record",
+                                            "cite the record it comes from"))
+        if unsaved:
+            raise NothingToCheck(f"{unsaved[0]} has no saved text in {ctx.records or 'no records folder'} (NOREC); "
+                                 "save a transcription of it as a .txt whose first line is that address")
         return out
 
     def mutate(self, ctx):
         recs = _records_or_none(ctx)
-        for t in recs.every_text() if recs else []:
-            words = _norm(t).split()
-            if len(words) < QUOTE_WORDS + 1:
-                continue
-            span = " ".join(words[:QUOTE_WORDS + 2])
-            changed = _flip_accent(span)
-            if changed and not _found(changed, recs.every_text()):
-                op = {"op": "add_note", "key": "lint-prove-quote", "ruling": "prove", "attach": [],
-                      "text": f"The record says «{changed}».", "_line": _line(ctx)}
-                return Mutant(ctx.ops + [op], "quote-notfound")
+        for rec in recs.records if recs else []:
+            arks = [a for p in rec["personas"] for a in p["arks"] if recs.find(a)[0] is rec]
+            for t in rec["texts"] if arks else []:
+                words = _norm(t).split()
+                if len(words) < QUOTE_WORDS + 1:
+                    continue
+                changed = _flip_accent(" ".join(words[:QUOTE_WORDS + 2]))
+                if changed and not _found(changed, recs.texts_of(arks[0])):
+                    op = {"op": "add_note", "key": "lint-prove-quote", "ruling": "prove", "attach": [],
+                          "text": f"The record says «{changed}», {FS}{arks[0]}", "_line": _line(ctx)}
+                    return Mutant(ctx.ops + [op], "quote-notfound")
         return None
 
 

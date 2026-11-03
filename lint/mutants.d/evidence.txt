@@ -4,12 +4,12 @@ gwt_lint/rules_evidence.py |     return " ".join(unicodedata.normalize("NFC", s 
 gwt_lint/rules_evidence.py | unicodedata.normalize("NFC", s or "") | (s or "") | a quotation typed decomposed (NFD) still matches the record
 gwt_lint/rules_evidence.py |                 if images and not record_arks: |                 if False: | a quotation with only an image behind it is quote-image, a STOP
 gwt_lint/rules_evidence.py |             and r[2].strip()} |             } | a reading row counts only when it names its reader
-gwt_lint/rules_evidence.py |                     out += self.cited(self.by_key[ref], depth + 1) |                     pass | a note on a citation is checked against that citation's record, not every record
+gwt_lint/rules_evidence.py | out += self._strings_cited(self.by_key[ref], depth + 1) | pass | a note on a citation is checked against that citation's record, not every record
 gwt_lint/rules_evidence.py |             for c in self.attaching.get(f"key:{op['key']}", []): |             for c in []: | an event's own citations give the record its placement is checked against
 gwt_lint/rules_evidence.py | if ark in self.thin: | if True: | an ark with no saved record is NOREC, exit 2
 gwt_lint/rules_evidence.py |         if {"url", "status", "fetched"} <= set(doc): |         if False: | a gwt-fscache entry is read through its .body
 gwt_lint/rules_evidence.py |         if isinstance(doc.get("candidates"), list): |         if False: | gwt-read candidate rows are records
-gwt_lint/rules_evidence.py | ARK.findall(name) + ARK.findall(text.split("\n", 1)[0]) | ARK.findall(name) | a transcription binds to the ark on its first line
+gwt_lint/rules_evidence.py | ARK.findall(name) + ARK.findall(first) or urls_in(first) | ARK.findall(name) or urls_in(first) | a transcription binds to the ark on its first line
 gwt_lint/rules_evidence.py |                 if rel != "principal" and not (rel == "spouse" and types & {"Marriage", "Family"}): |                 if rel != "principal" and False: | citing a persona who is not the principal is principal-nonprincipal
 gwt_lint/rules_evidence.py |  and not (rel == "spouse" and types & {"Marriage", "Family"}) |  | the spouse's persona of a marriage record may be cited for the marriage
 gwt_lint/rules_evidence.py |                 if facts and wanted and not facts & wanted: |                 if False: | a record of another event type is principal-event
@@ -38,3 +38,10 @@ gwt_lint/rules_evidence.py | return ev._tree_page("Citation", ref) | return [] |
 gwt_lint/rules_evidence.py | if persona["principal"] or not persona["name"]: | if persona["principal"] or not persona["name"] or not set(persona["arks"]) & set(op_arks(op)): | role reads every persona of a cited record, not only the one whose ark is cited
 gwt_lint/rules_evidence.py | and any(toks[j] in words and toks[j] != t for j in range(max(0, i - 2), min(len(toks), i + 3)))] | and True] | a surname alone does not name a person: a namesake is not the persona
 gwt_lint/rules_evidence.py | if w in ROLE_WORDS and not (n == 1 and w in own): | if w in ROLE_WORDS: | a person's own name is not a role word for him (Peter, Mare)
+gwt_lint/rules_evidence.py | ARK.findall(name) + ARK.findall(first) or urls_in(first) | ARK.findall(name) + ARK.findall(first) | a transcription binds to the web address on its first line (a bulletin, an archive viewer)
+gwt_lint/rules_evidence.py | if not long and not record_arks: | if not long: | a short span (one to three words) next to a cited record is checked: quote-short
+gwt_lint/rules_evidence.py | yield "", False | return | an empty «» next to a cited record is quote-short
+gwt_lint/rules_evidence.py | unsaved += [u for u in urls if u not in unsaved] | pass | a quotation from a source with no saved text is NOREC (exit 2), not clean
+gwt_lint/rules_evidence.py | elif not _found(q, ev.records.loose if ctx.records else []): | elif False: | a quotation that cites nothing is not matched against unrelated records
+gwt_lint/rules_evidence.py | if o["op"] == "add_media" or (o["op"] == "attach_existing" and "media" in (o.get("object") or {})): | if False: | a media on the cited citation makes a quotation image-only: quote-image
+gwt_lint/rules_evidence.py | encoding="utf-8-sig", newline="" | encoding="utf-8", newline="" | a readings file saved with a BOM keeps its first row
