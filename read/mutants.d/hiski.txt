@@ -18,3 +18,5 @@ gwt_hiski.py |     if shell: | if False: | a book the parish lacks is a usage er
 gwt_hiski.py | if shell[0].lower() == 'unknown parish': | if False: | an unknown parish code is named as such, not as a missing book
 gwt_hiski.py |     if bad: | if False: | a --field without NAME= is refused, never dropped silently
 gwt_hiski.py |             return usage('%r has a letter | pass  # ('%r has a letter | a value outside ISO-8859-1 is refused, never sent as '?'
+gwt_hiski.py |     if not m or _TABLE.search(page) or gwt_reader.classify(page, SPEC) != 'unknown': |     if not m or gwt_reader.classify(page, SPEC) != 'unknown': | a search page with a result table the reader cannot read is a STOP, never a missing book
+gwt_hiski.py |     if not m or _TABLE.search(page) or gwt_reader.classify(page, SPEC) != 'unknown': |     if not m or _TABLE.search(page): | rows on a page titled like the empty search page are read, never a missing book

@@ -150,6 +150,21 @@ class Search(Run):
         self.assertEqual((code, gate.hits, self.out_files()), (64, [], []), text)
         self.assertIn('no parish 0999', text)
 
+    def test_a_search_page_with_a_result_table_it_cannot_read_is_a_stop_not_a_usage_error(self):
+        page = fx('no-book.html').replace(b'<BR><P><HR>', b'<TABLE BORDER=1 CELLSPACING=0><TR><TH>Man <TH>Wife</TABLE><HR>')
+        gate = FakeGate()
+        code, _, text = self.search(FakeNet(gate, (200, page)), gate, book='baptisms')
+        self.assertEqual((code, len(gate.hits), self.out_files()), (gwt_reader.EXIT_WALL, 1, []), text)
+
+    def test_rows_on_a_page_titled_like_the_empty_search_page_are_read(self):
+        page = (fx('results.html').replace(b'<TITLE>HisKi project - Search results</TITLE>',
+                                           '<TITLE>Search - Kylämaa - married</TITLE>'.encode('iso-8859-1'))
+                .replace(b'<TABLE BORDER=1 CELLSPACING=0>', b'<TABLE CELLSPACING=0>'))
+        gate = FakeGate()
+        code, lines, text = self.search(FakeNet(gate, (200, page)), gate)
+        self.assertEqual(code, 0, text)
+        self.assertTrue(lines['results'].startswith('2 total, 2 read'))
+
     def test_a_field_without_a_name_or_outside_iso_8859_1_is_refused(self):
         for extra in (('--field', 'aetunimi'), ('--field', '=Maria'), ('--given', 'Jōhan'),
                       ('--field', 'aetunimi=Ŝara')):

@@ -13,3 +13,5 @@ gwt_freeukgen.py | if len(counties) > 3 and list(counties) != CHANNEL_ISLANDS: |
 gwt_freeukgen.py | bool(TOO_MANY.search(p) or REFUSED.search(p)) | bool(TOO_MANY.search(p)) | the form shown again with the site's reasons is a usage error, never a gate pause
 gwt_freeukgen.py | return gwt_read._pares_build(src, a, urlopen, gate) | return gwt_read._default_build(src, a, urlopen, gate) | the form token's session cookie lives in a cookie jar, or every search is refused
 gwt_freeukgen.py | SPEC['build'] = build | pass | freeukgen builds its reader with the cookie jar
+gwt_freeukgen.py |         if y and not str(y).isdigit(): |         if False: | a year that is not a number is refused before any request
+gwt_freeukgen.py |     if year_from and not year_to: |     if False: | a start year with no end year is refused before any request

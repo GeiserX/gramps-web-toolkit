@@ -11,3 +11,5 @@ gwt_digitalarkivet.py | page=lambda p: rows(p) or past_end(p, a.page)) | page=ro
 gwt_digitalarkivet.py | and (number - 1) * PER_PAGE >= min(hits, MAX_PAGE * PER_PAGE)) | ) | an empty page before the last one is still a STOP, never "past the end"
 gwt_digitalarkivet.py | if not 1 <= a.page <= MAX_PAGE: | if False: | a --page the site never shows (over 200) is refused before it answers HTTP 500 and pauses the gate
 gwt_digitalarkivet.py | if not a.name.strip(): | if False: | an empty --name is refused, never sent as a search for anyone
+gwt_digitalarkivet.py |     return (number > 1 and bool(hits) and '<div class="unit"' not in page |     return (number > 1 and '<div class="unit"' not in page | an empty page with no count is a STOP, never past the end
+gwt_digitalarkivet.py |     return (number > 1 and bool(hits) and '<div class="unit"' not in page |     return (number > 1 and bool(hits) | a row the reader cannot read is a STOP even past the count, never past the end

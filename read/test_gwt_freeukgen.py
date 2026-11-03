@@ -157,6 +157,10 @@ class Search(Run):
         self.assertIn('precede', self.refused('--from', '1810', '--to', '1800', county=('--county', 'DEV')))
         self.assertIn('surname', self.refused('--surname', '', '--given', 'Thomas', county=('--county', 'DEV')))
 
+    def test_a_year_alone_or_not_a_number_is_refused_before_any_request(self):
+        self.assertIn('no end year', self.refused('--from', '1800', county=('--county', 'DEV')))
+        self.assertIn('a year is a number', self.refused('--from', '18x0', '--to', '1900', county=('--county', 'DEV')))
+
     def test_what_the_site_accepts_is_sent(self):
         for extra in (('--type', 'baptisms', '--from', '1800', '--to', '1801'),
                       tuple('--county ALD --county GSY --county JSY --county SRK'.split()),

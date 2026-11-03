@@ -109,6 +109,19 @@ class Search(Run):
         code, _, text = self.search(FakeNet(gate, (200, self.past_end_page())), gate, '--page', '3')
         self.assertEqual((code, len(gate.hits), self.out_files()), (gwt_reader.EXIT_WALL, 1, []), text)
 
+    def test_an_empty_page_with_no_count_is_a_stop_never_past_the_end(self):
+        page = self.past_end_page().replace(b'data-hits="101"', b'')
+        gate = FakeGate()
+        code, _, text = self.search(FakeNet(gate, (200, page)), gate, '--page', '5')
+        self.assertEqual((code, len(gate.hits), self.out_files()), (gwt_reader.EXIT_WALL, 1, []), text)
+
+    def test_a_row_the_reader_cannot_read_past_the_count_is_a_stop_never_past_the_end(self):
+        page = self.past_end_page().replace(b'clearfix">\n\t</div>',
+                                            b'clearfix">\n<div class="unit"><div class="person-name">Ola</div></div></div>')
+        gate = FakeGate()
+        code, _, text = self.search(FakeNet(gate, (200, page)), gate, '--page', '5')
+        self.assertEqual((code, len(gate.hits), self.out_files()), (gwt_reader.EXIT_WALL, 1, []), text)
+
     def test_a_page_the_site_never_shows_is_refused_before_any_request(self):
         for page in ('201', '0'):
             gate = FakeGate()

@@ -90,6 +90,13 @@ class Search(Run):
         q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(net.requests[0].full_url).query))
         self.assertEqual((q['bdm'], q['rid']), ('D', '1234'))
 
+    def test_page_asks_for_its_own_rows(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, fx('none.json')))
+        self.search(net, gate, '--page', '3', '--count', '10')
+        q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(net.requests[0].full_url).query))
+        self.assertEqual((q['start'], q['length']), ('20', '10'))
+
     def test_the_sites_own_zero_is_exit_2(self):
         gate = FakeGate()
         code, lines, _ = self.search(FakeNet(gate, (200, fx('none.json'))), gate)
