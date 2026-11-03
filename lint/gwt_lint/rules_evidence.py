@@ -837,7 +837,9 @@ class Placement(Rule):
                                         "not on a church", fix))
                 continue
             origs = self._origs(ev, arks)
-            ov = overrides.get(str(op.get("key")))
+            # by list file and op key: keys like e1 repeat across lists, and lint.toml serves them all
+            mine = overrides.get(Path(ctx.path).name) if ctx.path else None
+            ov = mine.get(str(op.get("key"))) if isinstance(mine, dict) else None
             if isinstance(ov, dict):
                 quote, page = str(ov.get("quote") or ""), [t for a in arks for t in ev.records.texts_of(a)]
                 page += [c.get("page") or "" for c in ev.attaching.get(evref, []) if c["op"] == "add_citation"]

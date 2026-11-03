@@ -83,10 +83,10 @@ Each event the list places (`add_event` with a place, `update_event` setting one
 
 When a sacrament sits on a church and the event cites a record that keeps the place as the index typed it (`place_orig`, the `EVENT_PLACE_ORIG` and parish fields), the church must match it. Both names are folded and the locale's abbreviations written out (`Sta.` becomes `Santa`, see `dedication()` in the [shared rules](rules.md)); church words (iglesia, parroquia, ermita, church, ...) and particles at either end are dropped; what is left must appear whole in the typed place. Titles count, so «Santo Cristo del Valle» is not «Santísimo Cristo del Valle». A generic dedication, one with only titles left («Iglesia de Santa María»), never matches by itself: the town the church sits under must also be in the typed place.
 
-When the index typed the place wrongly, give an override for that op, with the page's own words:
+When the index typed the place wrongly, give an override for that op, with the page's own words. It is keyed by the list's file name and the op's key, because op keys repeat across lists and lint.toml serves them all (an op cannot carry it: gwt-apply refuses fields it does not know):
 
 ```toml
-[placement.overrides.e-bap-pedro]          # the op's key
+[placement.overrides."changes.jsonl".e-bap-pedro]   # the list's file name, then the op's key
 place = "Ermita del Santo Cristo del Valle"
 quote = "en la ermita del Santo Cristo del Valle"   # must be in the cited record or the citation's page
 ```

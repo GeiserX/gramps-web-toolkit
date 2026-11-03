@@ -136,7 +136,7 @@ def test_records_setting_must_be_a_text(tmp_path):
 
 def test_an_override_needs_its_quote_on_the_page(tmp_path):
     cfg = tmp_path / "lint.toml"
-    cfg.write_text(f'records = "{RECORDS}"\n[placement.overrides.e-bap-pedro]\n'
+    cfg.write_text(f'records = "{RECORDS}"\n[placement.overrides."placement-clean.jsonl".e-bap-pedro]\n'
                    'place = "Ermita del Santo Cristo del Valle"\nquote = "en la ermita junto al río"\n', encoding="utf-8")
     code, codes, _ = lint("placement-clean.jsonl", "placement", config=str(cfg))
     assert codes == {"placement-override": ["e-bap-pedro"], "placement-parish": ["e-bap-pedro"]}
@@ -327,3 +327,11 @@ def test_a_readings_file_saved_with_a_bom_still_counts_its_first_row(tmp_path):
     ops = [{"op": "add_note", "key": "n", "text": f"«estas palabras no tienen lectura firmada» {FS}3:1:QZZ9-IMG2",
             "attach": [{"person": "I1"}]}]
     assert lint(write(tmp_path, ops), "quote", "--readings", str(rows))[:2] == (0, {})
+
+
+def test_an_override_holds_only_for_its_own_list(tmp_path):
+    # the same op key in another list is another op: the override for placement-clean.jsonl does not reach it
+    other = tmp_path / "other.jsonl"
+    shutil.copy(os.path.join(FIX, "placement-clean.jsonl"), other)
+    code, codes, _ = lint(str(other), "placement")
+    assert codes == {"placement-parish": ["e-bap-pedro"]}

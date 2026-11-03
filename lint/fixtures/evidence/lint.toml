@@ -4,6 +4,6 @@ records = "records"
 [quote]
 readings = "readings.tsv"
 
-[placement.overrides.e-bap-pedro]
+[placement.overrides."placement-clean.jsonl".e-bap-pedro]
 place = "Ermita del Santo Cristo del Valle"
 quote = "en la ermita del Santo Cristo del Valle"

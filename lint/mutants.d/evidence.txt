@@ -45,3 +45,4 @@ gwt_lint/rules_evidence.py | unsaved += [u for u in urls if u not in unsaved] | 
 gwt_lint/rules_evidence.py | elif not _found(q, ev.records.loose if ctx.records else []): | elif False: | a quotation that cites nothing is not matched against unrelated records
 gwt_lint/rules_evidence.py | if o["op"] == "add_media" or (o["op"] == "attach_existing" and "media" in (o.get("object") or {})): | if False: | a media on the cited citation makes a quotation image-only: quote-image
 gwt_lint/rules_evidence.py | encoding="utf-8-sig", newline="" | encoding="utf-8", newline="" | a readings file saved with a BOM keeps its first row
+gwt_lint/rules_evidence.py | mine = overrides.get(Path(ctx.path).name) if ctx.path else None | mine = {k: v for m in overrides.values() if isinstance(m, dict) for k, v in m.items()} | a placement override holds for its own list only, not for an op with the same key in another list
