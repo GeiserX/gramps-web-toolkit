@@ -11,6 +11,7 @@ the record; the bytes live in the bucket and can be fetched back and checked at 
     gwt-rawstore migrate <dir> [--remove|--evict]      upload files already committed; --remove untracks and ignores them,
                                                        --evict also deletes the local copies the store confirms
     gwt-rawstore check-staged                          pre-commit check: refuse big binaries outside allowed paths
+    gwt-rawstore doctor [--repo PATH] [--json]          read-only repo health: packs, lazy fetch, binaries, scratch, backups
 
 Configuration comes from the environment, then from the file in $GWT_RAWSTORE_CONFIG (default
 ~/.config/gwt-rawstore/config, KEY=value lines): GWT_RAWSTORE_ENDPOINT, GWT_RAWSTORE_BUCKET,
@@ -20,6 +21,7 @@ AWS SigV4 and use path-style addressing, which Garage and MinIO need. Standard l
 """
 import argparse, concurrent.futures, datetime, fnmatch, hashlib, hmac, http.client, os, re, shutil, subprocess, \
     sys, tempfile, time, urllib.error, urllib.parse, urllib.request, xml.etree.ElementTree as ET
+import gwt_rawstore_doctor   # imported here so a wheel without it fails on any run, not only on `doctor`
 
 MANIFEST = 'rawstore.tsv'
 COLUMNS = ('sha256', 'size', 'key', 'path')
@@ -478,7 +480,16 @@ def main(argv=None, store=None):
     g.add_argument('-j', '--jobs', type=int, default=4)
     g = sub.add_parser('check-staged', help='pre-commit hook: refuse big staged binaries')
     g.add_argument('--max-kb', type=int, default=None)
+    g = sub.add_parser('doctor', help='read-only check of a repo\'s disk health; never fetches')
+    g.add_argument('--repo', default='.', help='a path inside the work tree (default: here)')
+    g.add_argument('--json', action='store_true', help='print the report as JSON')
+    g.add_argument('--max-packs', type=int, default=gwt_rawstore_doctor.PACKS)
+    g.add_argument('--max-tmp-gb', type=float, default=gwt_rawstore_doctor.TMP_GB,
+                   help='a scratch or cache folder, or .git for Time Machine, bigger than this is reported')
+    g.add_argument('--max-binary-gb', type=float, default=gwt_rawstore_doctor.BINARY_GB)
     a = p.parse_args(argv)
+    if a.cmd == 'doctor':
+        return gwt_rawstore_doctor.main(a)
 
     cfg = load_config()
     if a.cmd == 'check-staged':

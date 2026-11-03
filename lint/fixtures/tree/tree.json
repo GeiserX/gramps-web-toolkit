@@ -1,0 +1,1665 @@
+{
+ "objects": {
+  "citations": [
+   {
+    "confidence": 3,
+    "gramps_id": "C1",
+    "handle": "hC1",
+    "note_list": [],
+    "page": "folio 3",
+    "source_handle": "hS1",
+    "tag_list": []
+   },
+   {
+    "confidence": 1,
+    "gramps_id": "C2",
+    "handle": "hC2",
+    "note_list": [],
+    "page": "row 7",
+    "source_handle": "hS2",
+    "tag_list": [
+     "htagweak"
+    ]
+   }
+  ],
+  "events": [
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1900,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E1b",
+    "handle": "hE1b",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Birth"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1980,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E1d",
+    "handle": "hE1d",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Death"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1870,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E2b",
+    "handle": "hE2b",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Birth"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1940,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E2d",
+    "handle": "hE2d",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Death"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1872,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E3b",
+    "handle": "hE3b",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Birth"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1950,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E3d",
+    "handle": "hE3d",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Death"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1902,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E4b",
+    "handle": "hE4b",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Birth"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1970,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E4d",
+    "handle": "hE4d",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Death"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1898,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E5b",
+    "handle": "hE5b",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Birth"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1975,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E5d",
+    "handle": "hE5d",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Death"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1930,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E6b",
+    "handle": "hE6b",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Birth"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      2000,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E6d",
+    "handle": "hE6d",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Death"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1895,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E7b",
+    "handle": "hE7b",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Birth"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1960,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E7d",
+    "handle": "hE7d",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Death"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1925,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E8b",
+    "handle": "hE8b",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Birth"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1990,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E8d",
+    "handle": "hE8d",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Death"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1932,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E9b",
+    "handle": "hE9b",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Birth"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      2010,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E9d",
+    "handle": "hE9d",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Death"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1990,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E10b",
+    "handle": "hE10b",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Birth"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1928,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E11b",
+    "handle": "hE11b",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Birth"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1999,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E11d",
+    "handle": "hE11d",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Death"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1860,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E13b",
+    "handle": "hE13b",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Birth"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1930,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E13d",
+    "handle": "hE13d",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Death"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1897,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E14b",
+    "handle": "hE14b",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Birth"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1970,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "E14d",
+    "handle": "hE14d",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Death"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1899,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "EM1",
+    "handle": "hEM1",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Marriage"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1924,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "EM2",
+    "handle": "hEM2",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Marriage"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1955,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "EM3",
+    "handle": "hEM3",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Marriage"
+   },
+   {
+    "attribute_list": [],
+    "citation_list": [],
+    "date": {
+     "_class": "Date",
+     "calendar": 0,
+     "dateval": [
+      1,
+      5,
+      1920,
+      false
+     ],
+     "modifier": 0,
+     "newyear": 0,
+     "quality": 0,
+     "sortval": 0,
+     "text": ""
+    },
+    "description": "",
+    "gramps_id": "EM5",
+    "handle": "hEM5",
+    "media_list": [],
+    "note_list": [],
+    "place": "hP1",
+    "tag_list": [],
+    "type": "Marriage"
+   }
+  ],
+  "families": [
+   {
+    "child_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "frel": "Birth",
+      "mrel": "Birth",
+      "note_list": [],
+      "private": false,
+      "ref": "hI1"
+     },
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "frel": "Birth",
+      "mrel": "Birth",
+      "note_list": [],
+      "private": false,
+      "ref": "hI4"
+     }
+    ],
+    "citation_list": [],
+    "event_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hEM1",
+      "role": "Family"
+     }
+    ],
+    "father_handle": "hI2",
+    "gramps_id": "F1",
+    "handle": "hF1",
+    "media_list": [],
+    "mother_handle": "hI3",
+    "note_list": [],
+    "private": false,
+    "tag_list": [],
+    "type": "Married"
+   },
+   {
+    "child_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "frel": "Birth",
+      "mrel": "Birth",
+      "note_list": [],
+      "private": false,
+      "ref": "hI6"
+     },
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "frel": "Stepchild",
+      "mrel": "Stepchild",
+      "note_list": [],
+      "private": false,
+      "ref": "hI8"
+     },
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "frel": "Adopted",
+      "mrel": "Adopted",
+      "note_list": [
+       "hN1"
+      ],
+      "private": false,
+      "ref": "hI9"
+     }
+    ],
+    "citation_list": [],
+    "event_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hEM2",
+      "role": "Family"
+     }
+    ],
+    "father_handle": "hI5",
+    "gramps_id": "F2",
+    "handle": "hF2",
+    "media_list": [],
+    "mother_handle": "hI1",
+    "note_list": [],
+    "private": false,
+    "tag_list": [],
+    "type": "Married"
+   },
+   {
+    "child_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "frel": "Birth",
+      "mrel": "Birth",
+      "note_list": [],
+      "private": false,
+      "ref": "hI10"
+     }
+    ],
+    "citation_list": [],
+    "event_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hEM3",
+      "role": "Family"
+     }
+    ],
+    "father_handle": "hI11",
+    "gramps_id": "F3",
+    "handle": "hF3",
+    "media_list": [],
+    "mother_handle": "hI6",
+    "note_list": [],
+    "private": false,
+    "tag_list": [],
+    "type": "Married"
+   },
+   {
+    "child_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "frel": "Birth",
+      "mrel": "Birth",
+      "note_list": [],
+      "private": false,
+      "ref": "hI5"
+     },
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "frel": "Birth",
+      "mrel": "Birth",
+      "note_list": [],
+      "private": false,
+      "ref": "hI7"
+     }
+    ],
+    "citation_list": [],
+    "event_ref_list": [],
+    "father_handle": "hI13",
+    "gramps_id": "F4",
+    "handle": "hF4",
+    "media_list": [],
+    "mother_handle": null,
+    "note_list": [],
+    "private": false,
+    "tag_list": [],
+    "type": "Married"
+   },
+   {
+    "child_ref_list": [],
+    "citation_list": [],
+    "event_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hEM5",
+      "role": "Family"
+     }
+    ],
+    "father_handle": "hI7",
+    "gramps_id": "F5",
+    "handle": "hF5",
+    "media_list": [],
+    "mother_handle": "hI14",
+    "note_list": [],
+    "private": false,
+    "tag_list": [],
+    "type": "Married"
+   }
+  ],
+  "media": [],
+  "notes": [
+   {
+    "gramps_id": "N1",
+    "handle": "hN1",
+    "private": false,
+    "tag_list": [],
+    "text": {
+     "_class": "StyledText",
+     "string": "[probable] Adoption named only in a later census.",
+     "tags": []
+    },
+    "type": "Research"
+   },
+   {
+    "gramps_id": "N2",
+    "handle": "hN2",
+    "private": false,
+    "tag_list": [],
+    "text": {
+     "_class": "StyledText",
+     "string": "Ana kept the family bible.",
+     "tags": []
+    },
+    "type": "General"
+   }
+  ],
+  "people": [
+   {
+    "birth_ref_index": 0,
+    "citation_list": [],
+    "death_ref_index": 1,
+    "event_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE1b",
+      "role": "Primary"
+     },
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE1d",
+      "role": "Primary"
+     }
+    ],
+    "family_list": [
+     "hF2"
+    ],
+    "gender": 0,
+    "gramps_id": "I1",
+    "handle": "hI1",
+    "media_list": [],
+    "note_list": [
+     "hN2"
+    ],
+    "parent_family_list": [
+     "hF1"
+    ],
+    "person_ref_list": [],
+    "primary_name": {
+     "first_name": "Ana",
+     "surname_list": [
+      {
+       "primary": true,
+       "surname": "Prieto Gil"
+      }
+     ]
+    },
+    "private": false,
+    "tag_list": []
+   },
+   {
+    "birth_ref_index": 0,
+    "citation_list": [],
+    "death_ref_index": 1,
+    "event_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE2b",
+      "role": "Primary"
+     },
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE2d",
+      "role": "Primary"
+     }
+    ],
+    "family_list": [
+     "hF1"
+    ],
+    "gender": 1,
+    "gramps_id": "I2",
+    "handle": "hI2",
+    "media_list": [],
+    "note_list": [],
+    "parent_family_list": [],
+    "person_ref_list": [],
+    "primary_name": {
+     "first_name": "Pedro",
+     "surname_list": [
+      {
+       "primary": true,
+       "surname": "Prieto"
+      }
+     ]
+    },
+    "private": false,
+    "tag_list": []
+   },
+   {
+    "birth_ref_index": 0,
+    "citation_list": [],
+    "death_ref_index": 1,
+    "event_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE3b",
+      "role": "Primary"
+     },
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE3d",
+      "role": "Primary"
+     }
+    ],
+    "family_list": [
+     "hF1"
+    ],
+    "gender": 0,
+    "gramps_id": "I3",
+    "handle": "hI3",
+    "media_list": [],
+    "note_list": [],
+    "parent_family_list": [],
+    "person_ref_list": [],
+    "primary_name": {
+     "first_name": "Marta",
+     "surname_list": [
+      {
+       "primary": true,
+       "surname": "Gil"
+      }
+     ]
+    },
+    "private": false,
+    "tag_list": []
+   },
+   {
+    "birth_ref_index": 0,
+    "citation_list": [],
+    "death_ref_index": 1,
+    "event_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE4b",
+      "role": "Primary"
+     },
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE4d",
+      "role": "Primary"
+     }
+    ],
+    "family_list": [],
+    "gender": 1,
+    "gramps_id": "I4",
+    "handle": "hI4",
+    "media_list": [],
+    "note_list": [],
+    "parent_family_list": [
+     "hF1"
+    ],
+    "person_ref_list": [],
+    "primary_name": {
+     "first_name": "Luis",
+     "surname_list": [
+      {
+       "primary": true,
+       "surname": "Prieto Gil"
+      }
+     ]
+    },
+    "private": false,
+    "tag_list": []
+   },
+   {
+    "birth_ref_index": 0,
+    "citation_list": [],
+    "death_ref_index": 1,
+    "event_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE5b",
+      "role": "Primary"
+     },
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE5d",
+      "role": "Primary"
+     }
+    ],
+    "family_list": [
+     "hF2"
+    ],
+    "gender": 1,
+    "gramps_id": "I5",
+    "handle": "hI5",
+    "media_list": [],
+    "note_list": [],
+    "parent_family_list": [
+     "hF4"
+    ],
+    "person_ref_list": [],
+    "primary_name": {
+     "first_name": "Carlos",
+     "surname_list": [
+      {
+       "primary": true,
+       "surname": "Vega"
+      }
+     ]
+    },
+    "private": false,
+    "tag_list": []
+   },
+   {
+    "birth_ref_index": 0,
+    "citation_list": [],
+    "death_ref_index": 1,
+    "event_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE6b",
+      "role": "Primary"
+     },
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE6d",
+      "role": "Primary"
+     }
+    ],
+    "family_list": [
+     "hF3"
+    ],
+    "gender": 0,
+    "gramps_id": "I6",
+    "handle": "hI6",
+    "media_list": [],
+    "note_list": [],
+    "parent_family_list": [
+     "hF2"
+    ],
+    "person_ref_list": [],
+    "primary_name": {
+     "first_name": "Elena",
+     "surname_list": [
+      {
+       "primary": true,
+       "surname": "Vega Prieto"
+      }
+     ]
+    },
+    "private": false,
+    "tag_list": []
+   },
+   {
+    "birth_ref_index": 0,
+    "citation_list": [],
+    "death_ref_index": 1,
+    "event_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE7b",
+      "role": "Primary"
+     },
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE7d",
+      "role": "Primary"
+     }
+    ],
+    "family_list": [
+     "hF5"
+    ],
+    "gender": 1,
+    "gramps_id": "I7",
+    "handle": "hI7",
+    "media_list": [],
+    "note_list": [],
+    "parent_family_list": [
+     "hF4"
+    ],
+    "person_ref_list": [],
+    "primary_name": {
+     "first_name": "Hugo",
+     "surname_list": [
+      {
+       "primary": true,
+       "surname": "Vega"
+      }
+     ]
+    },
+    "private": false,
+    "tag_list": []
+   },
+   {
+    "birth_ref_index": 0,
+    "citation_list": [],
+    "death_ref_index": 1,
+    "event_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE8b",
+      "role": "Primary"
+     },
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE8d",
+      "role": "Primary"
+     }
+    ],
+    "family_list": [],
+    "gender": 0,
+    "gramps_id": "I8",
+    "handle": "hI8",
+    "media_list": [],
+    "note_list": [],
+    "parent_family_list": [
+     "hF2"
+    ],
+    "person_ref_list": [],
+    "primary_name": {
+     "first_name": "Sara",
+     "surname_list": [
+      {
+       "primary": true,
+       "surname": "Vega"
+      }
+     ]
+    },
+    "private": false,
+    "tag_list": []
+   },
+   {
+    "birth_ref_index": 0,
+    "citation_list": [],
+    "death_ref_index": 1,
+    "event_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE9b",
+      "role": "Primary"
+     },
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE9d",
+      "role": "Primary"
+     }
+    ],
+    "family_list": [],
+    "gender": 1,
+    "gramps_id": "I9",
+    "handle": "hI9",
+    "media_list": [],
+    "note_list": [],
+    "parent_family_list": [
+     "hF2"
+    ],
+    "person_ref_list": [],
+    "primary_name": {
+     "first_name": "Iker",
+     "surname_list": [
+      {
+       "primary": true,
+       "surname": "Vega"
+      }
+     ]
+    },
+    "private": false,
+    "tag_list": []
+   },
+   {
+    "birth_ref_index": 0,
+    "citation_list": [],
+    "death_ref_index": -1,
+    "event_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE10b",
+      "role": "Primary"
+     }
+    ],
+    "family_list": [],
+    "gender": 0,
+    "gramps_id": "I10",
+    "handle": "hI10",
+    "media_list": [],
+    "note_list": [],
+    "parent_family_list": [
+     "hF3"
+    ],
+    "person_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hI12",
+      "rel": "DNA"
+     }
+    ],
+    "primary_name": {
+     "first_name": "Nora",
+     "surname_list": [
+      {
+       "primary": true,
+       "surname": "Ruiz Vega"
+      }
+     ]
+    },
+    "private": false,
+    "tag_list": []
+   },
+   {
+    "birth_ref_index": 0,
+    "citation_list": [],
+    "death_ref_index": 1,
+    "event_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE11b",
+      "role": "Primary"
+     },
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE11d",
+      "role": "Primary"
+     }
+    ],
+    "family_list": [
+     "hF3"
+    ],
+    "gender": 1,
+    "gramps_id": "I11",
+    "handle": "hI11",
+    "media_list": [],
+    "note_list": [],
+    "parent_family_list": [],
+    "person_ref_list": [],
+    "primary_name": {
+     "first_name": "Mario",
+     "surname_list": [
+      {
+       "primary": true,
+       "surname": "Ruiz"
+      }
+     ]
+    },
+    "private": false,
+    "tag_list": []
+   },
+   {
+    "birth_ref_index": -1,
+    "citation_list": [],
+    "death_ref_index": -1,
+    "event_ref_list": [],
+    "family_list": [],
+    "gender": 2,
+    "gramps_id": "I12",
+    "handle": "hI12",
+    "media_list": [],
+    "note_list": [],
+    "parent_family_list": [],
+    "person_ref_list": [],
+    "primary_name": {
+     "first_name": "Kit",
+     "surname_list": [
+      {
+       "primary": true,
+       "surname": "Match"
+      }
+     ]
+    },
+    "private": false,
+    "tag_list": []
+   },
+   {
+    "birth_ref_index": 0,
+    "citation_list": [],
+    "death_ref_index": 1,
+    "event_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE13b",
+      "role": "Primary"
+     },
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE13d",
+      "role": "Primary"
+     }
+    ],
+    "family_list": [
+     "hF4"
+    ],
+    "gender": 1,
+    "gramps_id": "I13",
+    "handle": "hI13",
+    "media_list": [],
+    "note_list": [],
+    "parent_family_list": [],
+    "person_ref_list": [],
+    "primary_name": {
+     "first_name": "Ramón",
+     "surname_list": [
+      {
+       "primary": true,
+       "surname": "Vega"
+      }
+     ]
+    },
+    "private": false,
+    "tag_list": []
+   },
+   {
+    "birth_ref_index": 0,
+    "citation_list": [],
+    "death_ref_index": 1,
+    "event_ref_list": [
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE14b",
+      "role": "Primary"
+     },
+     {
+      "attribute_list": [],
+      "citation_list": [],
+      "note_list": [],
+      "private": false,
+      "ref": "hE14d",
+      "role": "Primary"
+     }
+    ],
+    "family_list": [
+     "hF5"
+    ],
+    "gender": 0,
+    "gramps_id": "I14",
+    "handle": "hI14",
+    "media_list": [],
+    "note_list": [],
+    "parent_family_list": [],
+    "person_ref_list": [],
+    "primary_name": {
+     "first_name": "Rosa",
+     "surname_list": [
+      {
+       "primary": true,
+       "surname": "Luna"
+      }
+     ]
+    },
+    "private": false,
+    "tag_list": []
+   }
+  ],
+  "places": [
+   {
+    "gramps_id": "P1",
+    "handle": "hP1",
+    "name": {
+     "value": "Villaejemplo"
+    },
+    "tag_list": []
+   }
+  ],
+  "repositories": [],
+  "sources": [
+   {
+    "gramps_id": "S1",
+    "handle": "hS1",
+    "tag_list": [],
+    "title": "Parish book of Villaejemplo"
+   },
+   {
+    "gramps_id": "S2",
+    "handle": "hS2",
+    "tag_list": [],
+    "title": "Machine index of baptisms"
+   }
+  ],
+  "tags": [
+   {
+    "handle": "htagweak",
+    "name": "weak"
+   }
+  ]
+ }
+}
