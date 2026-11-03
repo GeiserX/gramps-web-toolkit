@@ -333,7 +333,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     run_id = f"{datetime.now():%Y%m%d-%H%M%S}-{secrets.token_hex(3)}"
     log = _log_path(args, run_id, conf.get("GWT_TREE"), prefix="gwt-apply",
-                    writes=args.apply and not args.save_snapshot)
+                    writes=args.apply)
     client = _client(conf, dry_run=not args.apply, log_path=log)
     _first_line(run_id, log)
     outcome: dict = {}
