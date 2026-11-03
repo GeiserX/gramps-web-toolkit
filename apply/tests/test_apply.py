@@ -4272,19 +4272,19 @@ def test_cli_rerun_reads_only_the_done_ops_of_an_earlier_apply(fake, tmp_path, e
     assert main([str(r), "--snapshot", str(snap), "--apply"]) == 0, capsys.readouterr().out
 
 
-def test_active_lease_diagnostic_gives_safe_recovery_without_stealing(fake):
-    from gwt_apply.lock import TreeLock, LockHeld, read_lock
+def test_a_held_lock_names_its_host_and_the_seconds_left(fake, monkeypatch):
+    import gwt_apply.lock as lockmod
+    from gwt_apply.lock import LockHeld, TreeLock, read_lock
     c = Client("https://gw.example", "u", "pw", dry_run=False, session=fake)
-    owner = TreeLock(c, "owner")
-    owner.acquire()
-    before = len(fake.writes())
-    with pytest.raises(LockHeld) as exc:
-        TreeLock(c, "next").acquire()
-    message = str(exc.value)
-    assert "lease" in message and "seconds" in message and "unless renewed" in message
-    assert "host/container" in message and "--break-lock" in message
-    assert "PID alone" in message
-    assert read_lock(c)["run"] == "owner"
-    assert fake.writes()[before:] == []
-    TreeLock(c, "next").acquire(break_lock=True)
-    assert read_lock(c)["run"] == "next"
+    clock = [1_800_000_000.0]
+    monkeypatch.setattr(lockmod, "_now", lambda: clock[0])
+    TreeLock(c, "owner").acquire()
+    host = read_lock(c)["host"]
+    for advance, left in ((0, 900), (299.5, 601), (899.25, 1)):
+        clock[0] = 1_800_000_000.0 + advance
+        with pytest.raises(LockHeld) as exc:
+            TreeLock(c, "next").acquire()
+        message = str(exc.value)
+        assert message.startswith("another apply holds this tree: run owner")
+        assert f"about {left} seconds left on its lease" in message
+        assert f"--break-lock once you have checked on {host} that it stopped" in message

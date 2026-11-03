@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Changed
+
+- `gwt-apply`: an apply that finds the tree locked says how many seconds are left on the holder's lease, and to pass `--break-lock` only after checking on the holder's host that it stopped, since a PID checked on another machine proves nothing.
+
 ## [1.0.0] - 2026-11-03
 
 ### Change lists

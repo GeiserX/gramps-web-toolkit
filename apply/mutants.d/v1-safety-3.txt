@@ -1,1 +1,0 @@
-gwt_apply/lock.py | A PID alone does not prove the owner is dead | Check the PID to recover | lock recovery guidance never treats a PID alone as proof
