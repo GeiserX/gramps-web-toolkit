@@ -1,0 +1,4 @@
+{"op": "add_event", "key": "e-luis-bapt", "ruling": "R-5", "person": "I4", "type": "Baptism", "date": "1902-05-09", "place": "P1"}
+{"op": "add_event", "key": "e-nora-res", "ruling": "R-5", "person": "I10", "type": "Residence", "date": "2015"}
+{"op": "add_note", "key": "n-nora", "ruling": "R-5", "text": "Lives abroad.", "attach": [{"person": "I10"}]}
+{"op": "add_note", "key": "n-ana", "ruling": "R-5", "text": "The record reads «Ana, hija legítima».", "attach": [{"person": "I1"}]}

@@ -1,0 +1,4 @@
+{"op": "add_event", "key": "e-hugo-res", "ruling": "R-2", "person": "I7", "type": "Residence", "date": "1930"}
+{"op": "add_note", "key": "n-sara", "ruling": "R-2", "text": "Sara lived with her mother.", "attach": [{"person": "I8"}]}
+{"op": "set_attribute", "key": "a-f5", "ruling": "R-2", "target": {"family": "F5"}, "type": "Note", "value": "x"}
+{"op": "add_event", "key": "e-ghost", "ruling": "R-2", "person": "I99", "type": "Residence", "date": "1930"}
