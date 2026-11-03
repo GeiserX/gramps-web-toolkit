@@ -95,10 +95,11 @@ class TreeLock:
         if held is not None and held.get("run") == self.run_id:
             return None  # an earlier try made it, but its answer was lost
         if held is not None:
-            alive = float(held.get("expires_ts") or 0) > _now()
+            now = _now()
+            alive = float(held.get("expires_ts") or 0) > now
             who = f"run {held.get('run')} on {held.get('host')} (pid {held.get('pid')}), expires {held.get('expires')}"
             if alive and not break_lock:
-                remaining = math.ceil(float(held.get("expires_ts") or 0) - _now())
+                remaining = math.ceil(float(held.get("expires_ts") or 0) - now)
                 raise LockHeld(f"another apply holds this tree: {who}; about {remaining} seconds left on its lease; wait, "
                                f"or pass --break-lock once you have checked on {held.get('host')} that it stopped "
                                "(a PID alone proves nothing)")

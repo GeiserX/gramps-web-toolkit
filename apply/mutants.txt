@@ -173,4 +173,4 @@ gwt_apply/ops.py | self._private(person, s) | pass | update_person sets private
 gwt_apply/client.py | self.unsnapped |= {"Person", "Family", "Note"} if cls in ("Person", "Family", "Event") else set(NAMESPACE) | self.unsnapped |= {"Person", "Family", "Note"} | a place, source or citation merge stops trusting the snapshot for every class
 gwt_apply/client.py |         if r.status_code == 412: | if False: | a file the server says changed (412) is named as such
 gwt_apply/ops.py | found |= {k for k, o in self.c.pending.items() if quoted in json.dumps(o)} | pass | offline, delete sees a reference an earlier op of the list adds
-gwt_apply/lock.py | remaining = math.ceil(float(held.get("expires_ts") or 0) - _now()) | remaining = int(float(held.get("expires_ts") or 0) - _now()) + 1 | a fresh lock reports its 900 seconds, not 901
+gwt_apply/lock.py | remaining = math.ceil(float(held.get("expires_ts") or 0) - now) | remaining = int(float(held.get("expires_ts") or 0) - now) + 1 | a fresh lock reports its 900 seconds, not 901
