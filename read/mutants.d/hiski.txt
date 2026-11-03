@@ -12,3 +12,8 @@ gwt_reader.py | scripts/jsd/main\.js' | ' | only the beacon is left out: a real 
 gwt_hiski.py | page=gwt_reader.rows_check(SPEC, SPEC['result_markers'][0], candidates)) | page=gwt_reader.page_check(SPEC)) | a page with entry rows the reader cannot read is a STOP, never "none"
 gwt_hiski.py | _ROW = re.compile(r'<TR\b[^>]*>\s*(<TD\b[^>]*> | _ROW = re.compile(r'<TR>\s*(<TD> | a row whose <TR> or <TD> carries attributes is read
 gwt_reader.py | or 0 < len(parse(page)) == len(re.findall(rows, page))) | or len(parse(page)) > 0) | a page where one row of several cannot be read is a STOP, never a page with fewer rows
+gwt_hiski.py | page=lambda p: rows(p) or shell_of(p) is not None) | page=rows) | the site's empty search page (a book the parish lacks, an unknown parish) never pauses the gate
+gwt_hiski.py |     if shell: | if False: | a book the parish lacks is a usage error, never "none"
+gwt_hiski.py | if shell[0].lower() == 'unknown parish': | if False: | an unknown parish code is named as such, not as a missing book
+gwt_hiski.py |     if bad: | if False: | a --field without NAME= is refused, never dropped silently
+gwt_hiski.py |             return usage('%r has a letter | pass  # ('%r has a letter | a value outside ISO-8859-1 is refused, never sent as '?'

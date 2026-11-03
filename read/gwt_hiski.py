@@ -10,10 +10,12 @@ string, in English (kieli=en), one parish and one book at a time.
 A row is an index entry, a lead, not the record: read the parish register (the scans on the Finnish archives' sites)
 before citing it. A candidate's `url` is the entry's own page, /hiski?en+<parish>+<book>+<n>.
 
-"none" is the site's own sentence, "No events found with this search criteria". Any other page with no row (a
-parish list, because the parish code is wrong; a block page; a new layout) is a STOP. Standard library only.
+"none" is the site's own sentence, "No events found with this search criteria". A book the parish does not keep, or a
+parish code the site does not have, gets an empty search page titled "Search - <parish> - <book>": that is the
+user's mistake, exit 64, and the gate is not told. Any other page with no row (a block page, a new layout) is a
+STOP. Standard library only.
 """
-import html, re, urllib.parse
+import html, re, sys, urllib.parse
 
 import gwt_reader
 
@@ -23,6 +25,7 @@ SOURCE = 'hiski'
 # most, and never faster than one every 5 s.
 PACE = {'start': 10.0, 'floor': 5.0, 'ceil': 300.0}
 DAY = 86400
+EXIT_USAGE = 64
 SPEC = {
     'id': SOURCE,
     'help': 'HisKi, the Finnish parish register index (baptisms, marriages, burials, moves); public',
@@ -48,6 +51,9 @@ _HEAD = re.compile(r'<TR\b[^>]*>\s*(<TH\b.*?)(?=<TR\b|</TABLE>)', re.S | re.I)
 _CELL = re.compile(r'<TD\b[^>]*>', re.I)
 _TOTAL = re.compile(r'(?:About\s+)?(\d+)\s+events?\s+found', re.I)
 _DATE = re.compile(r'\b\d{1,2}\.\d{1,2}\.\d{3,4}\b')
+# the empty search page the site answers for a book the parish does not keep, or a parish it does not have
+_SHELL = re.compile(r'<TITLE>\s*Search - (.*) - ([^<-]*?)\s*</TITLE>', re.I)
+_TABLE = re.compile(r'<TABLE\s+BORDER=1', re.I)
 
 
 def text(fragment):
@@ -89,6 +95,14 @@ def candidates(page):
     return out
 
 
+def shell_of(page):
+    """(parish name, book word) of the site's empty search page, or None for any other page."""
+    m = _SHELL.search(page)
+    if not m or _TABLE.search(page) or gwt_reader.classify(page, SPEC) != 'unknown':
+        return None
+    return text(m.group(1)), text(m.group(2))
+
+
 def total_of(page):
     m = _TOTAL.search(text(page))
     return int(m.group(1)) if m else None
@@ -122,15 +136,36 @@ def add_search_args(sp):
     sp.add_argument('--start', type=int, default=0, help='the site\'s position to continue from (its hakupos)')
 
 
+def usage(msg):
+    print('gwt-read: hiski: %s' % msg, file=sys.stderr, flush=True)
+    return EXIT_USAGE
+
+
 def search(a, R):
     book = BOOKS.get(a.book, a.book)
     fields = [(FIELDS[k], getattr(a, k)) for k in ('given', 'patronymic', 'surname', 'village')]
-    fields += [tuple(f.split('=', 1)) for f in a.field if '=' in f]
+    bad = [f for f in a.field if not re.fullmatch(r'[a-z]\w*=.*', f, re.S)]
+    if bad:
+        return usage('--field is NAME=VALUE with the form\'s own field name, e.g. aetunimi=Maria (not %r)' % bad[0])
+    fields += [tuple(f.split('=', 1)) for f in a.field]
     fields += [('alkuvuosi', a.year_from), ('loppuvuosi', a.year_to)]
+    for _, v in fields:
+        try:
+            v.encode('iso-8859-1')
+        except UnicodeEncodeError:
+            return usage('%r has a letter the site cannot read (it reads ISO-8859-1 only)' % v)
     url = search_url(a.parish, book, fields, a.count, a.start)
+    rows = gwt_reader.rows_check(SPEC, SPEC['result_markers'][0], candidates)
     status, rh, body, cached = gwt_reader.get_api(R, url, {'accept': 'text/html'}, refresh=a.refresh,
-                                                  page=gwt_reader.rows_check(SPEC, SPEC['result_markers'][0], candidates))
+                                                  page=lambda p: rows(p) or shell_of(p) is not None)
     page = decode(body)
+    shell = shell_of(page)
+    if shell:
+        where = '%s/hiski?en+%s' % (HOST, a.parish)
+        if shell[0].lower() == 'unknown parish':
+            return usage('the site has no parish %s; the parish list is at %s/hiski?en' % (a.parish, HOST))
+        return usage('parish %s (%s) has no %s book in HisKi; its books are listed at %s (this answer is kept in the '
+                     'cache; --refresh asks again)' % (a.parish, shell[0], a.book, where))
     cands = candidates(page)
     env = gwt_reader.envelope(url, None, text=text(page), verdict=gwt_reader.classify(page, SPEC), from_cache=cached)
     words = [SOURCE, a.parish, book] + [v for _, v in fields]

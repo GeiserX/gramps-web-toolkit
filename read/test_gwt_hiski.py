@@ -123,6 +123,28 @@ class Search(Run):
         self.search(net, gate)
         self.assertEqual(len(net.requests), 2, 'a page with an unread row was served from the cache')
 
+    def test_a_book_the_parish_does_not_keep_is_a_usage_error_not_a_block(self):
+        gate = FakeGate()
+        code, _, text = self.search(FakeNet(gate, (200, fx('no-book.html'))), gate, book='baptisms')
+        self.assertEqual((code, gate.hits, self.out_files()), (64, [], []), text)
+        self.assertIn('no baptisms book', text)
+        self.assertIn('https://hiski.genealogia.fi/hiski?en+0999', text)
+
+    def test_a_parish_code_the_site_does_not_have_is_a_usage_error_not_a_block(self):
+        page = fx('no-book.html').replace('Kylämaa - christened'.encode('iso-8859-1'), b'unknown parish - married')
+        gate = FakeGate()
+        code, _, text = self.search(FakeNet(gate, (200, page)), gate)
+        self.assertEqual((code, gate.hits, self.out_files()), (64, [], []), text)
+        self.assertIn('no parish 0999', text)
+
+    def test_a_field_without_a_name_or_outside_iso_8859_1_is_refused(self):
+        for extra in (('--field', 'aetunimi'), ('--field', '=Maria'), ('--given', 'Jōhan'),
+                      ('--field', 'aetunimi=Ŝara')):
+            gate = FakeGate()
+            net = FakeNet(gate)
+            code, _, text = self.search(net, gate, *extra)
+            self.assertEqual((code, net.requests), (64, []), (extra, text))
+
 
 if __name__ == '__main__':
     unittest.main()
