@@ -17,11 +17,11 @@ def _ids(values):
     return [i.strip() for v in values or [] for i in v.split(",") if i.strip()]
 
 
-SECTIONS = ("scope", "protect", "living", "overlap", "weak", "count")
+SECTIONS = ("scope", "protect", "living", "overlap", "weak", "count", "quote", "placement")
 NAME_LISTS = {None: ("rules",), "scope": ("roots",), "protect": ("ids", "locales"), "weak": ("tag", "machine_sources"),
-              "count": ("words",)}  # settings that name things: a list, or one name as a bare string
+              "count": ("words",), "placement": ("church", "civil", "church_types", "locales")}  # settings that name things: a list, or one name as a bare string
 NUMBERS = {"living": ("years", "this_year")}
-TEXTS = {"overlap": ("open", "applied")}
+TEXTS = {"overlap": ("open", "applied"), "quote": ("readings",)}
 
 
 def load_config(path) -> dict:
@@ -50,11 +50,15 @@ def load_config(path) -> dict:
                 v = (cfg.get(sec) or {}).get(key)
                 if v is not None and (not isinstance(v, kind) or isinstance(v, bool)):
                     raise F.InputError(f"{path}: [{sec}] {key} is {what}")
+    if cfg.get("records") is not None and not isinstance(cfg["records"], str):
+        raise F.InputError(f"{path}: records is a text")
     base = Path(path).resolve().parent
-    for key in ("open", "applied"):
-        v = (cfg.get("overlap") or {}).get(key)
+    for sec, key in (("overlap", "open"), ("overlap", "applied"), ("quote", "readings")):
+        v = (cfg.get(sec) or {}).get(key)
         if isinstance(v, str):
-            cfg["overlap"][key] = str(base / v)
+            cfg[sec][key] = str(base / v)
+    if isinstance(cfg.get("records"), str):
+        cfg["records"] = str(base / cfg["records"])
     return cfg
 
 
@@ -67,13 +71,15 @@ def build_parser():
     ap.add_argument("--snapshot", help="a `gwt-check dump` or a gwt-apply snapshot (.json or .json.gz)")
     ap.add_argument("--config", help="lint.toml: which rules run and their settings")
     ap.add_argument("--rules", help="comma-separated rules to run (default: [rules] in the config, else all)")
-    ap.add_argument("--records", help="a folder of saved records, for rules that compare a list with them")
+    ap.add_argument("--records", help="a folder of saved records, for rules that compare a list with them "
+                                      "(default: records in the config)")
     ap.add_argument("--root", action="append", help="scope: a root person's Gramps ID (repeat or comma-separate)")
     ap.add_argument("--protect", action="append", help="protect: a protected person's Gramps ID (repeat or comma)")
     ap.add_argument("--open", metavar="DIR", help="overlap: the folder of open lists to compare with")
     ap.add_argument("--applied", metavar="DIR", help="overlap: the folder of applied lists")
     ap.add_argument("--weak-tag", action="append",
                     help="weak: a weak tag (repeat or comma-separate); any tag whose name holds one counts")
+    ap.add_argument("--readings", metavar="TSV", help="quote: signed readings of images (quote, image sha, reader)")
     ap.add_argument("--prove", action="store_true",
                     help="run every rule on its own mutant of the list; exit 1 unless each fires its own code")
     ap.add_argument("--json", action="store_true", help="one JSON object on stdout")
@@ -116,7 +122,8 @@ def _main(args):
         for key, sec, field in (("root", "scope", "roots"), ("protect", "protect", "ids"), ("weak_tag", "weak", "tag")):
             if getattr(args, key):
                 cfg.setdefault(sec, {})[field] = _ids(getattr(args, key))
-        for key, sec, field in (("open", "overlap", "open"), ("applied", "overlap", "applied")):
+        for key, sec, field in (("open", "overlap", "open"), ("applied", "overlap", "applied"),
+                                ("readings", "quote", "readings")):
             if getattr(args, key):
                 cfg.setdefault(sec, {})[field] = getattr(args, key)
         names = _ids([args.rules]) if args.rules else cfg.get("rules") or list(rules)
@@ -129,7 +136,7 @@ def _main(args):
         return _fail(args, str(e))
     if not ops:
         return _fail(args, f"{args.list} has no ops")
-    ctx = F.Context(ops, tree, cfg, path=args.list, records=args.records)
+    ctx = F.Context(ops, tree, cfg, path=args.list, records=args.records or cfg.get("records"))
     if args.prove:
         return _prove(ctx, [rules[n] for n in names], args.json)
     results = []

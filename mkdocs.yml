@@ -138,10 +138,12 @@ nav:
       - Archives catalogue: archives.md
       - gwt-report: report.md
       - gwt-geocode: geocode.md
+      - gwt-run: run.md
       - gwt-import-dna: import-dna.md
       - gwt-lint: lint.md
       - gwt-import-gedcom: import-gedcom.md
       - gwt-corpus: corpus.md
+      - gwt-lint evidence rules: lint-evidence.md
   - Research tools:
       - gwt-queue: queue.md
       - gwt-ledger: ledger.md

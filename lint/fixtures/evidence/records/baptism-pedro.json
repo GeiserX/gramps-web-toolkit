@@ -1,0 +1,110 @@
+{
+ "persons": [
+  {
+   "id": "q1",
+   "principal": true,
+   "gender": {
+    "type": "http://gedcomx.org/Male"
+   },
+   "identifiers": {
+    "http://gedcomx.org/Persistent": [
+     "https://www.familysearch.org/ark:/61903/1:1:QZZ8-BBA"
+    ]
+   },
+   "names": [
+    {
+     "nameForms": [
+      {
+       "fullText": "Pedro Lurre"
+      }
+     ]
+    }
+   ],
+   "facts": [
+    {
+     "type": "http://gedcomx.org/Christening",
+     "date": {
+      "original": "1860"
+     },
+     "place": {
+      "original": "Villazul"
+     }
+    }
+   ]
+  },
+  {
+   "id": "q2",
+   "principal": false,
+   "gender": {
+    "type": "http://gedcomx.org/Male"
+   },
+   "identifiers": {
+    "http://gedcomx.org/Persistent": [
+     "https://www.familysearch.org/ark:/61903/1:1:QZZ8-BBB"
+    ]
+   },
+   "names": [
+    {
+     "nameForms": [
+      {
+       "fullText": "Juan Morel"
+      }
+     ]
+    }
+   ],
+   "facts": []
+  },
+  {
+   "id": "q3",
+   "principal": false,
+   "gender": {
+    "type": "http://gedcomx.org/Female"
+   },
+   "identifiers": {
+    "http://gedcomx.org/Persistent": [
+     "https://www.familysearch.org/ark:/61903/1:1:QZZ8-BBC"
+    ]
+   },
+   "names": [
+    {
+     "nameForms": [
+      {
+       "fullText": "Teresa Vidán"
+      }
+     ]
+    }
+   ],
+   "facts": []
+  }
+ ],
+ "relationships": [
+  {
+   "type": "http://gedcomx.org/ParentChild",
+   "person1": {
+    "resource": "#q2"
+   },
+   "person2": {
+    "resource": "#q1"
+   }
+  },
+  {
+   "type": "http://gedcomx.org/ParentChild",
+   "person1": {
+    "resource": "#q3"
+   },
+   "person2": {
+    "resource": "#q1"
+   }
+  }
+ ],
+ "fields": [
+  {
+   "labelId": "EVENT_PLACE_ORIG",
+   "text": "Santísimo Cristo del Valle, Villazul"
+  },
+  {
+   "labelId": "NOTES",
+   "text": "bauticé en la ermita del Santo Cristo del Valle por estar la parroquia en obras"
+  }
+ ]
+}

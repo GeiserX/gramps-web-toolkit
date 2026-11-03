@@ -1,0 +1,5 @@
+{"op": "add_event", "key": "e-bap-ana", "ruling": "R-1", "person": "I1", "type": "Baptism", "place": "P2"}
+{"op": "add_citation", "key": "c-bap-ana", "ruling": "R-1", "source": "S1", "page": "https://www.familysearch.org/ark:/61903/1:1:QZZ9-AAA", "attach": [{"event": "key:e-bap-ana"}]}
+{"op": "add_event", "key": "e-birth-ana", "ruling": "R-1", "person": "I1", "type": "Birth", "place": "P1"}
+{"op": "add_event", "key": "e-bap-pedro", "ruling": "R-1", "person": "I4", "type": "Baptism", "place": "P4"}
+{"op": "add_citation", "key": "c-bap-pedro", "ruling": "R-1", "source": "S1", "page": "https://www.familysearch.org/ark:/61903/1:1:QZZ8-BBA", "attach": [{"event": "key:e-bap-pedro"}]}

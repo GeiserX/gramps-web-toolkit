@@ -1,4 +1,5 @@
 # Settings for proving the rules on examples/changes.jsonl (lint/ci-extra.sh); every name and ID is invented.
+records = "../evidence/records"   # --prove builds the evidence rules' mutants from saved records
 [scope]
 roots = ["I0001"]
 
