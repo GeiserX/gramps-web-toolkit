@@ -1,0 +1,5 @@
+{"op": "add_citation", "key": "c-ana", "ruling": "R-1", "source": "S1", "page": "https://www.familysearch.org/ark:/61903/1:1:QZZ9-AAA", "attach": [{"event": "E1"}]}
+{"op": "add_citation", "key": "c-bride", "ruling": "R-1", "source": "S1", "page": "https://www.familysearch.org/ark:/61903/1:1:QZZ6-CCB", "attach": [{"family": "F2"}]}
+{"op": "add_family", "key": "f-couple", "ruling": "R-1", "father": "I5", "mother": "I6", "allow_new_couple": true, "new_couple_of": ["F2"], "new_couple_reason": "their marriage, https://www.familysearch.org/ark:/61903/1:1:QZZ6-CCB"}
+{"op": "add_citation", "key": "c-couple", "ruling": "R-1", "source": "S1", "page": "https://www.familysearch.org/ark:/61903/1:1:QZZ6-CCB", "attach": [{"family": "key:f-couple"}]}
+{"op": "update_citation", "key": "u-fix", "ruling": "R-1", "citation": "C2", "expect": "https://www.familysearch.org/ark:/61903/1:1:QZZ9-AAB", "set": {"page": "https://www.familysearch.org/ark:/61903/1:1:QZZ9-AAA"}}

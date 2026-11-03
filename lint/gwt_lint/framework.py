@@ -25,7 +25,7 @@ from pathlib import Path
 from gwt_apply.ops import validate
 from gwt_core.rules import DateError, Index, read_date
 
-RULE_MODULES = ["gwt_lint.rules_tree"]
+RULE_MODULES = ["gwt_lint.rules_tree", "gwt_lint.rules_evidence"]
 
 CLASSES = {"people": "Person", "families": "Family", "events": "Event", "places": "Place",
            "citations": "Citation", "sources": "Source", "media": "Media", "notes": "Note",

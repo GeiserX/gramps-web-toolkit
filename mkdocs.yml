@@ -142,6 +142,7 @@ nav:
       - gwt-lint: lint.md
       - gwt-import-gedcom: import-gedcom.md
       - gwt-corpus: corpus.md
+      - gwt-lint evidence rules: lint-evidence.md
   - Research tools:
       - gwt-queue: queue.md
       - gwt-ledger: ledger.md
