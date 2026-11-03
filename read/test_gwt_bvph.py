@@ -56,6 +56,9 @@ class Classify(unittest.TestCase):
         page = P1.decode().replace('[s.n, 12/01/1901]', '[S.l. : s.n.').replace(
             'La Voz de Nortia A&ntilde;o I N&uacute;mero 20 - 1901 enero 12', 'La Voz de Nortia N&uacute;mero 1612 _ 05/02/1889')
         self.assertEqual([(x['date'], x['year']) for x in gwt_bvph.candidates(page)][2], ('1889-02-05', 1889))
+        yearly = page.replace('N&uacute;mero 1612 _ 05/02/1889', 'N&uacute;mero 1612 - A&ntilde;o 1889')
+        self.assertEqual([(x['date'], x['year']) for x in gwt_bvph.candidates(yearly)][2], ('', 1889),
+                         'an issue with only a year in its title lost it')
 
     def test_the_total_and_the_pager(self):
         self.assertEqual(gwt_bvph.total_of(P1.decode()), 1203, 'a total with a thousands dot')
