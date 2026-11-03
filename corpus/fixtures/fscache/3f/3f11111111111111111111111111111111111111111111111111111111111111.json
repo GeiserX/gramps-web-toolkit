@@ -1,0 +1,1 @@
+{"method": "GET", "url": "https://records.example.org/ark:/99999/1:1:AAAA-111", "status": 200, "headers": {"content-type": "application/json"}, "fetched": 0, "date": "2026-01-05T10:00:00Z", "vary": {}}
