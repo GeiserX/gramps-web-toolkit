@@ -28,3 +28,4 @@ gwt_lint/rules_evidence.py |         self._add(rec, self.thin) |         self._a
 gwt_lint/rules_evidence.py |                         by_id[who]["facts"] |= facts |                         pass | a marriage fact on the Couple relationship backs a marriage
 gwt_lint/rules_evidence.py | followlinks=True | followlinks=False | a records folder of symlinks to other record folders is read
 gwt_lint/rules_evidence.py |                     self.unread.append(str(p)) |                     raise | one record file of another shape is skipped, not a crash of every rule
+gwt_lint/rules_evidence.py | self.ctx = ctx | self.ctx = ctx; load(ctx) | a list that cites no record and quotes nothing needs no saved records (no exit 2)

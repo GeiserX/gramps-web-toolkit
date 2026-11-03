@@ -70,7 +70,7 @@ machine_sources = ["S0042"]          # sources whose citations come from a machi
 words = ["tree", "árbol"]            # default: the word for "tree" in every gwt_core locale
 ```
 
-`--rules scope,living` runs only those rules. `--records DIR` names a folder of saved records for rules that compare a list with them: the [evidence rules](lint-evidence.md) (quote, principal, role, placement) read it, and with no `--rules` they run too, so a run without saved records exits 2.
+`--rules scope,living` runs only those rules. `--records DIR` names a folder of saved records for rules that compare a list with them: the [evidence rules](lint-evidence.md) (quote, principal, role, placement) read it, and with no `--rules` they run too. A list that cites a record or quotes one then needs saved records (exit 2 without them); one that does neither needs none.
 
 ## Rules
 

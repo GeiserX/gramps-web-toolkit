@@ -302,17 +302,21 @@ def role_words(text, near=None, window=3) -> set[str]:
 
 class Evidence:
     """The list read for evidence: what each op cites, directly or through what it attaches to, and the event
-    types it speaks about."""
+    types it speaks about. The saved records are read on first use, so a list that cites no record and quotes
+    nothing needs none."""
 
     def __init__(self, ctx):
         self.ctx = ctx
-        self.records = load(ctx)
         self.by_key = {f"key:{op['key']}": op for op in ctx.ops if op.get("key")}
         self.attaching: dict[str, list[dict]] = {}
         for op in ctx.ops:
             for _, ref in attach_targets(op):
                 if isinstance(ref, str):
                     self.attaching.setdefault(ref, []).append(op)
+
+    @property
+    def records(self) -> Records:
+        return load(self.ctx)
 
     def _tree_page(self, cls, ref):
         if cls != "Citation" or not isinstance(ref, str):
@@ -356,7 +360,8 @@ class Evidence:
 def load(ctx) -> Records:
     folder = ctx.records
     if not folder:
-        raise NothingToCheck("no saved records: give --records DIR or records in lint.toml")
+        raise NothingToCheck("the list cites a record or quotes one, and there are no saved records: give --records "
+                             "DIR or records in lint.toml")
     cache = getattr(ctx, "_evidence_records", None)
     if cache is None or cache.folder != str(folder):
         cache = Records(folder)
@@ -364,6 +369,14 @@ def load(ctx) -> Records:
             raise NothingToCheck(f"no saved records in {folder}")
         ctx._evidence_records = cache
     return cache
+
+
+def _records_or_none(ctx):
+    """The saved records for a mutant; None when there are none (the rule then cannot prove itself)."""
+    try:
+        return load(ctx)
+    except NothingToCheck:
+        return None
 
 
 def _first_person(ctx):
@@ -444,8 +457,8 @@ class Quote(Rule):
         return out
 
     def mutate(self, ctx):
-        recs = load(ctx)
-        for t in recs.every_text():
+        recs = _records_or_none(ctx)
+        for t in recs.every_text() if recs else []:
             words = _norm(t).split()
             if len(words) < QUOTE_WORDS + 1:
                 continue
@@ -500,7 +513,8 @@ class Principal(Rule):
         return out
 
     def mutate(self, ctx):
-        for rec in load(ctx).records:
+        recs = _records_or_none(ctx)
+        for rec in recs.records if recs else []:
             for p in rec["personas"]:
                 if p["arks"] and relation(rec, p) not in ("principal", "spouse"):
                     op = {"op": "add_citation", "key": "lint-prove-principal", "ruling": "prove", "source": "S0",
@@ -555,7 +569,8 @@ class Role(Rule):
         return []
 
     def mutate(self, ctx):
-        for rec in load(ctx).records:
+        recs = _records_or_none(ctx)
+        for rec in recs.records if recs else []:
             for p in rec["personas"]:
                 rel = relation(rec, p)
                 if p["arks"] and p["name"] and rel not in ("principal", "other"):
@@ -625,6 +640,16 @@ class Placement(Rule):
         parent_gid = (ctx.tree.handles["Place"].get(parent) or {}).get("gramps_id")
         return ((p.get("name") or {}).get("value") or "", text_of(p.get("place_type")), parent_gid)
 
+    @staticmethod
+    def _origs(ev, arks, need=True):
+        """The place as the cited records typed it; NOREC (exit 2) when one is not saved, unless not `need`ed."""
+        try:
+            return [o for a in arks for o in ev.records.find(a)[0]["place_orig"]]
+        except NothingToCheck:
+            if need:
+                raise
+            return []
+
     def _events(self, ctx):
         """(op, event type, place ref, event ref) of every event the list places."""
         for op in ctx.ops:
@@ -648,6 +673,11 @@ class Placement(Rule):
                 continue
             name, ptype, parent = place
             is_church = fold(ptype) in church_types
+            if kind in civil_ev:  # town and civil read the snapshot only: they need no saved record
+                if is_church:
+                    out.append(self.finding("placement-civil", op, f"{etype} placed on {name} ({ptype}), a church",
+                                            "place it on the municipality"))
+                continue
             arks = ev.cited(op)
             if op["op"] == "update_event":
                 arks += [a for c in ev.attaching.get(evref, []) for a in ev.cited(c)]
@@ -655,17 +685,13 @@ class Placement(Rule):
                 for c in (ctx.tree.handles["Event"].get(h) or {}).get("citation_list") or []:
                     arks += ARK.findall(str((ctx.tree.handles["Citation"].get(c) or {}).get("page") or ""))
             arks = [a for a in dict.fromkeys(arks) if a.startswith("1:1:")]
-            origs = [o for a in arks for o in ev.records.find(a)[0]["place_orig"]]
-            if kind in civil_ev:
-                if is_church:
-                    out.append(self.finding("placement-civil", op, f"{etype} placed on {name} ({ptype}), a church",
-                                            "place it on the municipality"))
-                continue
             if not is_church:
+                origs = self._origs(ev, arks, need=False)  # only to name the church in the fix
                 fix = f"place it on the church under {name}" + (f" that the record names: {origs[0]}" if origs else "")
                 out.append(self.finding("placement-town", op, f"{etype} placed on {name} ({ptype or 'no type'}), "
                                         "not on a church", fix))
                 continue
+            origs = self._origs(ev, arks)
             ov = overrides.get(str(op.get("key")))
             if isinstance(ov, dict):
                 quote, page = str(ov.get("quote") or ""), [t for a in arks for t in ev.records.texts_of(a)]

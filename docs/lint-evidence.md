@@ -31,7 +31,7 @@ Save a record before you cite it: `gwt-read familysearch record 1:1:XXXX-XXX --o
 
 Every file is read on each run, so point `--records` at the records a list cites, not at a whole `gwt-fscache` of tens of thousands of answers.
 
-**NOREC.** An op that cites a FamilySearch record ark with no saved record makes the rule exit 2, with the command that saves it. A rule that could not look at the record is not a clean rule. A missing `--records`, or a folder with no records in it, exits 2 the same way.
+**NOREC.** An op that cites a FamilySearch record ark with no saved record makes the rule exit 2, with the command that saves it. A rule that could not look at the record is not a clean rule. A missing `--records`, or a folder with no records in it, exits 2 the same way, but only when the list cites a record or quotes one. A list that does neither (a tree-only list, a DNA import, a geocoding list) needs no saved records, and `placement-town` and `placement-civil` read only the snapshot.
 
 What an op cites: every FamilySearch ark anywhere in it (citation page, note text, event description, `probable_reason`, any reason), plus the arks of what it attaches to in the same list (a note on `key:c1` cites what `c1` cites) or in the snapshot (a citation's page), plus, for an event the list adds, the arks of the citations the list puts on it.
 

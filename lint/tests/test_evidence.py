@@ -220,3 +220,24 @@ def test_a_symlinked_record_folder_is_read(tmp_path):
     (tmp_path / "saved" / "lane").symlink_to(RECORDS, target_is_directory=True)
     code, codes, _ = lint("principal-finding.jsonl", "principal", "--records", str(tmp_path / "saved"))
     assert code == 1 and "principal-nonprincipal" in codes
+
+
+@pytest.mark.parametrize("rule,want", [("quote", {}), ("principal", {}), ("role", {}),
+                                       ("placement", {"placement-town": ["e-town"], "placement-civil": ["e-church"]})])
+def test_a_list_that_cites_and_quotes_nothing_needs_no_saved_records(rule, want, tmp_path):
+    # tree-only lists, DNA imports, geocoding: nothing to compare with a record, so no --records and no exit 2
+    ops = [{"op": "add_event", "key": "e-town", "person": "I1", "type": "Baptism", "place": "P1"},
+           {"op": "add_event", "key": "e-church", "person": "I1", "type": "Birth", "place": "P2"},
+           {"op": "add_note", "key": "n", "text": "Born in the spring, says the family.", "attach": [{"person": "I1"}]}]
+    code, codes, res = lint(write(tmp_path, ops), rule, config=None)
+    assert (code, codes) == (1 if want else 0, want), res
+
+
+def test_the_example_list_lints_without_saved_records():
+    example = os.path.join(os.path.dirname(os.path.dirname(HERE)), "examples")
+    out = io.StringIO()
+    with redirect_stdout(out):
+        code = cli.main([os.path.join(example, "changes.jsonl"), "--snapshot", os.path.join(example, "tree.json.gz"),
+                         "--rules", ",".join(RULES), "--json"])
+    assert all(r["status"] != "nothing" for r in json.loads(out.getvalue())["rules"]), out.getvalue()
+    assert code in (0, 1)

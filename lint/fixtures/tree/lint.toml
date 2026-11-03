@@ -1,5 +1,5 @@
 # Settings for the gwt-lint tests; every name and ID is invented.
-records = "../evidence/records"   # saved records for the evidence rules (quote, principal, role, placement)
+records = "../evidence/records"   # --prove builds the evidence rules' mutants from saved records
 [scope]
 roots = ["I1"]
 
