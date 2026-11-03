@@ -12,3 +12,4 @@ gwt_dokuklik.py | methods=('GET', 'POST') | methods=('GET',) | a repeated search
 gwt_dokuklik.py | SPEC['build'] = build | pass | the source builds its own reader, the one whose cache keeps POST answers
 gwt_dokuklik.py | if not (a.given or a.surname or a.surname2): | if False: | a search with no name is refused before any request
 gwt_reader.py | 'GET' if data is None else 'POST' | 'GET' | Reader.get with a body sends a POST
+gwt_dokuklik.py | choices=sorted(ARCHIVES), help= | choices=[''] + sorted(ARCHIVES), help= | --archive lists only real archives, no empty choice

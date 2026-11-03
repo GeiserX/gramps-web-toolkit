@@ -130,7 +130,7 @@ def add_search_args(sp):
     sp.add_argument('--surname2', default='', help='a second surname')
     sp.add_argument('--from', dest='year_from', default='')
     sp.add_argument('--to', dest='year_to', default='')
-    sp.add_argument('--archive', default='', choices=[''] + sorted(ARCHIVES), help='one diocesan archive (default all)')
+    sp.add_argument('--archive', default='', choices=sorted(ARCHIVES), help='one diocesan archive (default all)')
     sp.add_argument('--count', type=int, default=100, choices=range(1, 101), metavar='1-100')
     sp.add_argument('--page', type=int, default=1)
 

@@ -52,6 +52,12 @@ class Shape(unittest.TestCase):
         self.assertGreaterEqual(gwt_dokuklik.SPEC['pace']['floor'], 3.0)
         self.assertEqual(gwt_reader.spec_problems(gwt_dokuklik.SPEC), [])
 
+    def test_the_archive_choices_show_no_empty_one(self):
+        o = io.StringIO()
+        with contextlib.redirect_stdout(o), self.assertRaises(SystemExit):
+            gwt_read.main(['dokuklik', 'search', '--help'])
+        self.assertIn('{bilbao,san-sebastian,vitoria}', o.getvalue())
+
 
 class Search(Run):
     def test_rows_are_baptisms_with_parents_and_a_record_page(self):
