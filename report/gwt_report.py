@@ -337,7 +337,7 @@ DIGEST_I18N = {
         'side_not_kin': 'not blood kin', 'side_other': 'other',
         'not_attached': 'not attached to a person',
         'path_line': '(path: %d confirmed, %d probable, %d weak, %d unmarked links)',
-        'new_person': 'new person: %s', 'born': ', born %s', 'new_event': 'new event: ',
+        'new_person': 'new person: %s', 'born': ', born %s', 'new_event': 'new event: ', 'event': 'event',
         'new_citation': 'new citation: ', 'confidence': 'confidence %s', 'new_media': 'new media: ',
         'weak_mark': '[weak]',
         'cut_note': ('kin paths were cut at %d per person for %d of these people: a more distant '
@@ -350,7 +350,7 @@ DIGEST_I18N = {
         'side_not_kin': 'sin parentesco de sangre', 'side_other': 'otros',
         'not_attached': 'no ligado a una persona',
         'path_line': '(camino: confirmados %d, probables %d, débiles %d, sin marcar %d)',
-        'new_person': 'persona nueva: %s', 'born': ', n. %s', 'new_event': 'evento nuevo: ',
+        'new_person': 'persona nueva: %s', 'born': ', n. %s', 'new_event': 'evento nuevo: ', 'event': 'evento',
         'new_citation': 'cita nueva: ', 'confidence': 'confianza %s', 'new_media': 'medio nuevo: ',
         'weak_mark': '[débil]',
         'cut_note': ('los caminos de parentesco se cortaron en %d por persona para %d de estas personas: '
@@ -363,7 +363,7 @@ DIGEST_I18N = {
         'side_not_kin': 'sans lien de parenté', 'side_other': 'autres',
         'not_attached': 'non rattaché à une personne',
         'path_line': '(chemin : confirmés %d, probables %d, faibles %d, non marqués %d)',
-        'new_person': 'nouvelle personne : %s', 'born': ', n. %s', 'new_event': 'nouvel événement : ',
+        'new_person': 'nouvelle personne : %s', 'born': ', n. %s', 'new_event': 'nouvel événement : ', 'event': 'événement',
         'new_citation': 'nouvelle citation : ', 'confidence': 'confiance %s', 'new_media': 'nouveau média : ',
         'weak_mark': '[faible]',
         'cut_note': ('les chemins de parenté ont été coupés à %d par personne pour %d de ces personnes : '
@@ -545,7 +545,7 @@ def describe(T, t, o, lang='en'):
     if t == 'events':
         name = (T['places'].get(o.get('place')) or {}).get('name')
         place = text_of(name.get('value')) if isinstance(name, dict) else ''
-        bits = [text_of(o.get('type')) or 'event', str(year_of(o) or ''), place, o.get('description') or '']
+        bits = [text_of(o.get('type')) or s(lang, 'event'), str(year_of(o) or ''), place, o.get('description') or '']
         return s(lang, 'new_event') + ', '.join(b for b in bits if b)
     if t == 'citations':
         src = text_of((T['sources'].get(o.get('source_handle')) or {}).get('title'))

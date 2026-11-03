@@ -389,6 +389,15 @@ class DigestTest(unittest.TestCase):
         self.assertIn('(camino: confirmados 0, probables 0, débiles 1, sin marcar 2)', out)
         self.assertNotIn('new person', out)
 
+    def test_untyped_event_word_follows_lang(self):
+        old, new = R.load(OLD), R.load(NEW)
+        ev = next(o for o in new['events'].values() if o.get('gramps_id') not in
+                  {x.get('gramps_id') for x in old['events'].values()})
+        ev['type'] = ''
+        self.assertTrue(R.describe(new, 'events', ev, 'es').startswith('evento nuevo: evento, '))
+        self.assertTrue(R.describe(new, 'events', ev, 'fr').startswith('nouvel événement : événement, '))
+        self.assertTrue(R.describe(new, 'events', ev).startswith('new event: event, '))
+
     def test_french_digest_strings_and_english_default(self):
         out = self.digest('--root', 'I1', '--lang', 'fr')
         self.assertIn("## côté paternel", out)
