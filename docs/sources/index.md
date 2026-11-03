@@ -13,6 +13,10 @@
 | `wikitree` | WikiTree, the shared one-world tree, public profiles | [wikitree](wikitree.md) |
 | `archiveorg` | Internet Archive: scanned books and registers, catalogue and full text | [archiveorg](archiveorg.md) |
 | `matchid` | matchID: France's deaths since 1970, searched online | [matchid](matchid.md) |
+| `riksarkivet` | Riksarkivet (Sweden): scanned church books and other volumes, with IIIF manifests | [riksarkivet](riksarkivet.md) |
+| `tna` | The National Archives (UK) Discovery: wills, service records, 2,500 UK archives | [tna](tna.md) |
+| `census1950` | The 1950 US census name index (NARA), with the page scans | [census1950](census1950.md) |
+| `digitalnz` | Papers Past, New Zealand newspapers, through the DigitalNZ API | [digitalnz](digitalnz.md) |
 | `dokuklik` | Dokuklik: Basque parish baptisms, marriages and burials | [dokuklik](dokuklik.md) |
 | `hiski` | HisKi: Finnish parish registers index | [hiski](hiski.md) |
 | `digitalarkivet` | Digitalarkivet: Norway's transcribed censuses and church books | [digitalarkivet](digitalarkivet.md) |

@@ -153,6 +153,10 @@ nav:
       - "gwt-read wikitree": sources/wikitree.md
       - "gwt-read archiveorg": sources/archiveorg.md
       - "gwt-read matchid": sources/matchid.md
+      - "gwt-read riksarkivet": sources/riksarkivet.md
+      - "gwt-read tna": sources/tna.md
+      - "gwt-read census1950": sources/census1950.md
+      - "gwt-read digitalnz": sources/digitalnz.md
       - "gwt-read dokuklik": sources/dokuklik.md
       - "gwt-read hiski": sources/hiski.md
       - "gwt-read digitalarkivet": sources/digitalarkivet.md

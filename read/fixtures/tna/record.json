@@ -1,0 +1,24 @@
+{
+ "citableReference": "PROB 11/9001/17",
+ "coveringDates": "12 March 1833",
+ "coveringFromDate": 18330312,
+ "coveringToDate": 18330312,
+ "scopeContent": {
+  "placeNames": null,
+  "description": "<emph altrender=\"doctype\">W</emph><persname><emph altrender=\"forenames\">Ana</emph><emph altrender=\"surname\">Zorvalo</emph></persname>"
+ },
+ "digitised": true,
+ "heldBy": [
+  {
+   "xReferenceId": "A0000000",
+   "xReferenceCode": "66",
+   "xReferenceName": "The National Archives, Kew"
+  }
+ ],
+ "id": "D900001",
+ "isParent": false,
+ "catalogueLevel": 7,
+ "parentId": "C900000",
+ "legalStatus": "Public Record(s)",
+ "title": null
+}
