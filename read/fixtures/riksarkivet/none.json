@@ -1,0 +1,10 @@
+{
+ "totalHits": 0,
+ "hits": 0,
+ "offset": 0,
+ "facets": [],
+ "items": [],
+ "_links": {
+  "self": "https://data.riksarkivet.se/api/records?text=zz"
+ }
+}

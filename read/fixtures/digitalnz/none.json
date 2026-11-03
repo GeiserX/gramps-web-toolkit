@@ -1,0 +1,11 @@
+{
+ "search": {
+  "page": 1,
+  "per_page": 20,
+  "result_count": 0,
+  "request_url": "https://api.digitalnz.org/records.json?text=zz",
+  "results": [],
+  "facets": {}
+ },
+ "api_terms_of_use": "https://api.digitalnz.org/terms-of-use"
+}

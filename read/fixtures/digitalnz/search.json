@@ -1,0 +1,44 @@
+{
+ "search": {
+  "page": 1,
+  "per_page": 20,
+  "result_count": 2,
+  "request_url": "https://api.digitalnz.org/records.json?text=Zorvalo",
+  "results": [
+   {
+    "id": 99000001,
+    "title": "MARRIAGE. (Kowhai Courier, 3 May 1901)",
+    "date": [
+     "1901-05-03T00:00:00.000Z"
+    ],
+    "year": [
+     1901
+    ],
+    "publisher": [
+     "Kowhai Courier"
+    ],
+    "display_collection": "Papers Past",
+    "landing_url": "https://paperspast.natlib.govt.nz/newspapers/ZZ19010503.2.1",
+    "fulltext": "marriage at st kilda church on the 1st instant by the rev mr quintel ana daughter of mr pedro zorvalo of villazul to luis quintel all friends please accept this intimation"
+   },
+   {
+    "id": 99000002,
+    "title": "Shipping News. (Kowhai Courier, 9 June 1902)",
+    "date": [
+     "1902-06-09T00:00:00.000Z"
+    ],
+    "year": [
+     1902
+    ],
+    "publisher": [
+     "Kowhai Courier"
+    ],
+    "display_collection": "Papers Past",
+    "landing_url": "https://paperspast.natlib.govt.nz/newspapers/ZZ19020609.2.2",
+    "fulltext": null
+   }
+  ],
+  "facets": {}
+ },
+ "api_terms_of_use": "https://api.digitalnz.org/terms-of-use"
+}

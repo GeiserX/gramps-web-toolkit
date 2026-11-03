@@ -1,0 +1,78 @@
+{
+ "records": [
+  {
+   "altName": "",
+   "places": [],
+   "heldBy": [
+    "The National Archives, Kew"
+   ],
+   "context": "Prerogative Court of Canterbury: Will Registers.",
+   "content": "",
+   "department": "PROB",
+   "catalogueLevel": 7,
+   "closureStatus": "O",
+   "documentType": "W",
+   "coveringDates": "12 March 1833",
+   "description": "Will of Ana Zorvalo, Widow of Westbury.",
+   "numStartDate": 18330312,
+   "numEndDate": 18330312,
+   "startDate": "",
+   "endDate": "",
+   "id": "D900001",
+   "reference": "PROB 11/9001/17",
+   "score": 12.5,
+   "source": "200",
+   "title": "Will of Ana Zorvalo, Widow of Westbury"
+  },
+  {
+   "altName": "",
+   "places": [],
+   "heldBy": [
+    "Westbury Record Office"
+   ],
+   "context": "Estate and family papers.",
+   "content": "",
+   "department": "ZZ/1/2",
+   "catalogueLevel": 7,
+   "closureStatus": "O",
+   "documentType": "W",
+   "coveringDates": "1790-1850",
+   "description": "Zorvalo family papers.",
+   "numStartDate": 17900101,
+   "numEndDate": 18501231,
+   "startDate": "",
+   "endDate": "",
+   "id": "9f0e0000-0000-4000-8000-00000000zz01",
+   "reference": "ZZ/1/2",
+   "score": 12.5,
+   "source": "200",
+   "title": "Zorvalo family papers"
+  }
+ ],
+ "taxonomySubjects": [],
+ "timePeriods": [],
+ "departments": [],
+ "catalogueLevels": [],
+ "closureStatuses": [],
+ "sources": [],
+ "repositories": [
+  {
+   "code": "999 Westbury Record Office",
+   "count": 1
+  }
+ ],
+ "heldByReps": [
+  {
+   "code": "TNA",
+   "count": 1
+  },
+  {
+   "code": "OTH",
+   "count": 1
+  }
+ ],
+ "referenceFirstLetters": [],
+ "titleFirstLetters": [],
+ "count": 2,
+ "nextBatchMark": ""
+}

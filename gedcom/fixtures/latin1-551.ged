@@ -1,0 +1,89 @@
+0 HEAD
+1 SOUR INVENTED_TEST_FILE
+1 GEDC
+2 VERS 5.5.1
+2 FORM LINEAGE-LINKED
+1 CHAR ANSI
+1 PLAC
+2 FORM City, County, Country
+0 @I1@ INDI
+1 NAME Pablo /García/
+1 SEX M
+1 BIRT
+2 DATE @#DJULIAN@ 11 FEB 1700
+2 PLAC Villanueva, Tierra Alta, España
+2 SOUR @S1@
+3 PAGE folio 12
+3 QUAY 3
+1 DEAT
+2 DATE 3 MAR 1760
+2 PLAC Villanueva, Tierra Alta, España
+1 FAMS @F1@
+1 _FSFTID ABCD-123
+1 NOTE Pablo worked the mill for forty years and his son took it ov
+2 CONC er after him.
+2 CONT A second line of the note.
+0 @I2@ INDI
+1 NAME María /Moreno/
+1 SEX F
+1 BIRT
+2 DATE ABT 1705
+1 DEAT
+2 DATE 1770
+1 FAMS @F1@
+0 @I3@ INDI
+1 NAME Diego /García Moreno/
+1 SEX M
+1 BIRT
+2 DATE 31 FEB 1730
+2 PLAC Villanueva, Tierra Alta, EspaÃ±a
+1 BAPM
+2 DATE 2 MAR 1730
+2 PLAC San Diego, Villanueva, Tierra Alta, España
+2 SOUR @S1@
+3 PAGE folio 40
+1 DEAT
+2 DATE @#DFRENCH R@ 1 VEND 12
+1 FAMC @F1@
+0 @I4@ INDI
+1 NAME Ana /García Moreno/
+1 SEX F
+1 BIRT
+2 DATE 1735
+1 BURI
+2 DATE BET 1790 AND 1795
+1 FAMC @F1@
+2 PEDI adopted
+0 @I5@ INDI
+1 NAME Luis /Martín/
+1 SEX M
+1 BIRT
+2 DATE 1990
+1 FAMC @F2@
+0 @I6@ INDI
+1 NAME Diego /García Moreno/
+1 SEX M
+1 BIRT
+2 DATE 1731
+1 DEAT
+2 DATE 1801
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I3@
+1 CHIL @I4@
+1 MARR
+2 DATE 1728
+2 PLAC Villanueva, Tierra Alta, España
+2 SOUR @S1@
+3 PAGE folio 3
+0 @F2@ FAM
+1 CHIL @I5@
+0 @S1@ SOUR
+1 TITL Libro de bautismos, Villanueva
+1 AUTH Parroquia de San Diego
+1 REPO @R1@
+2 CALN 12/3
+0 @R1@ REPO
+1 NAME Archivo Diocesano
+0 TRLR

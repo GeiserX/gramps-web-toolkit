@@ -1,0 +1,30 @@
+0 HEAD
+1 GEDC
+2 VERS 7.0
+1 SOUR INVENTED_RECORD_EXPORT
+0 @I1@ INDI
+1 NAME Hendrik /Jansen/
+1 SEX M
+1 BAPM
+2 DATE 14 MAR 1790
+2 PLAC Dorpstad
+2 SOUR @S1@
+3 PAGE Doopboek 3, folio 21
+1 FAMC @F1@
+0 @I2@ INDI
+1 NAME Jan /Jansen/
+1 SEX M
+1 FAMS @F1@
+0 @I3@ INDI
+1 NAME Geertje /de Vries/
+1 SEX F
+1 FAMS @F1@
+0 @F1@ FAM
+1 HUSB @I2@
+1 WIFE @I3@
+1 CHIL @I1@
+0 @S1@ SOUR
+1 TITL Doopboek Dorpstad 1780-1800
+1 PUBL Invented Regional Archive
+1 NOTE https://www.openarchives.nl/
+0 TRLR
