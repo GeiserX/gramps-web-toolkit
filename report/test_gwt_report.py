@@ -368,13 +368,34 @@ class DigestTest(unittest.TestCase):
     def test_html_uses_only_inline_tags_chat_apps_take(self):
         out = self.digest('--root', 'I1', '--format', 'html', '--base-url', 'https://g.example.org', '--lang', 'es')
         self.assertIn('<b>Lena Gale (I12), prima hermana</b> <a href="https://g.example.org/person/I12">', out)
-        self.assertIn("<b><u>father's side</u></b>", out)
+        self.assertIn('<b><u>rama paterna</u></b>', out)
         self.assertLessEqual(set(re.findall(r'</?([a-z0-9]+)', out)), {'b', 'u', 'i', 'a'})
         old, new = R.load(OLD), R.load(NEW)
         new['people']['hI12']['primary_name']['first_name'] = 'Lena <x> & Co'
         out = R.render(new, R.digest(old, new), 'https://g.example.org/?t=1&u=2', 'en', 'html')
         self.assertIn('Lena &lt;x&gt; &amp; Co', out)
         self.assertIn('<a href="https://g.example.org/?t=1&amp;u=2/person/I12">', out)
+
+    def test_spanish_digest_strings(self):
+        out = self.digest('--root', 'I1', '--lang', 'es')
+        self.assertIn('# Novedades en el árbol desde el ', out)
+        self.assertIn('## rama paterna', out)
+        self.assertIn('## rama materna', out)
+        self.assertIn('## sin parentesco de sangre', out)
+        self.assertIn('- evento nuevo: Baptism, 1890, Greenford', out)
+        self.assertIn('- cita nueva: Greenford parish register, folio 12, confianza 3', out)
+        self.assertIn('- persona nueva: Rosa Pine [débil]', out)
+        self.assertIn('1 débiles', out)
+        self.assertNotIn('new person', out)
+
+    def test_french_digest_strings_and_english_default(self):
+        out = self.digest('--root', 'I1', '--lang', 'fr')
+        self.assertIn("## côté paternel", out)
+        self.assertIn('- nouvelle personne : Rosa Pine [faible]', out)
+        self.assertIn('confiance 3', out)
+        out = self.digest('--root', 'I1')
+        self.assertIn("## father's side", out)
+        self.assertIn('- new person: Rosa Pine [weak]', out)
 
     def test_who_owns_what(self):
         old, new = R.load(OLD), R.load(NEW)

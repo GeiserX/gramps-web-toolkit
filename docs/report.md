@@ -91,6 +91,8 @@ gwt report digest --from OLD --to NEW [--root I0001] [--base-url URL] [--lang en
                   [--told FILE --audience NAME [--mark]] [--format md|html] [--include-private]
 ```
 
+`--lang` translates the whole digest (title, section headers, item labels, confidence and the cut note), not only the kin names; English is the default and the fallback.
+
 It lists the people, events, citations and media in `NEW` that `OLD` lacks (by handle), grouped by the person they belong to:
 
 - a new person is their own group;
