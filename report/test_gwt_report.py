@@ -417,6 +417,16 @@ class DigestTest(unittest.TestCase):
         with self.assertRaises(KeyError):  # no silent English for a language without a table
             R.s('de', 'title')
 
+    def test_empty_unattached_and_cut_lines_follow_lang(self):
+        g = [{'side': 'other', 'person': None, 'items': [], 'truncated': True}]
+        es, fr = R.render({}, g, '', 'es', 'text'), R.render({}, g, '', 'fr', 'text')
+        self.assertIn('### no ligado a una persona', es)
+        self.assertIn('(los caminos de parentesco se cortaron en %d por persona para 1 ' % R.MAX_PATHS, es)
+        self.assertIn('### non rattaché à une personne', fr)
+        self.assertIn('(les chemins de parenté ont été coupés à %d par personne pour 1 ' % R.MAX_PATHS, fr)
+        self.assertIn('Nada nuevo.', R.render({}, [], '', 'es', 'text'))
+        self.assertIn('Rien de nouveau.', R.render({}, [], '', 'fr', 'text'))
+
     def test_french_digest_strings_and_english_default(self):
         out = self.digest('--root', 'I1', '--lang', 'fr')
         self.assertIn("## côté paternel", out)
