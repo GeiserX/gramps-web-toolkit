@@ -43,3 +43,13 @@ gwt_gedcom/audit.py | low, high = PARENT_AGE.get(sex, PARENT_AGE_UNKNOWN) | low,
 gwt_gedcom/cli.py | if not os.path.isdir(os.path.dirname(os.path.abspath(p))): | if False: | an output in a folder that does not exist exits 2 before any work, not 1 with a traceback
 gwt_gedcom/cli.py | raise ImportError_("--out, --report and --write-decisions must be different files") | pass | the report never overwrites the change list
 gwt_gedcom/split.py | return [r.xref for r in ged.individuals if r.xref not in kept] | return [] | split says who is in no output
+gwt_gedcom/parse.py | k = 3 if d1 and d2 and m1 and m2 else 2 if m1 and m2 else 1 | k = 3 | a range is compared at the precision both ends have: «BET 12 MAR 1850 AND MAR 1850» is kept
+gwt_gedcom/parse.py | if (y2, m2, d2)[:k] < (y1, m1, d1)[:k]: | if False: | a range that ends before it starts is still flagged at shared precision
+gwt_gedcom/mapping.py | key, new = self.emit(op)  # two records | new = self.emit(op)[1]  # two records | a source record with the title of another is cited as the source made, not a key no op makes
+gwt_gedcom/mapping.py | self.sources[hid] = "key:" + made | self.sources[hid] = "key:" + key | an inline source with the title of a source record is cited as that source
+gwt_gedcom/mapping.py | rkey, _ = self.emit( | _ = self.emit( | a repository with the name of another is linked as the repository made
+gwt_gedcom/split.py | and value.strip() != "@VOID@":  # | :  # | split writes @VOID@ as a null pointer, not as text
+gwt_gedcom/split.py | p if re.fullmatch(r"@#D[A-Z ]+@", p) else p.replace("@", "@@") | p.replace("@", "@@") | split keeps a calendar escape such as @#DJULIAN@ as written
+gwt_gedcom/split.py | if len(set(paths)) < len(paths): | if False: | two roots that would write one file are refused
+gwt_gedcom/audit.py | for t in tags for c in rec.children if c.tag == t and | for c in rec.children if c.tag in tags and | audit takes the birth before the baptism, whatever the record order
+gwt_gedcom/audit.py | if sv - 1721425 > datetime.date.max.toordinal(): | if False: | a date past the year 9999 is skipped, not a crash

@@ -754,3 +754,41 @@ def test_cli_split_says_who_is_in_no_output_and_takes_ids_without_at(tmp_path, c
     assert os.path.exists(tmp_path / "I1.ged")
     left = split_mod.left_out(read(str(FIX / "split.ged")), ["@I1@"])
     assert left and f"in no output: {len(left)} of " in out
+
+
+# --- review round 2 --------------------------------------------------------------------------------------------
+
+def test_a_range_is_compared_at_the_precision_both_ends_have():
+    assert ged_date("BET 12 MAR 1850 AND MAR 1850") == ("bet 1850-03-12 and 1850-03", None)
+    assert ged_date("FROM 3 MAR 1850 TO 1850") == ("from 1850-03-03 to 1850", None)
+    assert ged_date("BET 12 MAR 1850 AND FEB 1850")[0].startswith("text:")
+    assert ged_date("BET 12 MAR 1850 AND 11 MAR 1850")[0].startswith("text:")
+
+
+def test_two_sources_with_one_title_are_one_source_and_every_citation_finds_it():
+    text = ("0 HEAD\n0 @I1@ INDI\n1 NAME Ana /Sanz/\n1 BIRT\n2 DATE 1800\n2 SOUR @S1@\n3 PAGE p1\n1 DEAT\n"
+            "2 DATE 1850\n2 SOUR @S2@\n3 PAGE p2\n1 BURI\n2 DATE 1850\n2 SOUR Parish book\n0 @S1@ SOUR\n1 TITL Parish book\n1 REPO @R1@\n0 @S2@ SOUR\n"
+            "1 TITL Parish book\n1 REPO @R2@\n0 @R1@ REPO\n1 NAME Archive\n0 @R2@ REPO\n1 NAME Archive\n0 TRLR")
+    ops, rep = run(ged(text))
+    made = {"key:" + o["key"] for o in ops}
+    refs = [o[f] for o in ops for f in ("source", "repository") if isinstance(o.get(f), str)]
+    assert refs and all(r in made for r in refs)
+    assert len(by_op(ops, "add_source")) == 1 and rep["sources"] == 1
+    assert len(by_op(ops, "add_citation")) == 3
+
+
+def test_split_keeps_void_pointers_and_calendar_escapes_as_written(tmp_path):
+    g = read(ged("0 HEAD\n1 GEDC\n2 VERS 5.5.1\n0 @I1@ INDI\n1 NAME Ana /Sanz/\n1 FAMC @VOID@\n1 BIRT\n"
+                 "2 DATE @#DJULIAN@ 1 JAN 1700\n1 EMAIL ana@@example.org\n0 TRLR"))
+    out = split_mod.write(g, {"@I1@"}, set(), set())
+    assert "1 FAMC @VOID@" in out and "2 DATE @#DJULIAN@ 1 JAN 1700" in out and "1 EMAIL ana@@example.org" in out
+    with pytest.raises(ValueError):
+        split_mod.split(g, ["@I1@", "@I1@"], str(tmp_path))
+
+
+def test_audit_takes_the_birth_before_the_baptism_and_skips_years_past_9999():
+    from gwt_gedcom.audit import BIRTHS, _first, _sortval
+    g = read(ged("0 HEAD\n0 @I1@ INDI\n1 NAME Ana /Sanz/\n1 BAPM\n2 DATE 1801\n1 BIRT\n2 DATE 1800\n"
+                 "1 DEAT\n2 DATE @#DJULIAN@ 31 DEC 9999\n0 TRLR"))
+    assert _first(g.individuals[0], BIRTHS).tag == "BIRT"
+    assert _sortval(g.individuals[0].first("DEAT")) == (0, 0)

@@ -452,9 +452,12 @@ def ged_date(text: str | None) -> tuple[str | None, str | None]:
         if cal != "gregorian":
             out = f"{cal} {out}"
         parsed = parse_date(out)  # the real calendar check: 31 FEB is refused here
-        if word in ("bet", "from") and parse_date(read[1][1] if cal == "gregorian" else f"{cal} {read[1][1]}")[
-                "sortval"] < parsed["sortval"]:
-            raise DateError("the range ends before it starts")
+        if word in ("bet", "from"):  # compared at the precision both ends have: «BET 12 MAR 1850 AND MAR 1850» is fine
+            ends = [parse_date(e if cal == "gregorian" else f"{cal} {e}")["dateval"] for _, e, _ in read]
+            (d1, m1, y1), (d2, m2, y2) = (v[:3] for v in ends)
+            k = 3 if d1 and d2 and m1 and m2 else 2 if m1 and m2 else 1
+            if (y2, m2, d2)[:k] < (y1, m1, d1)[:k]:
+                raise DateError("the range ends before it starts")
         if tokens[0] in ("FROM", "TO") and word in ("aft", "bef"):
             notes.append(f"an open span {tokens[0]} date read as {'after' if word == 'aft' else 'before'} that date")
         if phrase:

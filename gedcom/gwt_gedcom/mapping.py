@@ -445,13 +445,13 @@ class Builder:
             for tag, f in (("AUTH", "author"), ("PUBL", "pubinfo"), ("ABBR", "abbrev")):
                 if rec.val(tag):
                     op[f] = rec.val(tag).replace("\n", " ")
-            self.emit(op)
-            self.report["sources"] += 1
+            key, new = self.emit(op)  # two records with the same title make one source: cite the one made
+            self.report["sources"] += new
             self.sources[x] = "key:" + key
             for r in rec.all("REPO"):
                 self.repository(r, key)
             if rec.val("TEXT"):
-                self.note_text(rec.val("TEXT"), {"source": "key:" + key}, f"{key}-text")
+                self.note_text(rec.val("TEXT"), {"source": "key:" + key}, f"{self.prefix}-{_slug(x)}-text")
             for n in rec.all("NOTE", "SNOTE"):
                 self.note(n, {"source": "key:" + key})
             self.unused(rec, {"TITL", "ABBR", "AUTH", "PUBL", "REPO", "TEXT", "NOTE", "SNOTE", "CHAN"})
@@ -462,11 +462,11 @@ class Builder:
         hid = "inline-" + _h(text)
         if hid not in self.sources:
             key = f"{self.prefix}-src-{_h(text)}"
-            self.emit({"op": "add_source", "key": key, "title": text.split("\n")[0][:200]})
-            self.report["sources"] += 1
-            self.sources[hid] = "key:" + key
+            made, new = self.emit({"op": "add_source", "key": key, "title": text.split("\n")[0][:200]})
+            self.report["sources"] += new
+            self.sources[hid] = "key:" + made
             if "\n" in text or len(text) > 200:
-                self.note_text(text, {"source": "key:" + key}, f"{key}-text")
+                self.note_text(text, {"source": "key:" + made}, f"{key}-text")
         return self.sources[hid]
 
     def repository(self, line: Line, source_key: str) -> None:
@@ -474,7 +474,7 @@ class Builder:
         if rec is None or not rec.val("NAME"):
             return
         rkey = f"{self.prefix}-{_slug(rec.xref)}"
-        self.emit({"op": "add_repository", "key": rkey, "name": rec.val("NAME"), "type": "Unknown"})
+        rkey, _ = self.emit({"op": "add_repository", "key": rkey, "name": rec.val("NAME"), "type": "Unknown"})
         link = {"op": "link_repository", "key": f"{source_key}-repo-{_slug(rec.xref)}", "source": "key:" + source_key,
                 "repository": "key:" + rkey}
         if line.val("CALN"):

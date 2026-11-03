@@ -42,11 +42,14 @@ def _sortval(line: Line | None) -> tuple[int, int]:
     except DateError:
         return 0, 0
     sv = date["sortval"]
+    if sv - 1721425 > datetime.date.max.toordinal():  # past the year 9999: nothing to compare it with
+        return 0, 0
     return sv, (datetime.date.fromordinal(sv - 1721425).year if sv > 1721425 else 0)
 
 
 def _first(rec: Line, tags) -> Line | None:
-    return next((c for c in rec.children if c.tag in tags and c.val("DATE")), None)
+    """The first dated event by tag priority: a birth before a baptism, a death before a burial."""
+    return next((c for t in tags for c in rec.children if c.tag == t and c.val("DATE")), None)
 
 
 def _refs(line: Line, out: list[tuple[int, str, str]]) -> None:

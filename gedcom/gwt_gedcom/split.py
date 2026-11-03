@@ -96,8 +96,12 @@ def _prune(line: Line, keep: set[str]) -> Line | None:
 def _lines(line: Line, seven: bool) -> list[str]:
     head = f"{line.level}" + (f" {line.xref}" if line.xref else "") + f" {line.tag}"
     value = line.value
-    if line.pointer is None and value:
-        value = ("@" + value if value.startswith("@") else value) if seven else value.replace("@", "@@")
+    if line.pointer is None and value and value.strip() != "@VOID@":  # @VOID@ is a null pointer, not text
+        if seven:
+            value = "@" + value if value.startswith("@") else value
+        else:  # a calendar escape such as @#DJULIAN@ stays as written; any other @ is doubled
+            value = "".join(p if re.fullmatch(r"@#D[A-Z ]+@", p) else p.replace("@", "@@")
+                            for p in re.split(r"(@#D[A-Z ]+@)", value))
     parts = value.split("\n")
     out = [head + (f" {parts[0]}" if parts[0] else "")]
     out += [f"{line.level + 1} CONT" + (f" {p}" if p else "") for p in parts[1:]]
@@ -152,6 +156,8 @@ def split(ged: Gedcom, roots: list[str], out_dir: str, *, force: bool = False) -
     """Write one file per root; one summary row each."""
     trees = [(r, *reach(ged, r)) for r in roots]
     paths = [os.path.join(out_dir, name_of(r) + ".ged") for r in roots]
+    if len(set(paths)) < len(paths):
+        raise ValueError("two roots would write the same file: give each root once")
     for p in paths:
         if os.path.exists(p) and not force:
             raise FileExistsError(f"{p} exists; pass --force to overwrite it")
