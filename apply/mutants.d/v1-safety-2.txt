@@ -1,2 +1,4 @@
 gwt_apply/ops.py |         if diffs: |         if False: | a reused person key with different identity stops before dependent evidence
 gwt_apply/ops.py | diffs = [r for r in rows if not r[1] and r[0] not in amended] | diffs = [r for r in rows if not r[1]] | an identity field a later update_person of the same list sets does not make the add a key collision
+gwt_apply/ops.py |             if op["key"] not in self.landed: |             if True: | an add_person this same list landed skips after a later hand correction
+gwt_apply/ops.py |         if op.get("gramps_id"): |         if False: | a reused person key with another Gramps ID is a key collision

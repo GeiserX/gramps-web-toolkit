@@ -4338,3 +4338,23 @@ def test_person_key_collision_names_each_differing_field_and_the_way_out(fake):
     assert "gender 'F' in the tree, 'M' in this op" in line
     assert "surname" not in line.split("differs:")[1].split(".")[0]
     assert "make this op match the tree or drop it" in line and "give it a new key" in line
+
+
+def test_person_key_landed_by_this_list_skips_after_a_hand_correction(fake):
+    original = {"op": "add_person", "key": "p", "ruling": R, "first_name": "Alice", "surname": "Example"}
+    assert run(fake, [original])[0].status == "done"
+    fake.store["people"][stable_handle("p")]["primary_name"]["first_name"] = "Alicia"  # corrected by hand since
+    assert run(fake, [original])[0].status == "conflict"  # no apply log of this list: the key check runs
+    c = Client("https://gw.example", "u", "pw", tree="tree-test", dry_run=False, session=fake)
+    c.login()
+    assert Applier(c, landed=frozenset({"p"})).run([original])[0].status == "skip"
+
+
+def test_person_key_collision_compares_an_explicit_gramps_id(fake):
+    original = {"op": "add_person", "key": "p", "ruling": R, "first_name": "Alice", "surname": "Example",
+                "gramps_id": "I0900"}
+    assert run(fake, [original])[0].status == "done"
+    assert run(fake, [original])[0].status == "skip"
+    res = run(fake, [dict(original, gramps_id="I0901")])[0]
+    assert res.status == "conflict"
+    assert "gramps_id 'I0900' in the tree, 'I0901' in this op" in res.actions[-1]
