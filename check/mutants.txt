@@ -100,6 +100,15 @@ gwt_check/public.py | LEAKS = ("private-visible", "private-reference", "private-
 gwt_check/public.py | if path and x.get("private") is True: | if x.get("private") is True: | a visible private object is one row, not also a sub-object row with no path
 gwt_check/checks.py | if e and e.get("type") in ("Birth", "Baptism")] | if e and e.get("type") in ("Birth",)] | a recent baptism alone makes a person possibly living
 gwt_check/public.py | if not rep["rows"]: | if False: | a clean comparison says nothing found
+gwt_check/checks.py | and not parent_and_child(p["handle"], q["handle"]) and not apart(p, q): | and not parent_and_child(p["handle"], q["handle"]): | namesakes whose births cannot overlap get no same-relative hint
+gwt_check/checks.py | if near or (kin_shared and not (yp and yq) and not apart(P[h], P[c])): | if near or (kin_shared and not (yp and yq)): | namesakes whose births cannot overlap get no fuzzy same-relative hint
+gwt_check/checks.py | return bool(a and b) and (a[1] < b[0] or b[1] < a[0]) | return bool(a and b) and (a[1] <= b[0] or b[1] <= a[0]) | two births on the same day overlap
+gwt_check/checks.py | if readable and len(readable) == len(alts) else None | if readable else None | one unreadable birth date leaves the birth unknown
+gwt_check/checks.py | spans[p["handle"]] = (min(s.lo for s in readable), max(s.hi for s in readable)) \ | spans[p["handle"]] = (readable[-1].lo, readable[-1].hi) \ | every birth alternative widens the interval
+gwt_check/checks.py | and dates.kind(E[r["ref"]].get("type")) in dates.BIRTH] | and dates.kind(E[r["ref"]].get("type")) in dates.BIRTH.union(dates.BAPTISM)] | a baptism alone never sets two namesakes apart
+gwt_check/checks.py | if r.get("ref") in E and r.get("role") == "Primary" | if r.get("ref") in E | a birth the person only witnessed never sets two namesakes apart
+gwt_check/checks.py | if r.get("ref") in E and r.get("role") == "Primary" | if r.get("role") == "Primary" | a dangling event reference never crashes the namesake check
+gwt_check/checks.py | max(s.hi for s in readable)) | min(s.hi for s in readable)) | the latest birth alternative widens the interval too
 gwt_check/media.py | or mimetypes.guess_type(o.get("path") or "")[0] or "").lower() | or "").lower() | a media object with no MIME stored is judged by its file name
 gwt_check/media.py | return sum(hist[max(0, top - TONE_WINDOW):top + TONE_WINDOW + 1]) / total | return sum(hist[max(0, top - TONE_WINDOW):top + TONE_WINDOW]) / total | the tone window reaches as far above the top tone as below it
 gwt_check/media.py | (a > b) | (a < b) | the dHash bit is set where the left neighbour is brighter

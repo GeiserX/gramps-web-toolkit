@@ -1,0 +1,62 @@
+[
+ {
+  "status": "",
+  "resultByKey": {
+   "Zorvalo-12": {
+    "Id": 900001
+   }
+  },
+  "people": {
+   "900001": {
+    "Privacy": 60,
+    "IsLiving": 0,
+    "Privacy_IsPrivate": false,
+    "Privacy_IsPublic": false,
+    "Privacy_IsOpen": true,
+    "Privacy_IsAtLeastPublic": true,
+    "Privacy_IsSemiPrivate": false,
+    "Privacy_IsSemiPrivateBio": false,
+    "Id": 900001,
+    "Name": "Zorvalo-12",
+    "FirstName": "Ana",
+    "MiddleName": "Rosa",
+    "LastNameAtBirth": "Zorvalo",
+    "LastNameCurrent": "Quirell",
+    "BirthDate": "1851-03-02",
+    "DeathDate": "1920-00-00",
+    "BirthLocation": "Villazul, Nortia",
+    "DeathLocation": "",
+    "Gender": "Female",
+    "Father": 900003,
+    "Mother": 900004
+   },
+   "900003": {
+    "Privacy": 60,
+    "IsLiving": 0,
+    "Privacy_IsPrivate": false,
+    "Privacy_IsPublic": false,
+    "Privacy_IsOpen": true,
+    "Privacy_IsAtLeastPublic": true,
+    "Privacy_IsSemiPrivate": false,
+    "Privacy_IsSemiPrivateBio": false,
+    "Id": 900003,
+    "Name": "Zorvalo-5",
+    "FirstName": "Pedro",
+    "MiddleName": "",
+    "LastNameAtBirth": "Zorvalo",
+    "LastNameCurrent": "Zorvalo",
+    "BirthDate": "1820-00-00",
+    "DeathDate": "",
+    "BirthLocation": "Villazul, Nortia",
+    "DeathLocation": "",
+    "Gender": "Male",
+    "Father": 0,
+    "Mother": 0
+   },
+   "900004": {
+    "Id": 900004,
+    "Name": "Brin-2"
+   }
+  }
+ }
+]
