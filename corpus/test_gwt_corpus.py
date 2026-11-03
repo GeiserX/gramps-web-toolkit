@@ -196,6 +196,49 @@ class UpdateTest(Base):
             code, out, _ = run('update', '--db', self.db, *self.roots)
         self.assertIn('1 PDFs not read: pdftotext', out)
 
+    def test_a_scanned_pdf_with_no_text_is_counted(self):
+        with open(os.path.join(self.dir, 'books', 'scan.pdf'), 'wb') as f:
+            f.write(b'%PDF-1.4 invented')
+        with mock.patch.dict(os.environ, self.pdftotext_stub('printf "\\f\\f"')):
+            code, out, _ = run('update', '--db', self.db, *self.roots)
+        self.assertIn('1 PDFs have no text layer', out)
+
+    def test_a_pdftotext_that_times_out_is_tried_again(self):
+        with open(os.path.join(self.dir, 'books', 'book.pdf'), 'wb') as f:
+            f.write(b'%PDF-1.4 invented')
+        with mock.patch.object(C.shutil, 'which', return_value='/bin/pdftotext'), \
+                mock.patch.object(C.subprocess, 'run', side_effect=C.subprocess.TimeoutExpired('pdftotext', 600)):
+            code, out, _ = run('update', '--db', self.db, *self.roots)
+        self.assertEqual(code, 0)
+        self.assertIn('1 PDFs pdftotext could not read', out)
+
+    def test_one_update_at_a_time(self):
+        import fcntl
+        with open(self.db + '.lock', 'w') as held:
+            fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)  # another update is running
+            code, _, err = run('update', '--db', self.db, *self.roots)
+        self.assertEqual(code, 2)
+        self.assertIn('another update', err)
+
+    def test_a_long_first_index_keeps_what_it_read_when_it_stops(self):
+        root = os.path.join(self.dir, 'many')
+        os.makedirs(root)
+        for i in range(1001):
+            with open(os.path.join(root, '%04d.txt' % i), 'w') as f:
+                f.write('hoja %d' % i)
+        real, calls = C.extract, []
+
+        def stop_at_the_last(path, ctx):
+            calls.append(path)
+            if len(calls) == 1001:
+                raise KeyboardInterrupt  # the run is stopped before its final commit
+            return real(path, ctx)
+
+        fresh = os.path.join(self.dir, 'idx3', 'corpus.db')
+        with mock.patch.object(C, 'extract', stop_at_the_last), self.assertRaises(KeyboardInterrupt):
+            run('update', '--db', fresh, root)
+        self.assertEqual(sqlite3.connect(fresh).execute('SELECT count(*) FROM files').fetchone()[0], 1000)
+
 
 class SearchTest(Base):
     def test_accents_and_case_fold(self):
@@ -280,6 +323,9 @@ class SweepTest(Base):
         self.assertTrue(all(r[2] == 'corpus' and r[7] == 'lane-a' for r in rows))
         self.assertTrue(all(r[9].startswith('corpus-sweep-') for r in rows))  # the controls that passed
         self.assertIn('Tomás Merino (the miller)', out)
+        olmedo = next(r for r in rows if r[0] == 'k-olmedo')
+        self.assertEqual(olmedo[1], 'José Olmedo Quiroga')  # an empty label falls back to the name
+        self.assertTrue(olmedo[6].startswith('https://'), olmedo)  # a lead names where to read it
         nones = [r for r in rows if r[5] == 'none']
         self.assertTrue(all(r[8] == r[4] and r[6] == 'corpus:corpus.db' for r in nones))
         # a corpus miss is due again at once: it never tells gwt-ledger the person was searched
@@ -468,6 +514,25 @@ class XrefTest(unittest.TestCase):
             code, _, err = run('xref', f.name, '--dump', os.path.join(FIX, 'tree.json'))
         self.assertEqual(code, 2)
         self.assertIn('could not read', err)
+
+    def test_a_scanned_pdf_with_no_text_is_bad_input(self):
+        with tempfile.NamedTemporaryFile(suffix='.pdf') as f, \
+                mock.patch.object(C.subprocess, 'run', return_value=mock.Mock(returncode=0, stdout=b'\f\f')), \
+                mock.patch.object(C.shutil, 'which', return_value='/bin/pdftotext'):
+            code, _, err = run('xref', f.name, '--dump', os.path.join(FIX, 'tree.json'))
+        self.assertEqual(code, 2)
+        self.assertIn('no text layer', err)
+
+    def test_name_words_apart_on_a_page_are_no_match(self):
+        tree = self.tree(('Rosa', 'Larrinaga Soto', ''))
+        book = self.write('book.txt', 'Rosa vino sola. Larrinaga firma. Soto testigo.')
+        code, out, _ = run('xref', book, '--dump', tree, '--format', 'tsv')
+        self.assertEqual(code, 1, out)
+
+    def test_a_file_that_is_no_dump_is_bad_input(self):
+        code, _, err = run('xref', os.path.join(FIX, 'dictionary.txt'), '--dump', self.write('x.json', '{"a": 1}'))
+        self.assertEqual(code, 2)
+        self.assertIn('not a gwt-check dump', err)
 
     def test_a_pdf_without_pdftotext_is_bad_input(self):
         with tempfile.NamedTemporaryFile(suffix='.pdf') as f, \

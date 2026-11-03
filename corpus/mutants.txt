@@ -38,3 +38,12 @@ gwt_corpus.py | 'agent': a.agent, 'control': run_id} | 'agent': a.agent} | sweep
 gwt_corpus.py |         have = {(r['person_key'], r['source'], r['query'], r['result'], r['date']) for r in led.read_rows(a.ledger)} |         have = set() | the same sweep twice on one day adds no rows
 gwt_corpus.py |     if n < 1: |     if False: | a --limit below 1 is refused
 gwt_corpus.py |             raise BadInput('%s: pdftotext could not read it (%s)' % (path, e)) |             pages = [] | xref on a PDF pdftotext cannot read says so
+gwt_corpus.py |         ctx['pdf_no_text'] += 1 |         pass | an update says how many PDFs have no text layer (scans to OCR)
+gwt_corpus.py | except (OSError, subprocess.TimeoutExpired) as e: | except ZeroDivisionError as e: | a pdftotext that times out is a failed read, tried again at the next update
+gwt_corpus.py |             if (n['new'] + n['changed']) % 1000 == 0: |             if False: | a long first index keeps what it has read if it stops before the end
+gwt_corpus.py |             raise BadInput('%s has no text layer; OCR it first (see ocr-bench)' % path) |             pass | xref on a PDF with no text layer says so, never «0 matches»
+gwt_corpus.py | if ' %s ' % needle in pages[i - 1]) | if True) | xref needs the words of a name side by side, not anywhere on the page
+gwt_corpus.py |         raise BadInput('--dump %s: not a gwt-check dump (no objects.people)' % path) |         pass | a --dump that is not a dump is bad input, never «0 matches»
+gwt_corpus.py |             r['label'] = r['label'] or ('%s %s' % (r['given'], r['surname'])).strip() |             pass | a names row with an empty label is labelled with the name
+gwt_corpus.py | evidence='%s%s' % (first[2] or first[3], | evidence='%s%s' % ('', | a sweep lead names the URL or file to read
+gwt_corpus.py | fcntl.flock(lock, | (lock, | a second update exits 2 while the first holds the lock
