@@ -347,7 +347,11 @@ SOURCE_MODULES = ('gwt_pares', 'gwt_genae', 'gwt_boe', 'gwt_insee',
                   'gwt_hiski',
                   'gwt_digitalarkivet',
                   'gwt_geneteka',
-                  'gwt_freeukgen')
+                  'gwt_freeukgen',
+                  'gwt_bvph',
+                  'gwt_delpher',
+                  'gwt_trove',
+                  'gwt_kramerius')
 
 SPEC_KEYS = {'id': str, 'help': str, 'pace': dict, 'cache_rules': tuple, 'controls': list,
              'result_markers': list, 'negative_markers': list}

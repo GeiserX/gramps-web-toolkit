@@ -1,0 +1,58 @@
+{
+ "query": "\"Ann Zorvalo\"",
+ "category": [
+  {
+   "code": "newspaper",
+   "name": "Newspapers & Gazettes",
+   "records": {
+    "s": "*",
+    "n": 2,
+    "total": 37,
+    "next": "https://api.trove.nla.gov.au/v3/result?q=%22Ann+Zorvalo%22&s=AoIIQ0ZZ",
+    "nextStart": "AoIIQ0ZZ",
+    "article": [
+     {
+      "id": "999000001",
+      "url": "/newspaper/article/999000001",
+      "heading": "Family Notices",
+      "category": "Family Notices",
+      "title": {
+       "id": "9001",
+       "title": "The Villazul Advertiser (Vic. : 1880 - 1920)"
+      },
+      "date": "1903-08-21",
+      "page": "2",
+      "pageSequence": "2",
+      "relevance": {
+       "score": 12.5,
+       "value": "very relevant"
+      },
+      "snippet": "ZORVALO.-On the 19th August, at her residence, <strong>Ann Zorvalo</strong>, relict of the late...",
+      "troveUrl": "https://trove.nla.gov.au/newspaper/article/999000001",
+      "articleText": "<p>ZORVALO.-On the 19th August, at her residence, Main street, Villazul, <strong>Ann Zorvalo</strong>, relict of the late Peter Quirell, aged 71 years.</p>"
+     },
+     {
+      "id": "999000002",
+      "url": "/newspaper/article/999000002",
+      "heading": "LOCAL NEWS.",
+      "category": "Article",
+      "title": {
+       "id": "9001",
+       "title": "Nortia Times (NSW : 1890 - 1930)"
+      },
+      "date": "1899-02-03",
+      "page": "3",
+      "pageSequence": "3",
+      "relevance": {
+       "score": 12.5,
+       "value": "very relevant"
+      },
+      "snippet": "Mrs <strong>Ann Zorvalo</strong> won first prize for needlework...",
+      "troveUrl": "https://trove.nla.gov.au/newspaper/article/999000002",
+      "articleText": ""
+     }
+    ]
+   }
+  }
+ ]
+}

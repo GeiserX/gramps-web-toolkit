@@ -1,0 +1,20 @@
+# Mutations the bvph tests must catch (format: see read/mutants.txt).
+gwt_bvph.py | 'negative_markers': [r'<div class="nav_registros">\s*<p>\s*No hay resultados'], | 'negative_markers': [r'resultados_ocr'], | the soft-block skeleton still says resultados_ocr in its scripts: it is a STOP, never "none"
+gwt_bvph.py | 'negative_markers': [r'<div class="nav_registros">\s*<p>\s*No hay resultados'], | 'negative_markers': [r'nav_registros|nav_marco'], | a page whose result list is missing is a STOP, never "none"
+gwt_bvph.py | 'negative_markers': [r'<div class="nav_registros">\s*<p>\s*No hay resultados'], | 'negative_markers': [], | the site's own "No hay resultados" box is exit 2, not a STOP
+gwt_bvph.py | 'result_markers': [r'class="unidad_textual"'], | 'result_markers': [], | a page with page hits is read as hits
+gwt_bvph.py | PACE = {'start': 10.0, 'floor': 6.0, 'ceil': 300.0} | PACE = {'start': 10.0, 'floor': 2.0, 'ceil': 300.0} | the BVPH gate never goes under one request every 6 s
+gwt_bvph.py | check = gwt_reader.page_check(SPEC) if pos == 1 else later_page | check = gwt_reader.page_check(SPEC) | "No hay resultados" on a later page is the site failing, a STOP
+gwt_bvph.py |         if not has_next(page, pos): | if True: | every results page is walked, not only the first
+gwt_bvph.py |             capped = True | capped = False | a search stopped by the page cap says capped, never complete
+gwt_bvph.py | return bool(re.fullmatch(r'"[^"]+"', (phrase or '').strip())) | return bool(phrase) | an unquoted phrase is refused before any request
+gwt_bvph.py | return 'posicion=%d' % (pos + PER_PAGE) in page | return 'posicion=' in page | the walk stops on the last page instead of asking past it
+gwt_bvph.py |     pages = max(1, min(int(a.pages), MAX_PAGES)) |     pages = max(1, int(a.pages)) + 1 | a search never reads more pages than asked
+gwt_bvph.py | return int(m.group(1).replace('.', '')) if m else None | return int(m.group(1).split('.')[0]) if m else None | a total with a thousands dot (1.203) is read whole
+gwt_bvph.py | words = [text(li) for li in re.findall(r'<li>(.*?)</li>', frags.group(1), re.S)] if frags else [] | words = [text(li) for li in re.findall(r'<li>(.*?)</li>', frags.group(1), re.S)][:1] if frags else [] | every fragment of a page reaches the candidate text
+gwt_bvph.py |         if not rows and gwt_reader.classify(page, SPEC) == 'hits': |         if False: | a page that shows hits but yields no row (changed markup) is a STOP, never "none"
+gwt_bvph.py | if d else title_date(title) | if d else '' | an issue dated only in its title keeps that date
+gwt_bvph.py | re.sub(r'N[úu]m(?:ero|\.)?\s*\d+', ' ', title or '', flags=re.I) | (title or '') | an issue number of 1500 or more is never read as the year
+gwt_bvph.py | gwt_reader.get_api(R, url, | R.get(url, | a 5xx or no answer from the site is an outage (exit 3), never a plain error
+gwt_bvph.py |         year = int(date[:4]) if date else title_year(title) |         year = int(date[:4]) if date else None | an undated issue keeps the year its title gives
+gwt_bvph.py | return '%s-%02d-%02d' % (y, mo, d) if 1 <= mo <= 12 and 1 <= d <= 31 else '' | return '%s-%02d-%02d' % (y, mo, d) | a title with an impossible month or day gives no date, never a wrong one

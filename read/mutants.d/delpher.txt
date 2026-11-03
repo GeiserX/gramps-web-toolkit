@@ -1,0 +1,21 @@
+# Mutations the delpher tests must catch (format: see read/mutants.txt).
+gwt_delpher.py |         return 'unknown'      # the SRU error answer: a bad query or a failing index, never "none" | return 'none' | an SRU diagnostic (an error with HTTP 200) is a STOP, never "none"
+gwt_delpher.py |     if int(n) == 0 and not recs: |     if not recs: | a count above zero with the records gone is a STOP, never "none"
+gwt_delpher.py |     if not n.isdigit(): |     if False: | an answer with no count is a STOP, never "none"
+gwt_delpher.py |     if not recs and start > int(n): |     if False: | a start past the last row is the end of the results, not a STOP
+gwt_delpher.py | if recs and all(r.findtext('ddd:metadataKey', '', NS) for r in recs): | if recs: | a record with no metadataKey is a changed answer, a STOP
+gwt_delpher.py | PACE = {'start': 3.0, 'floor': 2.0, 'ceil': 120.0} | PACE = {'start': 3.0, 'floor': 0.5, 'ceil': 120.0} | the KB API is never asked faster than one request every 2 s
+gwt_delpher.py |     return root is not None and root.tag == 'text' |     return root is not None or True | a resolver page that is not OCR text is a STOP, never saved as the article's text
+gwt_delpher.py |     for c in cands[:max(0, min(int(a.text), MAX_TEXT))]: |     for c in cands[:0]: | --text reads the OCR text of the first articles
+gwt_delpher.py |     return re.sub(r'^http://', 'https://', url or '') |     return url or '' | the OCR is read over https
+gwt_delpher.py | "01-01-%s 31-12-%s"' % (cql, | "%s %s"' % (cql, | --from and --to send the date filter the API reads
+gwt_delpher.py | ('maximumRecords', max(1, min(int(count), 100))) | ('maximumRecords', max(1, int(count))) | a search never asks for more than 100 rows
+gwt_delpher.py |         cql = '(%s) and date within | cql = '%s and date within | the date filter wraps the query in brackets: a quoted phrase plus a date otherwise reads as 0 rows
+gwt_delpher.py |     if query.count('"') % 2: |     if False: | a query with an odd number of quotes is refused before any request
+gwt_delpher.py |     return 'unbalanced brackets' if depth else '' |     return '' | a query with unbalanced brackets is refused before any request, never sent to pause every lane
+gwt_delpher.py |         if diag: |         if False: | an SRU diagnostic's own words reach the user
+gwt_delpher.py |                 if e.verdict != 'http' or e.status not in (404, 410): |                 if True: | one article without OCR text keeps the other rows
+gwt_delpher.py | dest='year_from', type=int, default=None | dest='year_from', default=None | a year that is not a number is refused before any request
+gwt_delpher.py | dest='year_to', type=int, default=None | dest='year_to', default=None | a --to that is not a number is refused before any request
+gwt_delpher.py | if e.verdict != 'http' or e.status not in (404, 410): | if e.verdict not in ('http', 'wall'): | a 429 or 5xx on an article's OCR is a block, never an article without text
+gwt_delpher.py | e.status not in (404, 410) | e.status not in (404,) | a 410 on one article's OCR, like a 404, leaves that row without text and keeps the others

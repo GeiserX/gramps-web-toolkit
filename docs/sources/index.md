@@ -22,6 +22,10 @@
 | `digitalarkivet` | Digitalarkivet: Norway's transcribed censuses and church books | [digitalarkivet](digitalarkivet.md) |
 | `geneteka` | Geneteka: Polish parish and civil registers index | [geneteka](geneteka.md) |
 | `freeukgen` | FreeREG and FreeCEN: UK parish registers and censuses | [freeukgen](freeukgen.md) |
+| `bvph` | BVPH: Spanish historical newspapers, searched inside their text | [bvph](bvph.md) |
+| `delpher` | Delpher: Dutch newspapers 1618-1995, searched inside their text | [delpher](delpher.md) |
+| `trove` | Trove: Australian newspapers, with your own free API key | [trove](trove.md) |
+| `kramerius` | Kramerius: Czech digital libraries' newspapers and books, searched inside their text | [kramerius](kramerius.md) |
 
 `gwt read --help` lists every source the installed version knows.
 

@@ -165,6 +165,10 @@ nav:
       - "gwt-read digitalarkivet": sources/digitalarkivet.md
       - "gwt-read geneteka": sources/geneteka.md
       - "gwt-read freeukgen": sources/freeukgen.md
+      - "gwt-read bvph": sources/bvph.md
+      - "gwt-read delpher": sources/delpher.md
+      - "gwt-read trove": sources/trove.md
+      - "gwt-read kramerius": sources/kramerius.md
       - gwt-rawstore: rawstore.md
       - ocr-bench: ocr-bench.md
       - gwt-spanish-poller: spanish-poller.md

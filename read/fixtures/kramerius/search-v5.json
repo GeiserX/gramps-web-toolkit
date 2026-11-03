@@ -1,0 +1,32 @@
+{
+ "response": {
+  "docs": [
+   {
+    "dostupnost": "public",
+    "datum_str": "[1927?]",
+    "PID": "uuid:00000000-0000-4000-8000-000000000001",
+    "details": [
+     "201 \n                        ##NormalPage"
+    ],
+    "model_path": [
+     "monograph/page"
+    ],
+    "root_title": "Adresář Nortie",
+    "root_pid": "uuid:00000000-0000-4000-8000-0000000000a1"
+   }
+  ],
+  "numFound": 1,
+  "start": 0
+ },
+ "responseHeader": {
+  "status": 0,
+  "QTime": 30
+ },
+ "highlighting": {
+  "uuid:00000000-0000-4000-8000-000000000001": {
+   "text_ocr": [
+    "﻿<em>Zorvalová</em>\r\n201\r\n<em>Zorvalová</em> Anna, obch., Hlavní 6"
+   ]
+  }
+ }
+}

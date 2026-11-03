@@ -1,0 +1,5 @@
+{
+ "statusCode": 401,
+ "statusText": "Unauthorized",
+ "description": "No API key found in request"
+}

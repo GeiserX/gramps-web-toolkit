@@ -1,0 +1,14 @@
+{
+ "query": "\"Ann Zorvalo\"",
+ "category": [
+  {
+   "code": "newspaper",
+   "name": "Newspapers & Gazettes",
+   "records": {
+    "s": "*",
+    "n": 0,
+    "total": 0
+   }
+  }
+ ]
+}
