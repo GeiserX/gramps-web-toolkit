@@ -3,13 +3,17 @@
 A skill is skills/<name>/SKILL.md in the Agent Skills format (https://agentskills.io/specification). Agents trust
 what it says, so a renamed flag or a moved docs heading must fail here, not in an agent's run:
 
-- the frontmatter has a valid `name` equal to the folder name and a `description` of at most 1024 characters;
+- the frontmatter has a valid `name` equal to the folder name and a `description` of at most 1024 characters, and
+  each value is one a YAML loader reads as the same plain string;
 - every `gwt <tool>` or `gwt-<tool>` it names is a real tool, and a word right after the tool inside a code span is
-  one of that tool's subcommands when the tool has any;
-- every `--flag` belongs to the tool named last before it, and is in that tool's --help (or its subcommand's);
+  one of that tool's subcommands when the tool has any; in prose, a word right after it that is close to a
+  subcommand's name must be that subcommand;
+- every `--flag` belongs to the tool named last before it, and is in that tool's --help, or, after a subcommand,
+  in that subcommand's --help only (argparse rejects a tool-level option after the subcommand);
 - every link to the docs site names a page under docs/ and, with `#anchor`, a heading on that page.
 """
 import contextlib
+import difflib
 import io
 import os
 import re
@@ -42,6 +46,22 @@ def skills():
 def read_skill(name):
     with open(os.path.join(HERE, name, "SKILL.md"), encoding="utf-8") as f:
         return f.read()
+
+
+def yaml_problem(value):
+    """Why a one-line frontmatter value would not load in YAML as the plain string it reads as, or None. Agent loaders
+    parse the block with a real YAML parser; CI has none, so the rules for a plain (unquoted) scalar are checked here."""
+    if not value:
+        return None
+    if value[0] in "\"'":
+        return None if len(value) > 1 and value[-1] == value[0] else "a quoted value must end with its quote"
+    if value[0] in "[]{}>|*&!%@`#,?:-" and not (value[0] in "?:-" and len(value) > 1 and value[1] != " "):
+        return f"a plain value may not start with {value[0]!r}; quote it"
+    if ": " in value or value.endswith(":"):
+        return "': ' inside a plain value starts a mapping; quote the value"
+    if " #" in value:
+        return "' #' inside a plain value starts a comment; quote the value"
+    return None
 
 
 def frontmatter(text):
@@ -100,15 +120,16 @@ def commands(text):
                 continue
             sub = None
             span = next(((a, b) for a, b in code if a <= pos < b), None)
-            if span:
-                nxt = re.match(r"\s+([A-Za-z][A-Za-z0-9-]*)", text[m.end():span[1]])
-                subs = subcommands(tool)
-                if nxt and subs:
-                    if nxt.group(1) not in subs:
-                        problems.append(f"line {line}: `gwt {tool} {nxt.group(1)}`: no such subcommand "
-                                        f"(known: {', '.join(sorted(subs))})")
-                    else:
-                        sub = nxt.group(1)
+            nxt = re.match(r"[ \t]+([A-Za-z][A-Za-z0-9-]*)", text[m.end():span[1] if span else len(text)])
+            subs = subcommands(tool)
+            if nxt and subs:
+                word = nxt.group(1)
+                if word in subs:
+                    sub = word
+                # in a code span the word after the tool is the subcommand; in prose it is only when it looks like one
+                elif span or difflib.get_close_matches(word, subs, n=1, cutoff=0.75):
+                    problems.append(f"line {line}: `gwt {tool} {word}`: no such subcommand "
+                                    f"(known: {', '.join(sorted(subs))})")
             current = (tool, sub)
             named.append((tool, sub, None))
         else:
@@ -117,7 +138,7 @@ def commands(text):
                 problems.append(f"line {line}: --{flag} follows no gwt tool, so nothing proves it exists")
                 continue
             tool, sub = current
-            known = flags(tool_help(tool)) | (flags(tool_help(tool, sub)) if sub else set())
+            known = flags(tool_help(tool, sub)) if sub else flags(tool_help(tool))
             if flag not in known:
                 where = f"gwt {tool}" + (f" {sub}" if sub else "")
                 problems.append(f"line {line}: --{flag} is not an option of `{where}` (see `{where} --help`)")
@@ -187,6 +208,8 @@ class Skills(unittest.TestCase):
                 self.assertEqual(fields.get("name"), name, "name must equal the folder name")
                 self.assertRegex(name, NAME)
                 self.assertLessEqual(len(name), 64)
+                for k, v in fields.items():
+                    self.assertIsNone(yaml_problem(v), f"frontmatter {k}: {v[:60]!r}")
                 desc = fields.get("description", "")
                 self.assertTrue(desc, "description is required")
                 self.assertLessEqual(len(desc), 1024)
@@ -224,6 +247,15 @@ class TheCheckerCanFail(unittest.TestCase):
         self.assertTrue(commands("`gwt ledger add --exact`")[0])
         self.assertTrue(commands("`gwt ledger chek --exact`")[0])
 
+    def test_tool_flag_after_subcommand(self):
+        # argparse: `gwt-ledger check --ledger L` is "unrecognized arguments"; --ledger goes before the subcommand
+        self.assertIn("ledger", flags(tool_help("ledger")))
+        self.assertTrue(commands("`gwt ledger check --ledger L --exact`")[0])
+
+    def test_subcommand_typo_in_prose(self):
+        self.assertTrue(commands("log it (gwt ledger chek, a person)")[0])
+        self.assertEqual(commands("with gwt ledger check, or gwt gate or gwt corpus.")[0], [])
+
     def test_unknown_tool(self):
         self.assertTrue(commands("`gwt aply changes.jsonl`")[0])
         self.assertTrue(commands("use gwt-aply first")[0])
@@ -239,6 +271,12 @@ class TheCheckerCanFail(unittest.TestCase):
     def test_anchor_inside_code_is_not_a_heading(self):
         # docs/ledger.md has "# Before a search..." inside a sh block; mkdocs gives it no anchor
         self.assertNotIn("before-a-search", {a[:15] for a in anchors(os.path.join(DOCS, "ledger.md"))})
+
+    def test_frontmatter_value_yaml_would_misread(self):
+        for bad in ("Use when: change things", "x # y", "'unclosed", "[a list]", "> folded", "- item"):
+            self.assertIsNotNone(yaml_problem(bad), bad)
+        for good in ("Change a tree, safely.", "'quoted: ok'", "\"quoted # ok\"", "-1 is fine", "key:value"):
+            self.assertIsNone(yaml_problem(good), good)
 
     def test_bad_frontmatter(self):
         self.assertIsNone(frontmatter("# no frontmatter\n")[0])

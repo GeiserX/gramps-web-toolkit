@@ -8,3 +8,6 @@ gramps-web-toolkit/SKILL.md | `gwt gate hit LANE` | `gwt gate hits LANE` | a sub
 gramps-web-toolkit/SKILL.md | /apply/#undo-a-run | /apply/#undo-one-run | a docs anchor no heading has
 gramps-web-toolkit/SKILL.md | /run/#exit-codes | /runs/#exit-codes | a docs page that does not exist
 gramps-web-toolkit/SKILL.md | name: gramps-web-toolkit | name: gramps-web-tools | the name must equal the folder name
+gramps-web-toolkit/SKILL.md | description: Change | description: Use when: Change | a description a YAML loader reads as a mapping
+gramps-web-toolkit/SKILL.md | `gwt corpus search | `gwt corpse search | a tool that does not exist
+gramps-web-toolkit/SKILL.md | gwt ledger check --exact | gwt ledger check --ledger L --exact | a tool-level flag after the subcommand

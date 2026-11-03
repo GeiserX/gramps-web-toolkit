@@ -301,7 +301,7 @@ What it does not see:
 
 `status` is `done`, `skip`, `conflict`, `error`, or `not run` for an op the run never reached (after a conflict, or when the pre-flight found likely duplicates). `reason` is the missing and differs lines joined with `; ` for `done`, the conflict or error line for those, and empty for `skip`.
 
-A skip has two causes. The op may find what this list made by its key on an earlier run (a rerun), or it may find an object the tree already had exactly as the op asks: an `update_*` with the same values, an `add_tag` whose tag is already on, a removal with `expect: "absent"` whose thing is already gone, a `set_attribute` already set. The second kind is a no-op. Its row carries `"noop": true` and the skip line as `reason`, and after the summary line the run prints, whenever there is a skip:
+A skip has three causes. The op may find what this list made by its key on an earlier run (a rerun). It may match an object the tree already had and reuse it (`reused ...`, `already has that child`, `already links it`). Or it may find an object the tree already had exactly as the op asks: an `update_*` with the same values, an `add_tag` whose tag is already on, a removal with `expect: "absent"` whose thing is already gone, a `set_attribute` already set. The last kind is a no-op. Its row carries `"noop": true` and the skip line as `reason`, and after the summary line the run prints, whenever there is a skip:
 
 ```
 NOOP: 2 of 3 skip(s) found the tree already as the op asks (t add_tag, u update_note)
