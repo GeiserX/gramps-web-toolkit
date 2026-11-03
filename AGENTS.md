@@ -47,7 +47,7 @@ page goes into the `mkdocs.yml` nav and `docs/index.md`, and `mkdocs build --str
 cd apply && python3 -m pytest -q
 cd check && python3 -m pytest -q
 cd fetch && python3 -m pytest -q
-cd ledger && python3 -m unittest test_gwt_ledger
+cd ledger && python3 -m unittest test_gwt_ledger test_requests
 cd fscache && python3 -m unittest test_gwt_fscache
 cd gate && python3 -m unittest test_gwt_gate
 cd rank && python3 -m unittest test_gwt_rank

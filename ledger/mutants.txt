@@ -1,0 +1,35 @@
+# Mutations the ledger tests must catch. One row each: file | exact text | replacement | why
+# `python3 .github/scripts/run_tests.py --mutants --only ledger` applies each row to a scratch copy
+# and fails when the tests still pass. The text must occur exactly once in the file.
+gwt_ledger.py | if s in self.alias: | if False: | an alias (fs) resolves to its canonical id (familysearch-index)
+gwt_ledger.py | canon = registry.canon if registry else key | canon = key | check finds a row logged under an alias of the source asked for
+gwt_ledger.py | if self.alias.get(a, sid) != sid: | if False: | a registry refuses an alias that already names another source
+gwt_ledger.py | near = [] if new_source else self.near(slug) | near = [] | a source close to a known name (familysea) exits 2 unless --new-source
+gwt_ledger.py | if near: | if True: | a source far from every known name is kept as its slug, with no registry file
+gwt_ledger.py | if s.endswith('-*'): | if False: | coverage takes the shipped registry as its sources file (a -* row is no column)
+gwt_ledger.py | and not (sid in self.sources and not row['kind']) |  | a user row extending a shipped id may leave kind empty
+gwt_ledger.py | encoding='utf-8-sig') as f:  # -sig | encoding='utf-8') as f:  # -sig | a registry file with a byte order mark reads
+gwt_ledger.py | if result == 'none' and not control: | if False: | a none without --control-ok is stored as unproven
+gwt_ledger.py | if bad or not oks: | if False: | a --control-ok file must be a passing control run (no void, no SHORT)
+gwt_ledger.py | SEARCHED = ('hit', 'none', 'partial', 'out-of-coverage') | SEARCHED = ('hit', 'none', 'partial', 'out-of-coverage', 'unproven') | an unproven row never counts as a search that ran
+gwt_ledger.py | a.add_argument('--result', required=True, choices=RESULTS) | a.add_argument('--result', required=True) | add refuses a result outside the enum (found, negative)
+gwt_ledger.py | result = word if word in RESULTS else SYNONYMS.get(word) | result = word if word in RESULTS else SYNONYMS.get(word, word) | import-tsv refuses a result that is neither a result nor a synonym
+gwt_ledger.py | return bool((src['to'] and int(src['to']) < lo) or (src['from'] and int(src['from']) > hi)) | return False | coverage marks n/a a source whose years cannot hold the person's life
+gwt_ledger.py | if r['status'] not in CLOSED and r['next_date'] and r['next_date'] <= on | if r['next_date'] and r['next_date'] <= on | a closed or refused request is never due
+gwt_ledger.py | t = totals[(r[col] or '-', r['currency'].upper() or '-')] | t = totals[(r[col] or '-', '-')] | costs never add two currencies together
+gwt_ledger.py | .replace(';', '\\;').replace(',', '\\,') | .replace(';', ';').replace(',', ',') | .ics text escapes ; and , (RFC 5545 3.3.11)
+gwt_ledger.py | if '/' in ref or os.sep in ref or re.search(r'\.(txt|tsv|log|out|json)$', ref, re.I): | if False: | a --control-ok path with a typo is refused, never stored as a run id
+gwt_ledger.py | if key(ref) in NOT_PROOF or not normalize(ref): | if False: | --control-ok no (or -) is not a control run
+gwt_ledger.py | checked[control] = control_problem(control) | checked[control] = None | import-tsv checks each row's control like add
+gwt_ledger.py | control = clean(v.get('control')) or clean(args.control_ok) | control = clean(v.get('control')) | import-tsv --control-ok vouches for the rows with no control
+gwt_ledger.py | if same(row) in seen: | if False: | importing the same file twice adds nothing
+gwt_ledger.py | out = {gid} | owned.get(gid, set()) if gid else set() | out = {gid} if gid else set() | coverage counts a person key that starts with <gramps-id>- for that person
+gwt_ledger.py | if name and names[name] == 1: | if name: | coverage never gives one namesake the other's rows
+gwt_ledger.py | if unmatched: | if False: | coverage says how many ledger keys match nobody, so an empty matrix is not read as not searched
+gwt_ledger.py | ids = [l.split('\t', 1)[0] for l in lines[1 if lines and lines[0].startswith('id\t') else 0:]] | ids = [l.split('\t', 1)[0] for l in lines] | request update refuses the header word id
+gwt_ledger.py | return format(d, 'f')  # 1e3 is stored as 1000 | return str(d)  # 1e3 is stored as 1000 | a cost of 1e3 is stored as 1000
+gwt_ledger.py | if bad or not oks: | if bad: | a --control-ok file with no ok control line (empty, or a search's output) is no proof
+gwt_ledger.py | bad = [l for l in lines if l.startswith('void\t') or | bad = [l for l in lines if False or | a --control-ok file with a void line is no proof, whatever its ok lines say
+gwt_ledger.py | return bool((src['to'] and int(src['to']) < lo) or (src['from'] and int(src['from']) > hi)) | return bool((src['from'] and int(src['from']) > hi)) | coverage marks n/a a source whose records end before the person was born
+gwt_ledger.py | if any(r['result'] == 'hit' for r in rows): | if False: | coverage shows an older hit over a newer none
+gwt_ledger.py | for n in range(len(parts), 0, -1)) | for n in range(1, len(parts) + 1)) | a key of a suffixed id (i0042-b-...) goes to I0042-b, never to I0042

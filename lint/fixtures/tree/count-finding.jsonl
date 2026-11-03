@@ -1,0 +1,2 @@
+{"op": "add_note", "key": "n-ana", "ruling": "R-10", "text": "El árbol tiene 263 personas con este apellido.", "attach": [{"person": "I1"}]}
+{"op": "add_event", "key": "e-luis", "ruling": "R-10", "person": "I4", "type": "Residence", "date": "1950", "description": "one of the 40 people named Prieto in the tree"}
