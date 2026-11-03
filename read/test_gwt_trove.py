@@ -52,7 +52,10 @@ class Classify(unittest.TestCase):
     def test_the_url(self):
         q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(gwt_trove.search_url(
             '"Ann Zorvalo"', '1890', '1910', 'Family Notices', 'Victoria', 500)).query))
-        self.assertEqual(q['q'], '"Ann Zorvalo" date:[1890-01-01T00:00:00Z TO 1910-12-31T23:59:59Z]')
+        self.assertEqual(q['q'], '("Ann Zorvalo") date:[1890-01-01T00:00:00Z TO 1910-12-31T23:59:59Z]')
+        q2 = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(gwt_trove.search_url('Zorvalo OR Quirel', 1890)).query))
+        self.assertEqual(q2['q'], '(Zorvalo OR Quirel) date:[1890-01-01T00:00:00Z TO 2030-12-31T23:59:59Z]',
+                         'an OR query must keep the date range on both terms')
         self.assertEqual((q['category'], q['n'], q['s'], q['include'], q['l-category'], q['l-state']),
                          ('newspaper', '100', '*', 'articletext', 'Family Notices', 'Victoria'))
         self.assertNotIn('key', q, 'the key must never be in the URL, which the cache and the envelope keep')
@@ -106,6 +109,9 @@ class Search(Base):
         gate = FakeGate()
         code, lines, text = self.search(FakeNet(gate, (401, UNAUTH)), gate)
         self.assertEqual((code, len(gate.deads), self.out_files()), (gwt_reader.EXIT_DEAD, 1, []), text)
+        self.assertIn('refused the API key in $GWT_TROVE_KEY', text)
+        self.assertIn('gwt gate clear --dir ~/.cache/gwt-gate-trove', text)
+        self.assertNotIn('session token', text)
 
     def test_none_is_exit_2(self):
         gate = FakeGate()

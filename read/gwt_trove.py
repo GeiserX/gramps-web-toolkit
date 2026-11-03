@@ -55,8 +55,8 @@ ACCEPT = 'application/json'
 
 def search_url(query, year_from='', year_to='', category='', state='', count=20, start='*', text=True):
     q = query.strip()
-    if year_from or year_to:
-        q += ' date:[%s-01-01T00:00:00Z TO %s-12-31T23:59:59Z]' % (year_from or '1800', year_to or '2030')
+    if year_from or year_to:      # brackets, so an OR in the query never escapes the date range
+        q = '(%s) date:[%s-01-01T00:00:00Z TO %s-12-31T23:59:59Z]' % (q, year_from or '1800', year_to or '2030')
     params = [('category', 'newspaper'), ('q', q), ('encoding', 'json'), ('n', max(1, min(int(count), 100))),
               ('s', start or '*'), ('sortby', 'relevance')]
     if text:
@@ -121,8 +121,8 @@ def candidates(doc):
 
 def add_search_args(sp):
     sp.add_argument('--query', required=True, help='Trove query: words, "a phrase", AND/OR: \'"Ann Smith" AND funeral\'')
-    sp.add_argument('--from', dest='year_from', default='', help='first publication year')
-    sp.add_argument('--to', dest='year_to', default='', help='last publication year')
+    sp.add_argument('--from', dest='year_from', type=int, default=None, help='first publication year')
+    sp.add_argument('--to', dest='year_to', type=int, default=None, help='last publication year')
     sp.add_argument('--category', default='', help='an article category, as Trove names it: "Family Notices" ...')
     sp.add_argument('--state', default='', help='a state of publication: "New South Wales", "Victoria" ...')
     sp.add_argument('--count', type=int, default=20, choices=range(1, 101), metavar='1-100')
@@ -131,15 +131,22 @@ def add_search_args(sp):
 
 
 def search(a, R):
-    url = search_url(a.query, a.year_from, a.year_to, a.category, a.state, a.count, a.start, a.text)
-    status, rh, body, cached = gwt_reader.get_api(R, url, {'accept': ACCEPT}, refresh=a.refresh,
-                                                  expect=lambda d: verdict(d, a.start) != 'unknown')
+    url = search_url(a.query, a.year_from or '', a.year_to or '', a.category, a.state, a.count, a.start, a.text)
+    try:
+        status, rh, body, cached = gwt_reader.get_api(R, url, {'accept': ACCEPT}, refresh=a.refresh,
+                                                      expect=lambda d: verdict(d, a.start) != 'unknown')
+    except gwt_reader.Stop as e:
+        if e.verdict != 'dead':
+            raise
+        raise gwt_reader.Stop('Trove refused the API key in $%s (HTTP 401): check or renew it, then end the pause with '
+                              '`gwt gate clear --dir ~/.cache/gwt-gate-trove "new key"`; never retry in a loop'
+                              % KEY_ENV, e.exit_code, e.verdict, e.status, e.body) from None
     doc = json.loads(body)
     rec = records(doc)
     cands = candidates(doc)
     env = gwt_reader.envelope(url, None, text='\n\n'.join(c['text'] for c in cands if c['text']), json_body=doc,
                               verdict=verdict(doc, a.start), total=rec['total'], status=status, from_cache=cached)
-    words = [SOURCE, a.query, a.year_from, a.year_to, a.category, a.state, a.count, a.start, a.text]
+    words = [SOURCE, a.query, a.year_from or '', a.year_to or '', a.category, a.state, a.count, a.start, a.text]
     base = gwt_reader.write_search(a.out, gwt_reader.search_key(url, words), env, cands)
     gwt_reader.print_paths(SOURCE, base, print)
     if cands and rec.get('nextStart'):

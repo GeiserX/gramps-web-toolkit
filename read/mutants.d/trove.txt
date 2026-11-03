@@ -9,3 +9,5 @@ gwt_trove.py | 'text': plain(x.get('articleText')) or plain(x.get('snippet'))}) 
 gwt_trove.py |         params += [('reclevel', 'full'), ('include', 'articletext')] |         pass | a search asks for the article text
 gwt_trove.py |     if cands and rec.get('nextStart'): |     if False: | a search with more articles prints the next cursor
 gwt_trove.py | ('n', max(1, min(int(count), 100))) | ('n', max(1, int(count))) | a search never asks for more than the API's 100 rows
+gwt_trove.py |         q = '(%s) date:[%s-01-01T00:00:00Z TO %s-12-31T23:59:59Z]' % (q, | q = '%s date:[%s-01-01T00:00:00Z TO %s-12-31T23:59:59Z]' % (q, | the date range wraps the query in brackets, so an OR never escapes it
+gwt_trove.py |         if e.verdict != 'dead': |         if True: | a 401 says the API key was refused and how to end the pause, not "session token"

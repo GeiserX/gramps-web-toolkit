@@ -10,7 +10,13 @@ Trove gives a free API key for non-commercial use to anyone with a Trove account
 export GWT_TROVE_KEY=...            # yours; never commit it
 ```
 
-The key is sent only as the `X-API-KEY` header, added inside the fetcher, so it never reaches [gwt-fscache](../fscache.md), the evidence files or the URL. Without `GWT_TROVE_KEY` every command exits 4 with a message and makes no request. A 401 (a wrong, expired or revoked key) exits 4 too and the gate hears `dead`: fix the key, never retry in a loop.
+The key is sent only as the `X-API-KEY` header, added inside the fetcher, so it never reaches [gwt-fscache](../fscache.md), the evidence files or the URL. Without `GWT_TROVE_KEY` every command exits 4 with a message and makes no request. A 401 (a wrong, expired or revoked key) exits 4 too, says Trove refused the key, and the gate hears `dead`, which pauses every trove lane for 20 minutes. Fix the key, then end the pause yourself, or a rerun with the right key exits 6 until it runs out:
+
+```sh
+gwt gate clear --dir ~/.cache/gwt-gate-trove "new key"
+```
+
+Never retry in a loop.
 
 ## Commands
 
@@ -20,7 +26,7 @@ gwt read trove search --query '"Ann Smith" AND funeral' [--from 1890] [--to 1910
 gwt read trove control
 ```
 
-- `--query` is Trove's query syntax: words, `"a phrase"`, `AND`, `OR`. `--from` and `--to` add a `date:[...]` range to it.
+- `--query` is Trove's query syntax: words, `"a phrase"`, `AND`, `OR`. `--from` and `--to` (years) add a `date:[...]` range and put the query in brackets, `("Ann Smith" AND funeral) date:[...]`, so an `OR` in it never escapes the range.
 - `--category` keeps one article category (Trove's names: "Family Notices", "Article", "Advertising" ...), `--state` one state of publication.
 - Each article comes with its full text unless `--no-text`, in the same request.
 - When there are more articles, the search prints a `next<TAB><cursor>` line; pass that cursor as `--start` for the next page.
