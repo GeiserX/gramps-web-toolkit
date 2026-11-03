@@ -19,7 +19,7 @@ gwt apply changes.jsonl --snapshot tree.json.gz         # dry run, as always
 With `--tree`, each person in the file is compared with the tree the way gwt-apply's preflight compares them: the same full name, or the same first given name and first surname with a birth or baptism within two years, a parent in common or a spouse in common. A person who matches is not added. Their events, notes, citations and links wait with them, and the report lists them under `namesakes`:
 
 ```json
-{"xref": "@I3@", "name": "Pedro García", "born": [1730], "namesake_of": ["I0007"],
+{"xref": "@I3@", "name": "Diego García", "born": [1730], "namesake_of": ["I0007"],
  "why": ["same name"], "decide": "--same @I3@=<one of I0007>  or  --different \"@I3@=<why another person>\""}
 ```
 
@@ -41,7 +41,7 @@ gwt import-gedcom cousin.ged --tree tree.json.gz --batch cousin-ana --out change
 ```
 
 ```text
-# @I3@ Pedro García, born 1730 looks like I0007 (same name)
+# @I3@ Diego García, born 1730 looks like I0007 (same name)
 @I3@=I0007
 # @I8@ Ana Ruiz looks like I0012 (same name)
 @I8@!=born in another parish
@@ -59,7 +59,7 @@ People who may be living are held unless `--allow-living`, by the toolkit's [sha
 
 | GEDCOM | Change list |
 |---|---|
-| `INDI` with `NAME`, `SEX` | `add_person`; a second `NAME` becomes `add_alternate_name` (typed from its `TYPE`: married, aka, birth), and a `_MARNM` an alternate name of type Married Name. Other `NAME` parts (`NICK`, `NPFX`...) are counted under `not_imported` |
+| `INDI` with `NAME`, `SEX` | `add_person`; a second `NAME` becomes `add_alternate_name` (typed from its `TYPE`: married, aka, birth), and a `_MARNM` (a surname alone, or a whole name such as `María /Gil/`) an alternate name of type Married Name. Other `NAME` parts (`NICK`, `NPFX`...) are counted under `not_imported` |
 | `_UID` | `set_attribute` `_UID`, and matched against the tree (above) |
 | `BIRT`, `CHR`, `BAPM`, `DEAT`, `BURI`, `RESI`, `OCCU` and the other events and facts, `EVEN`/`FACT` with `TYPE` | `add_event` with date, place and description (an `OCCU` or `RELI` value goes in the description). A second birth or death goes in a note: gwt-apply keeps one of each. The same event twice is one event with the sources of both |
 | `FAM` with `HUSB`, `WIFE`, `CHIL` | `add_family`; a child whose `FAMC` says `PEDI adopted` or `foster` gets `link_child` with that relation. A family with no parent left to add is skipped and reported |

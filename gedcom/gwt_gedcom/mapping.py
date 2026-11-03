@@ -101,7 +101,7 @@ def _tree_uids(person: dict) -> list[str]:
 
 
 def split_name(rec: Line) -> tuple[str, str]:
-    """(given names, surname) of a NAME line: "Juan José /García López/ Jr" -> ("Juan José", "García López"),
+    """(given names, surname) of a NAME line: "Pablo Luis /García Moreno/ Jr" -> ("Pablo Luis", "García Moreno"),
     with GIVN and SURN when the line has them."""
     value = rec.value.strip()
     m = re.match(r"^(.*?)/(.*?)/(.*)$", value)
@@ -204,8 +204,11 @@ class Builder:
                 if i:
                     p.alt_names.append((given, sur, NAME_TYPES.get(n.val("TYPE").lower())))
                 for m in n.all("_MARNM"):  # a married surname, as Gramps Web's own importer keeps it
-                    if m.value.strip():
-                        p.alt_names.append((given, m.value.strip().strip("/").strip(), "Married Name"))
+                    mg, ms = "", m.value.strip().strip("/").strip()  # «Gil» alone is the surname
+                    if re.search(r"/.*/", m.value):  # «Ana /Gil/»: a whole name, as Gramps reads it
+                        mg, ms = split_name(Line(m.level, "NAME", m.value, None, m.lineno))
+                    if ms:
+                        p.alt_names.append((mg or given, ms, "Married Name"))
                 for c in n.children:
                     if c.tag not in NAME_USED:
                         k = f"INDI.NAME.{c.tag}"

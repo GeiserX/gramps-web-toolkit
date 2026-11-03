@@ -328,7 +328,7 @@ def read(source: str | bytes) -> Gedcom:
         parent.children.append(line)
         del stack[level:]
         stack.append(line)
-        text_of = line if tag in TEXT_TAGS and value.strip() else None
+        text_of = line if tag in TEXT_TAGS and value.strip() and not line.pointer else None  # never a pointer
     version = ""
     if records and records[0].tag == "HEAD":
         gedc = records[0].first("GEDC")

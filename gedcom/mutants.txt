@@ -32,7 +32,11 @@ gwt_gedcom/mapping.py | alike += [(w, "same _UID") for u in uids(p.rec) for w in
 gwt_gedcom/mapping.py | for u in uids(p.rec)[:1]: | for u in []: | a new person gets their _UID, so the next import finds them
 gwt_gedcom/mapping.py | twins = [c.ref for c, pair in couples if | twins = [c.ref for c, pair in [] if | look-alike couples inside the file get allow_new_couple, so preflight lets them through
 gwt_gedcom/mapping.py | found = self.place_names.get(fold(name), []) | found = [] | a one-level place is found at any level of the tree when it is there once
-gwt_gedcom/mapping.py | p.alt_names.append((given, m.value.strip().strip("/").strip(), "Married Name")) | pass | a _MARNM becomes a Married Name alternate name, not dropped
+gwt_gedcom/mapping.py | p.alt_names.append((mg or given, ms, "Married Name")) | pass | a _MARNM becomes a Married Name alternate name, not dropped
+gwt_gedcom/mapping.py | if re.search(r"/.*/", m.value): | if False: | a _MARNM written as «María /Gil/» keeps its given name and surname apart
+gwt_gedcom/parse.py | and value.strip() and not line.pointer else None | and value.strip() else None | a bare line after a note pointer is a problem, not glued to the pointer
+gwt_gedcom/parse.py | text_of = line if tag in TEXT_TAGS else None | text_of = None | a bare line inside a shared NOTE record is kept as a new line of it
+gwt_gedcom/parse.py | return lines, codec, said, ([] if said == "UNICODE" else [ | return lines, codec, said, ([] if True else [ | UTF-16 with no byte-order mark under another CHAR is reported
 gwt_gedcom/mapping.py | made.get(who.loose, []) | [x for v in made.values() for x in v] | people of the file are compared only within their loose name, not with everyone before them
 gwt_gedcom/audit.py | for o in seen.get(w.loose, []): | for o in [x for v in seen.values() for x in v]: | audit compares people only within their loose name, not every pair
 gwt_gedcom/audit.py | low, high = PARENT_AGE.get(sex, PARENT_AGE_UNKNOWN) | low, high = PARENT_AGE_UNKNOWN | audit uses gwt-check's parent ages by sex: a mother over 52 is flagged
