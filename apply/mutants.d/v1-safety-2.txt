@@ -1,1 +1,2 @@
-gwt_apply/ops.py | if op["key"] not in self.landed and not (same_name and same_gender and same_id): | if False: | a reused person key with different identity stops before dependent evidence
+gwt_apply/ops.py |         if diffs: |         if False: | a reused person key with different identity stops before dependent evidence
+gwt_apply/ops.py | diffs = [r for r in rows if not r[1] and r[0] not in amended] | diffs = [r for r in rows if not r[1]] | an identity field a later update_person of the same list sets does not make the add a key collision

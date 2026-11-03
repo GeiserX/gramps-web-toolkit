@@ -4307,3 +4307,34 @@ def test_person_key_retry_uses_proven_same_list_completion_after_identity_update
     c.login()
     result = Applier(c, landed=frozenset({"p", "u"})).run([original, update])
     assert [r.status for r in result] == ["skip", "skip"]
+
+
+def test_person_key_changed_by_an_update_of_the_same_list_verifies_without_the_apply_logs(fake, tmp_path, env, capsys):
+    # gwt run's layout: the apply and the verify each log under their own stem, so the verify sees no landed keys
+    ops = [{"op": "add_person", "key": "p", "ruling": R, "first_name": "Alice", "surname": "Example", "gender": "U",
+            "gramps_id": "I0900"},
+           {"op": "update_person", "key": "u", "ruling": R, "person": "key:p", "set": {"gender": "F"}},
+           {"op": "update_person", "key": "v", "ruling": R, "person": "I0900", "set": {"first_name": "Alicia"}}]
+    p = tmp_path / "list.jsonl"
+    p.write_text("".join(json.dumps(op) + "\n" for op in ops))
+    d = tmp_path / "logs"
+    d.mkdir()
+    assert main([str(p), "--apply", "--log", str(d / "apply.jsonl")]) == 0
+    capsys.readouterr()
+    assert main([str(p), "--verify", "--log", str(d / "verify.jsonl")]) == 0, capsys.readouterr().out
+    fake.store["people"][stable_handle("p")]["primary_name"]["surname_list"][0]["surname"] = "Other"  # not set by the list
+    capsys.readouterr()
+    assert main([str(p), "--verify", "--log", str(d / "verify.jsonl")]) == 1
+    assert "surname 'Other' in the tree, 'Example' in this op" in capsys.readouterr().out
+
+
+def test_person_key_collision_names_each_differing_field_and_the_way_out(fake):
+    original = {"op": "add_person", "key": "p", "ruling": R, "first_name": "Alice", "surname": "Example", "gender": "F"}
+    assert run(fake, [original])[0].status == "done"
+    res = run(fake, [dict(original, first_name="Bob", gender="M")])[0]
+    assert res.status == "conflict"
+    line = res.actions[-1]
+    assert "first_name 'Alice' in the tree, 'Bob' in this op" in line
+    assert "gender 'F' in the tree, 'M' in this op" in line
+    assert "surname" not in line.split("differs:")[1].split(".")[0]
+    assert "make this op match the tree or drop it" in line and "give it a new key" in line
