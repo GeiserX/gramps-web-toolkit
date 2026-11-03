@@ -1,0 +1,33 @@
+{
+ "candidates": [
+  {
+   "source": "familysearch",
+   "id": "QZZ9-AAA",
+   "name": "Ana Zorvalo Quirell",
+   "role": "Principal",
+   "principal": true,
+   "given": null,
+   "surnames": null,
+   "events": {
+    "birth": {
+     "year": 1851,
+     "year_to": 1851,
+     "place": "Villazul, Nortia"
+    }
+   },
+   "relatives": [
+    {
+     "role": "father",
+     "name": "Luis Zorvalo"
+    },
+    {
+     "role": "mother",
+     "name": "Rosa Quirell"
+    }
+   ],
+   "place_orig": [
+    "Parroquia de Santa Eulalia, Villazul"
+   ]
+  }
+ ]
+}

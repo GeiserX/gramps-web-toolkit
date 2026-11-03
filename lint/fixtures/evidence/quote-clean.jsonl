@@ -1,0 +1,4 @@
+{"op": "add_citation", "key": "c-ana", "ruling": "R-1", "source": "S1", "page": "https://www.familysearch.org/ark:/61903/1:1:QZZ9-AAA", "attach": [{"event": "E1"}]}
+{"op": "add_note", "key": "n-ana", "ruling": "R-1", "text": "The priest wrote «bauticé solemnemente a una niña que nació el día de ayer».", "attach": [{"citation": "key:c-ana"}]}
+{"op": "add_note", "key": "n-ocr", "ruling": "R-1", "text": "The image reads «a doce de marzo de mil ochocientos … yo el cura propio» https://www.familysearch.org/ark:/61903/3:1:QZZ9-IMG1", "attach": [{"person": "I1"}]}
+{"op": "add_note", "key": "n-signed", "ruling": "R-1", "text": "The margin reads «nota marginal de difícil lectura aquí» https://www.familysearch.org/ark:/61903/3:1:QZZ9-IMG2", "attach": [{"person": "I1"}]}

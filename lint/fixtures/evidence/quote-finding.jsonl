@@ -1,0 +1,5 @@
+{"op": "add_citation", "key": "c-ana", "ruling": "R-1", "source": "S1", "page": "https://www.familysearch.org/ark:/61903/1:1:QZZ9-AAA", "attach": [{"event": "E1"}]}
+{"op": "add_note", "key": "n-accent", "ruling": "R-1", "text": "The priest wrote «bautice solemnemente a una niña que nació el día de ayer».", "attach": [{"citation": "key:c-ana"}]}
+{"op": "add_note", "key": "n-image", "ruling": "R-1", "text": "The margin reads «estas palabras no tienen lectura firmada» https://www.familysearch.org/ark:/61903/3:1:QZZ9-IMG2", "attach": [{"person": "I1"}]}
+{"op": "add_note", "key": "n-invented", "ruling": "R-1", "text": "The record says «hija de padres muy conocidos en la villa» https://www.familysearch.org/ark:/61903/1:1:QZZ9-AAA", "attach": [{"person": "I1"}]}
+{"op": "add_note", "key": "n-other-record", "ruling": "R-1", "text": "The priest wrote «bauticé en la ermita del Santo Cristo del Valle».", "attach": [{"citation": "key:c-ana"}]}
