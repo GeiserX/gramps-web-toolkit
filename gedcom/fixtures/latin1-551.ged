@@ -7,7 +7,7 @@
 1 PLAC
 2 FORM City, County, Country
 0 @I1@ INDI
-1 NAME Juan /García/
+1 NAME Pablo /García/
 1 SEX M
 1 BIRT
 2 DATE @#DJULIAN@ 11 FEB 1700
@@ -20,11 +20,11 @@
 2 PLAC Villanueva, Tierra Alta, España
 1 FAMS @F1@
 1 _FSFTID ABCD-123
-1 NOTE Juan worked the mill for forty years and his son took it ov
+1 NOTE Pablo worked the mill for forty years and his son took it ov
 2 CONC er after him.
 2 CONT A second line of the note.
 0 @I2@ INDI
-1 NAME María /López/
+1 NAME María /Moreno/
 1 SEX F
 1 BIRT
 2 DATE ABT 1705
@@ -32,21 +32,21 @@
 2 DATE 1770
 1 FAMS @F1@
 0 @I3@ INDI
-1 NAME Pedro /García López/
+1 NAME Diego /García Moreno/
 1 SEX M
 1 BIRT
 2 DATE 31 FEB 1730
 2 PLAC Villanueva, Tierra Alta, EspaÃ±a
 1 BAPM
 2 DATE 2 MAR 1730
-2 PLAC San Pedro, Villanueva, Tierra Alta, España
+2 PLAC San Diego, Villanueva, Tierra Alta, España
 2 SOUR @S1@
 3 PAGE folio 40
 1 DEAT
 2 DATE @#DFRENCH R@ 1 VEND 12
 1 FAMC @F1@
 0 @I4@ INDI
-1 NAME Ana /García López/
+1 NAME Ana /García Moreno/
 1 SEX F
 1 BIRT
 2 DATE 1735
@@ -61,7 +61,7 @@
 2 DATE 1990
 1 FAMC @F2@
 0 @I6@ INDI
-1 NAME Pedro /García López/
+1 NAME Diego /García Moreno/
 1 SEX M
 1 BIRT
 2 DATE 1731
@@ -81,7 +81,7 @@
 1 CHIL @I5@
 0 @S1@ SOUR
 1 TITL Libro de bautismos, Villanueva
-1 AUTH Parroquia de San Pedro
+1 AUTH Parroquia de San Diego
 1 REPO @R1@
 2 CALN 12/3
 0 @R1@ REPO

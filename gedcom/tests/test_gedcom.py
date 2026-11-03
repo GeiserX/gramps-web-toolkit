@@ -58,16 +58,16 @@ def test_latin1_file_with_a_utf8_line_is_read_and_the_line_reported():
     g = read(str(FIX / "latin1-551.ged"))
     assert (g.version, g.declared, g.encoding) == ("5.5.1", "ANSI", "cp1252")
     names = [r.val("NAME") for r in g.individuals]
-    assert "María /López/" in names
+    assert "María /Moreno/" in names
     places = {c.first("PLAC").value for r in g.individuals for c in r.children if c.first("PLAC")}
-    assert "San Pedro, Villanueva, Tierra Alta, España" in places
+    assert "San Diego, Villanueva, Tierra Alta, España" in places
     assert "Villanueva, Tierra Alta, EspaÃ±a" not in places  # the UTF-8 line is not read as mojibake
     assert [(r["line"], r["read_as"]) for r in g.repairs] == [(39, "utf-8")]
 
 
 def test_conc_and_cont_join_the_value_they_continue():
     note = read(str(FIX / "latin1-551.ged")).by_xref["@I1@"].first("NOTE").value
-    assert note == ("Juan worked the mill for forty years and his son took it over after him.\n"
+    assert note == ("Pablo worked the mill for forty years and his son took it over after him.\n"
                     "A second line of the note.")
 
 
@@ -80,9 +80,9 @@ def test_ansel_combining_marks_go_after_their_letter():
 
 
 def test_a_utf8_line_in_an_ansel_file_is_read_as_utf8_and_reported():
-    raw = b"0 HEAD\n1 CHAR ANSEL\n0 @I1@ INDI\n1 NAME Jos\xc3\xa9 /Ruiz/\n0 TRLR\n"
+    raw = b"0 HEAD\n1 CHAR ANSEL\n0 @I1@ INDI\n1 NAME Jos\xc3\xa9 /Vidal/\n0 TRLR\n"
     g = read(raw)
-    assert g.individuals[0].val("NAME") == "José /Ruiz/"
+    assert g.individuals[0].val("NAME") == "José /Vidal/"
     assert [r["read_as"] for r in g.repairs] == ["utf-8"]
 
 
@@ -178,7 +178,7 @@ def test_namesakes_inside_the_file_are_kept_apart_with_the_reason_said():
 
 
 def test_a_person_already_in_the_tree_is_held_not_added():
-    p, ev = tree_person("h1", "I0007", "Pedro", "García López", 1730)
+    p, ev = tree_person("h1", "I0007", "Diego", "García Moreno", 1730)
     tree = snap(Person=[p], Event=ev)
     ops, rep = run(FIX / "latin1-551.ged", tree)
     assert not [o for o in by_op(ops, "add_person") if o["key"].endswith(("-i3", "-i6"))]
@@ -190,7 +190,7 @@ def test_a_person_already_in_the_tree_is_held_not_added():
 
 
 def test_positive_control_without_the_tree_check_the_namesake_is_added():
-    p, ev = tree_person("h1", "I0007", "Pedro", "García López", 1730)
+    p, ev = tree_person("h1", "I0007", "Diego", "García Moreno", 1730)
     tree = snap(Person=[p], Event=ev)
     ops, _ = run(FIX / "latin1-551.ged", tree, check_tree=False)
     assert [o for o in by_op(ops, "add_person") if o["key"].endswith("-i3")]
@@ -198,7 +198,7 @@ def test_positive_control_without_the_tree_check_the_namesake_is_added():
 
 
 def test_same_links_the_tree_person_and_adds_nothing_about_them():
-    p, ev = tree_person("h1", "I0007", "Juan", "García", 1700)
+    p, ev = tree_person("h1", "I0007", "Pablo", "García", 1700)
     tree = snap(Person=[p], Event=ev)
     ops, rep = run(FIX / "latin1-551.ged", tree, same={"@I1@": "I0007"})
     assert not [o for o in by_op(ops, "add_person") if o["key"].endswith("-i1")]
@@ -209,7 +209,7 @@ def test_same_links_the_tree_person_and_adds_nothing_about_them():
 
 
 def test_different_adds_the_person_with_the_reason_and_the_ids_compared():
-    p, ev = tree_person("h1", "I0007", "Juan", "García", 1701)
+    p, ev = tree_person("h1", "I0007", "Pablo", "García", 1701)
     tree = snap(Person=[p], Event=ev)
     ops, _ = run(FIX / "latin1-551.ged", tree, different={"@I1@": "born in another parish"})
     juan = next(o for o in by_op(ops, "add_person") if o["key"].endswith("-i1"))
@@ -219,12 +219,12 @@ def test_different_adds_the_person_with_the_reason_and_the_ids_compared():
 
 
 def test_a_couple_already_in_the_tree_is_left_for_preflight_to_refuse():
-    j, ej = tree_person("h1", "I0001", "Juan", "García", 1650)
-    m, em = tree_person("h2", "I0002", "María", "López", 1655)
+    j, ej = tree_person("h1", "I0001", "Pablo", "García", 1650)
+    m, em = tree_person("h2", "I0002", "María", "Moreno", 1655)
     j["family_list"] = m["family_list"] = ["fam"]
     fam = {"handle": "fam", "gramps_id": "F0001", "father_handle": "h1", "mother_handle": "h2"}
     tree = snap(Person=[j, m], Event=ej + em, Family=[fam])
-    _, rep = run(FIX / "latin1-551.ged", tree, different={"@I1@": "another Juan", "@I2@": "another María"})
+    _, rep = run(FIX / "latin1-551.ged", tree, different={"@I1@": "another Pablo", "@I2@": "another María"})
     assert len(rep["preflight"]) == 1 and "F0001" in rep["preflight"][0]
 
 
@@ -476,13 +476,13 @@ def test_cli_refuses_bad_decisions_before_reading_anything(tmp_path, capsys):
 
 
 def test_cli_exits_1_when_preflight_would_still_refuse(tmp_path):
-    j, ej = tree_person("h1", "I0001", "Juan", "García", 1650)
-    m, em = tree_person("h2", "I0002", "María", "López", 1655)
+    j, ej = tree_person("h1", "I0001", "Pablo", "García", 1650)
+    m, em = tree_person("h2", "I0002", "María", "Moreno", 1655)
     j["family_list"] = m["family_list"] = ["fam"]
     fam = {"handle": "fam", "gramps_id": "F0001", "father_handle": "h1", "mother_handle": "h2"}
     tree = _tree_file(tmp_path, snap(Person=[j, m], Event=ej + em, Family=[fam]))
     args = [str(FIX / "latin1-551.ged"), "--tree", tree, "--batch", "b", "--out", str(tmp_path / "o"),
-            "--different", "@I1@=another Juan", "--different", "@I2@=another María"]
+            "--different", "@I1@=another Pablo", "--different", "@I2@=another María"]
     assert main(args) == 1
 
 
@@ -555,7 +555,7 @@ UID_FILE = """0 HEAD
 1 GEDC
 2 VERS 5.5.1
 0 @I1@ INDI
-1 NAME Pedro /Navas/
+1 NAME Diego /Navas/
 1 _UID 0A1B2C3D-4E5F-0000-1111-222233334444
 1 BIRT
 2 DATE 1850
@@ -568,7 +568,7 @@ UID_FILE = """0 HEAD
 
 
 def test_a_uid_on_a_tree_person_holds_the_file_person_even_after_a_rename():
-    p, ev = tree_person("h1", "I0042", "Pedro", "Ortiz Navas", 1850)  # renamed in the tree since
+    p, ev = tree_person("h1", "I0042", "Diego", "Ortiz Navas", 1850)  # renamed in the tree since
     p["attribute_list"] = [{"type": "_UID", "value": "0a1b2c3d4e5f00001111222233334444"}]
     ops, rep = run(ged(UID_FILE), snap(Person=[p], Event=ev))
     assert [(r["xref"], r["namesake_of"], r["why"]) for r in rep["namesakes"]] == [
@@ -626,6 +626,29 @@ def test_a_married_name_becomes_an_alternate_name_and_other_name_parts_are_count
     assert alts == {("Gil", "Married Name"), ("Vela", "Also Known As")}
     assert rep["not_imported"]["INDI.NAME.NICK"] == 1
     assert validate(ops) == []
+
+
+def test_a_married_name_written_as_a_whole_name_keeps_given_and_surname_apart():
+    text = "0 HEAD\n0 @I1@ INDI\n1 NAME Ana /Ruiz/\n2 _MARNM María /Gil/\n2 _MARNM /Vela/\n1 BIRT\n2 DATE 1800\n0 TRLR"
+    ops, rep = run(ged(text))
+    alts = [(a["first_name"], a["surnames"][0]["surname"]) for a in by_op(ops, "add_alternate_name")]
+    assert alts == [("María", "Gil"), ("Ana", "Vela")]
+
+
+def test_a_bare_line_after_a_note_pointer_never_breaks_the_pointer():
+    g = read(ged("0 HEAD\n0 @I1@ INDI\n1 NAME Ana /Ruiz/\n1 NOTE @N1@\nstray text\n0 @N1@ NOTE Shared\n"
+                 "more text\n0 TRLR"))
+    assert g.individuals[0].first("NOTE").pointer == "@N1@"
+    assert any("line 5" in p for p in g.problems)
+    assert g.by_xref["@N1@"].value == "Shared\nmore text"
+    assert [(j["line"], j["into"]) for j in g.joined] == [(7, "NOTE")]
+
+
+def test_utf16_without_a_bom_under_another_char_is_reported():
+    body = "0 HEAD\n1 CHAR ANSI\n0 @I1@ INDI\n1 NAME Zoë /Smith/\n0 TRLR\n"
+    g = read(body.encode("utf-16-le"))
+    assert g.individuals[0].val("NAME") == "Zoë /Smith/"
+    assert [(r["line"], r["declared"], r["read_as"]) for r in g.repairs] == [(1, "ANSI", "utf-16-le")]
 
 
 def test_a_one_level_place_is_found_at_any_level_when_the_tree_has_one():
@@ -697,18 +720,18 @@ def test_audit_uses_gwt_checks_parent_ages_by_sex():
 
 
 def test_cli_decisions_file_and_template(tmp_path, capsys):
-    p, ev = tree_person("h1", "I0007", "Pedro", "García López", 1730)
+    p, ev = tree_person("h1", "I0007", "Diego", "García Moreno", 1730)
     tree = _tree_file(tmp_path, snap(Person=[p], Event=ev))
     tmpl, out = tmp_path / "d.txt", tmp_path / "o.jsonl"
     base = [str(FIX / "latin1-551.ged"), "--tree", tree, "--batch", "b", "--out", str(out)]
     assert main(base + ["--write-decisions", str(tmpl)]) == 0
     text = tmpl.read_text()
     assert "#@I3@=I0007" in text and "#@I6@!=" in text
-    tmpl.write_text(text.replace("#@I3@=I0007", "@I3@=I0007").replace("#@I6@!=", "@I6@!=another Pedro"))
+    tmpl.write_text(text.replace("#@I3@=I0007", "@I3@=I0007").replace("#@I6@!=", "@I6@!=another Diego"))
     assert main(base + ["--decisions", str(tmpl), "--force"]) == 0
     ops = [json.loads(line) for line in out.read_text().splitlines()]
     six = next(o for o in by_op(ops, "add_person") if o["key"].endswith("-i6"))
-    assert six["namesake_reason"].startswith("another Pedro")
+    assert six["namesake_reason"].startswith("another Diego")
     assert any("I0007" in (f.get("children") or []) for f in by_op(ops, "add_family"))
     assert not [o for o in by_op(ops, "add_person") if o["key"].endswith("-i3")]
     bad = tmp_path / "bad.txt"
