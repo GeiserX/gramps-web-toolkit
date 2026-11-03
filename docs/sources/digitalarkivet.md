@@ -9,7 +9,7 @@ gwt read digitalarkivet search --name "WORDS" [--from 1850] [--to 1900] [--page 
 gwt read digitalarkivet control
 ```
 
-- `--name` is the site's own search box: names, and a place or a year if you like; the site reads them all.
+- `--name` is the site's own search box: names, and a place or a year if you like; the site reads them all. An empty `--name` is refused (exit 64): the site would answer with a page of unrelated people.
 - `--from` and `--to` limit the year of the event.
 - A page holds 50 persons; `--page` reads the next ones. The site shows at most 10,000 hits (200 pages), so a `--page` above 200 is refused (exit 64) before any request: the site answers it with HTTP 500, which would pause the gate.
 

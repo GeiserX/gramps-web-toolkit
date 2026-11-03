@@ -105,6 +105,10 @@ def add_search_args(sp):
 
 
 def search(a, R):
+    if not a.name.strip():
+        print('gwt-read: digitalarkivet: --name is empty: the site would answer with unrelated people',
+              file=sys.stderr, flush=True)
+        return EXIT_USAGE
     if not 1 <= a.page <= MAX_PAGE:
         print('gwt-read: digitalarkivet: --page is 1 to %d: the site shows at most 10,000 hits' % MAX_PAGE,
               file=sys.stderr, flush=True)

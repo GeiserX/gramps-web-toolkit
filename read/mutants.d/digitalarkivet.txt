@@ -10,3 +10,4 @@ gwt_digitalarkivet.py | /([^/"?#]+))"[^>]*>(.*?)' | /([a-z]{2}\d+))"[^>]*>(.*?)'
 gwt_digitalarkivet.py | page=lambda p: rows(p) or past_end(p, a.page)) | page=rows) | a --page past the last one is exit 2 "past the end", never a gate pause
 gwt_digitalarkivet.py | and (number - 1) * PER_PAGE >= min(hits, MAX_PAGE * PER_PAGE)) | ) | an empty page before the last one is still a STOP, never "past the end"
 gwt_digitalarkivet.py | if not 1 <= a.page <= MAX_PAGE: | if False: | a --page the site never shows (over 200) is refused before it answers HTTP 500 and pauses the gate
+gwt_digitalarkivet.py | if not a.name.strip(): | if False: | an empty --name is refused, never sent as a search for anyone

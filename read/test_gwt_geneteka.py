@@ -124,6 +124,13 @@ class Search(Run):
         code, _, _ = self.search(net, gate, '--parish', 'Nowa Wola')
         self.assertEqual((code, net.requests), (64, []))
 
+    def test_an_empty_surname_is_refused_before_any_request(self):
+        for surname in ('', '  '):
+            gate = FakeGate()
+            net = FakeNet(gate)
+            code, _, text = self.search(net, gate, '--surname', surname)
+            self.assertEqual((code, net.requests), (64, []), text)
+
 
 if __name__ == '__main__':
     unittest.main()

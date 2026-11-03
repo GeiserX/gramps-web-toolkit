@@ -12,7 +12,7 @@ gwt read geneteka control
 ```
 
 - `--region` is the site's region code: `01ds` dolnośląskie, `02kp` kujawsko-pomorskie, `03lb` lubelskie, `04ls` lubuskie, `05ld` łódzkie, `06mp` małopolskie, `07mz` mazowieckie, `71wa` Warszawa, `08op` opolskie, `09pk` podkarpackie, `10pl` podlaskie, `11pm` pomorskie, `12sl` śląskie, `13sk` świętokrzyskie, `14wm` warmińsko-mazurskie, `15wp` wielkopolskie, `16zp` zachodniopomorskie, `21uk` Ukraine, `22br` Belarus, `23lt` Lithuania, `25po` other.
-- The site needs a surname to search a whole region.
+- The site needs a surname to search a whole region; an empty `--surname` is refused (exit 64) before any request.
 - `--parish` is the site's numeric parish id (its `rid`, from the parish list of the search page); default every parish.
 - `--count` is 10, 25 or 50 rows a page.
 

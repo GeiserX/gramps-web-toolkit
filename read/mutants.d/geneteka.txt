@@ -9,3 +9,4 @@ gwt_geneteka.py | if a.parish and not a.parish.isdigit(): | if False: | a parish
 gwt_geneteka.py | '%s-%s' % (KINDS[kind], gid.group(1)) if gid else None | None | each row keeps the entry's own number as its id
 gwt_geneteka.py | 'x-requested-with': 'XMLHttpRequest', | 'x-gwt-unused': 'x', | the request carries the page's own table headers, without which the site cuts its answer to a few rows
 gwt_geneteka.py | if count and rows and len(rows) < min(count, n - start): | if False: | a cut answer (fewer rows than the page should hold) is a STOP, never a short list read as complete
+gwt_geneteka.py | if not a.surname.strip(): | if False: | an empty --surname is refused before any request

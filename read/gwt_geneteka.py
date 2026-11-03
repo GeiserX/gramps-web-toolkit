@@ -135,6 +135,10 @@ def add_search_args(sp):
 
 
 def search(a, R):
+    if not a.surname.strip():
+        print('gwt-read: geneteka: --surname is empty: the site needs one to search a region', file=sys.stderr,
+              flush=True)
+        return EXIT_USAGE
     if a.parish and not a.parish.isdigit():
         print('gwt-read: geneteka: --parish is the site\'s numeric parish id', file=sys.stderr, flush=True)
         return EXIT_USAGE

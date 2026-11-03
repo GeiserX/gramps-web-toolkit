@@ -116,6 +116,16 @@ class Search(Run):
             code, _, text = self.search(net, gate, '--page', page)
             self.assertEqual((code, net.requests), (64, []), (page, text))
 
+    def test_an_empty_name_is_refused_before_any_request(self):
+        for name in ('', '   '):
+            gate = FakeGate()
+            net = FakeNet(gate)
+            o = io.StringIO()
+            with contextlib.redirect_stdout(o), contextlib.redirect_stderr(o):
+                code = gwt_read.main(['digitalarkivet', '--cache-dir', self.cache, 'search', '--name', name, '--out',
+                                      self.out], urlopen=net, gate=gate)
+            self.assertEqual((code, net.requests), (64, []), o.getvalue())
+
 
 if __name__ == '__main__':
     unittest.main()
