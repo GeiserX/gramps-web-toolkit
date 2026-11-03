@@ -112,7 +112,7 @@ npx skills add GeiserX/gramps-web-toolkit --skill gramps-web-toolkit
 gh skill install GeiserX/gramps-web-toolkit gramps-web-toolkit --pin v<version> --agent claude-code
 ```
 
-`--pin` takes a release tag, so the skill matches the toolkit version you installed. `--agent` names your agent (`claude-code`, `cursor`, `codex`, ...): without it, an install that runs without a terminal goes to `.agents/skills`, which some agents never read. The first release with the skill is the one after 1.0.0. The skill does not install the tools: install the toolkit as above.
+`--pin` takes a release tag, so the skill matches the toolkit version you installed. `--agent` names your agent (`claude-code`, `cursor`, `codex`, ...): without it, an install that runs without a terminal goes to `.agents/skills`, which some agents never read. The first release with the skill is 1.1.0. The skill does not install the tools: install the toolkit as above.
 
 CI checks the skill against the code: every tool and option it names must be in that tool's `--help`, and every link to this site must reach a real page and heading.
 

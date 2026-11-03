@@ -6,6 +6,8 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-03
+
 ### Change lists
 
 - `gwt-apply`: an `add_person` whose key already names a person in the tree with a different first name, surname, or given gender or Gramps ID is a conflict now, not a skip, so evidence that follows it is never hung on someone else. Updates in the same list and a rerun proven by the list's own apply log still pass. The conflict names each differing field: make the op match the tree, or give it a new key.
