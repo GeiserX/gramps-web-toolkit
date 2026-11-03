@@ -1,0 +1,38 @@
+{
+ "responseHeader": {
+  "status": 0,
+  "QTime": 12,
+  "params": {
+   "query": "(title:(parish register)) AND mediatype:(texts)",
+   "wt": "json",
+   "rows": 50,
+   "start": 0
+  }
+ },
+ "response": {
+  "numFound": 2,
+  "start": 0,
+  "docs": [
+   {
+    "identifier": "registerofnortia00zzzz",
+    "title": "The parish register of Nortia, 1601-1812",
+    "creator": "Nortia Parish Register Society",
+    "year": 1904,
+    "mediatype": "texts",
+    "collection": [
+     "americana"
+    ],
+    "language": "eng"
+   },
+   {
+    "identifier": "villazul-burials-film",
+    "title": "Villazul burials (microfilm)",
+    "year": "1950",
+    "mediatype": "movies",
+    "collection": [
+     "opensource"
+    ]
+   }
+  ]
+ }
+}
