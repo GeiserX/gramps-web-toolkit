@@ -368,9 +368,10 @@ class Run:
                 return
             before = {r["reason"] for r in rows} & set(BEFORE_WRITE)
             if code == 2 or (rows and before and counts["not run"] == len(rows)):
-                # gwt-apply stopped before its first write; another try finds the same. A rerun starts over.
+                # gwt-apply stopped before its first write; another try finds the same. A rerun starts over, unless
+                # an earlier try wrote: then the backup must stay the tree before that write
                 why_not = BEFORE_WRITE.get(next(iter(before), ""), "gwt-apply refused its input")
-                self.mark("apply", "refused", exit=code)
+                self.mark("apply", "refused" if tries == 1 else "failed", exit=code)
                 raise Stop(EXIT["input"] if code == 2 else EXIT["apply"],
                            f"apply: {why_not}; nothing was written; see {self.dir / 'apply.out'}")
             if counts["conflict"]:  # the tree changed under the list: another try finds the same

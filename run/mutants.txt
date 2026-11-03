@@ -25,3 +25,9 @@ gwt_run.py | except BaseException:  # Ctrl-C | except ZeroDivisionError:  # Ctrl
 gwt_run.py | handlers = {sig: signal.signal(sig, _signalled) for sig in (signal.SIGTERM, signal.SIGHUP)} | handlers = {} | SIGTERM on gwt-run stops the run cleanly and marks the step stopped
 gwt_run.py | lines = [f"[refused] {p}" for p in problems] | lines = [] | a dry run that stops on a likely duplicate names the op behind it
 gwt_run.py | {r['reason'] or actions.get(r['key'], '')} | {r['reason']} | a refused skip says why it is a skip
+gwt_run.py | self.mark("apply", "refused" if tries == 1 else "failed", exit=code) | self.mark("apply", "refused", exit=code) | an apply try that stops before writing, after an earlier try wrote, never lets a rerun take the backup again
+gwt_run.py | raise Stop(EXIT["verify"], | print(EXIT["verify"], | a verify that reads an op as missing stops the run with exit 6
+gwt_run.py | written = steps["apply"]["status"] not in ("todo", "refused") | written = steps["apply"]["status"] not in ("todo",) | an apply refused before any write lets a rerun start over from a new backup
+gwt_run.py | if any('"server-backup"' in line and json.loads(line).get("event") == "server-backup" | if any('"server-backup"' in line | only the server's confirmation counts as a server backup, never a logged refusal
+gwt_run.py | if not out.exists(): | if False: | a list gwt-apply refuses to read stops at the dry run with exit 2
+gwt_run.py | if not self.target["tree"]: | if False: | no tree is bad input before any step runs

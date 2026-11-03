@@ -341,6 +341,9 @@ def test_a_tree_changed_after_the_backup_is_refused_before_any_write(tmp_path, s
     assert st["steps"]["apply"]["tries"] == 1  # not tried again: another try finds the same
     assert st["steps"]["apply"]["status"] == "refused"
     assert not server.fake.store["people"]  # gwt-apply checked the tree against the backup before its first write
+    server.fake.request = real
+    assert gwt_run_main(lst, conf) == 3  # nothing was written: the rerun takes a new backup, without Anna
+    assert state(lst)["restarts"] == 1
 
 
 def test_a_conflict_met_by_a_later_apply_try_is_not_tried_again(tmp_path, server):
@@ -482,3 +485,122 @@ def test_a_dry_run_stopped_on_a_likely_duplicate_names_it(tmp_path, server):
     assert gwt_run_main(lst, conf) == 3
     refused = state(lst)["steps"]["dry_run"]["refused"]
     assert any(r.startswith("[refused] ") and "p-anna-twin" in r and "I0001" in r for r in refused)
+
+
+def test_an_apply_try_refused_after_an_earlier_try_wrote_keeps_the_backup(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, BIRTH])
+    real = server.fake.request
+    seen = {"puts": 0}
+
+    def busy_then_bad_config(method, url, **kw):
+        if method == "PUT" and not seen["puts"]:
+            seen["puts"] += 1
+            server.fake.busy = 1  # try 1 made John, then meets "database is locked"
+            conf.write_text(conf.read_text().replace("GWT_TREE=tree-test\n", ""))  # try 2 exits 2 before writing
+        return real(method, url, **kw)
+
+    server.fake.request = busy_then_bad_config
+    assert gwt_run_main(lst, conf, "--apply-tries", "3") == 2
+    assert state(lst)["steps"]["apply"]["status"] == "failed"  # an earlier try wrote: never "refused"
+    md5 = state(lst)["steps"]["backup"]["md5"]
+    server.fake.request = real
+    conf.write_text(conf.read_text() + "GWT_TREE=tree-test\n")
+    assert gwt_run_main(lst, conf) == 0
+    st = state(lst)
+    assert st["steps"]["backup"]["md5"] == md5 and not st.get("restarts")  # the backup from before John stayed
+    assert len([o for o in server.fake.store["people"].values() if o["primary_name"]["first_name"] == "John"]) == 1
+
+
+def test_a_verify_that_reads_an_op_missing_stops_with_exit_6(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, BIRTH])
+    real, logins = server.fake.request, {"n": 0}
+
+    def birth_goes_before_the_verify(method, url, **kw):
+        if url.endswith("/api/token/"):
+            logins["n"] += 1
+            if logins["n"] == 3:  # backup, apply, then the verify
+                server.fake.store["events"].clear()
+        return real(method, url, **kw)
+
+    server.fake.request = birth_goes_before_the_verify
+    assert gwt_run_main(lst, conf) == 6
+    st = state(lst)
+    assert st["steps"]["verify"]["status"] == "failed"
+    assert any("e-john-birth" in m for m in st["steps"]["verify"]["missing"])
+    assert st["steps"]["gate"]["status"] == "todo"
+
+
+def test_no_tree_is_bad_input_before_any_step(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN])
+    conf.write_text(conf.read_text().replace("GWT_TREE=tree-test\n", ""))
+    assert gwt_run_main(lst, conf) == 2
+    assert not Path(f"{lst}.run/backup.out").exists() and server.fake.calls == []
+
+
+def test_a_backup_gwt_apply_refuses_to_take_is_bad_input(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN])
+    conf.write_text(conf.read_text().replace("GWT_PASSWORD=pw\n", ""))  # no login: gwt-apply exits 2
+    assert gwt_run_main(lst, conf) == 2
+    assert state(lst)["steps"]["backup"]["status"] == "failed"
+
+
+def test_a_backup_that_does_not_read_back_stops_the_run(tmp_path, server, monkeypatch):
+    lst, conf = setup(tmp_path, server, [JOHN])
+    real = gwt_run.Run.watch
+
+    def spoil_the_backup(self, name, cmd, **kw):
+        result = real(self, name, cmd, **kw)
+        if name == "backup":
+            self.pre.write_bytes(b"\x1f\x8b not a gzip")
+        return result
+
+    monkeypatch.setattr(gwt_run.Run, "watch", spoil_the_backup)
+    assert gwt_run_main(lst, conf) == 1
+    assert state(lst)["steps"]["backup"]["status"] == "failed" and server.fake.writes() == []
+
+
+def test_a_list_gwt_apply_refuses_to_read_stops_at_the_dry_run(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [{"op": "add_person", "key": "p-x", "ruling": R, "gender": "M"}])
+    assert gwt_run_main(lst, conf) == 2  # no names: gwt-apply writes no JSON and exits 2
+    assert state(lst)["steps"]["dry_run"]["status"] == "failed" and server.fake.writes() == []
+
+
+def test_a_damaged_backup_is_no_base_for_the_next_one(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, NOBODY])
+    assert gwt_run_main(lst, conf) == 3
+    Path(f"{lst}.run/pre.json.gz").write_bytes(b"\x1f\x8b damaged")
+    lst.write_text(json.dumps(JOHN) + "\n")
+    assert gwt_run_main(lst, conf) == 0
+    assert "page 1" in Path(f"{lst}.run/backup.out").read_text()  # a whole read, not --since the damaged one
+
+
+def test_an_apply_that_hangs_on_its_last_try_is_a_stall(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN])
+    server.delay = lambda method, path: 20 if method != "GET" and path != "/api/token/" else 0  # every write hangs
+    assert gwt_run_main(lst, conf, "--apply-tries", "1", "--stall", "2") == 5
+    assert state(lst)["steps"]["apply"]["status"] == "stalled"
+
+
+def test_a_server_backup_refused_once_is_asked_for_again_on_the_rerun(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN])
+    server.fake.backup_status = 429
+    assert gwt_run_main(lst, conf, "--server-backup") == 4
+    server.fake.backup_status = 201
+    assert gwt_run_main(lst, conf, "--server-backup") == 0
+    assert sum(1 for m, p in server.fake.calls if m == "POST" and p == "/api/backups/") == 2
+
+
+def test_a_finished_run_says_done_before(tmp_path, server, capsys):
+    lst, conf = setup(tmp_path, server, [JOHN])
+    assert gwt_run_main(lst, conf) == 0
+    capsys.readouterr()
+    assert gwt_run_main(lst, conf) == 0
+    assert "done before: every step went through" in capsys.readouterr().out
+
+
+def test_a_step_that_ignores_sigterm_is_killed():
+    t0 = time.monotonic()
+    code, why, _ = gwt_run.watch(
+        [sys.executable, "-c", "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+                               "print('up', flush=True); time.sleep(60)"], out=Path("/dev/null"), stall=1)
+    assert why == "stall" and time.monotonic() - t0 < 30
