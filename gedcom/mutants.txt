@@ -1,0 +1,55 @@
+# Mutations the gedcom tests must catch. One row each: file | exact text | replacement | why
+# `python3 .github/scripts/run_tests.py --mutants --only gedcom` applies each row to a scratch copy and fails when
+# the tests still pass. The text must occur exactly once in the file.
+gwt_gedcom/mapping.py | if not ids: | if True: | a person who looks like a tree person is held, never added
+gwt_gedcom/mapping.py | tree = [w for w in tree if w.handle not in mine] | tree = tree | a rerun of the same file is a skip, not a namesake of its own earlier work
+gwt_gedcom/mapping.py | twins = [w.ref for w in made.get(who.loose, []) if _alike(who, w)] | twins = [] | look-alikes inside the file get allow_namesake with the reason, so preflight lets them through
+gwt_gedcom/mapping.py | if living: | if False: | people who may be living are held unless --allow-living
+gwt_gedcom/mapping.py | p.held = "no given name" | pass | a person with no given name is held, not written with an empty name
+gwt_gedcom/mapping.py | if "person" in owner and etype in SINGLE and etype in seen: | if False: | a second birth or death goes in a note, not a second vital event gwt-apply would refuse
+gwt_gedcom/mapping.py | if (src, page) in used_pages: | if False: | one page cited with two qualities gets two pages, as gwt-apply requires
+gwt_gedcom/mapping.py | if _is_familysearch(system) and not re.fullmatch( | if False and not re.fullmatch( | a FamilySearch id that is not one is refused and reported
+gwt_gedcom/mapping.py | if len(found) == 1 and found[0].get("gramps_id"): | if False: | a place already in the tree under the same parent is reused, not made again
+gwt_gedcom/mapping.py | return None, plac.value | pass | a place the tree has twice is kept as text, never guessed
+gwt_gedcom/mapping.py | return PEDI.get(c.val("PEDI").lower(), "Birth") | return "Birth" | an adopted child is linked as adopted, not as a birth child
+gwt_gedcom/parse.py | if _latin_line_is_utf8(chunk, codec): | if False: | a UTF-8 line in a Latin-1 file is read as UTF-8 and reported, not turned into mojibake
+gwt_gedcom/parse.py | if any(ord(c) > 0x7F for c in text): | if False: | a UTF-8 line in an ANSEL file is read as UTF-8
+gwt_gedcom/parse.py | out.append(chr(b) + "".join(marks)) | out.append("".join(marks) + chr(b)) | ANSEL accents go after the letter they mark
+gwt_gedcom/parse.py | parent.value += ("\n" if tag == "CONT" else "") + value | parent.value += "\n" + value | CONC joins without a line break, CONT with one
+gwt_gedcom/parse.py | parsed = parse_date(out)  # the real calendar check | parsed = {"sortval": 0}  # | an impossible date such as 31 FEB is kept as text and flagged
+gwt_gedcom/split.py | todo += members[f][0] | pass | a root's tree reaches up through every ancestor
+gwt_gedcom/audit.py | if why and all(w.full) and not | if False and not | audit lists records that look like the same person
+gwt_gedcom/audit.py | if pd and kb and kb > pd + (0 if mother else 280): | if False: | audit flags a child born after a parent died
+gwt_gedcom/cli.py | return 1 | return 0 | the command fails when gwt-apply's preflight would still refuse the list
+gwt_gedcom/parse.py | if _not_ansel(raw): | if False: | a Windows-1252 line labelled ANSEL is read as Windows-1252 and reported, not turned into stray accents
+gwt_gedcom/parse.py |     _mend_conc(chunks, codec) |     pass | a character cut in two across a CONC line is put back together, not read as mojibake
+gwt_gedcom/parse.py | if text_of is not None:  # a line break | if False:  # | a bare line inside a note is kept as a new line of it, not dropped
+gwt_gedcom/parse.py | if codec == "utf-16":  # UNICODE, yet no NUL byte | if False:  # UNICODE, yet no NUL byte | a UNICODE file with no NUL bytes is read as UTF-8, not as UTF-16 gibberish
+gwt_gedcom/parse.py | if int(m.group(2)) != (year + 1) % 100: | if False: | a dual year whose second part is not the next year is kept as text, not read a century off
+gwt_gedcom/parse.py | raise DateError("the range ends before it starts") | pass | a range that ends before it starts is kept as text and flagged
+gwt_gedcom/mapping.py | raise ImportError_(f"--same {x}={gid}: the tree has no person {gid}") | pass | --same with an ID the tree does not have is refused before anything is written
+gwt_gedcom/mapping.py | alike += [(w, "same _UID") for u in uids(p.rec) for w in by_uid.get(u, [])] | pass | a file person whose _UID is on a tree person is held, whatever the name is now
+gwt_gedcom/mapping.py | for u in uids(p.rec)[:1]: | for u in []: | a new person gets their _UID, so the next import finds them
+gwt_gedcom/mapping.py | twins = [c.ref for c, pair in couples if | twins = [c.ref for c, pair in [] if | look-alike couples inside the file get allow_new_couple, so preflight lets them through
+gwt_gedcom/mapping.py | found = self.place_names.get(fold(name), []) | found = [] | a one-level place is found at any level of the tree when it is there once
+gwt_gedcom/mapping.py | p.alt_names.append((mg or given, ms, "Married Name")) | pass | a _MARNM becomes a Married Name alternate name, not dropped
+gwt_gedcom/mapping.py | if re.search(r"/.*/", m.value): | if False: | a _MARNM written as «María /Gil/» keeps its given name and surname apart
+gwt_gedcom/parse.py | and value.strip() and not line.pointer else None | and value.strip() else None | a bare line after a note pointer is a problem, not glued to the pointer
+gwt_gedcom/parse.py | text_of = line if tag in TEXT_TAGS else None | text_of = None | a bare line inside a shared NOTE record is kept as a new line of it
+gwt_gedcom/parse.py | return lines, codec, said, ([] if said == "UNICODE" else [ | return lines, codec, said, ([] if True else [ | UTF-16 with no byte-order mark under another CHAR is reported
+gwt_gedcom/mapping.py | made.get(who.loose, []) | [x for v in made.values() for x in v] | people of the file are compared only within their loose name, not with everyone before them
+gwt_gedcom/audit.py | for o in seen.get(w.loose, []): | for o in [x for v in seen.values() for x in v]: | audit compares people only within their loose name, not every pair
+gwt_gedcom/audit.py | low, high = PARENT_AGE.get(sex, PARENT_AGE_UNKNOWN) | low, high = PARENT_AGE_UNKNOWN | audit uses gwt-check's parent ages by sex: a mother over 52 is flagged
+gwt_gedcom/cli.py | if not os.path.isdir(os.path.dirname(os.path.abspath(p))): | if False: | an output in a folder that does not exist exits 2 before any work, not 1 with a traceback
+gwt_gedcom/cli.py | raise ImportError_("--out, --report and --write-decisions must be different files") | pass | the report never overwrites the change list
+gwt_gedcom/split.py | return [r.xref for r in ged.individuals if r.xref not in kept] | return [] | split says who is in no output
+gwt_gedcom/parse.py | k = 3 if d1 and d2 and m1 and m2 else 2 if m1 and m2 else 1 | k = 3 | a range is compared at the precision both ends have: «BET 12 MAR 1850 AND MAR 1850» is kept
+gwt_gedcom/parse.py | if (y2, m2, d2)[:k] < (y1, m1, d1)[:k]: | if False: | a range that ends before it starts is still flagged at shared precision
+gwt_gedcom/mapping.py | key, new = self.emit(op)  # two records | new = self.emit(op)[1]  # two records | a source record with the title of another is cited as the source made, not a key no op makes
+gwt_gedcom/mapping.py | self.sources[hid] = "key:" + made | self.sources[hid] = "key:" + key | an inline source with the title of a source record is cited as that source
+gwt_gedcom/mapping.py | rkey, _ = self.emit( | _ = self.emit( | a repository with the name of another is linked as the repository made
+gwt_gedcom/split.py | and value.strip() != "@VOID@":  # | :  # | split writes @VOID@ as a null pointer, not as text
+gwt_gedcom/split.py | p if re.fullmatch(r"@#D[A-Z ]+@", p) else p.replace("@", "@@") | p.replace("@", "@@") | split keeps a calendar escape such as @#DJULIAN@ as written
+gwt_gedcom/split.py | if len(set(paths)) < len(paths): | if False: | two roots that would write one file are refused
+gwt_gedcom/audit.py | for t in tags for c in rec.children if c.tag == t and | for c in rec.children if c.tag in tags and | audit takes the birth before the baptism, whatever the record order
+gwt_gedcom/audit.py | if sv - 1721425 > datetime.date.max.toordinal(): | if False: | a date past the year 9999 is skipped, not a crash
