@@ -154,7 +154,8 @@ def search(a, R):
     doc = json.loads(body)
     cands = candidates(doc, a.library)
     env = gwt_reader.envelope(url, None, text='\n'.join(c['text'] for c in cands if c['text']), json_body=doc,
-                              verdict=verdict(doc, pid, off), library=a.library, total=doc['response']['numFound'], status=status, from_cache=cached)
+                              verdict=verdict(doc, pid, off), library=a.library, total=doc['response']['numFound'],
+                              status=status, from_cache=cached)
     words = [SOURCE, a.library, a.query, a.year_from or '', a.year_to or '', a.count, off]
     base = gwt_reader.write_search(a.out, gwt_reader.search_key(url, words), env, cands)
     gwt_reader.print_paths(SOURCE, base, print)
