@@ -10,10 +10,11 @@ page, in English.
 A row is a transcription, a lead: open the scanned page (the record page links it) before citing it. A candidate's
 `url` is the person's own page (/en/census/person/pf..., /en/view/255/pd...).
 
-"none" is the site's own count, "Your search resulted in 0 hits". Any page with no person row and no zero count (an
+"none" is the site's own count, "Your search resulted in 0 hits". A --page past the last one (an empty list whose count
+the earlier pages already hold) is exit 2, "past the end". Any other page with no person row and no zero count (an
 empty result list, a block page, a new layout) is a STOP. Standard library only.
 """
-import html, re, urllib.parse
+import html, re, sys, urllib.parse
 
 import gwt_reader
 
@@ -22,6 +23,9 @@ SOURCE = 'digitalarkivet'
 # robots.txt asks every robot for Crawl-delay: 5
 PACE = {'start': 6.0, 'floor': 5.0, 'ceil': 300.0}
 DAY = 86400
+EXIT_USAGE = 64
+PER_PAGE = 50
+MAX_PAGE = 200     # the site shows at most 10,000 hits; past that it answers HTTP 500
 SPEC = {
     'id': SOURCE,
     'help': 'Digitalarkivet, Norway\'s transcribed censuses, church books and emigrant lists; public',
@@ -85,6 +89,13 @@ def total_of(page):
     return int(m.group(1)) if m else None
 
 
+def past_end(page, number):
+    """True for an empty list on page `number` when the earlier pages already hold every hit the site counts."""
+    hits = total_of(page)
+    return (number > 1 and bool(hits) and '<div class="unit"' not in page
+            and (number - 1) * PER_PAGE >= min(hits, MAX_PAGE * PER_PAGE))
+
+
 def add_search_args(sp):
     sp.add_argument('--name', required=True, help='the site\'s own search words: names, and places or years if '
                     'you like (it reads them all)')
@@ -94,9 +105,14 @@ def add_search_args(sp):
 
 
 def search(a, R):
+    if not 1 <= a.page <= MAX_PAGE:
+        print('gwt-read: digitalarkivet: --page is 1 to %d: the site shows at most 10,000 hits' % MAX_PAGE,
+              file=sys.stderr, flush=True)
+        return EXIT_USAGE
     url = search_url(a.name, a.year_from, a.year_to, a.page)
+    rows = gwt_reader.rows_check(SPEC, r'<div class="unit"', candidates)
     status, rh, body, cached = gwt_reader.get_api(R, url, {'accept': 'text/html'}, refresh=a.refresh,
-                                                  page=gwt_reader.rows_check(SPEC, r'<div class="unit"', candidates))
+                                                  page=lambda p: rows(p) or past_end(p, a.page))
     page = body.decode('utf-8', 'replace')
     cands = candidates(page)
     env = gwt_reader.envelope(url, (rh or {}).get('x-gwt-final-url'), text=text(page),
@@ -105,6 +121,7 @@ def search(a, R):
     base = gwt_reader.write_search(a.out, gwt_reader.search_key(url, words), env, cands)
     gwt_reader.print_paths(SOURCE, base, print)
     total = total_of(page)
-    print('results\t%s total, %d read%s' % ('?' if total is None else total, len(cands), ' (cache)' if cached else ''),
+    print('results\t%s total, %d read%s%s' % ('?' if total is None else total, len(cands),
+                                         gwt_reader.past_end(cands, (a.page - 1) * PER_PAGE), ' (cache)' if cached else ''),
           flush=True)
     return gwt_reader.EXIT_OK if cands else gwt_reader.EXIT_EMPTY

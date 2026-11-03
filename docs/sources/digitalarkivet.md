@@ -11,7 +11,7 @@ gwt read digitalarkivet control
 
 - `--name` is the site's own search box: names, and a place or a year if you like; the site reads them all.
 - `--from` and `--to` limit the year of the event.
-- A page holds 50 persons; `--page` reads the next ones. The site shows at most 10,000 hits (200 pages).
+- A page holds 50 persons; `--page` reads the next ones. The site shows at most 10,000 hits (200 pages), so a `--page` above 200 is refused (exit 64) before any request: the site answers it with HTTP 500, which would pause the gate.
 
 ## How it reads
 
@@ -23,7 +23,9 @@ A transcription, a lead: open the scanned page before citing it. Each one has `i
 
 ## When it stops
 
-"None" is the site's own count: "Your search resulted in 0 hits". Any page with no person row and no zero count is a STOP (exit 3, the gate pauses every lane, nothing written or cached): a block page, a new layout, an empty list with a count above zero, or a person row the reader cannot read (it never drops a row and reads the page as fewer persons). A `--page` past the last one is such a page too.
+"None" is the site's own count: "Your search resulted in 0 hits". Any page with no person row and no zero count is a STOP (exit 3, the gate pauses every lane, nothing written or cached): a block page, a new layout, an empty list with a count above zero, or a person row the reader cannot read (it never drops a row and reads the page as fewer persons).
+
+A `--page` past the last one (an empty list when the earlier pages already hold every hit the site counts) is exit 2, with `past the end` on the results line, as for the other sources; a loop can page until exit 2.
 
 ## Pace, cache and terms
 

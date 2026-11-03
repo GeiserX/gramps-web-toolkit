@@ -91,6 +91,31 @@ class Search(Run):
         self.search(net, gate)
         self.assertEqual(len(net.requests), 2, 'a page with an unread row was served from the cache')
 
+    def past_end_page(self):
+        page = fx('results.html').decode()
+        head, rest = page.split('<div id="searchResultList" class="result-list clearfix">', 1)
+        return (head.replace('data-hits="2">Your search resulted in 2 hits', 'data-hits="101">Your search resulted in '
+                             '101 hits') + '<div id="searchResultList" class="result-list clearfix">\n\t</div>'
+                '<ul class="pagination"></ul></section></body></html>').encode()
+
+    def test_a_page_past_the_last_is_exit_2_past_the_end(self):
+        gate = FakeGate()
+        code, lines, text = self.search(FakeNet(gate, (200, self.past_end_page())), gate, '--page', '5')
+        self.assertEqual((code, gate.hits), (gwt_reader.EXIT_EMPTY, []), text)
+        self.assertIn('past the end', lines['results'])
+
+    def test_an_empty_page_before_the_last_is_still_a_stop(self):
+        gate = FakeGate()
+        code, _, text = self.search(FakeNet(gate, (200, self.past_end_page())), gate, '--page', '3')
+        self.assertEqual((code, len(gate.hits), self.out_files()), (gwt_reader.EXIT_WALL, 1, []), text)
+
+    def test_a_page_the_site_never_shows_is_refused_before_any_request(self):
+        for page in ('201', '0'):
+            gate = FakeGate()
+            net = FakeNet(gate)
+            code, _, text = self.search(net, gate, '--page', page)
+            self.assertEqual((code, net.requests), (64, []), (page, text))
+
 
 if __name__ == '__main__':
     unittest.main()
