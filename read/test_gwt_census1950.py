@@ -81,7 +81,7 @@ class Search(Run):
         # the volunteers' lines 3 and 4 win over the machine's misread "Zorvalo Pedra"; the machine's line with no
         # number is kept, and a page with only the machine index gives machine rows
         self.assertEqual(got, [('9900001:3', 'Ana Zorvalo', 3, False), ('9900001:4', 'Pedro Zorvalo', 4, False),
-                               ('9900001', 'Zorvalo', None, True), ('9900002:12', 'Zorvalo Rosa', 12, True)])
+                               ('9900001:m4', 'Zorvalo', None, True), ('9900002:12', 'Zorvalo Rosa', 12, True)])
         a = cands[0]
         self.assertEqual((a['ed'], a['county'], a['state_abbr'], a['sheet'], a['principal']),
                          ('99-12', 'Villazul', 'PR', 7, True))
@@ -97,6 +97,28 @@ class Search(Run):
         r['highlight'] = {}
         (c,) = gwt_census1950.candidates(r)
         self.assertEqual((c['id'], c['row'], c['machine'], c['name']), ('9900002', None, True, ''))
+
+    def test_every_row_has_its_own_id(self):
+        r = json.loads(fx('search.json'))['results'][1]
+        r['names'] = [{'row': 1, 'name': 'Zorvalo Ana'}, {'row': 1, 'name': 'Zorvalo Anna'},
+                      {'row': None, 'name': 'Zorvalo'}, {'row': None, 'name': 'Zorvalo R'}]
+        r['highlight'] = {'names.name': ['Zorvalo Ana', 'Zorvalo Anna', 'Zorvalo', 'Zorvalo R']}
+        self.assertEqual([c['id'] for c in gwt_census1950.candidates(r)],
+                         ['9900002:1', '9900002:1.2', '9900002:m3', '9900002:m4'])
+        ids = [c['id'] for x in json.loads(fx('search.json'))['results'] for c in gwt_census1950.candidates(x)]
+        self.assertEqual(len(ids), len(set(ids)))
+
+    def test_a_line_the_volunteers_read_drops_the_machines_reading_of_it(self):
+        # the machine read line 5 as "Zorvalo Luis"; the volunteers read a Quintel there, which the search did not mark
+        r = json.loads(fx('search.json'))['results'][0]
+        r['names'][2]['name'] = 'Zorvalo Luis'
+        r['highlight']['names.name'].append('Zorvalo Luis')
+        self.assertNotIn(5, [c['row'] for c in gwt_census1950.candidates(r)])
+
+    def test_a_line_whose_name_is_not_text_is_skipped(self):
+        r = json.loads(fx('search.json'))['results'][1]
+        r['names'].append({'row': 14, 'name': ['Zorvalo']})
+        self.assertEqual([c['row'] for c in gwt_census1950.candidates(r)], [12])
 
     def test_a_page_only_the_volunteers_have_read(self):
         r = json.loads(fx('search.json'))['results'][0]
@@ -129,6 +151,15 @@ class Search(Run):
         gate = FakeGate()
         code, _, _, text = self.search(FakeNet(gate, (502, b'<html>Bad Gateway</html>')), gate)
         self.assertEqual((code, len(gate.hits), self.out_files()), (gwt_reader.EXIT_WALL, 1, []), text)
+
+    def test_a_page_past_what_the_api_serves_asks_nothing(self):
+        gate = FakeGate()
+        net = FakeNet(gate)
+        code, _, _, text = self.search(net, gate, '--page', '401')
+        self.assertEqual((code, net.requests), (gwt_census1950.EXIT_USAGE, []), text)
+        self.assertIn('400 pages', text)
+        code, _, _, text = self.search(FakeNet(gate, (200, fx('search.json'))), gate, '--page', '400')
+        self.assertNotEqual(code, gwt_census1950.EXIT_USAGE, text)
 
     def test_a_state_that_is_not_two_letters_asks_nothing(self):
         gate = FakeGate()

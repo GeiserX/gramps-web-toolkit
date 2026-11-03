@@ -11,16 +11,19 @@ gwt read census1950 control
 
 - `--name` is a name as the schedule writes it: a surname, or surname then given name ("garcia juan").
 - `--state` is the two-letter code (`PR`, `NY`, `FL`). `--county` is the county, or the municipio in Puerto Rico.
-- A page of results is 25 schedule pages, the API's own size. The API counts at most 10,000 pages, so a broad search reads `10000 pages`: narrow it with `--county`.
+- A page of results is 25 schedule pages, the API's own size. The API counts at most 10,000 pages and serves pages 1 to 400, so a broad search reads `10000 pages`: narrow it with `--county`. A `--page` above 400 asks nothing and exits 64.
+- The API matches similar spellings, not only the name asked for: a `garcia` search also returns lines such as `Garcio` or `Maria`. Read the name on each row.
 
 ## What a candidate is
 
 A row is one line of a schedule page whose name matches: role `census`, `principal`, with a residence event in 1950 at the county and state. It carries `row` (the line number), `schedule_id`, `ed` (the enumeration district), `county`, `state`, `state_abbr`, `sheet` (the image number in the district), and the page image twice:
 
-- `image`, the scan in NARA's bucket (`https://nara-1950-census.s3.amazonaws.com/1950census/...jpg`), which `gwt fetch` saves and `url` points to;
-- `iiif_info`, the page's IIIF Image API base, for `gwt fetch iiif --image-base`.
+- `image`, the scan in NARA's bucket (`https://nara-1950-census.s3.amazonaws.com/1950census/...jpg`), anonymous, for curl or gwt-rawstore; `url` points to it;
+- `iiif_info`, the page's IIIF Image API base: `gwt fetch iiif --image-base <iiif_info>` saves the page.
 
-The machine index is noisy: misread letters, given names split from surnames, lines with no number. A row read from it carries `machine: true`. Where volunteers have corrected the page, their line is read instead and carries `machine: false`; the machine's reading of the same line is dropped. A page the API matched but marked no line on gives one row for the page, with no name and no `row`, to read by eye.
+The machine index is noisy: misread letters, given names split from surnames, lines with no number. A row read from it carries `machine: true`. Where volunteers have corrected the page, their line is read instead and carries `machine: false`; the machine's reading of any line number they transcribed is dropped, whatever name they wrote there. A page the API matched but marked no line on gives one row for the page, with no name and no `row`, to read by eye.
+
+Every row has its own `id`: `<schedule>:<row>` for a numbered line, `<schedule>:m<n>` for the machine's n-th line when it has no number (`t<n>` for the volunteers'), and `.2`, `.3` after the line number when one line was read under two names.
 
 Each page prints an `item` line: the schedule id, the S3 image and the IIIF base.
 

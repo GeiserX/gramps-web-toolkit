@@ -8,11 +8,17 @@ gwt_census1950.py | and isinstance(r.get('image'), str) | and True | a page with
 gwt_census1950.py | return all(x is None or isinstance(x, list) for x in (n, t)) and | return | a page whose names or volunteer lines are no longer a list is unknown, a STOP
 gwt_census1950.py | (isinstance(n, list) or isinstance(t, list)) | True | a page with no lines at all is unknown, a STOP
 gwt_census1950.py | and _lines_ok(r) | and r.get('names') is not None | a page only the volunteers have read (names null) is a hit, never a STOP
-gwt_census1950.py | return S3 + urllib.parse.quote(key.lstrip('/')) | return 'https://1950census.archives.gov/' + key | the image is the scan in NARA's public bucket, what gwt fetch saves
-gwt_census1950.py | if machine and row is not None and row in read: | if False: | the volunteers' line wins over the machine's misreading of the same line
-gwt_census1950.py | for machine, lines, field in ((False, r.get('transcribe'), 'transcribe.name'), (True, r.get('names'), 'names.name')): | for machine, lines, field in ((True, r.get('names'), 'names.name'),): | a row from the volunteers' transcription is read too, marked machine false
+gwt_census1950.py | return S3 + urllib.parse.quote(key.lstrip('/')) | return 'https://1950census.archives.gov/' + key | the image is the scan in NARA's public bucket
+gwt_census1950.py | or (machine and row in read) or | or | the volunteers' line wins over the machine's misreading of the same line
+gwt_census1950.py | for machine, lines, field in ((False, volunteers, 'transcribe.name'), (True, _lines(r.get('names')), 'names.name')): | for machine, lines, field in ((True, _lines(r.get('names')), 'names.name'),): | a row from the volunteers' transcription is read too, marked machine false
 gwt_census1950.py | 'relatives': [], 'url': page['image'], 'row': row, 'machine': machine}, **page) | 'relatives': [], 'url': page['image'], 'row': row}, **page) | every row says whether the noisy machine index read it
-gwt_census1950.py |         rows = [(True, '', None)] |         pass | a page the API matched with no marked line is kept as the page, never dropped
+gwt_census1950.py |         rows = [(sid, True, '', None)] |         pass | a page the API matched with no marked line is kept as the page, never dropped
 gwt_census1950.py | if not a.name.strip() or not re.fullmatch(r'[A-Za-z]{2}', a.state.strip()): | if not a.name.strip(): | a state that is not a two-letter code asks nothing
 gwt_census1950.py | p = [('name', name), ('state', state.upper())] | p = [('name', name), ('state', state)] | the state code is sent in capitals
 gwt_census1950.py | off = (max(1, int(a.page)) - 1) * PAGE_SIZE | off = 0 | the search tells the verdict where its page starts, so the last page reads as the end
+gwt_census1950.py | read = {row for _, row in volunteers if row is not None} | read = {row for name, row in volunteers if row is not None and name in (hl.get('transcribe.name') or ())} | a line the volunteers read drops the machine's reading of it, even when the search did not mark their name
+gwt_census1950.py | while rid in ids: | while False: | one line number read under two names gives two ids
+gwt_census1950.py | row if row is not None else '%s%d' % ('m' if machine else 't', n)) | row) | lines with no number each get their own id, never the bare schedule id
+gwt_census1950.py | if isinstance(x, dict) and isinstance(x.get('name'), str)] | if isinstance(x, dict) and x.get('name')] | a line whose name is not text is skipped, never a crash
+gwt_census1950.py | if a.page > MAX_PAGE: | if False: | a page past the 400 the API serves asks nothing and says why
+gwt_census1950.py | MAX_PAGE = 400 | MAX_PAGE = 401 | the API serves 400 pages of a search, never more

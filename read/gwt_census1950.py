@@ -10,9 +10,9 @@ login: https://1950census.archives.gov/api/search?name=...&state=PR&county=... .
 
 A row is one line of a schedule: the name as the index reads it, the line (`row`), the page's schedule id,
 enumeration district (`ed`), county and state, and the page image twice: `image`, the scan in NARA's public bucket
-on AWS (https://nara-1950-census.s3.amazonaws.com/<key>, anonymous, what `gwt fetch` saves), and `iiif_info`, the
-page's IIIF Image API base for `gwt fetch iiif --image-base`. The machine index is noisy (misread letters, given
-names split from surnames), so a row read from it carries `machine: true`; a row from the volunteers' corrected
+on AWS (https://nara-1950-census.s3.amazonaws.com/<key>, anonymous, for curl or gwt-rawstore), and `iiif_info`, the
+page's IIIF Image API base, which `gwt fetch iiif --image-base` saves. The machine index is noisy (misread letters,
+given names split from surnames), so a row read from it carries `machine: true`; a row from the volunteers' corrected
 transcription, when the page has one, carries `machine: false`. "none" is the API's own count, `total` 0.
 Standard library only.
 """
@@ -39,6 +39,7 @@ SPEC = {
 ACCEPT = 'application/json'
 EXIT_USAGE = 64
 PAGE_SIZE = 25          # the API's own page size; it takes no size parameter
+MAX_PAGE = 400          # the API serves the first 10,000 pages of results; page 401 answers {}
 
 
 def search_url(name, state, county='', page=1):
@@ -87,39 +88,45 @@ def _sheet(key):
     return int(m.group(1)) if m else None
 
 
-def _rows(lines, wanted):
-    """{name: [row, ...]} of the lines whose name is one the API marked as matching."""
-    out = {}
-    for x in lines or []:
-        if isinstance(x, dict) and x.get('name') in wanted:
-            out.setdefault(x['name'], []).append(x.get('row') if _count(x.get('row')) else None)
-    return out
+def _lines(lines):
+    """[(name, row)] of a page's lines in their order; row None for a line with no number."""
+    return [(x['name'], x.get('row') if _count(x.get('row')) else None)
+            for x in lines or [] if isinstance(x, dict) and isinstance(x.get('name'), str)]
 
 
 def candidates(r):
-    """One row per matching line of the page. The volunteers' line wins over the machine's for the same row."""
+    """One row per matching line of the page. A line the volunteers transcribed is read from them only: the machine's
+    reading of that line number is dropped, whatever name the volunteers wrote there. Every row has its own id."""
     hl = r.get('highlight') if isinstance(r.get('highlight'), dict) else {}
     place = ', '.join(x for x in (r.get('county'), r.get('state')) if x)
-    page = {'schedule_id': str(r['scheduleId']), 'state': r.get('state') or '', 'state_abbr': r.get('abbr') or '',
+    sid = str(r['scheduleId'])
+    page = {'schedule_id': sid, 'state': r.get('state') or '', 'state_abbr': r.get('abbr') or '',
             'county': r.get('county') or '', 'ed': r.get('ed') or '', 'sheet': _sheet(r['image']),
             'image_key': r['image'], 'image': image_url(r['image']), 'iiif_info': r.get('iiifUrl') or ''}
-    rows, read = [], set()
-    for machine, lines, field in ((False, r.get('transcribe'), 'transcribe.name'), (True, r.get('names'), 'names.name')):
-        for name, nums in _rows(lines, set(hl.get(field) or ())).items():
-            for row in nums:
-                if machine and row is not None and row in read:
-                    continue        # the volunteers already read this line
-                if (machine, name, row) not in rows:
-                    rows.append((machine, name, row))
-                if not machine and row is not None:
-                    read.add(row)
+    volunteers = _lines(r.get('transcribe'))
+    read = {row for _, row in volunteers if row is not None}
+    rows, seen, ids = [], set(), set()
+    for machine, lines, field in ((False, volunteers, 'transcribe.name'), (True, _lines(r.get('names')), 'names.name')):
+        wanted = set(hl.get(field) or ())
+        for n, (name, row) in enumerate(lines, 1):
+            if name not in wanted or (machine and row in read) or (machine, name, row) in seen:
+                continue
+            seen.add((machine, name, row))
+            # a line with no number is known by its place in its list (m3: the machine's 3rd line, t3: the volunteers')
+            rid = base = '%s:%s' % (sid, row if row is not None else '%s%d' % ('m' if machine else 't', n))
+            k = 1
+            while rid in ids:       # one line number read under two names
+                k += 1
+                rid = '%s.%d' % (base, k)
+            ids.add(rid)
+            rows.append((rid, machine, name, row))
     if not rows:
-        rows = [(True, '', None)]   # the API matched the page but marked no line: the page itself, to read by eye
-    return [dict({'source': SOURCE, 'id': '%s' % r['scheduleId'] if row is None else '%s:%d' % (r['scheduleId'], row),
-                  'name': ' '.join(name.split()), 'role': 'census', 'principal': True, 'given': None,
-                  'surnames': None, 'events': {'residence': {'year': 1950, 'year_to': 1950, 'place': place}},
+        rows = [(sid, True, '', None)]  # the API matched the page but marked no line: the page itself, to read by eye
+    return [dict({'source': SOURCE, 'id': rid, 'name': ' '.join(name.split()), 'role': 'census', 'principal': True,
+                  'given': None, 'surnames': None,
+                  'events': {'residence': {'year': 1950, 'year_to': 1950, 'place': place}},
                   'relatives': [], 'url': page['image'], 'row': row, 'machine': machine}, **page)
-            for machine, name, row in rows]
+            for rid, machine, name, row in rows]
 
 
 def add_search_args(sp):
@@ -133,6 +140,10 @@ def add_search_args(sp):
 def search(a, R):
     if not a.name.strip() or not re.fullmatch(r'[A-Za-z]{2}', a.state.strip()):
         print('gwt-read: census1950: give --name and a two-letter --state', file=sys.stderr, flush=True)
+        return EXIT_USAGE
+    if a.page > MAX_PAGE:
+        print('gwt-read: census1950: the API serves at most %d pages of %d; narrow the search with --county'
+              % (MAX_PAGE, PAGE_SIZE), file=sys.stderr, flush=True)
         return EXIT_USAGE
     url = search_url(a.name, a.state.strip(), a.county, a.page)
     off = (max(1, int(a.page)) - 1) * PAGE_SIZE
