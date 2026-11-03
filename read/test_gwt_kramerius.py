@@ -46,20 +46,26 @@ class Classify(unittest.TestCase):
         self.assertEqual(a['image'], 'https://api.kramerius.mzk.cz/search/api/client/v7.0/items/%s/image' % P1)
         self.assertEqual(a['text'], 'Zorvalová Anna, vdova, Hlavní 12 / Zorvalová Marie, švadlena')
         self.assertEqual((b['year'], b['model']), (1908, 'periodical/periodicalvolume/periodicalitem/page'))
+        self.assertEqual((a['date'], b['date']), ('1912', '1908-03-15'), 'a dd.mm.yyyy date is given as ISO')
+        self.assertEqual(a['iiif'], 'https://api.kramerius.mzk.cz/search/iiif/%s/info.json' % P1,
+                         'an MZK page names its IIIF service, which gwt fetch iiif reads')
 
     def test_v5_rows(self):
         (a,) = gwt_kramerius.candidates(json.loads(V5), 'nkp')
         self.assertEqual((a['name'], a['page'], a['year'], a['model']), ('Adresář Nortie', '201', 1927, 'monograph/page'))
         self.assertEqual(a['image'], 'https://kramerius5.nkp.cz/search/img?pid=%s&stream=IMG_FULL&action=GETRAW' % P1)
         self.assertIn('Zorvalová Anna, obch.', a['text'])
+        self.assertEqual(a['iiif'], '', 'Kramerius 5 has no IIIF service')
 
     def test_the_url_asks_only_for_public_pages_in_the_years(self):
-        for lib, public, begin in (('mzk', 'accessibility:public', 'date_range_start.year:[* TO 1910]'),
-                                   ('nkp', 'dostupnost:public', 'datum_begin:[* TO 1910]')):
+        for lib, public, begin, end in (
+                ('mzk', 'accessibility:public', 'date_range_start.year:[* TO 1910]', 'date_range_end.year:[1900 TO *]'),
+                ('nkp', 'dostupnost:public', 'datum_begin:[* TO 1910]', 'datum_end:[1900 TO *]')):
             u = gwt_kramerius.search_url('"Anna Zorvalová"', lib, '1900', '1910', 500)
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(u).query)
             self.assertIn(public, q['fq'])
             self.assertIn(begin, q['fq'])
+            self.assertIn(end, q['fq'], '--from was dropped')
             self.assertEqual((q['q'], q['rows']), (['text_ocr:("Anna Zorvalová")'], ['100']))
 
     def test_spec(self):
@@ -85,8 +91,9 @@ class Search(Base):
         code, lines, text = self.search(FakeNet(gate, (200, V7)), gate)
         self.assertEqual(code, 0, text)
         self.assertIn('page\thttps://www.digitalniknihovna.cz/mzk/uuid/%s\thttps://api.kramerius.mzk.cz/' % P1, text)
+        self.assertIn('/image\thttps://api.kramerius.mzk.cz/search/iiif/%s/info.json\n' % P1, text)
         env = json.load(open(lines['evidence']))
-        self.assertEqual((env['verdict'], env['library']), ('hits', 'mzk'))
+        self.assertEqual((env['verdict'], env['library'], env['total']), ('hits', 'mzk', 2))
         self.assertIn('Zemřela paní Anna Zorvalová', env['text'])
         self.assertEqual(lines['results'], '2 total, 2 read')
 
@@ -96,6 +103,13 @@ class Search(Base):
         code, lines, text = self.search(net, gate, '--library', 'nkp')
         self.assertEqual(code, 0, text)
         self.assertTrue(net.requests[0].full_url.startswith('https://kramerius5.nkp.cz/search/api/v5.0/search?'))
+
+    def test_a_year_that_is_not_a_number_is_refused_before_any_request(self):
+        gate = FakeGate()
+        net = FakeNet(gate)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.search(net, gate, '--to', '19x')
+        self.assertEqual(net.requests, [])
 
     def test_none_is_exit_2(self):
         gate = FakeGate()

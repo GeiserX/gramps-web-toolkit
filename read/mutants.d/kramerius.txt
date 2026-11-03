@@ -9,3 +9,8 @@ gwt_kramerius.py |         snip = hl.get(pid) or next((v for k, v in hl.items() 
 gwt_kramerius.py |             if e.verdict == 'http' and 'bad request' in why.lower(): |             if False: | a query Solr refuses is this search's error, never an outage that pauses every lane
 gwt_kramerius.py | 'image': '/search/api/client/v7.0/items/%s/image'}, | 'image': '/search/api/client/v7.0/items/%s/image/thumb'}, | the image URL is the full page, not a thumbnail
 gwt_kramerius.py | PACE = {'start': 3.0, 'floor': 2.0, 'ceil': 120.0} | PACE = {'start': 3.0, 'floor': 0.5, 'ceil': 120.0} | the libraries are never asked faster than one request every 2 s
+gwt_kramerius.py |         q.append(('fq', '%s:[%s TO *]' % (f['end'], int(year_from)))) |         pass | --from keeps pages from after that year
+gwt_kramerius.py |                     'iiif': lib['host'] + lib['iiif'] % pid if lib['iiif'] else '', |                     'iiif': '', | an MZK page names its IIIF service for gwt fetch iiif
+gwt_kramerius.py |         date = iso_date(str(d.get(f['date']) or '')) |         date = str(d.get(f['date']) or '') | a dd.mm.yyyy date is given as ISO, as the other sources give it
+gwt_kramerius.py | library=a.library, total=doc['response']['numFound'], | library=a.library, | the evidence file says Solr's total, as the other sources do
+gwt_kramerius.py | dest='year_to', type=int, default=None | dest='year_to', default=None | a year that is not a number is refused before any request

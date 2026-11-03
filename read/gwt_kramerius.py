@@ -11,8 +11,8 @@ parish and civil lists. No key, no login. A search here reads one library:
 
 Only public pages are asked for: pages under copyright (`dnnt`, `private`) are readable only inside the library or
 with a Czech library login. A row is one page that holds the words, never a person, with the words around them, the
-page's citation link and its full image URL for `gwt fetch` or any downloader. "None" is Solr's own count,
-`numFound` 0, in a well-shaped answer; any other shape is a STOP. Standard library only.
+page's citation link, its full image URL and, at the MZK, its IIIF service for `gwt fetch iiif --image-base`. "None"
+is Solr's own count, `numFound` 0, in a well-shaped answer; any other shape is a STOP. Standard library only.
 """
 import html, json, re, urllib.parse
 
@@ -21,8 +21,10 @@ import gwt_reader
 SOURCE = 'kramerius'
 # host, API version, citation (viewer) base. The v5 and v7 APIs name the same fields differently.
 LIBRARIES = {
-    'mzk': {'host': 'https://api.kramerius.mzk.cz', 'api': 7, 'web': 'https://www.digitalniknihovna.cz/mzk/uuid/'},
-    'nkp': {'host': 'https://kramerius5.nkp.cz', 'api': 5, 'web': 'https://www.digitalniknihovna.cz/nkp/uuid/'},
+    'mzk': {'host': 'https://api.kramerius.mzk.cz', 'api': 7, 'web': 'https://www.digitalniknihovna.cz/mzk/uuid/',
+            'iiif': '/search/iiif/%s/info.json'},       # an IIIF Image API service: `gwt fetch iiif --image-base`
+    'nkp': {'host': 'https://kramerius5.nkp.cz', 'api': 5, 'web': 'https://www.digitalniknihovna.cz/nkp/uuid/',
+            'iiif': ''},                                # Kramerius 5 has no IIIF: only the plain JPEG
 }
 FIELDS = {
     7: {'path': '/search/api/client/v7.0/search', 'pid': 'pid', 'title': 'root.title', 'date': 'date.str',
@@ -89,6 +91,12 @@ def plain(fragment):
     return re.sub(r'\s+', ' ', html.unescape(re.sub(r'<[^>]+>', ' ', fragment or ''))).strip()
 
 
+def iso_date(date):
+    """'08.07.1904' as '1904-07-08', as the other sources give dates; any other form as it came."""
+    m = re.fullmatch(r'(\d{1,2})\.(\d{1,2})\.(\d{4})', date.strip())
+    return '%s-%02d-%02d' % (m.group(3), int(m.group(2)), int(m.group(1))) if m else date
+
+
 def candidates(doc, library='mzk'):
     lib = LIBRARIES[library]
     f = FIELDS[lib['api']]
@@ -99,12 +107,13 @@ def candidates(doc, library='mzk'):
         # v7 keys the highlights by "<root pid>!<pid>", v5 by the pid
         snip = hl.get(pid) or next((v for k, v in hl.items() if k.endswith('!' + pid)), {})
         page = _one(d.get(f['page'])).split('##')[0].strip()
-        date = str(d.get(f['date']) or '')
+        date = iso_date(str(d.get(f['date']) or ''))
         y = re.search(r'(?<!\d)(\d{4})(?!\d)', date)
         out.append({'source': SOURCE, 'id': '%s:%s' % (library, pid), 'name': d.get(f['title']) or '', 'role': 'mention',
                     'principal': False, 'given': None, 'surnames': None, 'events': {}, 'relatives': [],
                     'url': lib['web'] + pid, 'date': date, 'year': int(y.group(1)) if y else None, 'page': page,
                     'model': _one(d.get(f['model'])), 'image': lib['host'] + f['image'] % pid,
+                    'iiif': lib['host'] + lib['iiif'] % pid if lib['iiif'] else '',
                     'text': ' / '.join(plain(s) for s in (snip.get('text_ocr') or []) if isinstance(snip, dict))})
     return out
 
@@ -112,15 +121,15 @@ def candidates(doc, library='mzk'):
 def add_search_args(sp):
     sp.add_argument('--query', required=True, help='Solr words in the page text: Novák, "Jan Novák", Novák AND Brno')
     sp.add_argument('--library', default='mzk', choices=sorted(LIBRARIES), help='which library (default mzk)')
-    sp.add_argument('--from', dest='year_from', default='', help='first year the page can be from')
-    sp.add_argument('--to', dest='year_to', default='', help='last year')
+    sp.add_argument('--from', dest='year_from', type=int, default=None, help='first year the page can be from')
+    sp.add_argument('--to', dest='year_to', type=int, default=None, help='last year')
     sp.add_argument('--count', type=int, default=20, choices=range(1, 101), metavar='1-100')
     sp.add_argument('--start', type=int, default=0, help='row offset')
 
 
 class _QueryFirst:
-    """R as get_api sees it, except that Solr's own refusal of the query (HTTP 500 whose reason says Bad Request) is
-    an error in this one search (exit 1), never an outage that pauses every lane."""
+    """R as get_api sees it, except that Solr's own refusal of the query (HTTP 500 at the MZK, 400 at the NKP, with
+    "Bad Request" in its reason) is an error in this one search (exit 1), never an outage that pauses every lane."""
 
     def __init__(self, R):
         self.R, self.lane, self.gate = R, R.lane, R.gate
@@ -139,18 +148,18 @@ class _QueryFirst:
 def search(a, R):
     pid = FIELDS[LIBRARIES[a.library]['api']]['pid']
     off = max(0, int(a.start))
-    url = search_url(a.query, a.library, a.year_from, a.year_to, a.count, off)
+    url = search_url(a.query, a.library, a.year_from or '', a.year_to or '', a.count, off)
     status, rh, body, cached = gwt_reader.get_api(_QueryFirst(R), url, {'accept': ACCEPT}, refresh=a.refresh,
                                                   expect=lambda d: verdict(d, pid, off) != 'unknown')
     doc = json.loads(body)
     cands = candidates(doc, a.library)
     env = gwt_reader.envelope(url, None, text='\n'.join(c['text'] for c in cands if c['text']), json_body=doc,
-                              verdict=verdict(doc, pid, off), library=a.library, status=status, from_cache=cached)
-    words = [SOURCE, a.library, a.query, a.year_from, a.year_to, a.count, off]
+                              verdict=verdict(doc, pid, off), library=a.library, total=doc['response']['numFound'], status=status, from_cache=cached)
+    words = [SOURCE, a.library, a.query, a.year_from or '', a.year_to or '', a.count, off]
     base = gwt_reader.write_search(a.out, gwt_reader.search_key(url, words), env, cands)
     gwt_reader.print_paths(SOURCE, base, print)
     for c in cands:
-        print('page\t%s\t%s' % (c['url'], c['image']), flush=True)
+        print('page\t%s\t%s\t%s' % (c['url'], c['image'], c['iiif']), flush=True)
     print('results\t%s total, %d read%s%s' % (doc['response']['numFound'], len(cands), gwt_reader.past_end(cands, off),
                                             ' (cache)' if cached else ''), flush=True)
     return gwt_reader.EXIT_OK if cands else gwt_reader.EXIT_EMPTY
