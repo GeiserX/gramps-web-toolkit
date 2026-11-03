@@ -16,7 +16,7 @@ gwt_gedcom/parse.py | if _latin_line_is_utf8(chunk, codec): | if False: | a UTF-
 gwt_gedcom/parse.py | if any(ord(c) > 0x7F for c in text): | if False: | a UTF-8 line in an ANSEL file is read as UTF-8
 gwt_gedcom/parse.py | out.append(chr(b) + "".join(marks)) | out.append("".join(marks) + chr(b)) | ANSEL accents go after the letter they mark
 gwt_gedcom/parse.py | parent.value += ("\n" if tag == "CONT" else "") + value | parent.value += "\n" + value | CONC joins without a line break, CONT with one
-gwt_gedcom/parse.py | parse_date(out)  # the real calendar check | pass  # | an impossible date such as 31 FEB is kept as text and flagged
+gwt_gedcom/parse.py | parsed = parse_date(out)  # the real calendar check | parsed = {"sortval": 0}  # | an impossible date such as 31 FEB is kept as text and flagged
 gwt_gedcom/split.py | todo += members[f][0] | pass | a root's tree reaches up through every ancestor
 gwt_gedcom/audit.py | if why and all(w.full) and not | if False and not | audit lists records that look like the same person
 gwt_gedcom/audit.py | if pd and kb and kb > pd + (0 if mother else 280): | if False: | audit flags a child born after a parent died
@@ -24,7 +24,7 @@ gwt_gedcom/cli.py | return 1 | return 0 | the command fails when gwt-apply's pre
 gwt_gedcom/parse.py | if _not_ansel(raw): | if False: | a Windows-1252 line labelled ANSEL is read as Windows-1252 and reported, not turned into stray accents
 gwt_gedcom/parse.py |     _mend_conc(chunks, codec) |     pass | a character cut in two across a CONC line is put back together, not read as mojibake
 gwt_gedcom/parse.py | if text_of is not None:  # a line break | if False:  # | a bare line inside a note is kept as a new line of it, not dropped
-gwt_gedcom/parse.py | if codec == "utf-16":  # UNICODE, yet no NUL byte | if False: | a UNICODE file with no NUL bytes is read as UTF-8, not as UTF-16 gibberish
+gwt_gedcom/parse.py | if codec == "utf-16":  # UNICODE, yet no NUL byte | if False:  # UNICODE, yet no NUL byte | a UNICODE file with no NUL bytes is read as UTF-8, not as UTF-16 gibberish
 gwt_gedcom/parse.py | if int(m.group(2)) != (year + 1) % 100: | if False: | a dual year whose second part is not the next year is kept as text, not read a century off
 gwt_gedcom/parse.py | raise DateError("the range ends before it starts") | pass | a range that ends before it starts is kept as text and flagged
 gwt_gedcom/mapping.py | raise ImportError_(f"--same {x}={gid}: the tree has no person {gid}") | pass | --same with an ID the tree does not have is refused before anything is written
