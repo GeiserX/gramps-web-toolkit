@@ -363,8 +363,12 @@ def validate(ops: list[dict]) -> list[str]:
         missing = [f for f in required if op.get(f) in (None, "", [])]
         if name == "add_citation" and op.get("page") == "":
             missing.remove("page")  # an empty page is a real value
-        if name == "add_person" and op.get("surname") == "":
-            missing.remove("surname")  # someone known by one name only has no surname
+        if name == "add_person":
+            for f in ("first_name", "surname"):
+                if op.get(f) == "":
+                    missing.remove(f)  # a known name part must not force a guessed other part
+            if not any(isinstance(op.get(f), str) and op[f].strip() for f in ("first_name", "surname")):
+                errors.append(f"{where}: first_name or surname must be non-blank")
         if missing:
             errors.append(f"{where}: missing {sorted(missing)}")
         extra = set(op) - allowed
@@ -375,7 +379,7 @@ def validate(ops: list[dict]) -> list[str]:
                 continue
             if f in optional and op[f] in (None, ""):
                 continue  # an optional text left "" or null means none, as older lists write it
-            blank_ok = (name, f) in (("add_citation", "page"), ("add_person", "surname"))
+            blank_ok = (name, f) in (("add_citation", "page"), ("add_person", "surname"), ("add_person", "first_name"))
             if not isinstance(op[f], str) or not (op[f].strip() or (blank_ok and op[f] == "")):
                 errors.append(f"{where}: {f} is a non-empty text")
         for f in ("children", "attach", "namesake_of", "new_couple_of", "use_loser"):
