@@ -436,10 +436,11 @@ def build(data: dict, *, submitter: str = "Gramps Web Toolkit", this_year: int |
     for h in sorted(used_sources, key=lambda k: kept_sources[k].get("gramps_id") or k):
         s = kept_sources[h]
         out.append(f"0 {xref[('S', h)]} SOUR")
-        for key, tag in (("title", "TITL"), ("abbrev", "ABBR"), ("author", "AUTH"), ("pubinfo", "PUBL")):
-            if s.get(key):
-                _text(out, 1, tag, s[key])
-                texts.append(("sources", s.get("gramps_id") or h, s[key]))
+        for tag, value in (("TITL", s.get("title")), ("ABBR", s.get("abbrev")), ("AUTH", s.get("author")),
+                           ("PUBL", s.get("pubinfo"))):
+            if value:
+                _text(out, 1, tag, value)
+                texts.append(("sources", s.get("gramps_id") or h, value))
         add_notes(1, s.get("note_list"))
 
     for nh in used_notes:
