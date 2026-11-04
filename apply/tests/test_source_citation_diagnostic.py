@@ -36,3 +36,14 @@ def test_document_source_without_a_person_using_a_note():
 def test_existing_supported_citation_carriers_still_pass():
     for target in ({'person':'I0001'},{'family':'F0001'},{'event':'E0001'},{'media':'O0001'},{'place':'P0001'}):
         assert validate([citation([target])])==[]
+
+
+def test_detaching_a_citation_from_a_source_explains_the_alternatives():
+    op={'op':'detach','key':'invented-detach','ruling':'invented-review',
+        'target':{'source':'S0001'},'object':{'citation':'C0001'}}
+    errors=validate([op])
+    message=' '.join(errors)
+    assert 'Source' in message
+    assert 'cannot carry a citation' in message
+    assert 'add_note' in message
+    assert len(errors)==1

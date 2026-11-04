@@ -234,6 +234,17 @@ def _event_owner(spec) -> tuple[str, str]:
     return cls, ref
 
 
+def _check_carrier(cls: str, lst: str) -> None:
+    """Attach/detach guard: a Source is an evidence container, not a citation carrier in the Gramps
+    data model, so reject with the supported alternatives instead of the bare carrier error."""
+    if cls == "Source" and lst == "citation_list":
+        raise ValueError("a Source cannot carry a citation in the Gramps data model; "
+                         "use add_note attached to the Source for an unresolved reading, "
+                         "or attach the citation to the person or event it supports")
+    if cls not in CARRIES[lst]:
+        raise ValueError(f"a {cls} cannot carry a {lst[:-5]}")
+
+
 def _parse_object(spec) -> tuple[str, str, str]:
     """attach_existing's object: {"media": "O0054"} -> ("Media", "O0054", "media_list")."""
     if not isinstance(spec, dict) or len(spec) != 1:
@@ -579,12 +590,7 @@ def validate(ops: list[dict]) -> list[str]:
             if name == "detach":
                 cls, _ = _parse_target(op.get("target"))
                 ocls, _, lst = _parse_object(op.get("object"))
-                if cls == "Source" and lst == "citation_list":
-                    raise ValueError("a Source cannot carry a citation in the Gramps data model; "
-                                     "use add_note attached to the Source for an unresolved reading, "
-                                     "or attach the citation to the person or event it supports")
-                if cls not in CARRIES[lst]:
-                    raise ValueError(f"a {cls} cannot carry a {lst[:-5]}")
+                _check_carrier(cls, lst)
             if name in ("add_tag", "remove_tag"):
                 _tag_target(op.get("target"))
             if name == "move_event" and _event_owner(op.get("from")) == _event_owner(op.get("to")):
@@ -617,12 +623,7 @@ def validate(ops: list[dict]) -> list[str]:
             for spec in (op.get("attach") or []) if name in ("attach_existing", "add_citation", "add_media",
                                                              "add_note", "add_transcription") else []:
                 cls, _ = _parse_target(spec)
-                if cls == "Source" and lst == "citation_list":
-                    raise ValueError("a Source cannot carry a citation in the Gramps data model; "
-                                     "use add_note attached to the Source for an unresolved reading, "
-                                     "or attach the citation to the person or event it supports")
-                if cls not in CARRIES[lst]:
-                    raise ValueError(f"a {cls} cannot carry a {lst[:-5]}")
+                _check_carrier(cls, lst)
             if "expect" in op and name in ("detach", "remove_tag", "unlink_child", "attach_existing", "delete",
                                            "remove_alternate_name") and (
                     op["expect"] not in EXPECT):
