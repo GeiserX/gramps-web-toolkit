@@ -374,6 +374,139 @@ class GitTest(Base):
         R.migrate(self.store, os.path.join(self.dir, 'r1'), log=self.log)
         self.assertEqual(self.git('status', '--porcelain'), '?? r1/rawstore.tsv\n')
 
+    def dry_run_repo(self):
+        """Three committed binaries; only the first has a manifest row, and only its object is in the store."""
+        first = self.write('raw/a/scan-0001.jpg', b'first scan')
+        self.write('raw/a/scan-0002.jpg', b'second scan')
+        self.write('raw/b/index.json.gz', b'\x1f\x8b compressed index')
+        self.write('raw/a/notes.md', b'# notes')
+        self.assertEqual(R.put(self.store, [first], log=self.log), 0)   # writes raw/a/rawstore.tsv
+        self.git('add', '.')
+        self.git('commit', '-qm', 'raw')
+        FakeS3.calls.clear()
+        self.stdout.clear()
+        return os.path.join(self.dir, 'raw')
+
+    def tree_state(self):
+        files = {}
+        for d, dirs, names in os.walk(self.dir):
+            dirs[:] = [x for x in dirs if x != '.git']
+            for n in names:
+                with open(os.path.join(d, n), 'rb') as f:
+                    files[os.path.relpath(os.path.join(d, n), self.dir)] = f.read()
+        return files, self.git('ls-files', '-s'), self.git('status', '--porcelain'), dict(FakeS3.objects)
+
+    def test_migrate_dry_run_writes_nothing(self):
+        for flags in ({}, {'remove': True}, {'evict': True}):
+            with self.subTest(**flags):
+                self.tearDown()
+                self.setUp()
+                folder = self.dry_run_repo()
+                before = self.tree_state()
+                real_git, git_calls, writes = R.git, [], []
+
+                def spy_git(*a, **kw):
+                    git_calls.append(a)
+                    return real_git(*a, **kw)
+                with mock.patch.object(R, 'git', spy_git), \
+                        mock.patch.object(R.S3, 'put_file', lambda *a, **k: writes.append(('put_file', a))), \
+                        mock.patch.object(R, 'write_manifest', lambda *a, **k: writes.append(('manifest', a))), \
+                        mock.patch.object(R, 'ignore_binaries', lambda *a, **k: writes.append(('ignore', a))):
+                    self.assertEqual(R.migrate(self.store, folder, log=self.log, dry_run=True, **flags), 0)
+                self.assertEqual(writes, [])
+                self.assertEqual([a[0] for a in git_calls], ['ls-files'])
+                self.assertEqual({c[0] for c in FakeS3.calls}, {'HEAD'})   # HEAD only, never a PUT
+                self.assertEqual(len(FakeS3.calls), 3)
+                self.assertEqual(self.tree_state(), before)   # no file written, deleted or staged
+                out = '\n'.join(self.stdout)
+                self.assertRegex(out, r'have +\w{12} .*scan-0001\.jpg \(manifest row\)')
+                self.assertRegex(out, r'would put \w{12} .*scan-0002\.jpg \(no manifest row\)')
+                self.assertRegex(out, r'would put \w{12} .*index\.json\.gz \(no manifest row\)')
+                self.assertIn('dry run: 2 files to upload (%d bytes), 1 already in the store (10 bytes); '
+                              '1 of 3 have a manifest row; rawstore.tsv would be written in 2 folders'
+                              % (len(b'second scan') + len(b'\x1f\x8b compressed index')), out)
+                if flags:
+                    self.assertIn('%s would %s 3 files (40 bytes): .gz 1 (19 bytes), .jpg 2 (21 bytes)'
+                                  % (('--evict', 'untrack and delete') if 'evict' in flags
+                                     else ('--remove', 'untrack, keeping on disk,')), out)
+                else:
+                    self.assertNotIn('would untrack', out)
+                self.assertIn('dry run: nothing was uploaded, written, untracked or deleted', out)
+
+    def test_migrate_dry_run_reports_what_the_real_run_then_does(self):
+        folder = self.dry_run_repo()
+        self.assertEqual(R.migrate(self.store, folder, log=self.log, dry_run=True), 0)
+        planned = sorted(l.split()[3] for l in self.stdout if l.startswith('would put'))
+        self.stdout.clear()
+        self.assertEqual(R.migrate(self.store, folder, log=self.log), 0)
+        self.assertEqual(sorted(l.split()[-1] for l in self.stdout if l.startswith('put ')), planned)
+
+    def test_migrate_dry_run_counts_a_stale_manifest_row_as_missing(self):
+        folder = self.dry_run_repo()
+        self.write('raw/a/scan-0001.jpg', b'first scan, rescanned')   # same name, new bytes: the row is stale
+        self.assertEqual(R.migrate(self.store, folder, log=self.log, dry_run=True), 0)
+        self.assertRegex('\n'.join(self.stdout), r'would put \w{12} .*scan-0001\.jpg \(no manifest row\)')
+
+    def test_migrate_dry_run_counts_an_object_of_the_wrong_size_as_missing(self):
+        folder = self.dry_run_repo()
+        path = os.path.join(folder, 'a', 'scan-0001.jpg')
+        FakeS3.objects[R.object_key(R.sha256_file(path)[0], 'scan-0001.jpg')] = (b'cut', None)   # put() uploads again
+        self.assertEqual(R.migrate(self.store, folder, log=self.log, dry_run=True), 0)
+        self.assertRegex('\n'.join(self.stdout), r'would put \w{12} .*scan-0001\.jpg \(manifest row\)')
+
+    def test_migrate_dry_run_heads_the_keys_under_the_prefix(self):
+        folder = self.dry_run_repo()
+        self.assertEqual(R.put(self.store, [os.path.join(folder, 'b', 'index.json.gz')], prefix='p/', log=self.log), 0)
+        self.stdout.clear()
+        self.assertEqual(R.migrate(self.store, folder, prefix='p/', log=self.log, dry_run=True), 0)
+        self.assertRegex('\n'.join(self.stdout), r'have +\w{12} .*index\.json\.gz')
+
+    def test_migrate_dry_run_fails_on_a_store_it_cannot_read(self):
+        folder = self.dry_run_repo()
+        store = R.S3(self.endpoint, BUCKET, 'WRONG', 'SK')   # the stub answers 403
+        with redirect_stderr(io.StringIO()):
+            self.assertEqual(R.migrate(store, folder, log=self.log, dry_run=True), 3)
+        self.assertEqual(sum(1 for l in self.stderr if l.startswith('FAIL ')), 3)
+
+    def test_migrate_dry_run_fails_where_the_real_run_cannot_confirm_the_object(self):
+        folder = self.dry_run_repo()
+        path = os.path.join(folder, 'a', 'scan-0001.jpg')
+        key = R.object_key(R.sha256_file(path)[0], 'scan-0001.jpg')
+        FakeS3.objects[key] = (FakeS3.objects[key][0], '0' * 64)   # right size, another sha256: put() refuses it
+        self.assertEqual(R.migrate(self.store, folder, log=self.log, dry_run=True), 1)
+        self.assertTrue(any(l.startswith('FAIL ' + path + ': ') for l in self.stderr), self.stderr)
+        with mock.patch.object(R, 'WAIT', 0):
+            self.assertEqual(R.migrate(self.store, folder, log=self.log), 1)   # the real run fails on it too
+
+    def test_migrate_dry_run_names_a_file_it_cannot_read(self):
+        folder = self.dry_run_repo()
+        path = os.path.join(folder, 'a', 'scan-0002.jpg')
+        real = R.sha256_file
+
+        def unreadable(p):
+            if p == path:
+                raise PermissionError(13, 'Permission denied', p)
+            return real(p)
+        with mock.patch.object(R, 'sha256_file', unreadable):
+            self.assertEqual(R.migrate(self.store, folder, log=self.log, dry_run=True), 1)
+        self.assertTrue(any(l.startswith('FAIL ' + path + ': PermissionError') for l in self.stderr), self.stderr)
+
+    def test_migrate_dry_run_refuses_a_sparse_checkout_like_the_real_run(self):
+        folder = self.dry_run_repo()
+        os.unlink(os.path.join(folder, 'b', 'index.json.gz'))
+        for dry in (True, False):
+            with self.assertRaisesRegex(SystemExit, '1 tracked files are not in the working tree'):
+                R.migrate(self.store, folder, log=self.log, dry_run=dry)
+        self.assertEqual(FakeS3.calls, [])
+
+    def test_migrate_cli_takes_dry_run_with_remove_and_evict(self):
+        folder = self.dry_run_repo()
+        for flags in ((), ('--remove',), ('--evict',)):
+            self.assertEqual(self.cli('migrate', folder, '--dry-run', *flags), 0)
+        self.assertEqual({c[0] for c in FakeS3.calls}, {'HEAD'})
+        self.assertEqual(self.git('status', '--porcelain'), '')
+        self.assertTrue(os.path.exists(os.path.join(folder, 'b', 'index.json.gz')))
+
     def test_check_staged_refuses_big_binary_outside_allowed(self):
         self.write('raw/big.jpg', b'\xff\xd8' + os.urandom(300 * 1024))
         self.write('assets/logo.png', b'\x89PNG' + os.urandom(300 * 1024))

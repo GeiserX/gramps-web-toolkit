@@ -51,11 +51,17 @@ gwt-rawstore verify [dirs] [--deep]
 Every row of every `rawstore.tsv` under the given directories: the key carries the sha256, the object exists, the size and the stored sha256 match. `--deep` also downloads and hashes every object. Exit status 1 when any row is bad.
 
 ```sh
-gwt-rawstore migrate <dir> [--remove | --evict] [-j 4]
+gwt-rawstore migrate <dir> [--remove | --evict] [--dry-run] [-j 4]
 ```
 For binaries already committed. Uploads every binary git tracks under `dir` and writes the manifests. With `--remove` it also runs `git rm --cached` on them, adds one pattern per extension (`*.jpg`, `*.pdf`) to `dir/.gitignore`, which covers every subfolder, and stages the manifests and `.gitignore`. The files stay on disk. `--evict` does the same and then deletes the local copies. Every upload is confirmed by a `HEAD` that checks the size and the sha256 before anything is untracked or deleted. The history is not rewritten in either case; commit when the diff looks right. If any upload fails, nothing is untracked.
 
 It refuses to run when tracked files are missing from the working tree (a sparse checkout), since it cannot hash what it cannot read. Run it on a full clone, for example on a server, then pull the commit on the laptop.
+
+`--dry-run` shows what a run with the same flags would do, and does none of it. It hashes each binary and sends one `HEAD` for its key; it never uploads, never writes a `rawstore.tsv` or `.gitignore`, never runs `git rm` or `git add`, and never deletes a file. Each file gets a line, `would put` or `have` (the store already holds the object with that size), and says whether its folder's `rawstore.tsv` already has a row with the same sha256 and size. Then come the totals: files and bytes to upload, files and bytes already stored, and how many folders would get a manifest written. With `--remove` or `--evict` it adds the files and bytes that would be untracked, or untracked and deleted, counted by extension, so compressed data such as `.json.gz` shows up before it leaves git. It refuses a sparse checkout with the same error as the real run, and exits 1, naming each file, when it cannot read a file, a `HEAD` fails, or the store holds the object with the right size but another sha256, which the real run would refuse.
+
+```sh
+gwt-rawstore migrate raw --evict --dry-run
+```
 
 ### Images that live in the bucket
 

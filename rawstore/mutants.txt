@@ -46,3 +46,12 @@ gwt_rawstore.py | f.write(('\n' if text and not text.endswith('\n') else '') + |
 gwt_rawstore.py | - set(text.splitlines())) | ) | a second migrate does not repeat an ignore pattern
 gwt_rawstore.py | *(':(literal)' + n for n in | *(n for n in | migrate untracks a scan whose name git would read as a pathspec pattern or magic
 gwt_rawstore.py | for i in range(0, len(names), GIT_BATCH): | for i in range(0, len(names), len(names)): | migrate passes names to git rm in batches, so a big folder stays under the argument limit
+gwt_rawstore.py |     if dry_run: | if False: | migrate --dry-run uploads, writes, untracks and deletes nothing
+gwt_rawstore.py | g.add_argument('--dry-run', action='store_true', | g.add_argument('--dry-run-later', action='store_true', | gwt-rawstore migrate takes --dry-run from the command line
+gwt_rawstore.py | in_manifest = row is not None and row[:2] == (sha, size) | in_manifest = row is not None | a dry run does not count a stale manifest row as recorded
+gwt_rawstore.py | stored = got is not None and got[0] == size | stored = got is not None | a dry run says an object of the wrong size would be uploaded again, as put() does
+gwt_rawstore.py | return plan(store, files, prefix=prefix, | return plan(store, files, prefix='', | a dry run HEADs the same prefixed keys the real run uses
+gwt_rawstore.py | return path, None, None, None, e | raise | a dry run names each file it could not read or HEAD and exits non-zero
+gwt_rawstore.py | if (remove or evict) and ext: | if ext: | a dry run without --remove or --evict reports nothing untracked
+gwt_rawstore.py | '--evict' if evict else '--remove', 'untrack and delete' if evict | '--remove', 'untrack and delete' if evict | a dry run with --evict says the files would be deleted
+gwt_rawstore.py | if got is not None and got[0] == size and got[1] and got[1] != sha: | if False: | a dry run fails on an object put() would not confirm (right size, another sha256)
