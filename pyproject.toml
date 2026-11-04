@@ -104,6 +104,7 @@ dev-mode-dirs = ["apply", "check", "fetch", "core", "ledger", "gate", "fscache",
 "read/gwt_trove.py" = "gwt_trove.py"
 "read/gwt_kramerius.py" = "gwt_kramerius.py"
 "report/gwt_report.py" = "gwt_report.py"
+"report/gwt_public_preflight.py" = "gwt_public_preflight.py"
 "geocode/gwt_geocode.py" = "gwt_geocode.py"
 "run/gwt_run.py" = "gwt_run.py"
 "dna/gwt_dna.py" = "gwt_dna.py"

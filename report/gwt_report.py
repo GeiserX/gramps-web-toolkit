@@ -750,9 +750,25 @@ def main(argv=None):
     d.add_argument('--format', choices=('md', 'html'), default='md')
     d.add_argument('--weak-tag', action='append', metavar='TEXT')
     d.add_argument('--include-private', action='store_true', help='also list objects and people marked private')
+    v = sub.add_parser('public-preflight', help='offline structural deceased CSV checks; never upload approval')
+    v.add_argument('csv')
+    v.add_argument('--surname-required', action='store_true')
+    v.add_argument('--wikitree-evidence', metavar='JSON')
+    v.add_argument('--exclude-id', action='append', default=[])
+    v.add_argument('--max-search-age-days', type=int, default=7)
+    v.set_defaults(weak_tag=None)
     args = p.parse_args(argv)
     weak = tuple(fold(w) for w in args.weak_tag) if args.weak_tag else WEAK_TAGS
     try:
+        if args.cmd == 'public-preflight':
+            from gwt_public_preflight import run
+            try:
+                if not 0 <= args.max_search_age_days <= 365:
+                    raise ValueError('search-window')
+                return run(args.csv, args.surname_required, args.wikitree_evidence, args.exclude_id, args.max_search_age_days)
+            except (OSError, ValueError):
+                print('gwt-report: public-preflight invalid input', file=sys.stderr)
+                return 2
         if args.cmd == 'kin':
             T = load(args.dump)
             rep = kin(T, person_handle(T, args.a), person_handle(T, args.b), weak)

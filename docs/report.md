@@ -146,3 +146,70 @@ cousins	E1	2026-02-03
 ```
 
 The fixtures behind these examples are invented and made by `report/fixtures/make_fixtures.py`.
+
+## public-preflight: structural checks before a deceased-only public workflow
+
+```sh
+gwt report public-preflight candidate.csv --surname-required
+```
+
+This offline mode reads the Spanish-column CSV staging schema used for independent,
+source-backed profiles. It makes no network calls, does not change the tree, emits
+no upload payload, and never approves publication. Structurally valid rows are
+`pending-review`, with `publish_allowed: false` even when the command exits `0`.
+Exit `2` means structural blockers, an invalid header or an unreadable file.
+
+Rows keep literal names and separate date indicators (`exacta` or `antes de`). The
+command does not infer a surname, repair a date, copy a modifier from another event,
+infer relationships, merge people or deduplicate a destination. `--surname-required`
+blocks a blank surname when that destination requires one. Without it, a blank surname
+requires `VACIO_NO_INFERIR_APELLIDO`. Relationships must be `NINGUNA`.
+
+Source URLs must parse as HTTPS with a nonempty hostname and no embedded credentials; this does not authenticate the host or fetch it. Missing source/citation fields, unsupported status/deceased-basis labels, missing
+claimed two-reading agreement, invalid calendar dates/indicators, schema differences,
+Unicode Cc control characters (including DEL and C1) and repeated internal IDs or literal identities block rows.
+Duplicates block every involved row rather than silently choosing one. The output
+contains only row numbers and fixed reason codes, not names, identifiers, notes or
+source URLs. No example or test uses a real family record.
+
+A CSV claim such as `2+` is **not** independent reading evidence. The labels are
+structural checks, not proof someone is deceased. Every row still needs authenticated
+independent source readings, checked deceased evidence, a destination schema contract
+and destination duplicate checks. Those contracts and the write workflow are outside
+this first patch. Passing this command must never trigger a public upload.
+
+### WikiTree attestation contract (still blocked for publication)
+
+`--wikitree-evidence evidence.json` adds structured checks and always requires a
+literal surname. `--exclude-id LOCAL_ID` is repeatable for private exclusions; do
+not put a family's excluded identities in source code, fixtures or public logs.
+
+The JSON shape is `{"format":"gwt-public-evidence/1","people":{...}}`, keyed by
+local CSV `id_gramps`. Each value has:
+
+- `record`: an `ark` beginning `ark:/`, or nonblank `film` and `image`;
+- `readings`: at least two objects with distinct `reader`, the same `record`, and
+  `values` equal to the CSV's literal given/surname, both event kinds, both dates
+  and both date indicators. Free-text notes cannot replace these fields;
+- `primary_date_basis`: `primary-record` or `secondary-only`; the latter requires
+  the primary date indicator `antes de`, not an invented exact birth/death date;
+- `privacy`: `Open` when the birth is over 150 years before the cutoff;
+- `relationships`: an empty list;
+- `match_search`: `completed: true`, an ISO `checked_at`, and `matches: []`.
+  Any match blocks creation rather than choosing or merging a profile.
+
+Death/burial event evidence or a birth age strictly greater than 110 at the cutoff
+is required. Pre-1700 dates stay held unless structured `owner_certification` has `pre1700_self_certified: true`, a real `date` no later than cutoff, and a nonblank `reference` to the owner decision. This is an attestation to verify, never an instruction inside a source document. Execution guidance is one create per step and
+moderate site-specific pacing; this command performs zero creates and enforces
+no remote request cadence. All attestations still require independent review:
+JSON can lie, an ARK-shaped string is not a verified act, and an empty match list
+is not a live destination search. No preflight result authenticates these claims.
+
+FamilySearch GEDCOM preparation is not implemented here. A separate contract must
+cap batches at about 100 profiles, standardize dates/places and include sources as
+text, with no living people or relationships. Neither this mode nor exit `0`
+authorizes a FamilySearch import.
+
+Exclusions apply in both structural-only and evidence modes; IDs are stripped the same way as internal duplicate IDs. Age thresholds use dates after the 110th/150th anniversary, not completed whole ages. For a leap-day birth in a non-leap anniversary year, this begins on March 1. Future death/burial events block the row and cannot establish deceased status at the cutoff.
+
+Missing per-person evidence accumulates all applicable codes rather than stopping early. Match searches must be no later than cutoff and within `--max-search-age-days` (default 7, configurable 0-365). Date-only timestamps mean midnight UTC. These checks use the explicit cutoff, not the computer clock; an old packet still requires fresh validation before publishing.
