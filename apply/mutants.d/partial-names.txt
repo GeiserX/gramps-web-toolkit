@@ -1,0 +1,1 @@
+gwt_apply/ops.py | if not any(isinstance(op.get(f), str) and op[f].strip() for f in ("first_name", "surname")): | if False: | a wholly unnamed person remains invalid when either known name part may be empty
