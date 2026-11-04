@@ -104,6 +104,36 @@ Writes `trees/I1.ged` and `trees/I40.ged`, in UTF-8. A root's tree is everyone w
 
 Some archive sites export one record as a GEDCOM 7 file: Open Archives gives one at `https://www.openarchieven.nl/<archive>:<uuid>/gedcom`. Such a file often holds only the names, sexes and family links of the people in the record, with no date: then everyone in it reads as maybe living and is held. Check the record, then import it with `--allow-living`, and cite the record with an `add_citation` of your own. When the file does carry the record's dated event and source, the people are dated by it and imported like any other file. Blank lines in these files are skipped.
 
+
+## Export
+
+`gwt-import-gedcom export` writes a GEDCOM 5.5.1 file from an offline tree file — a `gwt-check dump` or a
+`gwt-apply` snapshot, gzipped or not. It never touches Gramps: the file is the only input, so it always reads
+the tree as the dump left it.
+
+```sh
+gwt import-gedcom export dump.json.gz --out tree.ged --report report.json
+```
+
+The export is for sharing a tree without sharing the people in it who may be alive. The privacy rules are the
+same ones `gwt-check public` reports on:
+
+- A person who may be living (no death of their own, and born less than 110 years ago or never dated, or in a
+  DNA association) is only a placeholder: the name "Living" and their sex, never their real name, events,
+  notes or citations.
+- An object marked private never leaves the tree: it is not written, and references to it are dropped. A
+  private parent disappears from their children's families; a family that loses every member is not written.
+- A family's events, notes and citations are written only when neither spouse is living or private.
+
+`--report` writes who was anonymized and what was left out, by Gramps ID, so a share can be checked before it
+goes anywhere. The header's submitter name defaults to "Gramps Web Toolkit"; set it with `--submitter`.
+
+The export never invents: a date Gramps keeps as text only is written as a GEDCOM date phrase, never guessed.
+Media are not written (a GEDCOM points at files that stay on the server), and event roles other than Primary
+are not written either: they belong to the other person's own record. XREFs are the Gramps IDs when they are
+unique, else the handle. CHAR is UTF-8, FORM LINEAGE-LINKED, and the reader half of this same tool takes the
+file back with no problems.
+
 ## Limits
 
 - An `OCCU`, `RELI` or `EDUC` with a value becomes an event of that type with the value as its description. Gramps Web's own importer makes some of them person attributes instead.

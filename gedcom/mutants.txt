@@ -53,3 +53,8 @@ gwt_gedcom/split.py | p if re.fullmatch(r"@#D[A-Z ]+@", p) else p.replace("@", "
 gwt_gedcom/split.py | if len(set(paths)) < len(paths): | if False: | two roots that would write one file are refused
 gwt_gedcom/audit.py | for t in tags for c in rec.children if c.tag == t and | for c in rec.children if c.tag in tags and | audit takes the birth before the baptism, whatever the record order
 gwt_gedcom/audit.py | if sv - 1721425 > datetime.date.max.toordinal(): | if False: | a date past the year 9999 is skipped, not a crash
+gwt_gedcom/export.py | return bool(o.get("private")) | return False | an object marked private never leaves the tree
+gwt_gedcom/export.py | if h in living: | if False: | a person who may be living is only a placeholder, never their real name
+gwt_gedcom/export.py | if not spouse_living: | if True: | a family's events are written only when neither spouse may be living
+gwt_gedcom/export.py | return text.replace("@", "@@") | return text.replace("@", "@") | a text @ doubles so it cannot read as a pointer
+gwt_gedcom/export.py | {MOD_BEFORE: "BEF", MOD_AFTER: "AFT", MOD_ABOUT: "ABT"} | {MOD_BEFORE: "BEF", MOD_AFTER: "AFT", MOD_ABOUT: "BEF"} | an about date stays approximate, never exact-looking
