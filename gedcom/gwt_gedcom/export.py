@@ -10,12 +10,18 @@ Privacy, the same rules as `gwt-check public`:
   never their real name, events, notes or citations;
 - an object marked private never leaves the tree: it is not written, and references to it are dropped (a
   private parent disappears from their children's families; a family that loses every member is not written);
-- a family's events, notes and citations are written only when neither spouse is living or private.
+- a family's events, notes and citations are written only when neither recorded spouse is living or private
+  (judged before private members are dropped: a family that lost a spouse to the private filter keeps no
+  events);
+- a source is written only when an exported citation points at it: a source nobody can cite anymore (its
+  citations were anonymized with their person) never leaves, whatever its title says.
 
 The export never invents: a date Gramps keeps as text only is written as a GEDCOM date phrase, never guessed.
 Media are not written (a GEDCOM points at files that stay on the server), and event roles other than Primary
 are not written either: they belong to the other person's own record. XREFs are the Gramps IDs when they are
-unique, else the handle. Text doubles every `@` and wraps with CONC/CONT inside GEDCOM's line limit. CHAR is
+well-formed and free, else the handle sanitized; they are unique case-insensitively and never @SUBM@. Text
+doubles every `@` and wraps with CONC/CONT inside GEDCOM's line limit, never splitting an escape pair; values
+that must stay on one line (names, places, date phrases) cannot inject a record through a newline. CHAR is
 UTF-8, FORM LINEAGE-LINKED.
 """
 
@@ -77,18 +83,39 @@ def _esc(text: str) -> str:
     return text.replace("@", "@@")
 
 
+def _inline(text, limit: int = 120) -> str:
+    """A one-line value (a name piece, a place, a date phrase): newlines cannot inject a record, and the
+    result fits GEDCOM's name and place lengths without splitting an @@ pair."""
+    flat = _esc(str(text).replace("\r", " ").replace("\n", " ").strip())[:limit]
+    run = len(flat) - len(flat.rstrip("@"))
+    return flat[:-1] if run % 2 == 1 else flat
+
+
+def _wrap_escaped(text: str, limit: int = _LIMIT) -> list:
+    """Chunks of an escaped value, each within the line limit and never splitting an @@ pair."""
+    chunks = []
+    while len(text) > limit:
+        run = 0
+        while run < limit and text[limit - run - 1] == "@":
+            run += 1
+        cut = limit - 1 if run % 2 == 1 else limit
+        chunks.append(text[:cut])
+        text = text[cut:]
+    chunks.append(text)
+    return chunks
+
+
 def _text(out: list, level: int, tag: str, value) -> None:
-    """The lines of one text value: CONT at its newlines, CONC past the line limit."""
+    """The lines of one text value: @ doubled first, then CONT at its newlines and CONC past the line limit."""
     first_line = True
     for para in str(value).split("\n"):
-        chunks = [para[j:j + _LIMIT] for j in range(0, len(para), _LIMIT)] or [""]
-        for k, chunk in enumerate(chunks):
+        for k, chunk in enumerate(_wrap_escaped(_esc(para))):
             if first_line:
-                out.append(f"{level} {tag}" + (f" {_esc(chunk)}" if chunk else ""))
+                out.append(f"{level} {tag}" + (f" {chunk}" if chunk else ""))
                 first_line = False
             else:
                 kind = "CONT" if k == 0 else "CONC"
-                out.append(f"{level + 1} {kind}" + (f" {_esc(chunk)}" if chunk else ""))
+                out.append(f"{level + 1} {kind}" + (f" {chunk}" if chunk else ""))
 
 
 def _note_text(note: dict) -> str:
@@ -102,7 +129,7 @@ def _date(date: dict | None) -> str | None:
     if not date:
         return None
     mod = date.get("modifier", MOD_NONE)
-    text = (date.get("text") or "").strip()
+    text = _inline(date.get("text") or "")
     if mod == MOD_TEXTONLY:
         return f"({text})" if text else None
     val = date.get("dateval") or []
@@ -118,10 +145,10 @@ def _date(date: dict | None) -> str | None:
         return " ".join(w for w in (str(d) if d else "", mon, f"{y:04d}" if y else "") if w)
 
     first = ymd(val[0:3])
-    if mod == MOD_RANGE and len(val) >= 6:
-        return f"{esc}BET {first} AND {ymd(val[3:6])}"
+    if mod == MOD_RANGE and len(val) >= 7:
+        return f"{esc}BET {first} AND {ymd(val[4:7])}"
     if mod == MOD_SPAN:
-        second = ymd(val[3:6]) if len(val) >= 6 and val[5] > 0 else ""
+        second = ymd(val[4:7]) if len(val) >= 7 and val[6] > 0 else ""
         return f"{esc}FROM {first}" + (f" TO {second}" if second else "")
     word = {MOD_BEFORE: "BEF", MOD_AFTER: "AFT", MOD_ABOUT: "ABT"}.get(mod, "")
     if not word:
@@ -140,19 +167,29 @@ def _place(places: dict, h: str | None) -> str:
         n = p.get("name")
         name = (n.get("value") if isinstance(n, dict) else n) or p.get("title") or ""
         if name:
-            out.append(name)
+            out.append(_inline(name))
         refs = p.get("placeref_list") or []
         h = refs[0].get("ref") if refs else None
     return ", ".join(out)
 
 
+def _refs(lst) -> list:
+    """Handles out of a *_list: plain handles in a dump, {"ref": handle} dicts in some snapshots."""
+    return [(r.get("ref") if isinstance(r, dict) else r) for r in lst or []]
+
+
 def _xrefs(kind_rows: dict[str, dict], used: set) -> dict:
-    """handle -> @XREF@: the Gramps ID when it is well-formed and not already taken, else the handle."""
+    """handle -> @XREF@: the Gramps ID when it is well-formed and still free, else the handle sanitized.
+    XREFs are unique case-insensitively and never @SUBM@, whatever the ids or handles hold."""
     out = {}
     for h, o in kind_rows.items():
         gid = o.get("gramps_id") or ""
-        x = f"@{gid}@" if _ID.match(gid) and f"@{gid}@" not in used else f"@H{h}@"
-        used.add(x)
+        x = f"@{gid}@" if _ID.match(gid) else f"@H{re.sub(r'[^A-Za-z0-9_-]', '', h)[:40]}@"
+        base, n = x, 1
+        while x.upper() in used or x.upper() == "@SUBM@":
+            n += 1
+            x = f"{base[:-1]}-{n}@"
+        used.add(x.upper())
         out[h] = x
     return out
 
@@ -210,8 +247,12 @@ def build(data: dict, *, submitter: str = "Gramps Web Toolkit", this_year: int |
         if not husb and not wife and not children:
             report["dropped_empty_families"] += 1
             continue
+        # the family's events stay private when EITHER recorded spouse is living, private or dropped:
+        # judge the original spouses, before private members are removed above
+        spouse_sensitive = any(s and (s not in kept_people or s in living)
+                               for s in (f.get("father_handle"), f.get("mother_handle")))
         kept_fams[h] = f
-        fam_members[h] = (husb, wife, children)
+        fam_members[h] = (husb, wife, children, spouse_sensitive)
 
     used: set = set()
     xref = {}
@@ -221,23 +262,26 @@ def build(data: dict, *, submitter: str = "Gramps Web Toolkit", this_year: int |
     out = ["0 HEAD", "1 SOUR gwt-import-gedcom", f"2 VERS {version()}", "2 NAME Gramps Web Toolkit",
            "1 GEDC", "2 VERS 5.5.1", "2 FORM LINEAGE-LINKED", "1 CHAR UTF-8", "1 SUBM @SUBM@"]
     used_notes: list = []
+    used_sources: list = []
 
     def add_notes(level, note_list):
-        for nh in note_list or []:
+        for nh in _refs(note_list):
             if nh in kept_notes:
                 out.append(f"{level} NOTE {xref[nh]}")
                 if nh not in used_notes:
                     used_notes.append(nh)
 
     def add_citations(level, citation_list):
-        for r in citation_list or []:
-            c = cites.get(r.get("ref"))
+        for rh in _refs(citation_list):
+            c = cites.get(rh)
             if not c or _private(c):
                 continue
             sh = c.get("source_handle")
             if sh not in kept_sources:
                 continue
             out.append(f"{level} SOUR {xref[sh]}")
+            if sh not in used_sources:
+                used_sources.append(sh)
             if c.get("page"):
                 _text(out, level + 1, "PAGE", c["page"])
             if c.get("confidence"):
@@ -285,10 +329,10 @@ def build(data: dict, *, submitter: str = "Gramps Web Toolkit", this_year: int |
                     continue
                 surs = " ".join(" ".join(w for w in (s.get("prefix") or "", s.get("surname") or "") if w).strip()
                                 for s in n.get("surname_list") or [])
-                first_name = _esc((n.get("first_name") or "").strip())
-                line = f"1 NAME {first_name} /{_esc(surs)}/" if first_name else f"1 NAME /{_esc(surs)}/"
+                first_name = _inline(n.get("first_name") or "")
+                line = f"1 NAME {first_name} /{_inline(surs)}/" if first_name else f"1 NAME /{_inline(surs)}/"
                 if n.get("suffix"):
-                    line += f" {_esc(n['suffix'])}"
+                    line += f" {_inline(n['suffix'])}"
                 out.append(line)
         sex = {0: "F", 1: "M"}.get(p.get("gender"))
         if sex:
@@ -306,7 +350,7 @@ def build(data: dict, *, submitter: str = "Gramps Web Toolkit", this_year: int |
 
     for h in sorted(kept_fams, key=lambda k: families[k].get("gramps_id") or k):
         f = families[h]
-        husb, wife, children = fam_members[h]
+        husb, wife, children, spouse_sensitive = fam_members[h]
         out.append(f"0 {xref[h]} FAM")
         if husb:
             out.append(f"1 HUSB {xref[husb]}")
@@ -314,13 +358,12 @@ def build(data: dict, *, submitter: str = "Gramps Web Toolkit", this_year: int |
             out.append(f"1 WIFE {xref[wife]}")
         for ch in children:
             out.append(f"1 CHIL {xref[ch]}")
-        spouse_living = husb in living or wife in living
-        if not spouse_living:
+        if not spouse_sensitive:
             add_events(f, skip=False)
             add_notes(1, f.get("note_list"))
             add_citations(1, f.get("citation_list"))
 
-    for h in sorted(kept_sources, key=lambda k: kept_sources[k].get("gramps_id") or k):
+    for h in sorted(used_sources, key=lambda k: kept_sources[k].get("gramps_id") or k):
         s = kept_sources[h]
         out.append(f"0 {xref[h]} SOUR")
         if s.get("title"):
@@ -336,18 +379,17 @@ def build(data: dict, *, submitter: str = "Gramps Web Toolkit", this_year: int |
     for nh in used_notes:
         first = True
         for para in _note_text(kept_notes[nh]).split("\n"):
-            chunks = [para[j:j + _LIMIT] for j in range(0, len(para), _LIMIT)] or [""]
-            for k, chunk in enumerate(chunks):
+            for k, chunk in enumerate(_wrap_escaped(_esc(para))):
                 if first:
-                    out.append(f"0 {xref[nh]} NOTE" + (f" {_esc(chunk)}" if chunk else ""))
+                    out.append(f"0 {xref[nh]} NOTE" + (f" {chunk}" if chunk else ""))
                     first = False
                 else:
                     kind = "CONT" if k == 0 else "CONC"
-                    out.append(f"1 {kind}" + (f" {_esc(chunk)}" if chunk else ""))
+                    out.append(f"1 {kind}" + (f" {chunk}" if chunk else ""))
     out.append(f"0 @SUBM@ SUBM")
-    _text(out, 1, "NAME", submitter)
+    out.append(f"1 NAME {_inline(submitter)}")
     out.append("0 TRLR")
 
-    report.update(people=len(kept_people), families=len(kept_fams), sources=len(kept_sources),
+    report.update(people=len(kept_people), families=len(kept_fams), sources=len(used_sources),
                   notes=len(used_notes))
     return out, report

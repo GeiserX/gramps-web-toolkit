@@ -114,7 +114,7 @@ def test_private_person_never_leaves_the_tree():
 
 def test_private_note_and_source_never_leave():
     ev = event("e1", "E1", "Death", 1970)
-    ev["citation_list"] = [{"ref": "c1"}, {"ref": "c2"}]
+    ev["citation_list"] = ["c1", "c2"]
     data = snap(Person=[person("p1", "I1", "Ana", "Vega", sex=0, events=["e1"], notes=["n1", "n2"])],
                 Event=[ev],
                 Citation=[{"handle": "c1", "gramps_id": "C1", "source_handle": "s1", "page": "p. 12",
@@ -167,7 +167,7 @@ def test_dates_never_guessed():
     assert "2 DATE (Easter 1700)" in out
     # range and calendar escapes keep their meaning
     ev2 = event("e2", "E2", "Birth", 1700, 0, 0, modifier=MOD_RANGE)
-    ev2["date"]["dateval"] = [0, 0, 1700, 0, 0, 1701]
+    ev2["date"]["dateval"] = [0, 0, 1700, False, 0, 0, 1701, False]  # Gramps layout: d,m,y,slash,d2,m2,y2
     ev3 = event("e3", "E3", "Baptism", 1700, 2, 11, calendar=CAL_JULIAN)
     ev4 = event("e4", "E4", "Burial", 1700, 0, 0, modifier=MOD_ABOUT)
     data["objects"]["Event"] += [ev2, ev3, ev4]
@@ -178,9 +178,96 @@ def test_dates_never_guessed():
     assert "2 DATE ABT 1700" in out
 
 
+def test_family_events_hidden_when_a_spouse_is_private():
+    fam = family("f1", "F1", father="p2", mother="p1", events=["e3"])
+    fam["note_list"] = ["n9"]
+    data = snap(Person=[person("p1", "I1", "Ana", "Vega", sex=0, events=["e1"], families=["f1"]),
+                        person("p2", "I2", "Hidden", "Man", events=["e2"], families=["f1"], private=True)],
+                Event=[event("e1", "E1", "Death", 1970), event("e2", "E2", "Death", 1960),
+                       event("e3", "E3", "Marriage", 1950)],
+                Note=[note("n9", "N9", "PRIVATE_SPOUSE_FAMILY_SECRET")],
+                Family=[fam])
+    out = export(data, this_year=YEAR)
+    assert "1 WIFE @I1@" in out          # the family stays, without the private father
+    assert "MARR" not in out             # but its events never leave: a spouse was private
+    assert "PRIVATE_SPOUSE_FAMILY_SECRET" not in out
+
+
+def test_sources_only_when_cited_by_an_exported_citation():
+    ev = event("e1", "E1", "Death", 1970)
+    ev["citation_list"] = ["c1"]
+    living_ev = event("e2", "E2", "Birth", YEAR - 30)
+    living_ev["citation_list"] = ["c2"]
+    data = snap(Person=[person("p1", "I1", "Ana", "Vega", sex=0, events=["e1"]),
+                        person("p2", "I2", "Bob", "Ray", events=["e2"])],
+                Event=[ev, living_ev],
+                Citation=[{"handle": "c1", "gramps_id": "C1", "source_handle": "s1", "page": "p. 1",
+                           "confidence": 2, "note_list": [], "private": False},
+                          {"handle": "c2", "gramps_id": "C2", "source_handle": "s2", "page": "p. 2",
+                           "confidence": 2, "note_list": [], "private": False}],
+                Source=[source("s1", "S1", "Parish book"),
+                        source("s2", "S2", "cited only by a living person"),
+                        source("s3", "S3", "LIVING_REAL_NAME medical biography")])
+    out = export(data, this_year=YEAR)
+    assert "Parish book" in out                       # cited by an exported citation
+    assert "cited only by a living person" not in out  # its only citation was anonymized away
+    assert "LIVING_REAL_NAME" not in out              # never cited: never written
+
+
+def test_lines_never_exceed_the_limit_or_split_an_escape():
+    data = snap(Person=[person("p1", "I1", "Ana", "Vega", sex=0, events=["e1"], notes=["n1"])],
+                Event=[event("e1", "E1", "Death", 1970)],
+                Note=[note("n1", "N1", "@" * 240 + "\n" + "x" * 239 + "@@" + "y" * 300)])
+    lines = export(data, this_year=YEAR).split("\n")
+    assert all(len(l) <= 255 for l in lines)
+    # no @@ pair is split at the end of a content line (pointers like "@N1@" are fine)
+    import re as _re
+    content = [l for l in lines if len(l.split(" ", 2)) > 2 and l.split(" ", 2)[1] in ("NOTE", "CONT", "CONC", "TITL", "PAGE", "TYPE")
+               and not _re.match(r"^@[^@]+@$", l.split(" ", 2)[2])]  # pointers like "1 NOTE @N1@" are not content
+    assert all((len(l) - len(l.rstrip("@"))) % 2 == 0 for l in content)
+    import tempfile, os
+    from gwt_gedcom.parse import read as ged_read
+    with tempfile.NamedTemporaryFile("w", suffix=".ged", delete=False, encoding="utf-8") as fh:
+        fh.write("\n".join(lines))
+        path = fh.name
+    ged = ged_read(path)
+    assert ged.problems == []
+    os.unlink(path)
+
+
+def test_names_cannot_inject_records():
+    evil = "A\n0 @EVIL@ INDI\n1 NAME Injected"
+    data = snap(Person=[person("p1", "I1", evil, "Vega", sex=0, events=["e1"])],
+                Event=[event("e1", "E1", "Death", 1970)])
+    out = export(data, this_year=YEAR)
+    lines = out.split("\n")
+    assert not any(l == "0 @EVIL@ INDI" for l in lines)          # no injected record
+    assert not any(l.startswith("1 NAME Injected") for l in lines)
+    assert sum(1 for l in lines if l.startswith("0 @") and l.endswith(" INDI")) == 1
+
+
+def test_xrefs_never_collide_or_take_subm():
+    people = [person("p1", "I1", "Ana", "Vega", sex=0, events=["e1"]),
+              person("p2", "I1", "Bob", "Vega", events=["e2"]),          # duplicate id
+              person("p3", "SUBM", "Kim", "Vega", events=["e3"])]        # reserved xref
+    people[2]["gramps_id"] = "SUBM1"
+    src = source("s1", "I1", "a source whose id collides with a person")
+    ev = event("e1", "E1", "Death", 1970)
+    ev["citation_list"] = ["c1"]
+    data = snap(Person=people,
+                Event=[ev, event("e2", "E2", "Death", 1960), event("e3", "E3", "Death", 1950)],
+                Citation=[{"handle": "c1", "gramps_id": "C1", "source_handle": "s1", "page": "p. 1",
+                           "confidence": 2, "note_list": [], "private": False}],
+                Source=[src])
+    out = export(data, this_year=YEAR)
+    heads = [l.split(" ")[1] for l in out.split("\n") if l.startswith("0 @")]
+    assert len(heads) == len(set(heads))           # every record xref is unique
+    assert "@SUBM@" in heads and "@SUBM1@" in heads
+
+
 def test_output_is_a_gedcom_the_reader_takes_back(tmp_path):
     ev = event("e1", "E1", "Death", 1970)
-    ev["citation_list"] = [{"ref": "c1"}]
+    ev["citation_list"] = ["c1"]
     data = snap(Person=[person("p1", "I1", "Ana @home", "Vega", sex=0, events=["e1"], notes=["n1"],
                                families=["f1"]),
                         person("p2", "I2", "Luis", "Rio", events=["e2"], families=["f1"])],

@@ -123,7 +123,11 @@ same ones `gwt-check public` reports on:
   notes or citations.
 - An object marked private never leaves the tree: it is not written, and references to it are dropped. A
   private parent disappears from their children's families; a family that loses every member is not written.
-- A family's events, notes and citations are written only when neither spouse is living or private.
+- A family's events, notes and citations are written only when neither recorded spouse is living or private
+  (judged before private members are dropped: a family that lost a spouse to the private filter keeps no
+  events).
+- A source is written only when an exported citation points at it: a source nobody can cite anymore never
+  leaves, whatever its title says.
 
 `--report` writes who was anonymized and what was left out, by Gramps ID, so a share can be checked before it
 goes anywhere. The header's submitter name defaults to "Gramps Web Toolkit"; set it with `--submitter`.
