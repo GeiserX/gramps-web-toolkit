@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Added
+
+- `gwt-apply`: `update_place` clears a place's point with `"set": {"lat": "", "long": ""}`, so a place no event uses can lose an old point inside a reviewed list, with its dry run, log, `--verify` and `--revert`. Both go together: one empty and one set is still refused, and `add_place` still needs numbers. A place with no point is skipped.
+
 ## [1.1.0] - 2026-11-03
 
 ### Change lists
