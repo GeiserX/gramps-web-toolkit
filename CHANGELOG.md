@@ -6,6 +6,8 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-04
+
 ### Change lists
 
 - `gwt-lint --rules principal`: a citation of a FamilySearch record hung on someone the record does not name gets `principal-unnamed` now and exits 1, where it used to lint clean.
