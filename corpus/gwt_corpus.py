@@ -39,7 +39,7 @@ is a lead to read, never a finding.
 
 Exit: 0 hits, 1 none, 2 bad input, 3 void (a control found nothing). Standard library only.
 """
-import argparse, collections, email, email.policy, fcntl, gzip, hashlib, html, json, os, re, shutil, sqlite3, \
+import argparse, collections, csv, email, email.policy, fcntl, gzip, hashlib, html, json, os, re, shutil, sqlite3, \
     subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -54,6 +54,9 @@ NEAR = 10
 SOURCES = ('fscache', 'reader', 'file')
 TEXT_EXT = {'.txt', '.md', '.html', '.htm', '.json', '.pdf', '.tsv', '.csv', '.eml'}
 SKIP_FILES = {'manifest.tsv', 'rawstore.tsv'}
+# a table's columns that repeat the request (the query and the search URL that carries it); a `principal` or `id`
+# column of a table holds a record's name or a reference, so it stays
+REQUEST_COLUMNS = {'query', 'q', 'params', 'url', 'final_url', 'href'}
 # JSON keys whose values are ids, links or types, never words a person would search for, and the request a search
 # answer repeats back (query, q, params, responseHeader): a 0-result answer must not match the name it was asked for
 SKIP_KEYS = {'id', 'type', 'labelId', 'lang', 'links', 'href', 'resource', 'resourceId', 'qualifiers', 'confidence',
@@ -134,11 +137,23 @@ def part_text(part):
         return raw.decode('utf-8', 'replace')
 
 
+def eml_header(msg, h):
+    """One decoded header, or its raw text when Python's header parser breaks on it (an unclosed quote in a From
+    raises IndexError or AttributeError there): one broken header never costs the mail, nor the whole update."""
+    try:
+        return str(msg[h] or '')
+    except (IndexError, AttributeError):
+        return ' '.join(v for k, v in msg.raw_items() if k.lower() == h.lower())
+
+
 def eml_text(raw):
     """A saved mail as its decoded headers and its text parts. Attachments that are not text (scans, PDFs) stay
     out, and an HTML part is read only when the mail has no plain one (it is the same text twice)."""
-    msg = email.message_from_bytes(raw, policy=email.policy.default)
-    out = ['%s: %s' % (h, msg[h]) for h in EML_HEADERS if msg[h]]
+    try:
+        msg = email.message_from_bytes(raw, policy=email.policy.default)
+    except IndexError:  # a broken Content-Type the modern parser cannot read: the old one reads it, undecoded
+        msg = email.message_from_bytes(raw, policy=email.policy.compat32)
+    out = ['%s: %s' % (h, v) for h in EML_HEADERS for v in [eml_header(msg, h)] if v]
     parts = [p for p in msg.walk() if p.get_content_maintype() == 'text']
     plain = any(p.get_content_subtype() == 'plain' for p in parts)
     for p in parts:
@@ -148,6 +163,16 @@ def eml_text(raw):
         else:
             out.append(part_text(p))
     return '\n'.join(out)
+
+
+def table_cells(line, ext):
+    """The cells of one TSV or CSV line; a CSV cell may be quoted and hold commas."""
+    if ext == '.tsv':
+        return line.split('\t')
+    try:
+        return next(csv.reader([line]), [])
+    except csv.Error:  # a cell over the csv module's size limit
+        return line.split(',')
 
 
 def link_url(item, fallback):
@@ -274,10 +299,15 @@ def extract(path, ctx):
                      0, '') for h in o['links']] + [('file', name, ' · '.join(json_strings(rest, [])), url, 0, '')]
         return [('file', name, ' · '.join(json_strings(o, [])), url, 0, '')]
     if ext in ('.tsv', '.csv'):
-        if 'person_key' in re.split(r'[\t,]', text.split('\n', 1)[0]):
+        lines = text.split('\n')
+        cols = [c.strip() for c in table_cells(lines[0], ext)]
+        if 'person_key' in cols:
             return []  # a gwt-ledger, gwt-queue or requests file: the searches asked, never a source to find people in
-        # one row per line, its line number as the page, so a hit points at its row
-        return [('file', name, line, url, i + 1, '') for i, line in enumerate(text.split('\n'))]
+        # one row per line, its line number as the page, so a hit points at its row. The request a search table
+        # repeats on every row is left out, as in JSON: a row must not match the name it was asked for
+        skip = {j for j, c in enumerate(cols) if c in REQUEST_COLUMNS}
+        return [('file', name, '\t'.join(c for j, c in enumerate(table_cells(line, ext)) if j not in skip), url, i + 1,
+                 '') for i, line in enumerate(lines)]
     if ext in ('.html', '.htm'):
         return [('file', name, strip_html(text), url, 0, '')]
     pages = split_pages(text)

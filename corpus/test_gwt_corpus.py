@@ -266,6 +266,27 @@ class UpdateTest(Base):
         run('update', '--db', self.db, *self.roots)
         self.assertEqual(self.search('Lucio Brenal Asto')[0], 1)
 
+    def test_a_tables_query_column_is_left_out_as_in_json(self):
+        # a saved search table repeats the request on every row: a 0-result row must not match the name asked for
+        self.write('answers.tsv', 'query\ttitle\tdate\n"Lucio Brenal Asto"\tno records\t2026-01-02\n'
+                                  '"Rosaura Mendel"\tRosaura Mendel, bautismo\t1850\n')
+        self.write('answers.csv', 'title,q,place\n"Ostra, Penadel y Ruiz",Elvira Mascote,Villazul\n')
+        self.write('records.tsv', 'id\tprincipal\turl\nr1\tEusebia Tornal Pico\thttps://www.example.org/search?q=Anselmo+Duero\n')
+        run('update', '--db', self.db, *self.roots)
+        self.assertEqual(self.search('Lucio Brenal Asto')[0], 1)
+        self.assertIn('answers.tsv p.3', self.search('Rosaura Mendel')[1])  # the row's own text is still read
+        self.assertEqual(self.search('Elvira Mascote')[0], 1)  # a quoted comma keeps the q column in line
+        self.assertEqual(self.search('Penadel Ruiz')[0], 0)
+        self.assertEqual(self.search('Villazul')[0], 0)
+        self.assertIn('records.tsv p.2', self.search('Eusebia Tornal')[1])  # a principal column is a record's name
+        self.assertEqual(self.search('Anselmo Duero')[0], 1)  # a search URL carries the request too
+
+    def test_a_csv_cell_over_the_csv_size_limit_is_read(self):
+        self.write('big.csv', 'title,note\nBenita Carrasco Lunel,%s\n' % ('x' * 200000))
+        code, out, _ = run('update', '--db', self.db, *self.roots)
+        self.assertNotIn('unreadable', out)
+        self.assertEqual(self.search('Benita Carrasco')[0], 0)
+
     def test_an_eml_is_indexed_as_its_headers_and_text_parts(self):
         self.write('letter.eml', (
             b'From: =?utf-8?q?Ana_Zorvalo_Quir=C3=A9ll?= <a@example.org>\r\n'
@@ -302,6 +323,20 @@ class UpdateTest(Base):
         self.assertEqual(self.search('Tomasa Leribal Ondo')[0], 0)
         self.assertEqual(self.search('Scriptonly')[0], 1)
         self.assertEqual(self.search('Rufino Gartecho')[0], 0)
+
+    def test_an_eml_with_a_header_python_cannot_parse_is_read_and_the_update_goes_on(self):
+        # Python's email parser raises IndexError on an unclosed quote in an address or a bare `name*` parameter
+        self.write('quote.eml', b'From: Ana Zorvalo <a@example.org>, "\r\nSubject: aviso\r\n\r\n'
+                                b'Rufino Gartecho Ulla\r\n', 'wb')
+        self.write('ctype.eml', b'Subject: aviso\r\nContent-Type: text/plain; name*\r\n\r\nTomasa Leribal Ondo\r\n', 'wb')
+        self.write('after.txt', 'Clara Vendimo Arras\n')
+        code, out, _ = run('update', '--db', self.db, *self.roots)
+        self.assertEqual(code, 0)
+        self.assertNotIn('unreadable', out)
+        self.assertEqual(self.search('Rufino Gartecho')[0], 0)
+        self.assertEqual(self.search('Ana Zorvalo')[0], 0)  # the broken From is indexed as its raw text
+        self.assertEqual(self.search('Tomasa Leribal')[0], 0)
+        self.assertEqual(self.search('Clara Vendimo')[0], 0)
 
     def test_a_list_of_hits_under_links_is_one_row_per_hit_with_its_own_url(self):
         self.write('search.links.json', json.dumps({'query': 'Zorvalo', 'note': 'Restoftheword', 'links': [
