@@ -1,0 +1,2 @@
+gwt_apply/ops.py | carriers = ", ".join(sorted(KIND_NAME[c] for c in CARRIES[lst])) | carriers = "" | a refused attach or detach names the kinds that can carry the object
+gwt_apply/ops.py | attaching and lst == "citation_list") else "" | lst == "citation_list") else "" | the add_note pointer is given only when attaching a citation, never on detach
