@@ -9,7 +9,8 @@ the record; the bytes live in the bucket and can be fetched back and checked at 
     gwt-rawstore get <path|sha> [...] [-o TARGET]      fetch into the cache (or TARGET) and verify the sha256
     gwt-rawstore verify [dirs] [--deep]                every manifest row is in the bucket with the right size and hash
     gwt-rawstore migrate <dir> [--remove|--evict]      upload files already committed; --remove untracks and ignores them,
-                                                       --evict also deletes the local copies the store confirms
+                 [--dry-run]                           --evict also deletes the local copies the store confirms;
+                                                       --dry-run only reports what it would do
     gwt-rawstore check-staged                          pre-commit check: refuse big binaries outside allowed paths
     gwt-rawstore doctor [--repo PATH] [--json]          read-only repo health: packs, lazy fetch, binaries, scratch, backups
 
@@ -386,15 +387,67 @@ def ignore_binaries(folder, names):
             f.write(('\n' if text and not text.endswith('\n') else '') + '\n'.join(new) + '\n')
 
 
-def migrate(store, folder, prefix='', remove=False, jobs=4, log=print, evict=False):
+def plan(store, files, prefix='', remove=False, evict=False, jobs=4, log=print):
+    """migrate --dry-run: what the real run would upload, untrack and delete. It hashes each file and HEADs its key,
+    nothing else: no PUT, no manifest or .gitignore written, no git rm or git add, no file deleted. Returns the
+    number of files whose HEAD failed, which the real run could not store either."""
+    def look(path):
+        sha, size = sha256_file(path)
+        try:
+            return path, sha, size, store.head(object_key(sha, os.path.basename(path), prefix)), None
+        except Exception as e:
+            return path, sha, size, None, e
+
+    manifests, failed = {}, 0
+    up, have, listed, ext = [0, 0], [0, 0], 0, {}
+    with concurrent.futures.ThreadPoolExecutor(max(1, jobs)) as ex:
+        for path, sha, size, got, err in ex.map(look, files):
+            if err is not None:
+                failed += 1
+                log('FAIL %s: %s' % (path, describe(err)), file=sys.stderr)
+                continue
+            d, name = os.path.split(path)
+            if d not in manifests:
+                manifests[d] = read_manifest(d)
+            row = manifests[d].get(name)
+            in_manifest = row is not None and row[:2] == (sha, size)
+            listed += in_manifest
+            stored = got is not None and got[0] == size   # put() uploads exactly when this is false
+            n = have if stored else up
+            n[0] += 1
+            n[1] += size
+            e = os.path.splitext(name)[1].lower()
+            c = ext.setdefault(e, [0, 0])
+            c[0] += 1
+            c[1] += size
+            log('%s %s %s (%s)' % ('have     ' if stored else 'would put', sha[:12], path,
+                                   'manifest row' if in_manifest else 'no manifest row'))
+    log('dry run: %d files to upload (%d bytes), %d already in the store (%d bytes); %d of %d have a manifest row; '
+        'rawstore.tsv would be written in %d folders' % (up[0], up[1], have[0], have[1], listed, len(files),
+                                                        len(manifests)))
+    if (remove or evict) and ext:
+        log('dry run: %s would %s %d files (%d bytes): %s' % (
+            '--evict' if evict else '--remove', 'untrack and delete' if evict else 'untrack, keeping on disk,',
+            sum(c[0] for c in ext.values()), sum(c[1] for c in ext.values()),
+            ', '.join('%s %d (%d bytes)' % (e or '(none)', c[0], c[1]) for e, c in sorted(ext.items()))))
+    if failed:
+        log('dry run: %d files could not be checked in the store' % failed, file=sys.stderr)
+    log('dry run: nothing was uploaded, written, untracked or deleted')
+    return failed
+
+
+def migrate(store, folder, prefix='', remove=False, jobs=4, log=print, evict=False, dry_run=False):
     """Upload the binaries git tracks under folder. --remove untracks them and ignores them; --evict also deletes
     the local copies. put() HEADs every object after its upload, so a file is deleted only once the store holds it
-    with its size and sha256; if any upload fails, nothing is untracked or deleted. History stays."""
+    with its size and sha256; if any upload fails, nothing is untracked or deleted. History stays. dry_run reports
+    what would happen (see plan) and writes nothing; it refuses a sparse checkout like the real run."""
     tracked = [p for p in git('ls-files', '-z', '--', '.', cwd=folder).split('\0') if p and is_binary_name(p)]
     files = [os.path.join(folder, p) for p in tracked if os.path.isfile(os.path.join(folder, p))]
     if len(files) != len(tracked):
         raise SystemExit('gwt-rawstore: %d tracked files are not in the working tree (sparse checkout?); '
                          'run migrate on a full clone' % (len(tracked) - len(files)))
+    if dry_run:
+        return plan(store, files, prefix=prefix, remove=remove, evict=evict, jobs=jobs, log=log)
     failures = put(store, files, prefix=prefix, jobs=jobs, log=log)
     if failures:
         log('%d uploads failed; nothing untracked' % failures, file=sys.stderr)
@@ -477,6 +530,8 @@ def main(argv=None, store=None):
     m = g.add_mutually_exclusive_group()
     m.add_argument('--remove', action='store_true', help='git rm --cached them and ignore them; they stay on disk')
     m.add_argument('--evict', action='store_true', help='as --remove, then delete the local copies')
+    g.add_argument('--dry-run', action='store_true',
+                   help='report what would be uploaded, untracked and deleted; HEAD requests only, writes nothing')
     g.add_argument('-j', '--jobs', type=int, default=4)
     g = sub.add_parser('check-staged', help='pre-commit hook: refuse big staged binaries')
     g.add_argument('--max-kb', type=int, default=None)
@@ -508,7 +563,7 @@ def main(argv=None, store=None):
     if a.cmd == 'verify':
         return 1 if verify(store, a.roots, a.deep) else 0
     if a.cmd == 'migrate':
-        return 1 if migrate(store, a.folder, prefix, a.remove, a.jobs, evict=a.evict) else 0
+        return 1 if migrate(store, a.folder, prefix, a.remove, a.jobs, evict=a.evict, dry_run=a.dry_run) else 0
 
 
 if __name__ == '__main__':
