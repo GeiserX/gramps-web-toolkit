@@ -6,6 +6,11 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+- `add_person` accepts an empty `first_name` when `surname` is known, without guessed placeholders. Both fields remain required and a wholly blank name is refused.
+
+
 ## [1.1.0] - 2026-11-03
 
 ### Change lists
