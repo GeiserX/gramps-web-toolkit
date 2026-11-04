@@ -32,6 +32,8 @@ mother = ["mare"]
 child = ["fill", "filla", "fills"]
 spouse = ["marit", "muller", "espòs", "esposa", "vidu", "vídua"]
 priest = ["rector", "prevere", "vicari", "capellà"]
+# the words that join a role to the person it is relative to: «hija de», «son of»
+of = ["de", "d", "del"]
 
 [events]
 birth = ["naixement", "nascut", "nascuda", "naixença"]

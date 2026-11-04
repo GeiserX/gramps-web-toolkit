@@ -31,6 +31,8 @@ mother = ["madre"]
 child = ["figlio", "figlia", "figli"]
 spouse = ["marito", "moglie", "sposo", "sposa", "vedovo", "vedova"]
 priest = ["parroco", "sacerdote", "curato", "arciprete", "prevosto"]
+# the words that join a role to the person it is relative to: «hija de», «son of»
+of = ["di", "del", "della", "d"]
 
 [events]
 birth = ["nascita", "nato", "nata"]

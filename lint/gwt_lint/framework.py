@@ -374,8 +374,9 @@ def texts(op) -> list[str]:
 
 
 def creates(op) -> bool:
-    """Whether the op makes an object, the only thing its own `tag` lands on."""
-    return op["op"] in CREATES or op["op"] == "unlink_child" or (op["op"] == "link_child" and bool(op.get("probable")))
+    """Whether the op makes an object, the only thing its own `tag` lands on. A merge makes its merge note."""
+    return op["op"] in CREATES or op["op"] in MERGED or op["op"] == "unlink_child" \
+        or (op["op"] == "link_child" and bool(op.get("probable")))
 
 
 def tags_of(op) -> list[str]:

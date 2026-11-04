@@ -9,9 +9,10 @@
                     [--format json|tsv]
 
 update walks each ROOT and indexes, in one SQLite FTS5 file, every gwt-fscache answer (`<key>.body` with its
-`<key>.json`), every reader envelope (`<key>.json` with url and text or json), and every .txt, .md, .html and .json
-file, plus every PDF one page per row when `pdftotext` (poppler) is on PATH. A .txt holding form feeds is split into
-pages. Each row keeps the source (fscache, reader or file), the URL (from the fscache entry, the envelope, or the
+`<key>.json`), every reader envelope (`<key>.json` with url and text or json), and every .txt, .md, .html, .json,
+.tsv, .csv and .eml file, plus every PDF one page per row when `pdftotext` (poppler) is on PATH. A .txt holding form
+feeds is split into pages; a .tsv or .csv is one row per line (a gwt-ledger file, with a person_key column, is left
+out); an .eml is its decoded headers and text parts; a JSON file whose `links` is a list is one row per hit. Each row keeps the source (fscache, reader or file), the URL (from the fscache entry, the envelope, or the
 folder's manifest.tsv), the file's sha256 and the page. Only files whose size, time and sha256 changed are read
 again; files gone from a ROOT leave the index. A PDF that could not be read yet and a file that fails are not
 recorded, so the next update tries them again. One update at a time (a lock file beside the database).
@@ -38,7 +39,8 @@ is a lead to read, never a finding.
 
 Exit: 0 hits, 1 none, 2 bad input, 3 void (a control found nothing). Standard library only.
 """
-import argparse, collections, fcntl, gzip, hashlib, html, json, os, re, shutil, sqlite3, subprocess, sys, time
+import argparse, collections, csv, email, email.policy, fcntl, gzip, hashlib, html, json, os, re, shutil, sqlite3, \
+    subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 try:
@@ -50,8 +52,11 @@ except ModuleNotFoundError:  # a clone: the shared core sits next to this folder
 TOKENIZE = 'unicode61 remove_diacritics 2'  # «Olmedo», «olmédo» and «OLMEDO» are one word
 NEAR = 10
 SOURCES = ('fscache', 'reader', 'file')
-TEXT_EXT = {'.txt', '.md', '.html', '.htm', '.json', '.pdf'}
+TEXT_EXT = {'.txt', '.md', '.html', '.htm', '.json', '.pdf', '.tsv', '.csv', '.eml'}
 SKIP_FILES = {'manifest.tsv', 'rawstore.tsv'}
+# a table's columns that repeat the request (the query and the search URL that carries it); a `principal` or `id`
+# column of a table holds a record's name or a reference, so it stays
+REQUEST_COLUMNS = {'query', 'q', 'params', 'url', 'final_url', 'href'}
 # JSON keys whose values are ids, links or types, never words a person would search for, and the request a search
 # answer repeats back (query, q, params, responseHeader): a 0-result answer must not match the name it was asked for
 SKIP_KEYS = {'id', 'type', 'labelId', 'lang', 'links', 'href', 'resource', 'resourceId', 'qualifiers', 'confidence',
@@ -78,7 +83,7 @@ def json_strings(o, out, key=None):
     """Every human string in a JSON value: names, dates, places, transcriptions; no ids, links or type URIs."""
     if isinstance(o, dict):
         for k, v in o.items():
-            if k not in SKIP_KEYS:
+            if k not in SKIP_KEYS or (k == 'links' and isinstance(v, list)):  # a list of hits, not GEDCOM X hrefs
                 json_strings(v, out, k)
     elif isinstance(o, list):
         for v in o:
@@ -118,6 +123,64 @@ def pdf_pages(path):
 def read_text(path):
     with open(path, 'rb') as f:
         return f.read().decode('utf-8-sig', 'replace').replace('\r\n', '\n')
+
+
+EML_HEADERS = ('From', 'To', 'Cc', 'Subject', 'Date')
+
+
+def part_text(part):
+    """The decoded text of one MIME part, in its own charset; an unknown charset reads as UTF-8."""
+    raw = part.get_payload(decode=True) or b''
+    try:
+        return raw.decode(part.get_content_charset() or 'utf-8', 'replace')
+    except LookupError:
+        return raw.decode('utf-8', 'replace')
+
+
+def eml_header(msg, h):
+    """One decoded header, or its raw text when Python's header parser breaks on it (an unclosed quote in a From
+    raises IndexError or AttributeError there): one broken header never costs the mail, nor the whole update."""
+    try:
+        return str(msg[h] or '')
+    except (IndexError, AttributeError):
+        return ' '.join(v for k, v in msg.raw_items() if k.lower() == h.lower())
+
+
+def eml_text(raw):
+    """A saved mail as its decoded headers and its text parts. Attachments that are not text (scans, PDFs) stay
+    out, and an HTML part is read only when the mail has no plain one (it is the same text twice)."""
+    try:
+        msg = email.message_from_bytes(raw, policy=email.policy.default)
+    except IndexError:  # a broken Content-Type the modern parser cannot read: the old one reads it, undecoded
+        msg = email.message_from_bytes(raw, policy=email.policy.compat32)
+    out = ['%s: %s' % (h, v) for h in EML_HEADERS for v in [eml_header(msg, h)] if v]
+    parts = [p for p in msg.walk() if p.get_content_maintype() == 'text']
+    plain = any(p.get_content_subtype() == 'plain' for p in parts)
+    for p in parts:
+        if p.get_content_subtype() == 'html':
+            if not plain:
+                out.append(strip_html(part_text(p)))
+        else:
+            out.append(part_text(p))
+    return '\n'.join(out)
+
+
+def table_cells(line, ext):
+    """The cells of one TSV or CSV line; a CSV cell may be quoted and hold commas."""
+    if ext == '.tsv':
+        return line.split('\t')
+    try:
+        return next(csv.reader([line]), [])
+    except csv.Error:  # a cell over the csv module's size limit
+        return line.split(',')
+
+
+def link_url(item, fallback):
+    """The record one hit of a `links` list points at (h, href or url), else the file's own URL."""
+    for k in ('h', 'href', 'url'):
+        if isinstance(item.get(k), str) and item[k].startswith('http'):
+            return item[k]
+    return fallback
 
 
 def is_dump(o):
@@ -210,8 +273,11 @@ def extract(path, ctx):
             ctx['pdf_no_text'] += 1
         url = folder_urls(os.path.dirname(path), ctx['urls']).get(name, '')
         return [('file', name, p, url, i + 1, '') for i, p in enumerate(pages)]
-    text = read_text(path)
     url = folder_urls(os.path.dirname(path), ctx['urls']).get(name, '')
+    if ext == '.eml':
+        with open(path, 'rb') as f:
+            return [('file', name, eml_text(f.read()), url, 0, '')]
+    text = read_text(path)
     if ext == '.json':
         if os.path.exists(path[:-5] + '.body') or name.endswith('.candidates.json'):
             return []  # an fscache entry's metadata (read with its body), or a reader's normalized copy
@@ -226,7 +292,22 @@ def extract(path, ctx):
             words += json_strings(o.get('json'), [])
             return [('reader', o['url'], '\n'.join(words), o.get('final_url') or o['url'], 0,
                      (o.get('captured_at') or '')[:10])]
+        if isinstance(o, dict) and isinstance(o.get('links'), list):
+            # a saved search answer: one row per hit, each with its own record link, then the rest of the file
+            rest = {k: v for k, v in o.items() if k != 'links'}
+            return [('file', name, ' · '.join(json_strings(h, [])), link_url(h, url) if isinstance(h, dict) else url,
+                     0, '') for h in o['links']] + [('file', name, ' · '.join(json_strings(rest, [])), url, 0, '')]
         return [('file', name, ' · '.join(json_strings(o, [])), url, 0, '')]
+    if ext in ('.tsv', '.csv'):
+        lines = text.split('\n')
+        cols = [c.strip() for c in table_cells(lines[0], ext)]
+        if 'person_key' in cols:
+            return []  # a gwt-ledger, gwt-queue or requests file: the searches asked, never a source to find people in
+        # one row per line, its line number as the page, so a hit points at its row. The request a search table
+        # repeats on every row is left out, as in JSON: a row must not match the name it was asked for
+        skip = {j for j, c in enumerate(cols) if c in REQUEST_COLUMNS}
+        return [('file', name, '\t'.join(c for j, c in enumerate(table_cells(line, ext)) if j not in skip), url, i + 1,
+                 '') for i, line in enumerate(lines)]
     if ext in ('.html', '.htm'):
         return [('file', name, strip_html(text), url, 0, '')]
     pages = split_pages(text)
