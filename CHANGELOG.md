@@ -12,7 +12,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Fixed
 
-- `gwt-apply` explains why a Source cannot carry a citation in the Gramps data model, and points to a source note or a citation on the supported person/event. The anti-orphan guard is unchanged.
+- `gwt-apply` names the kinds that can carry a citation, media or note when it refuses an attach or detach, and points a citation it refuses at `add_note`.
 
 
 ## [1.1.0] - 2026-11-03

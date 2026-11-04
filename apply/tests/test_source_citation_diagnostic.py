@@ -1,49 +1,30 @@
-"""Sources are evidence containers, not direct citation carriers in Gramps."""
+"""A refused carrier names the kinds that can carry the object, and an attached citation points at add_note."""
 from gwt_apply.ops import validate
 
-
-def citation(attach):
-    return {'op':'add_citation','key':'invented-citation','ruling':'invented-review',
-            'source':'S0001','page':'book 1, folio 7','attach':attach}
+CITATION_CARRIERS = "association, child_ref, event, family, media, person, place"
 
 
-def test_source_citation_rejection_explains_supported_alternatives():
-    errors=validate([citation([{'source':'S0001'}])])
-    message=' '.join(errors)
-    assert 'Source' in message
-    assert 'cannot carry a citation' in message
-    assert 'Gramps' in message
-    assert 'add_note' in message
-    assert 'person' in message and 'event' in message
-    assert len(errors)==1
+def citation(target):
+    return {"op": "add_citation", "key": "c", "ruling": "invented-review", "source": "S0001", "page": "folio 7",
+            "attach": [target]}
 
 
-def test_source_is_not_a_citation_target_even_in_mixed_targets():
-    assert validate([citation([{'person':'I0001'},{'source':'S0001'}])])
+def test_a_citation_on_a_non_carrier_names_the_carriers_and_the_note_route():
+    for kind, cls in (("source", "Source"), ("repository", "Repository"), ("citation", "Citation")):
+        errors = validate([citation({kind: "X0001"})])
+        assert errors == [f"op 1 (add_citation 'c'): a {cls} cannot carry a citation; a citation goes on one of: "
+                          f"{CITATION_CARRIERS}; a reading you cannot tie to one of these yet goes in add_note on the {kind}"]
 
 
-def test_orphan_citation_guard_stays_closed():
-    assert validate([citation([])])
+def test_detach_names_the_carriers_without_the_note_route():
+    op = {"op": "detach", "key": "d", "ruling": "invented-review", "target": {"source": "S0001"},
+          "object": {"citation": "C0001"}}
+    assert validate([op]) == ["op 1 (detach 'd'): a Source cannot carry a citation; a citation goes on one of: "
+                              f"{CITATION_CARRIERS}"]
 
 
-def test_document_source_without_a_person_using_a_note():
-    op={'op':'add_note','key':'invented-source-reading','ruling':'invented-review',
-        'text':'Unresolved reading: preserve alternatives without assigning identity.',
-        'attach':[{'source':'S0001'}]}
-    assert validate([op])==[]
-
-
-def test_existing_supported_citation_carriers_still_pass():
-    for target in ({'person':'I0001'},{'family':'F0001'},{'event':'E0001'},{'media':'O0001'},{'place':'P0001'}):
-        assert validate([citation([target])])==[]
-
-
-def test_detaching_a_citation_from_a_source_explains_the_alternatives():
-    op={'op':'detach','key':'invented-detach','ruling':'invented-review',
-        'target':{'source':'S0001'},'object':{'citation':'C0001'}}
-    errors=validate([op])
-    message=' '.join(errors)
-    assert 'Source' in message
-    assert 'cannot carry a citation' in message
-    assert 'add_note' in message
-    assert len(errors)==1
+def test_a_media_on_a_non_carrier_names_the_media_carriers():
+    op = {"op": "attach_existing", "key": "m", "ruling": "invented-review", "object": {"media": "O0001"},
+          "attach": [{"repository": "R0001"}]}
+    assert validate([op]) == ["op 1 (attach_existing 'm'): a Repository cannot carry a media; a media goes on one of: "
+                              "citation, event, family, person, place, source"]
