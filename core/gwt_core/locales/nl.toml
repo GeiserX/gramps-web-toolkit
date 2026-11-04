@@ -32,6 +32,8 @@ mother = ["moeder"]
 child = ["zoon", "dochter", "kind"]
 spouse = ["echtgenoot", "echtgenote", "weduwnaar", "weduwe"]
 priest = ["pastoor", "priester", "predikant", "kapelaan"]
+# the words that join a role to the person it is relative to: «hija de», «son of»
+of = ["van"]
 
 [events]
 birth = ["geboorte", "geboren"]

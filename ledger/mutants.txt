@@ -33,3 +33,4 @@ gwt_ledger.py | bad = [l for l in lines if l.startswith('void\t') or | bad = [l 
 gwt_ledger.py | return bool((src['to'] and int(src['to']) < lo) or (src['from'] and int(src['from']) > hi)) | return bool((src['from'] and int(src['from']) > hi)) | coverage marks n/a a source whose records end before the person was born
 gwt_ledger.py | if any(r['result'] == 'hit' for r in rows): | if False: | coverage shows an older hit over a newer none
 gwt_ledger.py | for n in range(len(parts), 0, -1)) | for n in range(1, len(parts) + 1)) | a key of a suffixed id (i0042-b-...) goes to I0042-b, never to I0042
+gwt_ledger.py | if columns == COLUMNS: | if False: | a none from before 1.1.0 (no control column) reads as unproven, so check does not count it as done

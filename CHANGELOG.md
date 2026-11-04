@@ -8,17 +8,29 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Change lists
 
+- `gwt-lint --rules principal`: a citation of a FamilySearch record hung on someone the record does not name gets `principal-unnamed` now and exits 1, where it used to lint clean.
 - `add_person` accepts an empty `first_name` when `surname` is known, without guessed placeholders. Both fields remain required and a wholly blank name is refused.
 - `update_person` refuses a `set` whose `first_name` or `surname` is not text, or that would leave the person with no first name and no surname. A list that blanked both, or set either to a number or `null`, now stops.
 
 ### Added
 
+- `gwt-apply`: `update_place` clears a place's point with `"set": {"lat": "", "long": ""}`, so a place no event uses can lose an old point inside a reviewed list, with its dry run, log, `--verify` and `--revert`. Both go together: one empty and one set is still refused, and `add_place` still needs numbers. A place with no point is skipped.
+- `gwt-import-gedcom export` writes a GEDCOM 5.5.1 file from an offline tree file (a `gwt-check dump` or a `gwt-apply` snapshot) without touching Gramps. People who may be living become a `Living` placeholder, private objects and private parts of objects are left out, and only sources an exported citation points at are written. Names of the living quoted in free-text notes are not redacted; the report counts those notes.
 - `gwt-rawstore migrate --dry-run` shows what the run would upload, untrack and delete before it does any of it. Each binary gets a line saying whether it would be uploaded or the store already holds it, and whether its `rawstore.tsv` already has a matching row; totals follow, and with `--remove` or `--evict` the files and bytes that would leave git or the disk, by extension. It sends only `HEAD` requests and writes nothing: no upload, no manifest or `.gitignore`, no `git rm` or `git add`, no deleted file. It refuses a sparse checkout like the real run, and exits 1 on any file the real run could not store: one it cannot read, a failed `HEAD`, or an object whose stored sha256 does not match.
 
 ### Fixed
 
 - `gwt-apply` names the kinds that can carry a citation, media or note when it refuses an attach or detach, and points a citation it refuses at `add_note`.
+- `gwt-lint --rules principal` checks every person a record's citation hangs on: a person, an event's primary people, a family's parents, a child_ref's child. Each one must be a persona of the saved record by name (alternate names count, and words compare as an index spells them: b/v, y/i, one letter changed, dropped or swapped), or the op gets `principal-unnamed`. It used to check only the page, so a baptism attached to someone it never names passed. One person the record names covers no other, and a candidate row, which holds one persona only, never makes anyone unnamed.
+- `gwt-lint --rules role` reads the direction of «de», «di» and «of»: «Ana, hija de Luis» calls Ana the child and Luis a parent. It used to call Luis the child, so every «hija de», «hijo legítimo de», «figlio di» or «marido de» note was a false `role-mismatch`. The words are the new `of` entry of each locale's `roles` section. When the other side of «de» names another persona of the record («Luis, marido de Rosa»), neither is judged, since the words say nothing of how they stand to the principal; nor is a father named on both sides, inside his namesake son's name and after «de». `principal` still excuses a persona named with any role word, whichever way «de» points.
+- `gwt-lint --rules weak`: a `tag` on a `merge_*` op is no longer `weak-inert-tag`. `gwt-apply` writes a merge note on the winner and gives it the op's tags.
+- `gwt-lint --rules protect`: an `update_event` that sets only what a protected person's event already has (the same date, by what it means, the same place, type or description) is no longer a finding; `gwt-apply` skips it. When it changes something, the code names the field it changes.
+- `gwt-lint --rules count`: a number right before a comma («acta 5, imágenes ya en el árbol») is a record's number, not a count of the tree.
+- `gwt-corpus update` indexes `.tsv`, `.csv` and `.eml` files now; it used to pass over them in silence, so a search said «not downloaded yet» for tables and saved mail already on disk. A TSV or CSV is one row per line, so a hit points at its row (`people.tsv p.2`). A mail is its decoded headers and its text parts, each in its own charset; attachments that are not text stay out, and the HTML copy of a plain part is not read twice. A TSV with a `person_key` column (a gwt-ledger or gwt-queue file) is left out, because a person would find the query asked for them. The request a saved search table repeats on every row (its `query`, `q`, `params` and `url` columns) is left out, as a JSON answer's is, so a row never matches the name it was asked for. A mail whose `From` or `Content-Type` Python's parser breaks on (an unclosed quote) is still read, with that header as raw text, and never stops the update.
+- `gwt-corpus update` reads a list of hits under a JSON key `links` now, one row per hit with the hit's own `h`, `href` or `url`, so each hit points at its record. Every value under `links` used to be dropped, so a saved search answer of that shape was indexed with no text. A GEDCOM X `links` object (hrefs) is still left out.
+### Fixed
 
+- `gwt-ledger`: a `none` logged before 1.1.0, with no `control` column, now reads as `unproven`, the way `add` stores a `none` with no `--control-ok` since 1.1.0. Before, `check` counted it as done and lanes skipped the rerun 1.1.0 meant to send those rows to. `coverage`, `list`, `due` and `stats` read it the same way. The ledger file is not rewritten: a rerun logged with a control run is what makes the search count again.
 
 ## [1.1.0] - 2026-11-03
 

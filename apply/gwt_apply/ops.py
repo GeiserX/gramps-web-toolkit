@@ -503,7 +503,8 @@ def validate(ops: list[dict]) -> list[str]:
                 s = op.get("set")
                 if not isinstance(s, dict) or not s or set(s) - PLACE_FIELDS:
                     raise ValueError(f"set takes only {sorted(PLACE_FIELDS)}")
-                _check_coords(s)
+                if not (s.get("lat") == "" and s.get("long") == ""):  # "" for both clears the point
+                    _check_coords(s)
                 if "enclosed_by" in s and not (isinstance(s["enclosed_by"], str) and (
                         s["enclosed_by"].startswith("key:") or _GRAMPS_ID.match(s["enclosed_by"]))):
                     raise ValueError(f"{s['enclosed_by']!r} is neither key:<key> nor a Gramps ID (never a handle)")
@@ -1249,8 +1250,9 @@ class Applier:
         place.setdefault("_class", "Place")
         before = copy.deepcopy(place)
         s = op["set"]
-        if "lat" in s:
-            place["lat"], place["long"] = str(s["lat"]), str(s["long"])
+        point = (str(s["lat"]), str(s["long"])) if "lat" in s else None
+        if point and (place.get("lat") or "", place.get("long") or "") != point:  # a place with no point clears to a skip
+            place["lat"], place["long"] = point
         if "enclosed_by" in s:
             parent = self.resolve("Place", s["enclosed_by"])
             # compared with the parent the place has now, by handle: a place already under that one parent and no

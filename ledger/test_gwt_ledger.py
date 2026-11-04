@@ -232,7 +232,7 @@ class LedgerTest(unittest.TestCase):
         # Rows written by the old ASCII-only normalize: lowercase, no accents, words joined by single spaces.
         with open(self.path, 'w', encoding='utf-8') as f:
             f.write('\t'.join(L.COLUMNS) + '\n')
-            f.write('jose-peiro-ruiz\tJose\tfamilysearch\tpeiro jose bautismo 1850 1860\t2026-01-01\tnone\t\ta1\t\n')
+            f.write('jose-peiro-ruiz\tJose\tfamilysearch\tpeiro jose bautismo 1850 1860\t2026-01-01\tnone\t\ta1\t\trun-1\n')
         for person, query in (('José Peiró Ruiz', 'Peiró, JOSÉ: bautismo 1850-1860'),
                               ('jose-peiro-ruiz', 'bautismo de Jose Peiro 1850 1860')):
             code, out = run('--ledger', self.path, 'check', '--person', person, '--source', 'FamilySearch',
@@ -456,6 +456,18 @@ class RegistryTest(unittest.TestCase):
         self.assertEqual(L.read_rows(self.path)[1]['control'], 'run-2026-11-01')
         self.assertEqual(run(*check)[0], 0)
 
+    def test_a_none_logged_before_control_existed_reads_as_unproven(self):
+        # An 8-column row from before 1.1.0: a none with no control column proves no more than a new one.
+        write(self.path, '\t'.join(L.COLUMNS[:8]) + '\n'
+              'ana-zorvalo\tAna Zorvalo\tboe\tana zorvalo\t2026-01-05\tnone\tnotes.md\tlane-a\n')
+        check = ('--ledger', self.path, 'check', '--person', 'Ana Zorvalo', '--source', 'boe', '--query', 'ana zorvalo')
+        self.assertEqual(run(*check)[0], 1)
+        self.assertEqual([r['result'] for r in L.read_rows(self.path)], ['unproven'])
+        self.assertIn('\tnone\t', open(self.path, encoding='utf-8').read())  # the stored row stays as written
+        with open(self.path, 'a', encoding='utf-8') as f:  # a 1.1.0 row with its control still counts as done
+            f.write('ana-zorvalo\tAna Zorvalo\tboe\tana zorvalo\t2026-02-01\tnone\t\tlane-a\t\trun-7\n')
+        self.assertEqual(run(*check)[0], 0)
+
     def test_control_ok_file_must_be_a_passing_control_run(self):
         good, bad = os.path.join(self.dir.name, 'good.txt'), os.path.join(self.dir.name, 'bad.txt')
         write(good, 'control\tcontrol\t--name "Manuel Rodriguez"\t25 read, want at least 10\tok\n')
@@ -542,7 +554,7 @@ class RegistryTest(unittest.TestCase):
         out = run('--ledger', self.path, 'stats', '--by', 'source')[1].splitlines()
         self.assertEqual(out[0].split('\t')[:2], ['source', 'rows'])
         self.assertEqual(out[1], 'familysearch\t3\t1\t1\t0\t1\t0.33\t0.33\t0.33')
-        self.assertEqual(out[2], 'boe\t1\t0\t0\t1\t0\t0.00\t0.00\t0.00')
+        self.assertEqual(out[2], 'boe\t1\t0\t0\t0\t0\t0.00\t0.00\t0.00')  # a none with no control is unproven
 
     def test_import_maps_columns_and_synonyms_and_needs_proof(self):
         src = os.path.join(self.dir.name, 'old-log.tsv')
@@ -682,6 +694,11 @@ class CoverageTest(unittest.TestCase):
         self.assertEqual(rows['I1'], ['hit', 'n/a', '-'])  # matchid starts in 1970; born 1850, Ana's life ends by 1960
         self.assertEqual(rows['I2'], ['-', 'n/a', 'blocked'])  # logged under his name, and under an alias of boe
         self.assertEqual(rows['I3'], ['-', '-', 'due'])    # no dates: never n/a; the row's next_date has passed
+
+    def test_a_none_with_no_control_shows_as_unproven(self):
+        with open(self.path, 'a', encoding='utf-8') as f:  # a pre-1.1.0 none: no control column filled
+            f.write('i4\tLuis\tboe\tq\t2026-01-01\tnone\t\t\t\t\n')
+        self.assertEqual({r[0]: r[2:] for r in self.matrix()[1:]}['I4'], ['-', '-', 'unproven'])
 
     def test_a_key_that_starts_with_the_gramps_id_counts_for_that_person(self):
         with open(self.path, 'a', encoding='utf-8') as f:

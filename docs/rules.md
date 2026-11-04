@@ -70,7 +70,7 @@ With a locale, the date may also be written out: `12 de marzo de 1890` (es), `Ma
 | `fold` | `pairs` (spelling swaps) and `particles` (words dropped from names) |
 | `months` | `"1"` to `"12"`, each with the names and abbreviations a record uses |
 | `dates` | `filler`, the words a written date has around its numbers (`de`, `le`, `anno`) |
-| `roles` | the words for `godparent`, `witness`, `father`, `mother`, `child`, `spouse`, `priest` |
+| `roles` | the words for `godparent`, `witness`, `father`, `mother`, `child`, `spouse`, `priest`, and `of`, the words that join a role to the person it is relative to (`de` in «hija de», `of` in «son of»); `of` may be empty where a suffix does that work (Basque) |
 | `events` | the words for `birth`, `baptism`, `marriage`, `death`, `burial` |
 | `dedication` | `pairs` of a church-name abbreviation and its full words (`N.ª S.ª` and `Nuestra Señora`, `St.` and `Saint`) |
 

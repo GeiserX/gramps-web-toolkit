@@ -173,3 +173,6 @@ gwt_apply/client.py | self.unsnapped |= {"Person", "Family", "Note"} if cls in (
 gwt_apply/client.py |         if r.status_code == 412: | if False: | a file the server says changed (412) is named as such
 gwt_apply/ops.py | found |= {k for k, o in self.c.pending.items() if quoted in json.dumps(o)} | pass | offline, delete sees a reference an earlier op of the list adds
 gwt_apply/lock.py | remaining = math.ceil(float(held.get("expires_ts") or 0) - now) | remaining = int(float(held.get("expires_ts") or 0) - now) + 1 | a fresh lock reports its 900 seconds, not 901
+gwt_apply/ops.py | if not (s.get("lat") == "" and s.get("long") == ""):  # "" for both clears the point | if not (s.get("lat") == ""): | update_place clears a point only with both lat and long "", never one empty and one set
+gwt_apply/ops.py | if not (s.get("lat") == "" and s.get("long") == ""):  # "" for both clears the point | if False: | update_place still checks that a point it sets is two numbers in range
+gwt_apply/ops.py | if point and (place.get("lat") or "", place.get("long") or "") != point: | if point: | clearing the point of a place that has none is a skip, not a write of two empty strings
