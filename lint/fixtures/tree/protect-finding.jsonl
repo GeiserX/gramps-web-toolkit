@@ -1,6 +1,6 @@
 {"op": "add_event", "key": "e-nora-res", "ruling": "R-4", "person": "I10", "type": "Residence", "date": "2015"}
 {"op": "update_event", "key": "u-nora-birth", "ruling": "R-4", "event": "E10b", "set": {"date": "1990-07-01"}}
-{"op": "update_event", "key": "u-nora-place", "ruling": "R-4", "event": "E10b", "set": {"place": "P1"}}
+{"op": "update_event", "key": "u-nora-place", "ruling": "R-4", "event": "E10b", "set": {"place": ""}}
 {"op": "add_note", "key": "n-nora", "ruling": "R-4", "text": "Seen in a school photograph.", "attach": [{"person": "I10"}]}
 {"op": "link_child", "key": "l-nora", "ruling": "R-4", "family": "F2", "child": "I10"}
 {"op": "add_note", "key": "n-elena", "ruling": "R-4", "text": "Her daughter Nora Ruiz was born in the city hospital.", "attach": [{"person": "I6"}]}

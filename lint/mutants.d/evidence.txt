@@ -14,7 +14,6 @@ gwt_lint/rules_evidence.py |                 if rel != "principal" and not (rel 
 gwt_lint/rules_evidence.py |  and not (rel == "spouse" and types & {"Marriage", "Family"}) |  | the spouse's persona of a marriage record may be cited for the marriage
 gwt_lint/rules_evidence.py |                 if facts and wanted and not facts & wanted: |                 if False: | a record of another event type is principal-event
 gwt_lint/rules_evidence.py | claims.add("parent") | pass | a link_child or add_family that makes the record's godparent a parent is role-mismatch
-gwt_lint/rules_evidence.py | return {r for i, rs in hits if any(abs(i - j) <= window for j in at) for r in rs} | return {r for i, rs in hits if at for r in rs} | a role word counts only near the persona's name
 gwt_lint/rules_evidence.py |         if len(sexes) >= 2 and len(set(sexes)) == 1: |         if False: | two parents of one sex is role-samesex
 gwt_lint/rules_evidence.py |             if not is_church: |             if False: | a sacrament on a town is placement-town
 gwt_lint/rules_evidence.py |                 if is_church: |                 if False: | a civil event on a church is placement-civil
@@ -65,3 +64,30 @@ gwt_lint/rules_evidence.py |         return [i for i, t in enumerate(toks) if t 
 gwt_lint/rules_evidence.py | if not isinstance(c, dict) or c.get("source") not in (None, "familysearch"): | if not isinstance(c, dict): | a candidate row of another source is not a FamilySearch record
 gwt_lint/rules_evidence.py | if ark not in evidence and persona["name"] and role_words(text, persona["name"]): | if ark not in evidence and persona["name"] and role_words(text): | a role word must sit next to the persona's name to excuse it
 gwt_lint/rules_evidence.py | if facts and wanted and not facts & wanted: | if wanted and not facts & wanted: | a candidate row with no facts gives no principal-event
+gwt_lint/rules_evidence.py |             if any(abs(i - j) <= window for j in at): |             if at: | a role word counts only near the persona's name
+gwt_lint/rules_evidence.py |             if role == "of": |             if False: | «de», «of» join a role to a person; they are no role of their own
+gwt_lint/rules_evidence.py |                 hits.append((i, ROLE_WORDS[w], k)) |                 hits.append((i, ROLE_WORDS[w], None)) | «X, hija de Y» makes X the child, not Y
+gwt_lint/rules_evidence.py | toks[k + 1] in OF_WORDS and toks[k] not in names | toks[k + 1] in OF_WORDS | «madre: Rosa de Quirell» names the mother: a «de» inside a name joins no role
+gwt_lint/rules_evidence.py |         elif any(i - window <= j < i for j in at) and | elif any(abs(i - j) <= window for j in at) and | the person after «hija de» is not the child
+gwt_lint/rules_evidence.py |  and not any(k < j <= k + window for j in seen): | : | «Luis, marido de Rosa» says nothing of how Luis stands to the record's principal
+gwt_lint/rules_evidence.py |         elif k + 1 in at and not any(i - window <= j < i for j in seen): |         elif any(k < j <= k + window for j in at) and not any(i - window <= j < i for j in seen): | only the person named right after «de» takes the converse role, not one after a colon («padre de Ana: Luis»)
+gwt_lint/rules_evidence.py |  and not any(i - window <= j < i for j in seen): | : | «Luis, marido de Rosa» says nothing of how Rosa stands to the record's principal
+gwt_lint/rules_evidence.py |             out |= {c for r in rs for c in CONVERSE.get(r, ())} |             pass | «hija de <the godfather>» makes the godfather a parent: role-mismatch
+gwt_lint/rules_evidence.py |             out += self._unnamed(ctx, ev, op, [a for a in pages if a.startswith("1:1:")]) |             pass | a citation hung on someone the record does not name is principal-unnamed
+gwt_lint/rules_evidence.py | for ark in dict.fromkeys(a for a in pages if a in ev.records.by_ark): | for ark in dict.fromkeys(a for a in pages if a): | a candidate row names one persona only, so it never makes anyone unnamed
+gwt_lint/rules_evidence.py |             for cls, target in attach_targets(op): |             for cls, target in attach_targets(op)[:1]: | every target of a citation is checked, so one person the record names covers no other
+gwt_lint/rules_evidence.py |                     if h in seen or not names or |                     if not names or | one finding per person, however many targets stand for them
+gwt_lint/rules_evidence.py | any(_named(n, m) for n in names for m in named) | False | a person the record names may carry its citation
+gwt_lint/rules_evidence.py |         cls, ref = "Person", ref[1] |         pass | a citation on a child_ref speaks of the child
+gwt_lint/rules_evidence.py |         out = view.spouses(h) |         out = [] | a citation on a family speaks of its parents
+gwt_lint/rules_evidence.py |         out += [s for f in fams for s in view.spouses(f)] |         pass | a citation on a family's event speaks of the family's parents
+gwt_lint/rules_evidence.py | text_of(r.get("role")) in ("", "Primary") | True | a witness of an event is not who its citation speaks of
+gwt_lint/rules_evidence.py |  + list(person.get("alternate_names") or []) |  | a person named by an alternate name (a married name) is named
+gwt_lint/rules_evidence.py |         elif k + 1 in at and any(i - window <= j < i for j in at): |         elif False: | a father named on both sides of «hijo de», inside his namesake son's name and after «de», is no child
+gwt_lint/rules_evidence.py |     a, b = _spelt(a), _spelt(b) |     pass | «Luys Zorbalo» is Luis Zorvalo: the spelling pairs y/i and b/v make one word
+gwt_lint/rules_evidence.py |     if min(len(a), len(b)) < 4 or abs(len(a) - len(b)) > 1: |     if abs(len(a) - len(b)) > 1: | a short word must match as spelt: «Ana» is no «Ama»
+gwt_lint/rules_evidence.py |         return len(diff) == 1 or |         return | one letter changed is one word as an index spells it
+gwt_lint/rules_evidence.py |  or (len(diff) == 2 and diff[1] == diff[0] + 1 and a[diff[0]] == b[diff[1]] |  or (False |  two letters swapped side by side are one word («Isabel» «Isable»)
+gwt_lint/rules_evidence.py |     return any(long_[:i] + long_[i + 1:] == short for i in range(len(long_))) |     return False | a letter dropped is one word as an index spells it («Rossa» «Rosa»)
+gwt_lint/rules_evidence.py |     return common >= 2 or |     return common >= 3 or | two words in common name the person, as same_person
+gwt_lint/rules_evidence.py |     return common >= 2 or (len(x) == 1 and common == 1) |     return common >= 1 or (len(x) == 1 and common == 1) | a single word in common does not name the person («Ana Lurre»)

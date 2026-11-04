@@ -31,6 +31,8 @@ mother = ["mother"]
 child = ["son", "daughter", "child"]
 spouse = ["husband", "wife", "spouse"]
 priest = ["priest", "minister", "curate", "vicar", "rector"]
+# the words that join a role to the person it is relative to: «hija de», «son of»
+of = ["of"]
 
 [events]
 birth = ["birth", "born"]

@@ -33,6 +33,8 @@ mother = ["madre"]
 child = ["hijo", "hija", "hijos", "hijas"]
 spouse = ["esposo", "esposa", "marido", "consorte", "cónyuge"]
 priest = ["cura", "párroco", "presbítero", "sacerdote", "teniente cura"]
+# the words that join a role to the person it is relative to: «hija de», «son of»
+of = ["de", "del"]
 
 [events]
 birth = ["nacimiento", "nació", "nacido", "nacida"]
