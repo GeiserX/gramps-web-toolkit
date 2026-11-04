@@ -387,7 +387,9 @@ class Locales(unittest.TestCase):
             tab = self.raw(code)
             for sec in ("months", "roles", "events"):
                 for key, words in tab[sec].items():
-                    self.assertTrue(words and all(isinstance(w, str) and w.strip() for w in words), (code, sec, key))
+                    # «of» may be empty: a language that marks it with a suffix has no such word (Basque)
+                    self.assertTrue((words or (sec, key) == ("roles", "of"))
+                                    and all(isinstance(w, str) and w.strip() for w in words), (code, sec, key))
             for sec, key in (("fold", "pairs"), ("dedication", "pairs")):
                 self.assertTrue(all(len(p) == 2 and all(p) for p in tab[sec][key]), (code, sec))
 

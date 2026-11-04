@@ -393,3 +393,44 @@ def test_overlap_ignores_list_keys_two_lists_both_use(tmp_path):
 def test_scope_path_of_a_blood_relative_married_to_another_stays_the_blood_one():
     reach = _reach(_view([{"op": "add_family", "key": "f", "father": "I4", "mother": "I6"}]))
     assert (reach["hI4"], reach["hI6"]) == ("I1 > father I2 > child I4", "I1 > child I6")
+
+
+@pytest.mark.parametrize("op", ["merge_person", "merge_family", "merge_event", "merge_place", "merge_source",
+                                "merge_citation", "merge_repository"])
+def test_weak_tag_on_a_merge_lands_on_its_merge_note(op):
+    # gwt-apply writes a note on the winner for every merge and gives that note the op's tags
+    ops = [{"op": op, "key": "m", "winner": "X1", "loser": "X2", "reason": "the same one", "tag": "weak"}]
+    ctx = F.Context([dict(o, _line=1) for o in ops], F.Tree.load(TREE), {"weak": {"tag": "weak"}})
+    assert T.Weak().check(ctx) == []
+
+
+@pytest.mark.parametrize("set_", [{"date": "1990-05-01"}, {"place": "P1"}, {"date": "1990-05-01", "place": "P1"},
+                                  {"type": "Birth"}])
+def test_protect_an_update_event_that_sets_what_the_event_has_is_no_change(set_):
+    # E10b, the protected I10's birth, is 1990-05-01 in P1: gwt-apply skips this op as a no-op
+    ops = [{"op": "update_event", "key": "u", "event": "E10b", "set": set_}]
+    ctx = F.Context([dict(o, _line=1) for o in ops], F.Tree.load(TREE), {"protect": {"ids": ["I10"]}})
+    assert T.Protect().check(ctx) == []
+
+
+@pytest.mark.parametrize("set_,code", [({"date": "1990-05-01", "place": ""}, "protect-place"),
+                                       ({"date": "1990", "place": "P1"}, "protect-date"),
+                                       ({"date": "1990-05-01", "description": "born at home"}, "protect-event")])
+def test_protect_an_update_event_is_judged_by_the_field_it_changes(set_, code):
+    ops = [{"op": "update_event", "key": "u", "event": "E10b", "set": set_}]
+    ctx = F.Context([dict(o, _line=1) for o in ops], F.Tree.load(TREE), {"protect": {"ids": ["I10"]}})
+    assert [f.code for f in T.Protect().check(ctx)] == [code]
+
+
+@pytest.mark.parametrize("text", ["Acta 5, imágenes ya en el árbol.", "Folio 12, the tree gives the same day."])
+def test_count_a_record_number_before_a_comma_is_no_count(text):
+    # the number names the record; it counts nothing the tree holds
+    ctx = F.Context([{"op": "add_note", "key": "n", "_line": 1, "text": text, "attach": [{"person": "I1"}]}],
+                    F.Tree.load(TREE), {})
+    assert T.Count().check(ctx) == []
+
+
+def test_count_a_number_that_ends_a_sentence_still_counts():
+    ctx = F.Context([{"op": "add_note", "key": "n", "_line": 1, "text": "People with this surname in the tree: 263.",
+                      "attach": [{"person": "I1"}]}], F.Tree.load(TREE), {})
+    assert [f.code for f in T.Count().check(ctx)] == ["count-in-text"]

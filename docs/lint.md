@@ -91,7 +91,7 @@ Nothing to check: no root, or a root the snapshot does not have.
 
 ### protect
 
-People who asked to stay out of the tree (the tree's owners, say) get no new data. No update or merge of them, no new or moved event on them or the families they head, no date, place or other change to their events, no new parent or child link, no note, citation, media, attribute or association attached to them, and no new text that names them (by Gramps ID, or first name followed by a surname word) within eight words of a life-event word. The life-event words are the `events` section of the [locale tables](rules.md): born, baptised, married, died, buried and their forms in each language.
+People who asked to stay out of the tree (the tree's owners, say) get no new data. No update or merge of them, no new or moved event on them or the families they head, no date, place or other change to their events (an `update_event` that sets only what the event already has is no change: `gwt-apply` skips it, and dates compare by what they mean, as `gwt-apply` compares them), no new parent or child link, no note, citation, media, attribute or association attached to them, and no new text that names them (by Gramps ID, or first name followed by a surname word) within eight words of a life-event word. The life-event words are the `events` section of the [locale tables](rules.md): born, baptised, married, died, buried and their forms in each language.
 
 | Code | When |
 |---|---|
@@ -148,7 +148,7 @@ A tag counts as weak when its name, with case and accents folded, holds one of t
 | Code | When |
 |---|---|
 | `weak-untagged` | a weak claim without the weak tag |
-| `weak-inert-tag` | an op that makes no object has a `tag`; `gwt-apply` only tags what an op makes, so that tag lands nowhere. Use an `add_tag` op |
+| `weak-inert-tag` | an op that makes no object has a `tag`; `gwt-apply` only tags what an op makes, so that tag lands nowhere. Use an `add_tag` op. A `merge_*` op makes the merge note `gwt-apply` writes on the winner, and its tag lands there |
 
 Nothing to check: no weak tag.
 
@@ -156,7 +156,7 @@ Nothing to check: no weak tag.
 
 | Code | When |
 |---|---|
-| `count-in-text` | new text has a number within eight words of the word "tree" in any of the locales (or a `[count] words` entry): «el árbol tiene 263 personas con este apellido». Such a count is wrong as soon as another list lands. The tree word must be a whole word (`Baumann` or `Treeside` is no tree, and neither is the plural `trees`), and the number must stand alone, so the digits of `12-03-1850` or of an ID are no count. A four-digit number from 1000 to 2199 is read as a year. The finding quotes the words that fired |
+| `count-in-text` | new text has a number within eight words of the word "tree" in any of the locales (or a `[count] words` entry): «el árbol tiene 263 personas con este apellido». Such a count is wrong as soon as another list lands. The tree word must be a whole word (`Baumann` or `Treeside` is no tree, and neither is the plural `trees`), and the number must stand alone, so the digits of `12-03-1850` or of an ID are no count. A number right before a comma names a record, it counts nothing: «acta 5, imágenes ya en el árbol». A four-digit number from 1000 to 2199 is read as a year. The finding quotes the words that fired |
 
 ## Proving the rules
 

@@ -32,6 +32,8 @@ mother = ["nai"]
 child = ["fillo", "filla", "fillos"]
 spouse = ["marido", "muller", "esposo", "esposa", "viúvo", "viúva"]
 priest = ["párroco", "cura", "crego", "reitor"]
+# the words that join a role to the person it is relative to: «hija de», «son of»
+of = ["de", "do", "da"]
 
 [events]
 birth = ["nacemento", "naceu", "nado", "nada"]
