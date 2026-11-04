@@ -312,3 +312,42 @@ def test_load_rejects_a_non_tree_file(tmp_path):
         assert False, "a file without objects must be refused"
     except Exception as e:
         assert "objects" in str(e)
+
+
+def test_long_name_and_place_stay_within_the_line():
+    # 120-char first + 120-char surname + 120-char suffix would make a 371-char NAME line uncapped
+    p = person("p1", "I1", "", "", sex=0, events=["e1"])
+    p["primary_name"] = {"first_name": "x" * 120, "surname_list": [{"surname": "y" * 120}],
+                         "suffix": "z" * 120}
+    data = snap(Person=[p],
+                Event=[event("e1", "E1", "Death", 1970, place="pl1")],
+                Place=[{"handle": "pl1", "gramps_id": "P1", "name": {"value": "A" * 120},
+                        "placeref_list": [{"ref": "pl2"}], "private": False},
+                       {"handle": "pl2", "gramps_id": "P2", "name": {"value": "B" * 120},
+                        "placeref_list": [{"ref": "pl3"}], "private": False},
+                       {"handle": "pl3", "gramps_id": "P3", "name": {"value": "C" * 120},
+                        "placeref_list": [], "private": False}])
+    lines = export(data, this_year=YEAR).split("\n")
+    assert all(len(l) <= 255 for l in lines)
+    name_lines = [l for l in lines if l.startswith("1 NAME ")]
+    assert any(l.startswith("1 NAME x") and "/yyy" in l for l in name_lines)  # truncated, still one NAME line
+    assert any(l.startswith("2 PLAC ") for l in lines)                        # the place hierarchy is capped too
+    # never cut inside an @@ escape pair (content lines only; pointer values like @F1@ are pairs already)
+    assert all((len(l) - len(l.rstrip("@"))) % 2 == 0 for l in name_lines)
+
+
+def test_xrefs_never_collide_across_kinds():
+    # a person and a source sharing a handle must still get different XREFs
+    ev = event("e1", "E1", "Death", 1970)
+    ev["citation_list"] = ["c1"]
+    data = snap(Person=[person("same", "I1", "Ana", "Vega", sex=0, events=["e1"])],
+                Event=[ev],
+                Citation=[{"handle": "c1", "gramps_id": "C1", "source_handle": "same", "page": "p. 1",
+                           "confidence": 2, "note_list": [], "private": False}],
+                Source=[source("same", "S1", "Parish book")])
+    out = export(data, this_year=YEAR)
+    heads = [l for l in out.split("\n") if l.startswith("0 @")]
+    assert len(heads) == len(set(heads))  # no record written twice
+    assert "0 @I1@ INDI" in heads         # the person keeps her own XREF...
+    assert "0 @S1@ SOUR" in heads         # ...and the source keeps its own
+    assert "2 SOUR @S1@" in out           # the citation points at the source, never at the person

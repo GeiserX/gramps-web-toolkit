@@ -91,6 +91,15 @@ def _inline(text, limit: int = 120) -> str:
     return flat[:-1] if run % 2 == 1 else flat
 
 
+def _cap(line: str, limit: int = 255) -> str:
+    """A whole physical line cut at GEDCOM's 255 characters, never inside an @@ escape pair."""
+    if len(line) <= limit:
+        return line
+    cut = line[:limit]
+    run = len(cut) - len(cut.rstrip("@"))
+    return cut[:-1] if run % 2 == 1 else cut
+
+
 def _wrap_escaped(text: str, limit: int = _LIMIT) -> list:
     """Chunks of an escaped value, each within the line limit and never splitting an @@ pair."""
     chunks = []
@@ -257,7 +266,8 @@ def build(data: dict, *, submitter: str = "Gramps Web Toolkit", this_year: int |
     used: set = set()
     xref = {}
     for kind, rows in (("F", kept_fams), ("I", kept_people), ("S", kept_sources), ("N", kept_notes)):
-        xref.update(_xrefs(rows, used))
+        for h, x in _xrefs(rows, used).items():
+            xref[(kind, h)] = x
 
     out = ["0 HEAD", "1 SOUR gwt-import-gedcom", f"2 VERS {version()}", "2 NAME Gramps Web Toolkit",
            "1 GEDC", "2 VERS 5.5.1", "2 FORM LINEAGE-LINKED", "1 CHAR UTF-8", "1 SUBM @SUBM@"]
@@ -267,7 +277,7 @@ def build(data: dict, *, submitter: str = "Gramps Web Toolkit", this_year: int |
     def add_notes(level, note_list):
         for nh in _refs(note_list):
             if nh in kept_notes:
-                out.append(f"{level} NOTE {xref[nh]}")
+                out.append(f"{level} NOTE {xref[('N', nh)]}")
                 if nh not in used_notes:
                     used_notes.append(nh)
 
@@ -279,7 +289,7 @@ def build(data: dict, *, submitter: str = "Gramps Web Toolkit", this_year: int |
             sh = c.get("source_handle")
             if sh not in kept_sources:
                 continue
-            out.append(f"{level} SOUR {xref[sh]}")
+            out.append(f"{level} SOUR {xref[('S', sh)]}")
             if sh not in used_sources:
                 used_sources.append(sh)
             if c.get("page"):
@@ -319,7 +329,7 @@ def build(data: dict, *, submitter: str = "Gramps Web Toolkit", this_year: int |
 
     for h in sorted(kept_people, key=gid):
         p = kept_people[h]
-        out.append(f"0 {xref[h]} INDI")
+        out.append(f"0 {xref[('I', h)]} INDI")
         if h in living:
             out.append("1 NAME Living")
         else:
@@ -343,21 +353,21 @@ def build(data: dict, *, submitter: str = "Gramps Web Toolkit", this_year: int |
             add_citations(1, p.get("citation_list"))
         for fh in p.get("family_list") or []:
             if fh in kept_fams:
-                out.append(f"1 FAMS {xref[fh]}")
+                out.append(f"1 FAMS {xref[('F', fh)]}")
         for fh in p.get("parent_family_list") or []:
             if fh in kept_fams:
-                out.append(f"1 FAMC {xref[fh]}")
+                out.append(f"1 FAMC {xref[('F', fh)]}")
 
     for h in sorted(kept_fams, key=lambda k: families[k].get("gramps_id") or k):
         f = families[h]
         husb, wife, children, spouse_sensitive = fam_members[h]
-        out.append(f"0 {xref[h]} FAM")
+        out.append(f"0 {xref[('F', h)]} FAM")
         if husb:
-            out.append(f"1 HUSB {xref[husb]}")
+            out.append(f"1 HUSB {xref[('I', husb)]}")
         if wife:
-            out.append(f"1 WIFE {xref[wife]}")
+            out.append(f"1 WIFE {xref[('I', wife)]}")
         for ch in children:
-            out.append(f"1 CHIL {xref[ch]}")
+            out.append(f"1 CHIL {xref[('I', ch)]}")
         if not spouse_sensitive:
             add_events(f, skip=False)
             add_notes(1, f.get("note_list"))
@@ -365,7 +375,7 @@ def build(data: dict, *, submitter: str = "Gramps Web Toolkit", this_year: int |
 
     for h in sorted(used_sources, key=lambda k: kept_sources[k].get("gramps_id") or k):
         s = kept_sources[h]
-        out.append(f"0 {xref[h]} SOUR")
+        out.append(f"0 {xref[('S', h)]} SOUR")
         if s.get("title"):
             _text(out, 1, "TITL", s["title"])
         if s.get("abbrev"):
@@ -381,7 +391,7 @@ def build(data: dict, *, submitter: str = "Gramps Web Toolkit", this_year: int |
         for para in _note_text(kept_notes[nh]).split("\n"):
             for k, chunk in enumerate(_wrap_escaped(_esc(para))):
                 if first:
-                    out.append(f"0 {xref[nh]} NOTE" + (f" {chunk}" if chunk else ""))
+                    out.append(f"0 {xref[('N', nh)]} NOTE" + (f" {chunk}" if chunk else ""))
                     first = False
                 else:
                     kind = "CONT" if k == 0 else "CONC"
@@ -392,4 +402,4 @@ def build(data: dict, *, submitter: str = "Gramps Web Toolkit", this_year: int |
 
     report.update(people=len(kept_people), families=len(kept_fams), sources=len(used_sources),
                   notes=len(used_notes))
-    return out, report
+    return [_cap(l) for l in out], report

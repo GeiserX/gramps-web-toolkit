@@ -62,3 +62,5 @@ gwt_gedcom/export.py | s not in kept_people or s in living | s not in kept_peopl
 gwt_gedcom/export.py | AND {ymd(val[4:7])} | AND {ymd(val[3:6])} | a range keeps its end year (Gramps dateval is d,m,y,slash,d2,m2,y2)
 gwt_gedcom/export.py | for h in sorted(used_sources, key=lambda k: kept_sources[k].get("gramps_id") or k): | for h in sorted(kept_sources, key=lambda k: kept_sources[k].get("gramps_id") or k): | only sources an exported citation points at are written
 gwt_gedcom/export.py | flat = _esc(str(text).replace("\r", " ").replace("\n", " ").strip())[:limit] | flat = _esc(str(text).replace("\r", " ").strip())[:limit] | a one-line value cannot inject a record through a newline
+gwt_gedcom/export.py | return [_cap(l) for l in out], report | return out, report | every physical line stays within 255 characters, however it was assembled
+gwt_gedcom/export.py | xref[(kind, h)] = x | xref[h] = x | an XREF never collides across record kinds that share a handle
