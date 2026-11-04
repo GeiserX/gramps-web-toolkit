@@ -352,8 +352,12 @@ def validate(ops: list[dict]) -> list[str]:
         missing = [f for f in required if op.get(f) in (None, "", [])]
         if name == "add_citation" and op.get("page") == "":
             missing.remove("page")  # an empty page is a real value
-        if name == "add_person" and op.get("surname") == "":
-            missing.remove("surname")  # someone known by one name only has no surname
+        if name == "add_person":
+            for f in ("first_name", "surname"):
+                if op.get(f) == "":
+                    missing.remove(f)  # a known name part must not force a guessed other part
+            if not any(isinstance(op.get(f), str) and op[f].strip() for f in ("first_name", "surname")):
+                errors.append(f"{where}: first_name or surname must be non-blank")
         if missing:
             errors.append(f"{where}: missing {sorted(missing)}")
         extra = set(op) - allowed
@@ -364,7 +368,7 @@ def validate(ops: list[dict]) -> list[str]:
                 continue
             if f in optional and op[f] in (None, ""):
                 continue  # an optional text left "" or null means none, as older lists write it
-            blank_ok = (name, f) in (("add_citation", "page"), ("add_person", "surname"))
+            blank_ok = (name, f) in (("add_citation", "page"), ("add_person", "surname"), ("add_person", "first_name"))
             if not isinstance(op[f], str) or not (op[f].strip() or (blank_ok and op[f] == "")):
                 errors.append(f"{where}: {f} is a non-empty text")
         for f in ("children", "attach", "namesake_of", "new_couple_of", "use_loser"):
@@ -467,9 +471,11 @@ def validate(ops: list[dict]) -> list[str]:
                     raise ValueError(f"set takes only {sorted(PERSON_FIELDS)}")
                 if "gender" in s and (not isinstance(s["gender"], str) or s["gender"] not in GENDER):
                     raise ValueError(f"gender is one of {sorted(GENDER)}")
-                for k in NAME_KEYS:  # "" clears the field
+                for k in (*NAME_KEYS, "first_name", "surname"):  # "" clears the field
                     if k in s and not isinstance(s[k], str):
                         raise ValueError(f"{k} is a text")
+                if "first_name" in s and "surname" in s and not (s["first_name"].strip() or s["surname"].strip()):
+                    raise ValueError("set would leave first_name and surname both blank; keep one of them")
             if name == "update_event":
                 s = op.get("set")
                 if not isinstance(s, dict) or not s or set(s) - EVENT_FIELDS:
@@ -688,6 +694,11 @@ class Result:
     noop: bool = False  # a skip because the object the tree has is already as the op asks (an update, a tag)
 
 
+
+
+def _joined(*parts: str) -> str:
+    """Name parts joined with one space, leaving out the empty ones."""
+    return " ".join(x for x in parts if x)
 
 
 def _stored_name(person: dict) -> tuple[str, str]:
@@ -1124,13 +1135,13 @@ class Applier:
         same = self.namesakes().get(name, [])
         if same and not op.get("allow_namesake"):
             raise Conflict(
-                f"{op['first_name']} {op['surname']} already exists as {', '.join(same)}; "
+                f"{_joined(op['first_name'], op['surname'])} already exists as {', '.join(same)}; "
                 "use that ID, or set allow_namesake with namesake_reason and namesake_of if this is another person"
             )
         unchecked = [x for x in same if x not in self._compared(op)]
         if unchecked:
             raise Conflict(
-                f"{op['first_name']} {op['surname']} also exists as {', '.join(unchecked)}, "
+                f"{_joined(op['first_name'], op['surname'])} also exists as {', '.join(unchecked)}, "
                 "which namesake_of does not name; compare with them too"
             )
         if same:
@@ -1194,6 +1205,8 @@ class Applier:
         for k, gramps in NAME_KEYS.items():
             if k in s and (name.get(gramps) or "") != s[k].strip():
                 name[gramps] = s[k].strip()
+        if ("first_name" in s or "surname" in s) and not any(x.strip() for x in _stored_name(person)):
+            raise Conflict(f"Person {self.label(before)} would be left with no first name and no surname; keep one of them")
         self._private(person, s)
         if person == before:
             self.skip_noop(f"skip: Person {self.label(person)} already has those values")
