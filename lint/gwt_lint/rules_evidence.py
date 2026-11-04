@@ -347,6 +347,8 @@ def role_words(text, name=None, window=3, others=()) -> set[str]:
         if k is None:
             if any(abs(i - j) <= window for j in at):
                 out |= rs
+        elif k + 1 in at and any(i - window <= j < i for j in at):
+            continue  # named on both sides, as a son is named after his father: the text does not say which
         elif any(i - window <= j < i for j in at) and not any(k < j <= k + window for j in seen):
             out |= rs
         elif k + 1 in at and not any(i - window <= j < i for j in seen):
@@ -621,6 +623,40 @@ def _target_people(view, cls, ref) -> list[str]:
     return [p for p in out if p in view.people]
 
 
+# old spellings swap letters by pairs (es: b/v, y/i): «Ysavel» is «Isabel»
+SPELLING = tuple(dict.fromkeys(pair for code in LOCALES for pair in load_locale(code)["_pairs"]))
+
+
+def _spelt(word) -> str:
+    for a, b in SPELLING:
+        word = word.replace(a, b)
+    return word
+
+
+def _near(a, b) -> bool:
+    """Whether two name words are one word as an index spells it: the same after the spelling pairs, or, from four
+    letters on, one letter changed, dropped or swapped with the next («Agustín» «Augustin», «Isabel» «Isable»)."""
+    a, b = _spelt(a), _spelt(b)
+    if a == b:
+        return True
+    if min(len(a), len(b)) < 4 or abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) == len(b):
+        diff = [i for i in range(len(a)) if a[i] != b[i]]
+        return len(diff) == 1 or (len(diff) == 2 and diff[1] == diff[0] + 1 and a[diff[0]] == b[diff[1]]
+                                  and a[diff[1]] == b[diff[0]])
+    short, long_ = sorted((a, b), key=len)
+    return any(long_[:i] + long_[i + 1:] == short for i in range(len(long_)))
+
+
+def _named(a, b) -> bool:
+    """same_person with each word matched as an index spells it: two words in common, or every word of a one-word
+    name."""
+    x, y = name_words(a), name_words(b)
+    common = sum(1 for w in x if any(_near(w, v) for v in y))
+    return common >= 2 or (len(x) == 1 and common == 1) or (len(y) == 1 and any(_near(y[0], w) for w in x))
+
+
 def _names_of(person) -> list[str]:
     """A person's primary and alternate names, each as first name and surnames."""
     names = [person.get("primary_name") or {}] + list(person.get("alternate_names") or [])
@@ -647,7 +683,7 @@ class Principal(Rule):
             for cls, target in attach_targets(op):
                 for h in _target_people(ctx.view, cls, target):
                     names = _names_of(ctx.view.people[h])
-                    if h in seen or not names or any(same_person(n, m) for n in names for m in named):
+                    if h in seen or not names or any(_named(n, m) for n in names for m in named):
                         continue
                     seen.add(h)
                     out.append(self.finding("principal-unnamed", op, f"{ark} does not name {ctx.view.label(h)}; "
@@ -688,8 +724,8 @@ class Principal(Rule):
                 heads = principals(rec)
                 if rel != "principal" and not (rel == "spouse" and types & {"Marriage", "Family"}):
                     # in free text, «padrino Tomás Brin <ark>» names a persona by its role: role judges that claim
-                    if ark not in evidence and persona["name"] and role_words(text, persona["name"],
-                                                                              others=_others(rec, persona)):
+                    # any role word by the name will do, whichever way «de» points: «María, hija de Diego <ark>»
+                    if ark not in evidence and persona["name"] and role_words(text, persona["name"]):
                         continue
                     fix = ", ".join(FS + a for p in heads for a in p["arks"][:1]) or "open the record and cite its principal"
                     out.append(self.finding("principal-nonprincipal", op,

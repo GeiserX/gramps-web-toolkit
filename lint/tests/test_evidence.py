@@ -534,6 +534,14 @@ def test_role_reads_the_direction_of_de(text, tmp_path):
     assert lint(write(tmp_path, ops), "role")[:2] == (0, {})
 
 
+@pytest.mark.parametrize("text", ["Luis Zorvalo Quirell, hijo de Luis Zorvalo y de Rosa Quirell",
+                                  "Luis Zorvalo Quirell, hijo legítimo de Luis Zorvalo"])
+def test_role_a_father_named_on_both_sides_of_de_is_no_child(text, tmp_path):
+    # a son named after his father: the father's name sits before «hijo» inside the son's, and after «de»
+    ops = [{"op": "add_note", "key": "n", "text": f"{text} ({FS}1:1:QZZ9-AAA)", "attach": [{"person": "I1"}]}]
+    assert lint(write(tmp_path, ops), "role")[:2] == (0, {})
+
+
 @pytest.mark.parametrize("text", ["Ana Zorvalo Quirell, hija de Tomás Brin", "Tomás Brin, padre de Ana"])
 def test_role_a_godparent_made_a_parent_through_de_is_a_mismatch(text, tmp_path):
     # the person after «hija de» is a parent, so the record's godfather there is the mistake the rule is for
@@ -597,3 +605,22 @@ def test_principal_a_candidate_row_names_too_few_people_to_judge_a_target(tmp_pa
     ops = [{"op": "add_citation", "key": "c", "source": "S1", "page": FS + "1:1:QZZ7-DDA", "attach": [{"person": "I4"}]}]
     code, codes, _ = lint(write(tmp_path, ops), "principal")
     assert "principal-unnamed" not in codes
+
+
+@pytest.mark.parametrize("first,surname,codes", [
+    ("Luys", "Zorbalo", {}), ("Rossa", "Quirel", {}), ("Rosa", "Quyrel", {}), ("Tomas", "Bryn", {}),
+    ("Luis", "Zorvalu", {}), ("Luis", "Zorvaol", {}), ("Luisa", "Lurre", {"principal-unnamed": ["c"]}),
+    ("Ana", "Lurre", {"principal-unnamed": ["c"]}), ("Ama", "Zorvalo", {"principal-unnamed": ["c"]})])
+def test_principal_a_name_the_index_spells_another_way_is_named(first, surname, codes, tmp_path):
+    # an index writes «Luys Zorbalo» for Luis Zorvalo: y/i and b/v, a letter dropped or swapped, are one name; a
+    # single word in common is not
+    ops = [{"op": "add_person", "key": "p", "first_name": first, "surname": surname, "gender": "M"},
+           {"op": "add_citation", "key": "c", "source": "S1", "page": FS + "1:1:QZZ9-AAA", "attach": [{"person": "key:p"}]}]
+    assert lint(write(tmp_path, ops), "principal")[1] == codes
+
+
+def test_principal_a_persona_named_with_a_role_relative_to_another_persona_is_excused(tmp_path):
+    # «Rosa Quirell, esposa de Luis Zorvalo <her ark>» names Rosa by a role: role judges it, whichever way «de» points
+    ops = [{"op": "add_note", "key": "n", "text": f"Rosa Quirell, esposa de Luis Zorvalo ({FS}1:1:QZZ9-AAC)",
+            "attach": [{"person": "I1"}]}]
+    assert lint(write(tmp_path, ops), "principal")[:2] == (0, {})
