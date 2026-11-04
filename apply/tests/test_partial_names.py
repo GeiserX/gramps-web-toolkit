@@ -65,3 +65,44 @@ def test_surname_only_parent_can_link_without_guessed_given_name():
     family=next(iter(fake.store['families'].values()))
     assert family['father_handle']==stable_handle('surname-only')
     assert not family.get('mother_handle')
+
+
+def update(set_, key='rename', person='key:surname-only'):
+    return {'op':'update_person','key':key,'ruling':'invented-record-review','person':person,'set':set_}
+
+
+@pytest.mark.parametrize('set_', [
+    {'first_name':'','surname':''}, {'first_name':' ','surname':''},
+    {'first_name':None}, {'first_name':42}, {'surname':None},
+])
+def test_update_person_cannot_blank_or_mistype_the_name(set_):
+    assert validate([update(set_)])
+
+
+def test_update_person_may_clear_one_name_part():
+    assert validate([update({'first_name':''})])==[]
+    assert validate([update({'first_name':'Ada','surname':''})])==[]
+
+
+def test_update_person_refused_when_the_stored_name_would_be_left_blank():
+    fake=FakeGrampsWeb(); c=client(fake); p=person()
+    assert Applier(c,retries=1,retry_wait=0).run([p])[0].status=='done'
+    stored=fake.store['people'][stable_handle(p['key'])]
+    writes=len(fake.writes())
+    applier=Applier(c,retries=1,retry_wait=0)
+    assert applier.run([update({'surname':''})])[0].status=='conflict'
+    assert any('no first name and no surname' in a for a in applier.actions)
+    assert len(fake.writes())==writes
+    assert stored['primary_name']['surname_list'][0]['surname']=='Example'
+    assert Applier(c,retries=1,retry_wait=0).run([update({'first_name':'Ada','surname':''},key='other')])[0].status=='done'
+
+
+def test_surname_only_namesake_messages_have_no_stray_space():
+    fake=FakeGrampsWeb(); c=client(fake)
+    Applier(c,retries=1,retry_wait=0).run([person()])
+    other=person('another')
+    flags=preflight([other],c)
+    assert flags and not any('( ' in f for f in flags)
+    applier=Applier(c,retries=1,retry_wait=0)
+    assert applier.run([other])[0].status=='conflict'
+    assert any(a.startswith('conflict: Example already exists') for a in applier.actions)

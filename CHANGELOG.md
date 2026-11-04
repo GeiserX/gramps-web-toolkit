@@ -9,6 +9,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 ### Change lists
 
 - `add_person` accepts an empty `first_name` when `surname` is known, without guessed placeholders. Both fields remain required and a wholly blank name is refused.
+- `update_person` refuses a `set` whose `first_name` or `surname` is not text, or that would leave the person with no first name and no surname. A list that blanked both, or set either to a number or `null`, now stops.
 
 
 ## [1.1.0] - 2026-11-03
