@@ -45,7 +45,7 @@ class Who:
         return (first[0] if first else "", sur[0] if sur else "")
 
     def label(self) -> str:
-        return f"{self.ref} ({self.first} {self.surname}{', ' + '/'.join(map(str, sorted(self.years))) if self.years else ''})"
+        return f"{self.ref} ({' '.join(x for x in (self.first, self.surname) if x)}{', ' + '/'.join(map(str, sorted(self.years))) if self.years else ''})"
 
 
 def _year(date) -> int | None:
