@@ -8,7 +8,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Added
 
-- `gwt-rawstore migrate --dry-run` shows what the run would upload, untrack and delete before it does any of it. Each binary gets a line saying whether it would be uploaded or the store already holds it, and whether its `rawstore.tsv` already has a matching row; totals follow, and with `--remove` or `--evict` the files and bytes that would leave git or the disk, by extension. It sends only `HEAD` requests and writes nothing: no upload, no manifest or `.gitignore`, no `git rm` or `git add`, no deleted file. It refuses a sparse checkout like the real run.
+- `gwt-rawstore migrate --dry-run` shows what the run would upload, untrack and delete before it does any of it. Each binary gets a line saying whether it would be uploaded or the store already holds it, and whether its `rawstore.tsv` already has a matching row; totals follow, and with `--remove` or `--evict` the files and bytes that would leave git or the disk, by extension. It sends only `HEAD` requests and writes nothing: no upload, no manifest or `.gitignore`, no `git rm` or `git add`, no deleted file. It refuses a sparse checkout like the real run, and exits 1 on any file the real run could not store: one it cannot read, a failed `HEAD`, or an object whose stored sha256 does not match.
 
 ## [1.1.0] - 2026-11-03
 

@@ -468,6 +468,29 @@ class GitTest(Base):
             self.assertEqual(R.migrate(store, folder, log=self.log, dry_run=True), 3)
         self.assertEqual(sum(1 for l in self.stderr if l.startswith('FAIL ')), 3)
 
+    def test_migrate_dry_run_fails_where_the_real_run_cannot_confirm_the_object(self):
+        folder = self.dry_run_repo()
+        path = os.path.join(folder, 'a', 'scan-0001.jpg')
+        key = R.object_key(R.sha256_file(path)[0], 'scan-0001.jpg')
+        FakeS3.objects[key] = (FakeS3.objects[key][0], '0' * 64)   # right size, another sha256: put() refuses it
+        self.assertEqual(R.migrate(self.store, folder, log=self.log, dry_run=True), 1)
+        self.assertTrue(any(l.startswith('FAIL ' + path + ': ') for l in self.stderr), self.stderr)
+        with mock.patch.object(R, 'WAIT', 0):
+            self.assertEqual(R.migrate(self.store, folder, log=self.log), 1)   # the real run fails on it too
+
+    def test_migrate_dry_run_names_a_file_it_cannot_read(self):
+        folder = self.dry_run_repo()
+        path = os.path.join(folder, 'a', 'scan-0002.jpg')
+        real = R.sha256_file
+
+        def unreadable(p):
+            if p == path:
+                raise PermissionError(13, 'Permission denied', p)
+            return real(p)
+        with mock.patch.object(R, 'sha256_file', unreadable):
+            self.assertEqual(R.migrate(self.store, folder, log=self.log, dry_run=True), 1)
+        self.assertTrue(any(l.startswith('FAIL ' + path + ': PermissionError') for l in self.stderr), self.stderr)
+
     def test_migrate_dry_run_refuses_a_sparse_checkout_like_the_real_run(self):
         folder = self.dry_run_repo()
         os.unlink(os.path.join(folder, 'b', 'index.json.gz'))

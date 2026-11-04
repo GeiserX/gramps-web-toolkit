@@ -392,11 +392,14 @@ def plan(store, files, prefix='', remove=False, evict=False, jobs=4, log=print):
     nothing else: no PUT, no manifest or .gitignore written, no git rm or git add, no file deleted. Returns the
     number of files whose HEAD failed, which the real run could not store either."""
     def look(path):
-        sha, size = sha256_file(path)
         try:
-            return path, sha, size, store.head(object_key(sha, os.path.basename(path), prefix)), None
+            sha, size = sha256_file(path)
+            got = store.head(object_key(sha, os.path.basename(path), prefix))
+            if got is not None and got[0] == size and got[1] and got[1] != sha:   # put() would not confirm it
+                raise RuntimeError('the store holds %s with sha256 %s' % (path, got[1]))
+            return path, sha, size, got, None
         except Exception as e:
-            return path, sha, size, None, e
+            return path, None, None, None, e
 
     manifests, failed = {}, 0
     up, have, listed, ext = [0, 0], [0, 0], 0, {}
