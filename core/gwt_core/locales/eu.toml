@@ -32,6 +32,8 @@ mother = ["ama"]
 child = ["seme", "semea", "alaba"]
 spouse = ["senarra", "emaztea", "alarguna"]
 priest = ["apaiz", "apaiza", "erretorea"]
+# the words that join a role to the person it is relative to: «hija de», «son of»; Basque marks it with a suffix (Luisen alaba), so none
+of = []
 
 [events]
 birth = ["jaiotza", "jaio"]

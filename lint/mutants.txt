@@ -76,3 +76,13 @@ gwt_lint/framework.py |             raise InputError(f"{path}: not a snapshot") 
 gwt_lint/rules_tree.py |             if op["op"] == "add_note" and str(op.get("text") or "").startswith(PROBABLE): |             if False: | a [probable] note on a child_ref in the same list makes its weak citation need no tag
 gwt_lint/rules_tree.py |             if isinstance(r, str) and not r.startswith("key:"): |             if isinstance(r, str): | the same list key in two lists is two objects, never an overlap
 gwt_lint/rules_tree.py |                     if s not in reach: |                     if True: | a blood relative married to another keeps the blood path in -v
+gwt_lint/framework.py |  or op["op"] in MERGED |  | a merge's tag lands on the note gwt-apply writes for the merge, so it is not inert
+gwt_lint/rules_tree.py |                 for who in hit("Event", op.get("event")) if s else []: |                 for who in hit("Event", op.get("event")): | an update_event that sets only what the event has is no change to a protected person
+gwt_lint/rules_tree.py |                 same = dates.date_key(ev.get("date")) == dates.date_key(dates.parse_date(v)) |                 same = False | setting the date an event already has is no date change
+gwt_lint/rules_tree.py |             same = (view.resolve(v, "Place") if v else None) == (ev.get("place") or None) |             same = False | setting the place an event already has is no place change
+gwt_lint/rules_tree.py |             same = (view.resolve(v, "Place") if v else None) == (ev.get("place") or None) |             same = True | removing an event's place is a place change
+gwt_lint/rules_tree.py |             same = text_of(ev.get(k)) == v |             same = False | setting the type an event already has is no change
+gwt_lint/rules_tree.py |             same = text_of(ev.get(k)) == v |             same = True | a new description on a protected person's event is a change
+gwt_lint/rules_tree.py |         if not same: |         if False: | a field an update_event changes is a change to a protected person
+gwt_lint/rules_tree.py | [)\].;:!?]?")  # no comma | [)\].,;:!?]?")  # no comma | a number before a comma («acta 5,») names a record, it counts nothing
+gwt_lint/rules_tree.py | [(\[]?\d+[)\].;:!?]?")  # no comma | [(\[]?\d+[)\];:!?]?")  # no comma | a number that ends a sentence next to the word tree is still a count

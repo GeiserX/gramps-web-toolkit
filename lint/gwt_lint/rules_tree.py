@@ -15,6 +15,7 @@ import json
 import re
 from collections import deque
 
+from gwt_apply import dates
 from gwt_core.rules import LIVING_YEARS, LOCALES, DateError, find_ids, fold, load_locale, possibly_living, read_date
 
 from .framework import (MERGED, PROBABLE, Mutant, NothingToCheck, Rule, attach_targets, creates, refs, tags_of,
@@ -22,7 +23,7 @@ from .framework import (MERGED, PROBABLE, Mutant, NothingToCheck, Rule, attach_t
 
 UPDATED = {"update_person": "Person", "update_family": "Family"}  # update_event has its own codes
 LINEAGE = {"", "Birth", "Unknown", "Adopted"}  # parent links that carry blood; Stepchild, Foster, Sponsored do not
-BARE_NUMBER = re.compile(r"[(\[]?\d+[)\].,;:!?]?")
+BARE_NUMBER = re.compile(r"[(\[]?\d+[)\].;:!?]?")  # no comma: «acta 5,» names a record, it counts nothing
 QUOTE = re.compile(r"«([^»]+)»|“([^”]+)”|\"([^\"]+)\"")
 QUOTE_WORDS = 4  # « » also mark titles and names; a quoted span this many words or longer reads as a quotation
 
@@ -201,6 +202,28 @@ def _mentions(text, names, words, window=8) -> bool:
     return False
 
 
+def _changed(view, ref, s) -> list[str]:
+    """The fields of an update_event's `set` that differ from what the event has, compared as gwt-apply compares
+    them before it skips the op as a no-op: a date by what it means, a place by the place it names."""
+    ev = view.events.get(view.resolve(ref, "Event")) or {}
+    out = []
+    for k, v in s.items():
+        if k == "date":
+            try:
+                same = dates.date_key(ev.get("date")) == dates.date_key(dates.parse_date(v))
+            except dates.DateError:  # gwt-apply refuses the op: nothing to call a no-op
+                same = False
+        elif k == "place":
+            same = (view.resolve(v, "Place") if v else None) == (ev.get("place") or None)
+        elif k in ("type", "description"):
+            same = text_of(ev.get(k)) == v
+        else:
+            same = False
+        if not same:
+            out.append(k)
+    return out
+
+
 class Protect(Rule):
     name = "protect"
     codes = {"protect-event": "adds or moves an event onto a protected person or their family",
@@ -250,8 +273,8 @@ class Protect(Rule):
                 for who in (w for cls, ref in owners if ref for w in hit(cls, ref)):
                     out.append(self.finding("protect-event", op, f"adds an event to protected {who}"))
             elif kind == "update_event":
-                s = op.get("set") if isinstance(op.get("set"), dict) else {}
-                for who in hit("Event", op.get("event")):
+                s = _changed(view, op.get("event"), op.get("set") if isinstance(op.get("set"), dict) else {})
+                for who in hit("Event", op.get("event")) if s else []:
                     code = "protect-date" if "date" in s else "protect-place" if "place" in s else "protect-event"
                     out.append(self.finding(code, op, f"changes event {op.get('event')} of protected {who}"))
             elif kind in ("link_child", "unlink_child", "add_family", "update_child_ref"):

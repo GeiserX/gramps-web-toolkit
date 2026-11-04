@@ -234,6 +234,20 @@ def _event_owner(spec) -> tuple[str, str]:
     return cls, ref
 
 
+KIND_NAME = {**{cls: kind for kind, cls in TARGET_KINDS.items()}, "ChildRef": "child_ref", "PersonRef": "association"}
+
+
+def _check_carrier(cls: str, lst: str, attaching: bool) -> None:
+    """Attach/detach guard: refuse a target that cannot hold this list, naming the kinds that can."""
+    if cls in CARRIES[lst]:
+        return
+    kind, name = lst[:-5], KIND_NAME[cls]
+    carriers = ", ".join(sorted(KIND_NAME[c] for c in CARRIES[lst]))
+    hint = f"; a reading you cannot tie to one of these yet goes in add_note on the {name}" if (
+        attaching and lst == "citation_list") else ""
+    raise ValueError(f"a {cls} cannot carry a {kind}; a {kind} goes on one of: {carriers}{hint}")
+
+
 def _parse_object(spec) -> tuple[str, str, str]:
     """attach_existing's object: {"media": "O0054"} -> ("Media", "O0054", "media_list")."""
     if not isinstance(spec, dict) or len(spec) != 1:
@@ -352,8 +366,12 @@ def validate(ops: list[dict]) -> list[str]:
         missing = [f for f in required if op.get(f) in (None, "", [])]
         if name == "add_citation" and op.get("page") == "":
             missing.remove("page")  # an empty page is a real value
-        if name == "add_person" and op.get("surname") == "":
-            missing.remove("surname")  # someone known by one name only has no surname
+        if name == "add_person":
+            for f in ("first_name", "surname"):
+                if op.get(f) == "":
+                    missing.remove(f)  # a known name part must not force a guessed other part
+            if not any(isinstance(op.get(f), str) and op[f].strip() for f in ("first_name", "surname")):
+                errors.append(f"{where}: first_name or surname must be non-blank")
         if missing:
             errors.append(f"{where}: missing {sorted(missing)}")
         extra = set(op) - allowed
@@ -364,7 +382,7 @@ def validate(ops: list[dict]) -> list[str]:
                 continue
             if f in optional and op[f] in (None, ""):
                 continue  # an optional text left "" or null means none, as older lists write it
-            blank_ok = (name, f) in (("add_citation", "page"), ("add_person", "surname"))
+            blank_ok = (name, f) in (("add_citation", "page"), ("add_person", "surname"), ("add_person", "first_name"))
             if not isinstance(op[f], str) or not (op[f].strip() or (blank_ok and op[f] == "")):
                 errors.append(f"{where}: {f} is a non-empty text")
         for f in ("children", "attach", "namesake_of", "new_couple_of", "use_loser"):
@@ -467,9 +485,11 @@ def validate(ops: list[dict]) -> list[str]:
                     raise ValueError(f"set takes only {sorted(PERSON_FIELDS)}")
                 if "gender" in s and (not isinstance(s["gender"], str) or s["gender"] not in GENDER):
                     raise ValueError(f"gender is one of {sorted(GENDER)}")
-                for k in NAME_KEYS:  # "" clears the field
+                for k in (*NAME_KEYS, "first_name", "surname"):  # "" clears the field
                     if k in s and not isinstance(s[k], str):
                         raise ValueError(f"{k} is a text")
+                if "first_name" in s and "surname" in s and not (s["first_name"].strip() or s["surname"].strip()):
+                    raise ValueError("set would leave first_name and surname both blank; keep one of them")
             if name == "update_event":
                 s = op.get("set")
                 if not isinstance(s, dict) or not s or set(s) - EVENT_FIELDS:
@@ -483,7 +503,8 @@ def validate(ops: list[dict]) -> list[str]:
                 s = op.get("set")
                 if not isinstance(s, dict) or not s or set(s) - PLACE_FIELDS:
                     raise ValueError(f"set takes only {sorted(PLACE_FIELDS)}")
-                _check_coords(s)
+                if not (s.get("lat") == "" and s.get("long") == ""):  # "" for both clears the point
+                    _check_coords(s)
                 if "enclosed_by" in s and not (isinstance(s["enclosed_by"], str) and (
                         s["enclosed_by"].startswith("key:") or _GRAMPS_ID.match(s["enclosed_by"]))):
                     raise ValueError(f"{s['enclosed_by']!r} is neither key:<key> nor a Gramps ID (never a handle)")
@@ -579,8 +600,7 @@ def validate(ops: list[dict]) -> list[str]:
             if name == "detach":
                 cls, _ = _parse_target(op.get("target"))
                 ocls, _, lst = _parse_object(op.get("object"))
-                if cls not in CARRIES[lst]:
-                    raise ValueError(f"a {cls} cannot carry a {lst[:-5]}")
+                _check_carrier(cls, lst, attaching=False)
             if name in ("add_tag", "remove_tag"):
                 _tag_target(op.get("target"))
             if name == "move_event" and _event_owner(op.get("from")) == _event_owner(op.get("to")):
@@ -613,8 +633,7 @@ def validate(ops: list[dict]) -> list[str]:
             for spec in (op.get("attach") or []) if name in ("attach_existing", "add_citation", "add_media",
                                                              "add_note", "add_transcription") else []:
                 cls, _ = _parse_target(spec)
-                if cls not in CARRIES[lst]:
-                    raise ValueError(f"a {cls} cannot carry a {lst[:-5]}")
+                _check_carrier(cls, lst, attaching=True)
             if "expect" in op and name in ("detach", "remove_tag", "unlink_child", "attach_existing", "delete",
                                            "remove_alternate_name") and (
                     op["expect"] not in EXPECT):
@@ -688,6 +707,11 @@ class Result:
     noop: bool = False  # a skip because the object the tree has is already as the op asks (an update, a tag)
 
 
+
+
+def _joined(*parts: str) -> str:
+    """Name parts joined with one space, leaving out the empty ones."""
+    return " ".join(x for x in parts if x)
 
 
 def _stored_name(person: dict) -> tuple[str, str]:
@@ -1124,13 +1148,13 @@ class Applier:
         same = self.namesakes().get(name, [])
         if same and not op.get("allow_namesake"):
             raise Conflict(
-                f"{op['first_name']} {op['surname']} already exists as {', '.join(same)}; "
+                f"{_joined(op['first_name'], op['surname'])} already exists as {', '.join(same)}; "
                 "use that ID, or set allow_namesake with namesake_reason and namesake_of if this is another person"
             )
         unchecked = [x for x in same if x not in self._compared(op)]
         if unchecked:
             raise Conflict(
-                f"{op['first_name']} {op['surname']} also exists as {', '.join(unchecked)}, "
+                f"{_joined(op['first_name'], op['surname'])} also exists as {', '.join(unchecked)}, "
                 "which namesake_of does not name; compare with them too"
             )
         if same:
@@ -1194,6 +1218,8 @@ class Applier:
         for k, gramps in NAME_KEYS.items():
             if k in s and (name.get(gramps) or "") != s[k].strip():
                 name[gramps] = s[k].strip()
+        if ("first_name" in s or "surname" in s) and not any(x.strip() for x in _stored_name(person)):
+            raise Conflict(f"Person {self.label(before)} would be left with no first name and no surname; keep one of them")
         self._private(person, s)
         if person == before:
             self.skip_noop(f"skip: Person {self.label(person)} already has those values")
@@ -1224,8 +1250,9 @@ class Applier:
         place.setdefault("_class", "Place")
         before = copy.deepcopy(place)
         s = op["set"]
-        if "lat" in s:
-            place["lat"], place["long"] = str(s["lat"]), str(s["long"])
+        point = (str(s["lat"]), str(s["long"])) if "lat" in s else None
+        if point and (place.get("lat") or "", place.get("long") or "") != point:  # a place with no point clears to a skip
+            place["lat"], place["long"] = point
         if "enclosed_by" in s:
             parent = self.resolve("Place", s["enclosed_by"])
             # compared with the parent the place has now, by handle: a place already under that one parent and no

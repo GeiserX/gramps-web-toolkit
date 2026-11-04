@@ -285,16 +285,22 @@ def relation(rec, persona) -> str:
 
 def _role_table():
     """Each role word of every locale, with every role it can mean: «padre» is a father in Spanish and Italian
-    and a priest in Portuguese."""
+    and a priest in Portuguese; and the words that join a role to the person it is relative to («hija de»)."""
     words: dict[str, set[str]] = {}
+    of: set[str] = set()
     for code in LOCALES:
         for role, ws in load_locale(code)["roles"].items():
+            if role == "of":
+                of |= {fold(w) for w in ws}
+                continue
             for w in ws:
                 words.setdefault(fold(w), set()).add(role)
-    return words
+    return words, of
 
 
-ROLE_WORDS = _role_table()
+ROLE_WORDS, OF_WORDS = _role_table()
+# what «X, <role> de Y» makes Y: «hija de Y» makes Y a parent
+CONVERSE = {"child": {"parent"}, "father": {"child"}, "mother": {"child"}, "spouse": {"spouse"}}
 
 
 def name_words(name) -> list[str]:
@@ -311,22 +317,48 @@ def _mentions(toks, name) -> list[int]:
             and any(toks[j] in words and toks[j] != t for j in range(max(0, i - 2), min(len(toks), i + 3)))]
 
 
-def role_words(text, name=None, window=3) -> set[str]:
+def role_words(text, name=None, window=3, others=()) -> set[str]:
     """The family roles a text names (by any locale's role words); with `name`, only those within `window` words
-    of where the text names that person, the name's own words left out (Peter is a name, not a Dutch godfather)."""
+    of where the text names that person, the name's own words left out (Peter is a name, not a Dutch godfather).
+
+    A role word joined to a person by «de», «di», «of» (`of` in the locale tables) reads one way: «X, hija de Y»
+    makes X a child and the Y named right after «de» a parent. Both are said of the record's principal, so the
+    claim stands only when the other side names none of `others`, the record's other personas: «Luis, marido de
+    Rosa» says nothing of how Luis stands to the child baptised."""
     toks = fold(text).split()
     own = set(name_words(name)) if name else set()
+    names = own | {w for o in others for w in name_words(o)}
     hits = []
     for i in range(len(toks)):
         for n in (2, 1):  # «teniente cura» before «cura»
             w = " ".join(toks[i:i + n])
             if w in ROLE_WORDS and not (n == 1 and w in own):
-                hits.append((i, ROLE_WORDS[w]))
+                k = i + n  # «hija de», or «hija legítima de» with one word between that is no name
+                k = k if k < len(toks) and toks[k] in OF_WORDS else k + 1 if k + 1 < len(toks) and \
+                    toks[k + 1] in OF_WORDS and toks[k] not in names else None
+                hits.append((i, ROLE_WORDS[w], k))
                 break
     if name is None:
-        return {r for _, rs in hits for r in rs}
+        return {r for _, rs, _ in hits for r in rs}
     at = _mentions(toks, name)
-    return {r for i, rs in hits if any(abs(i - j) <= window for j in at) for r in rs}
+    seen = [j for o in others for j in _mentions(toks, o)]
+    out = set()
+    for i, rs, k in hits:
+        if k is None:
+            if any(abs(i - j) <= window for j in at):
+                out |= rs
+        elif k + 1 in at and any(i - window <= j < i for j in at):
+            continue  # named on both sides, as a son is named after his father: the text does not say which
+        elif any(i - window <= j < i for j in at) and not any(k < j <= k + window for j in seen):
+            out |= rs
+        elif k + 1 in at and not any(i - window <= j < i for j in seen):
+            out |= {c for r in rs for c in CONVERSE.get(r, ())}
+    return out
+
+
+def _others(rec, persona) -> list[str]:
+    """The names of the record's personas other than this one and the principal."""
+    return [p["name"] for p in rec["personas"] if p is not persona and not p["principal"] and p["name"]]
 
 
 def same_person(a, b) -> bool:
@@ -571,10 +603,93 @@ def _flip_accent(s):
 
 # --- principal -----------------------------------------------------------------------------------------------
 
+def _target_people(view, cls, ref) -> list[str]:
+    """The people a citation on this target speaks of: a person; a child_ref's child; a family's parents; an
+    event's primary people, or the parents of the family whose event it is."""
+    if cls == "ChildRef":
+        cls, ref = "Person", ref[1]
+    h = view.resolve(ref, cls)
+    if cls == "Person":
+        out = [h]
+    elif cls == "Family":
+        out = view.spouses(h)
+    elif cls == "Event":
+        people, fams = view.event_owners(h)
+        out = [p for p in people if any(r.get("ref") == h and text_of(r.get("role")) in ("", "Primary")
+                                        for r in view.people[p].get("event_ref_list") or [])]
+        out += [s for f in fams for s in view.spouses(f)]
+    else:
+        out = []
+    return [p for p in out if p in view.people]
+
+
+# old spellings swap letters by pairs (es: b/v, y/i): «Ysavel» is «Isabel»
+SPELLING = tuple(dict.fromkeys(pair for code in LOCALES for pair in load_locale(code)["_pairs"]))
+
+
+def _spelt(word) -> str:
+    for a, b in SPELLING:
+        word = word.replace(a, b)
+    return word
+
+
+def _near(a, b) -> bool:
+    """Whether two name words are one word as an index spells it: the same after the spelling pairs, or, from four
+    letters on, one letter changed, dropped or swapped with the next («Agustín» «Augustin», «Isabel» «Isable»)."""
+    a, b = _spelt(a), _spelt(b)
+    if a == b:
+        return True
+    if min(len(a), len(b)) < 4 or abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) == len(b):
+        diff = [i for i in range(len(a)) if a[i] != b[i]]
+        return len(diff) == 1 or (len(diff) == 2 and diff[1] == diff[0] + 1 and a[diff[0]] == b[diff[1]]
+                                  and a[diff[1]] == b[diff[0]])
+    short, long_ = sorted((a, b), key=len)
+    return any(long_[:i] + long_[i + 1:] == short for i in range(len(long_)))
+
+
+def _named(a, b) -> bool:
+    """same_person with each word matched as an index spells it: two words in common, or every word of a one-word
+    name."""
+    x, y = name_words(a), name_words(b)
+    common = sum(1 for w in x if any(_near(w, v) for v in y))
+    return common >= 2 or (len(x) == 1 and common == 1) or (len(y) == 1 and any(_near(y[0], w) for w in x))
+
+
+def _names_of(person) -> list[str]:
+    """A person's primary and alternate names, each as first name and surnames."""
+    names = [person.get("primary_name") or {}] + list(person.get("alternate_names") or [])
+    out = [" ".join([x.get("first_name") or ""] + [s.get("surname") or "" for s in x.get("surname_list") or []])
+           for x in names if isinstance(x, dict)]
+    return [n for n in out if n.strip()]
+
+
 class Principal(Rule):
     name = "principal"
     codes = {"principal-nonprincipal": "cites the persona of someone who is not the record's principal",
-             "principal-event": "the record's principal has no fact of the event type the op speaks about"}
+             "principal-event": "the record's principal has no fact of the event type the op speaks about",
+             "principal-unnamed": "a citation of a record hangs on someone the record does not name"}
+
+    def _unnamed(self, ctx, ev, op, pages):
+        """Each person a citation's targets stand for must be one of the record's personas by name, one finding per
+        person, so a person the record names does not cover another it does not. A candidate row holds one persona
+        only, so only a full saved record can show that someone is missing."""
+        out = []
+        for ark in dict.fromkeys(a for a in pages if a in ev.records.by_ark):
+            rec, _ = ev.records.find(ark)
+            named = [p["name"] for p in rec["personas"] if p["name"]]
+            seen = set()
+            for cls, target in attach_targets(op):
+                for h in _target_people(ctx.view, cls, target):
+                    names = _names_of(ctx.view.people[h])
+                    if h in seen or not names or any(_named(n, m) for n in names for m in named):
+                        continue
+                    seen.add(h)
+                    out.append(self.finding("principal-unnamed", op, f"{ark} does not name {ctx.view.label(h)}; "
+                                            f"it names {', '.join(named)}", "hang the citation on someone the "
+                                            "record names, or cite that person's own record"))
+        return out
 
     @staticmethod
     def _pages(ev, op) -> list[str]:
@@ -609,6 +724,7 @@ class Principal(Rule):
                 heads = principals(rec)
                 if rel != "principal" and not (rel == "spouse" and types & {"Marriage", "Family"}):
                     # in free text, «padrino Tomás Brin <ark>» names a persona by its role: role judges that claim
+                    # any role word by the name will do, whichever way «de» points: «María, hija de Diego <ark>»
                     if ark not in evidence and persona["name"] and role_words(text, persona["name"]):
                         continue
                     fix = ", ".join(FS + a for p in heads for a in p["arks"][:1]) or "open the record and cite its principal"
@@ -621,6 +737,7 @@ class Principal(Rule):
                 if facts and wanted and not facts & wanted:
                     out.append(self.finding("principal-event", op, f"{ark} is a record of {', '.join(sorted(facts))}, "
                                             f"not of {', '.join(sorted(types))}", "cite the record of that event"))
+            out += self._unnamed(ctx, ev, op, [a for a in pages if a.startswith("1:1:")])
         return out
 
     def mutate(self, ctx):
@@ -695,7 +812,7 @@ class Role(Rule):
                     if persona["principal"] or not persona["name"]:
                         continue
                     rel = relation(rec, persona)
-                    claims = role_words(text, persona["name"])
+                    claims = role_words(text, persona["name"], others=_others(rec, persona))
                     if rel not in PARENTS | {"spouse", "other"} and any(same_person(persona["name"], n) for n in parents):
                         claims.add("parent")
                     if not claims or rel == "other" or rel in claims or (rel in PARENTS and claims & PARENTS):

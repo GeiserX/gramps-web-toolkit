@@ -239,6 +239,132 @@ class UpdateTest(Base):
             run('update', '--db', fresh, root)
         self.assertEqual(sqlite3.connect(fresh).execute('SELECT count(*) FROM files').fetchone()[0], 1000)
 
+    def write(self, name, data, mode='w'):
+        path = os.path.join(self.dir, 'books', name)
+        with open(path, mode, **({} if 'b' in mode else {'encoding': 'utf-8'})) as f:
+            f.write(data)
+        return path
+
+    def test_a_tsv_and_a_csv_are_indexed_one_row_per_line(self):
+        self.write('people.tsv', 'key\tgiven\tsurname\tnote\nI1\tAna\tZorvalo Quirell\tbautismo en Villazul, 1851\n'
+                                 'I2\tBruno\tPenadel Ostra\tboda en Villazul, 1874\n')
+        self.write('state.csv', 'key,given,surname\r\nI3,Clara,Vendimo Arrás\r\n')
+        run('update', '--db', self.db, *self.roots)
+        code, out, _ = self.search('Zorvalo Quirell')
+        self.assertEqual(code, 0)
+        self.assertIn('people.tsv p.2', out)  # the hit points at its row
+        self.assertNotIn('Penadel', out)
+        code, out, _ = self.search('Bruno Penadel')
+        self.assertIn('people.tsv p.3', out)
+        code, out, _ = self.search('Clara Vendimo Arras')
+        self.assertIn('state.csv p.2', out)
+
+    def test_a_ledger_tsv_is_not_indexed(self):
+        # a gwt-ledger file records the searches asked, misses included: a person must never find their own query
+        self.write('buscado.tsv', 'person_key\tperson_label\tsource\tquery\tdate\tresult\n'
+                                  'I9\tLucio Brenal Asto\tparish\t"Lucio Brenal Asto"\t2026-01-02\tnone\n')
+        run('update', '--db', self.db, *self.roots)
+        self.assertEqual(self.search('Lucio Brenal Asto')[0], 1)
+
+    def test_a_tables_query_column_is_left_out_as_in_json(self):
+        # a saved search table repeats the request on every row: a 0-result row must not match the name asked for
+        self.write('answers.tsv', 'query\ttitle\tdate\n"Lucio Brenal Asto"\tno records\t2026-01-02\n'
+                                  '"Rosaura Mendel"\tRosaura Mendel, bautismo\t1850\n')
+        self.write('answers.csv', 'title,q,place\n"Ostra, Penadel y Ruiz",Elvira Mascote,Villazul\n')
+        self.write('records.tsv', 'id\tprincipal\turl\nr1\tEusebia Tornal Pico\thttps://www.example.org/search?q=Anselmo+Duero\n')
+        run('update', '--db', self.db, *self.roots)
+        self.assertEqual(self.search('Lucio Brenal Asto')[0], 1)
+        self.assertIn('answers.tsv p.3', self.search('Rosaura Mendel')[1])  # the row's own text is still read
+        self.assertEqual(self.search('Elvira Mascote')[0], 1)  # a quoted comma keeps the q column in line
+        self.assertEqual(self.search('Penadel Ruiz')[0], 0)
+        self.assertEqual(self.search('Villazul')[0], 0)
+        self.assertIn('records.tsv p.2', self.search('Eusebia Tornal')[1])  # a principal column is a record's name
+        self.assertEqual(self.search('Anselmo Duero')[0], 1)  # a search URL carries the request too
+
+    def test_a_csv_cell_over_the_csv_size_limit_is_read(self):
+        self.write('big.csv', 'title,note\nBenita Carrasco Lunel,%s\n' % ('x' * 200000))
+        code, out, _ = run('update', '--db', self.db, *self.roots)
+        self.assertNotIn('unreadable', out)
+        self.assertEqual(self.search('Benita Carrasco')[0], 0)
+
+    def test_an_eml_is_indexed_as_its_headers_and_text_parts(self):
+        self.write('letter.eml', (
+            b'From: =?utf-8?q?Ana_Zorvalo_Quir=C3=A9ll?= <a@example.org>\r\n'
+            b'To: archivo@example.org\r\n'
+            b'Subject: =?iso-8859-1?q?Partida_de_Ib=E1=F1ez?=\r\n'
+            b'MIME-Version: 1.0\r\n'
+            b'Content-Type: multipart/mixed; boundary="B1"\r\n\r\n'
+            b'--B1\r\nContent-Type: multipart/alternative; boundary="B2"\r\n\r\n'
+            b'--B2\r\nContent-Type: text/plain; charset="iso-8859-1"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n'
+            b'La partida est=E1 en Villaz=FAl, libro tercero.\r\n'
+            b'--B2\r\nContent-Type: text/html; charset="utf-8"\r\n\r\n'
+            b'<p>La partida est\xc3\xa1 en <b>Villaz\xc3\xbal</b>, libro tercero. Duplicadoenhtml</p>\r\n'
+            b'--B2--\r\n'
+            b'--B1\r\nContent-Type: application/octet-stream; name="scan.bin"\r\n'
+            b'Content-Disposition: attachment; filename="scan.bin"\r\nContent-Transfer-Encoding: base64\r\n\r\n'
+            b'U2VjcmV0b2JpbmFyaW8gWm9ydmFsbw==\r\n'  # «Secretobinario Zorvalo»: binary, never text
+            b'--B1--\r\n'), 'wb')
+        run('update', '--db', self.db, *self.roots)
+        code, out, _ = self.search('esta en Villazul')  # quoted-printable latin-1 body, accents folded
+        self.assertEqual(code, 0)
+        self.assertIn('letter.eml', out)
+        self.assertEqual(self.search('Ibanez')[0], 0)  # an encoded Subject is decoded
+        self.assertEqual(self.search('Zorvalo Quirell')[0], 0)  # and an encoded From
+        self.assertEqual(self.search('Secretobinario')[0], 1)  # an attachment that is not text stays out
+        self.assertEqual(self.search('Duplicadoenhtml')[0], 1)  # the HTML copy of a plain part is not read twice
+
+    def test_an_eml_with_only_html_or_an_unknown_charset_is_read(self):
+        self.write('html.eml', b'Subject: aviso\r\nContent-Type: text/html; charset="utf-8"\r\n\r\n'
+                               b'<div>Tomasa <i>Leribal</i> Ondo</div><script>Scriptonly()</script>\r\n', 'wb')
+        self.write('odd.eml', b'Subject: aviso\r\nContent-Type: text/plain; charset="x-invented"\r\n\r\n'
+                              b'Rufino Gartecho Ulla\r\n', 'wb')
+        code, out, _ = run('update', '--db', self.db, *self.roots)
+        self.assertNotIn('could not be read', out)
+        self.assertEqual(self.search('Tomasa Leribal Ondo')[0], 0)
+        self.assertEqual(self.search('Scriptonly')[0], 1)
+        self.assertEqual(self.search('Rufino Gartecho')[0], 0)
+
+    def test_an_eml_with_a_header_python_cannot_parse_is_read_and_the_update_goes_on(self):
+        # Python's email parser raises IndexError on an unclosed quote in an address or a bare `name*` parameter
+        self.write('quote.eml', b'From: Ana Zorvalo <a@example.org>, "\r\nSubject: aviso\r\n\r\n'
+                                b'Rufino Gartecho Ulla\r\n', 'wb')
+        self.write('ctype.eml', b'Subject: aviso\r\nContent-Type: text/plain; name*\r\n\r\nTomasa Leribal Ondo\r\n', 'wb')
+        self.write('after.txt', 'Clara Vendimo Arras\n')
+        code, out, _ = run('update', '--db', self.db, *self.roots)
+        self.assertEqual(code, 0)
+        self.assertNotIn('unreadable', out)
+        self.assertEqual(self.search('Rufino Gartecho')[0], 0)
+        self.assertEqual(self.search('Ana Zorvalo')[0], 0)  # the broken From is indexed as its raw text
+        self.assertEqual(self.search('Tomasa Leribal')[0], 0)
+        self.assertEqual(self.search('Clara Vendimo')[0], 0)
+
+    def test_a_list_of_hits_under_links_is_one_row_per_hit_with_its_own_url(self):
+        self.write('search.links.json', json.dumps({'query': 'Zorvalo', 'note': 'Restoftheword', 'links': [
+            {'t': 'Ana Zorvalo Quirell\nBorn 1851, Villazul', 'h': 'https://www.example.org/record/123'},
+            {'t': 'Bruno Zorvalo Penadel\nBorn 1853, Villazul', 'href': 'https://www.example.org/record/456'}]}))
+        run('update', '--db', self.db, *self.roots)
+        code, out, _ = self.search('Ana Zorvalo Quirell')
+        self.assertEqual(code, 0)
+        self.assertIn('https://www.example.org/record/123', out)
+        self.assertNotIn('record/456', out)
+        code, out, _ = self.search('Bruno Zorvalo')
+        self.assertIn('https://www.example.org/record/456', out)
+        self.assertEqual(self.search('Zorvalo', '--limit', '5')[1].count('example.org/record/'), 2)
+        self.assertEqual(self.search('Restoftheword')[0], 0)  # the rest of the file is still read
+
+    def test_a_list_of_hits_under_links_in_a_reader_envelope_is_read(self):
+        self.write('mh-search.json', json.dumps({'url': 'https://www.example.org/search?q=Penadel', 'json': {
+            'links': [{'t': 'Ofelia Penadel Ruiz', 'h': 'https://www.example.org/record/789'}]}}))
+        run('update', '--db', self.db, *self.roots)
+        self.assertEqual(self.search('Ofelia Penadel')[0], 0)
+
+    def test_a_links_object_is_still_left_out(self):
+        self.write('gx.json', json.dumps({'persons': [{'names': [{'fullText': 'Elvira Mascote Run'}]}],
+                                          'links': {'self': {'title': 'Selfonlyword'}}}))
+        run('update', '--db', self.db, *self.roots)
+        self.assertEqual(self.search('Elvira Mascote')[0], 0)
+        self.assertEqual(self.search('Selfonlyword')[0], 1)  # a GEDCOM X links object holds no record words
+
 
 class SearchTest(Base):
     def test_accents_and_case_fold(self):

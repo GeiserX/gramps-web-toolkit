@@ -1,0 +1,5 @@
+gwt_apply/ops.py | if not any(isinstance(op.get(f), str) and op[f].strip() for f in ("first_name", "surname")): | if False: | a wholly unnamed person remains invalid when either known name part may be empty
+gwt_apply/ops.py | if "first_name" in s and "surname" in s and not (s["first_name"].strip() or s["surname"].strip()): | if False: | an update_person set cannot blank both name parts
+gwt_apply/ops.py | if ("first_name" in s or "surname" in s) and not any(x.strip() for x in _stored_name(person)): | if False: | an update_person that leaves the stored name wholly blank is a conflict
+gwt_apply/ops.py | for k in (*NAME_KEYS, "first_name", "surname"):  # "" clears the field | for k in NAME_KEYS:  # "" clears the field | update_person first_name and surname must be text
+gwt_apply/ops.py | f"{_joined(op['first_name'], op['surname'])} also exists as {', '.join(unchecked)}, " | f"{op['first_name']} {op['surname']} also exists as {', '.join(unchecked)}, " | the unnamed-namesake conflict names a surname-only person without a stray space

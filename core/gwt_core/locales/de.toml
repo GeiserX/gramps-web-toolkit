@@ -31,6 +31,8 @@ mother = ["Mutter"]
 child = ["Sohn", "Tochter", "Kind"]
 spouse = ["Ehemann", "Ehefrau", "Gatte", "Gattin", "Witwer", "Witwe"]
 priest = ["Pfarrer", "Priester", "Kaplan", "Pastor"]
+# the words that join a role to the person it is relative to: «hija de», «son of»
+of = ["von", "des", "der"]
 
 [events]
 birth = ["Geburt", "geboren"]

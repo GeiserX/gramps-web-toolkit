@@ -32,6 +32,8 @@ mother = ["mater", "matris"]
 child = ["filius", "filia", "filium", "filiam", "filii"]
 spouse = ["maritus", "uxor", "coniux", "sponsus", "sponsa", "viduus", "vidua"]
 priest = ["parochus", "sacerdos", "presbyter", "rector", "vicarius", "curatus"]
+# the words that join a role to the person it is relative to: «hija de», «son of»
+of = ["ex"]
 
 [events]
 birth = ["nativitas", "natus", "nata"]

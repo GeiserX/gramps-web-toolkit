@@ -514,6 +514,27 @@ def test_update_place_sets_coordinates_on_an_existing_place(fake):
         assert validate([dict(ops[0], key="bad", set=bad)]), bad
 
 
+def test_update_place_clears_coordinates_with_two_empty_strings(fake):
+    # a place no event uses keeps an old point: "" for both lat and long clears it, like "" clears other fields
+    _places_under(fake)
+    ops = [{"op": "update_place", "key": "clr", "ruling": R, "place": "P0003", "set": {"lat": "", "long": ""}}]
+    assert validate(ops) == []
+    plan = run(fake, ops, dry_run=True)[0]
+    assert plan.status == "done" and fake.writes() == []
+    assert any('lat: "1.5" -> ""' in a and 'long: "2.5" -> ""' in a for a in plan.actions), plan.actions
+    assert run(fake, ops)[0].status == "done"
+    pl = fake.store["places"]["parish"]
+    assert (pl["lat"], pl["long"], pl["name"]) == ("", "", {"value": "St Mary"})
+    assert run(fake, ops)[0].status == "skip"  # a rerun, and so --verify, finds the point gone
+    # a place that never had a point (no lat key at all) is a skip too, not a write of two empty strings
+    assert run(fake, [dict(ops[0], place="P0001")])[0].status == "skip"
+    # still both or neither: one empty and one set, or one empty alone, is refused
+    for bad in ({"lat": "", "long": 2.5}, {"lat": 1.5, "long": ""}, {"lat": ""}, {"lat": None, "long": None}):
+        assert validate([dict(ops[0], set=bad)]), bad
+    # add_place keeps asking for numbers
+    assert validate([{"op": "add_place", "key": "ap", "ruling": R, "name": "A", "type": "Town", "lat": "", "long": ""}])
+
+
 def _places_under(fake):
     """plc1 (P0001) > town (P0002) > parish (P0003), and a second town, other (P0004), under plc1."""
     fake.add("places", {"handle": "town", "name": {"value": "Oakford"}, "place_type": "Town", "placeref_list": [{"ref": "plc1"}]})

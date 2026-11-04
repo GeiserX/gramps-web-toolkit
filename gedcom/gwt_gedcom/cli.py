@@ -5,6 +5,7 @@
                     [--decisions FILE] [--write-decisions FILE] [--ruling TEXT] [--allow-living] [--force]
   gwt-import-gedcom audit FILE [--json]
   gwt-import-gedcom split FILE --root @I1@ [--root @I40@ ...] --out-dir DIR [--force]
+  gwt-import-gedcom export TREE_FILE --out tree.ged [--report report.json] [--submitter NAME] [--force]
 
 SNAPSHOT is `gwt apply --save-snapshot` or a `gwt check` dump of the tree you import into: a person who looks
 like someone already in it is held until you say --same or --different. Then run `gwt apply changes.jsonl`.
@@ -22,6 +23,7 @@ from gwt_apply import snapshot as snapshots
 
 from . import audit as audit_mod
 from . import split as split_mod
+from . import export as export_mod
 from .mapping import ImportError_, build
 from .parse import GedcomError, read
 
@@ -199,12 +201,49 @@ def run_split(argv: list[str]) -> int:
     return 0
 
 
+def run_export(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(prog="gwt-import-gedcom export", description=export_mod.__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("file", help="a gwt-check dump or a gwt-apply snapshot of the tree (.gz to read compressed)")
+    ap.add_argument("--out", required=True, help="the GEDCOM file to write")
+    ap.add_argument("--report", help="the privacy report to write (JSON): who was anonymized or left out")
+    ap.add_argument("--submitter", default="Gramps Web Toolkit", help="the SUBM name the header records")
+    ap.add_argument("--force", action="store_true", help="overwrite --out and --report")
+    a = ap.parse_args(argv)
+    try:
+        outs = [p for p in (a.out, a.report) if p]
+        if len({os.path.abspath(p) for p in outs}) < len(outs):
+            raise export_mod.ExportError("--out and --report must be different files")
+        for p in outs:
+            if os.path.exists(p) and not a.force:
+                raise export_mod.ExportError(f"{p} exists; pass --force to overwrite it")
+            folder = os.path.dirname(os.path.abspath(p))
+            if not os.path.isdir(folder):
+                raise export_mod.ExportError(f"{p}: the folder {folder} does not exist")
+        lines, rep = export_mod.build(export_mod.load(a.file), submitter=a.submitter)
+    except (export_mod.ExportError, OSError, ValueError) as e:
+        print(f"gwt-import-gedcom: {e}", file=sys.stderr)
+        return 2
+    with open(a.out, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write("\n".join(lines) + "\n")
+    if a.report:
+        with open(a.report, "w", encoding="utf-8") as fh:
+            json.dump(rep, fh, ensure_ascii=False, indent=1)
+    print(f"people {rep['people']} ({len(rep['living'])} anonymized as living) | families {rep['families']} "
+          f"({rep['dropped_empty_families']} empty dropped) | sources {rep['sources']} | notes {rep['notes']} "
+          f"| private left out: {sum(len(v) for v in rep['excluded_private'].values())} "
+          f"| texts naming living: {sum(len(v) for v in rep['text_naming_living'].values())} -> {a.out}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else list(argv)
     if argv and argv[0] == "audit":
         return run_audit(argv[1:])
     if argv and argv[0] == "split":
         return run_split(argv[1:])
+    if argv and argv[0] == "export":
+        return run_export(argv[1:])
     if argv and argv[0] == "import":
         argv = argv[1:]
     return run_import(argv)
