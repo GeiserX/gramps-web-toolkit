@@ -1,0 +1,1 @@
+gwt_apply/ops.py | if cls == "Source" and lst == "citation_list": | if False: | invalid source citations explain supported alternatives instead of only rejecting
