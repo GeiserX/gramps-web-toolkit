@@ -234,6 +234,20 @@ def _event_owner(spec) -> tuple[str, str]:
     return cls, ref
 
 
+KIND_NAME = {**{cls: kind for kind, cls in TARGET_KINDS.items()}, "ChildRef": "child_ref", "PersonRef": "association"}
+
+
+def _check_carrier(cls: str, lst: str, attaching: bool) -> None:
+    """Attach/detach guard: refuse a target that cannot hold this list, naming the kinds that can."""
+    if cls in CARRIES[lst]:
+        return
+    kind, name = lst[:-5], KIND_NAME[cls]
+    carriers = ", ".join(sorted(KIND_NAME[c] for c in CARRIES[lst]))
+    hint = f"; a reading you cannot tie to one of these yet goes in add_note on the {name}" if (
+        attaching and lst == "citation_list") else ""
+    raise ValueError(f"a {cls} cannot carry a {kind}; a {kind} goes on one of: {carriers}{hint}")
+
+
 def _parse_object(spec) -> tuple[str, str, str]:
     """attach_existing's object: {"media": "O0054"} -> ("Media", "O0054", "media_list")."""
     if not isinstance(spec, dict) or len(spec) != 1:
@@ -585,8 +599,7 @@ def validate(ops: list[dict]) -> list[str]:
             if name == "detach":
                 cls, _ = _parse_target(op.get("target"))
                 ocls, _, lst = _parse_object(op.get("object"))
-                if cls not in CARRIES[lst]:
-                    raise ValueError(f"a {cls} cannot carry a {lst[:-5]}")
+                _check_carrier(cls, lst, attaching=False)
             if name in ("add_tag", "remove_tag"):
                 _tag_target(op.get("target"))
             if name == "move_event" and _event_owner(op.get("from")) == _event_owner(op.get("to")):
@@ -619,8 +632,7 @@ def validate(ops: list[dict]) -> list[str]:
             for spec in (op.get("attach") or []) if name in ("attach_existing", "add_citation", "add_media",
                                                              "add_note", "add_transcription") else []:
                 cls, _ = _parse_target(spec)
-                if cls not in CARRIES[lst]:
-                    raise ValueError(f"a {cls} cannot carry a {lst[:-5]}")
+                _check_carrier(cls, lst, attaching=True)
             if "expect" in op and name in ("detach", "remove_tag", "unlink_child", "attach_existing", "delete",
                                            "remove_alternate_name") and (
                     op["expect"] not in EXPECT):
