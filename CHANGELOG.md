@@ -6,9 +6,20 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+- `add_person` accepts an empty `first_name` when `surname` is known, without guessed placeholders. Both fields remain required and a wholly blank name is refused.
+- `update_person` refuses a `set` whose `first_name` or `surname` is not text, or that would leave the person with no first name and no surname. A list that blanked both, or set either to a number or `null`, now stops.
+
 ### Added
 
 - `gwt-apply`: `update_place` clears a place's point with `"set": {"lat": "", "long": ""}`, so a place no event uses can lose an old point inside a reviewed list, with its dry run, log, `--verify` and `--revert`. Both go together: one empty and one set is still refused, and `add_place` still needs numbers. A place with no point is skipped.
+- `gwt-import-gedcom export` writes a GEDCOM 5.5.1 file from an offline tree file (a `gwt-check dump` or a `gwt-apply` snapshot) without touching Gramps. People who may be living become a `Living` placeholder, private objects and private parts of objects are left out, and only sources an exported citation points at are written. Names of the living quoted in free-text notes are not redacted; the report counts those notes.
+
+### Fixed
+
+- `gwt-apply` names the kinds that can carry a citation, media or note when it refuses an attach or detach, and points a citation it refuses at `add_note`.
+
 
 ## [1.1.0] - 2026-11-03
 
