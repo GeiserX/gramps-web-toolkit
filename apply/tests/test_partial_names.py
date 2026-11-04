@@ -106,3 +106,13 @@ def test_surname_only_namesake_messages_have_no_stray_space():
     applier=Applier(c,retries=1,retry_wait=0)
     assert applier.run([other])[0].status=='conflict'
     assert any(a.startswith('conflict: Example already exists') for a in applier.actions)
+
+
+def test_surname_only_unnamed_namesake_message_has_no_stray_space():
+    fake=FakeGrampsWeb(); c=client(fake)
+    first=person(); second=person('second',allow_namesake=True,namesake_reason='invented: another record',namesake_of='key:surname-only')
+    assert [r.status for r in Applier(c,retries=1,retry_wait=0).run([first,second])]==['done','done']
+    third=person('third',allow_namesake=True,namesake_reason='invented: a third record',namesake_of='key:surname-only')
+    applier=Applier(c,retries=1,retry_wait=0)
+    assert applier.run([third])[0].status=='conflict'
+    assert any(a.startswith('conflict: Example also exists') for a in applier.actions)
