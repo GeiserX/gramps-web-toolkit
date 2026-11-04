@@ -6,6 +6,11 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+- `add_person` accepts an empty `first_name` when `surname` is known, without guessed placeholders. Both fields remain required and a wholly blank name is refused.
+- `update_person` refuses a `set` whose `first_name` or `surname` is not text, or that would leave the person with no first name and no surname. A list that blanked both, or set either to a number or `null`, now stops.
+
 ### Fixed
 
 - `gwt-corpus update` indexes `.tsv`, `.csv` and `.eml` files now; it used to pass over them in silence, so a search said «not downloaded yet» for tables and saved mail already on disk. A TSV or CSV is one row per line, so a hit points at its row (`people.tsv p.2`). A mail is its decoded headers and its text parts, each in its own charset; attachments that are not text stay out, and the HTML copy of a plain part is not read twice. A TSV with a `person_key` column (a gwt-ledger or gwt-queue file) is left out, because a person would find the query asked for them.
