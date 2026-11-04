@@ -104,6 +104,62 @@ Writes `trees/I1.ged` and `trees/I40.ged`, in UTF-8. A root's tree is everyone w
 
 Some archive sites export one record as a GEDCOM 7 file: Open Archives gives one at `https://www.openarchieven.nl/<archive>:<uuid>/gedcom`. Such a file often holds only the names, sexes and family links of the people in the record, with no date: then everyone in it reads as maybe living and is held. Check the record, then import it with `--allow-living`, and cite the record with an `add_citation` of your own. When the file does carry the record's dated event and source, the people are dated by it and imported like any other file. Blank lines in these files are skipped.
 
+
+## Export
+
+`gwt-import-gedcom export` writes a GEDCOM 5.5.1 file from an offline tree file — a `gwt-check dump` or a
+`gwt-apply` snapshot, gzipped or not. It never touches Gramps: the file is the only input, so it always reads
+the tree as the dump left it.
+
+```sh
+gwt import-gedcom export dump.json.gz --out tree.ged --report report.json
+```
+
+The export is for sharing a tree without sharing the people in it who may be alive. It leaves out what the
+owner marked private, the same marks `gwt-check public` reports on, and its living rule is stricter than that
+check's:
+
+- A person who may be living (no death of their own, and born less than 110 years ago, or never dated with no
+  dated relative to bound them, or in a DNA association) is only a placeholder: the name "Living" and their
+  sex, never their real name, events, notes or citations. An undated person counts as living here;
+  `gwt-check public` does not report them.
+- An object marked private never leaves the tree: it is not written, and references to it are dropped. A
+  private parent disappears from their children's families; a family that loses every member is not written.
+- A part of an object marked private is left out too: a private name (a private primary name is written as
+  "Private"), a private event reference, and a private child link, which drops both the family's `CHIL` and
+  the child's `FAMC`.
+- A family's events, notes and citations are written only when neither recorded spouse is living or private
+  (judged before private members are dropped: a family that lost a spouse to the private filter keeps no
+  events).
+- A source is written only when an exported citation points at it: a source nobody can cite anymore never
+  leaves, whatever its title says.
+
+Free text is not anonymized. A note, a citation page, an event description or a source title written for a
+dead person can still name a living one: «birth certificate of Bruno Sáez» cited on his grandmother's record
+goes out as written. The report's `text_naming_living` lists, by Gramps ID, every exported note, citation,
+event and source whose text holds a possibly living person's first name and whole surname. A namesake who died
+matches too, so it is a list to read, not a verdict: mark what must not leave private, or edit it, and export
+again. `gwt-check public` still covers a private person's name inside a visible text on the server.
+
+`--report` writes who was anonymized, what was left out and `text_naming_living`, by Gramps ID, so a share can
+be checked before it goes anywhere. The header's submitter name defaults to "Gramps Web Toolkit"; set it with
+`--submitter`.
+
+The export never invents: a date Gramps keeps as text only is written as a GEDCOM date phrase, never guessed,
+and a date GEDCOM 5.5.1 cannot hold (a Persian or Islamic one, a range with no end, a modifier the writer does
+not know) is a phrase from its text, or left out and counted in the report's `dates_left_out`. Gregorian,
+Julian, French Republican and Hebrew dates keep their calendar. Media are not written (a GEDCOM points at files
+that stay on the server), and event roles other than Primary, and Family on a family's own events, are not
+written either: they belong to the other person's own record. XREFs are the Gramps IDs when they are unique
+and fit GEDCOM's 20 characters, else a short form of the handle. CHAR is UTF-8, FORM LINEAGE-LINKED, and the
+reader half of this same tool takes the file back with no problems. The file is for sharing, not for importing
+back: a "Living" placeholder carries no dates, so the importer cannot tell it is living.
+
+To export straight from the server instead, Gramps Web has its own GEDCOM exporter:
+`GET /api/exporters/ged/file?private=true&living=ReplaceCompleteName`. It uses Gramps' own writer and its
+`probably_alive` rule; this subcommand works offline from a dump, uses the toolkit's living rule and writes the
+report.
+
 ## Limits
 
 - An `OCCU`, `RELI` or `EDUC` with a value becomes an event of that type with the value as its description. Gramps Web's own importer makes some of them person attributes instead.

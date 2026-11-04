@@ -11,8 +11,13 @@ Every release has a **Change lists** heading. It names each change that makes a 
 - `add_person` accepts an empty `first_name` when `surname` is known, without guessed placeholders. Both fields remain required and a wholly blank name is refused.
 - `update_person` refuses a `set` whose `first_name` or `surname` is not text, or that would leave the person with no first name and no surname. A list that blanked both, or set either to a number or `null`, now stops.
 
+### Added
+
+- `gwt-import-gedcom export` writes a GEDCOM 5.5.1 file from an offline tree file (a `gwt-check dump` or a `gwt-apply` snapshot) without touching Gramps. People who may be living become a `Living` placeholder, private objects and private parts of objects are left out, and only sources an exported citation points at are written. Names of the living quoted in free-text notes are not redacted; the report counts those notes.
+
 ### Fixed
 
+- `gwt-apply` names the kinds that can carry a citation, media or note when it refuses an attach or detach, and points a citation it refuses at `add_note`.
 - `gwt-corpus update` indexes `.tsv`, `.csv` and `.eml` files now; it used to pass over them in silence, so a search said «not downloaded yet» for tables and saved mail already on disk. A TSV or CSV is one row per line, so a hit points at its row (`people.tsv p.2`). A mail is its decoded headers and its text parts, each in its own charset; attachments that are not text stay out, and the HTML copy of a plain part is not read twice. A TSV with a `person_key` column (a gwt-ledger or gwt-queue file) is left out, because a person would find the query asked for them. The request a saved search table repeats on every row (its `query`, `q`, `params` and `url` columns) is left out, as a JSON answer's is, so a row never matches the name it was asked for. A mail whose `From` or `Content-Type` Python's parser breaks on (an unclosed quote) is still read, with that header as raw text, and never stops the update.
 - `gwt-corpus update` reads a list of hits under a JSON key `links` now, one row per hit with the hit's own `h`, `href` or `url`, so each hit points at its record. Every value under `links` used to be dropped, so a saved search answer of that shape was indexed with no text. A GEDCOM X `links` object (hrefs) is still left out.
 
