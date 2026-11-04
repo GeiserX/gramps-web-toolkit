@@ -14,7 +14,6 @@ gwt_lint/rules_evidence.py |                 if rel != "principal" and not (rel 
 gwt_lint/rules_evidence.py |  and not (rel == "spouse" and types & {"Marriage", "Family"}) |  | the spouse's persona of a marriage record may be cited for the marriage
 gwt_lint/rules_evidence.py |                 if facts and wanted and not facts & wanted: |                 if False: | a record of another event type is principal-event
 gwt_lint/rules_evidence.py | claims.add("parent") | pass | a link_child or add_family that makes the record's godparent a parent is role-mismatch
-gwt_lint/rules_evidence.py | return {r for i, rs in hits if any(abs(i - j) <= window for j in at) for r in rs} | return {r for i, rs in hits if at for r in rs} | a role word counts only near the persona's name
 gwt_lint/rules_evidence.py |         if len(sexes) >= 2 and len(set(sexes)) == 1: |         if False: | two parents of one sex is role-samesex
 gwt_lint/rules_evidence.py |             if not is_church: |             if False: | a sacrament on a town is placement-town
 gwt_lint/rules_evidence.py |                 if is_church: |                 if False: | a civil event on a church is placement-civil
@@ -32,7 +31,7 @@ gwt_lint/rules_evidence.py | self.ctx = ctx | self.ctx = ctx; load(ctx) | a list
 gwt_lint/rules_evidence.py | NOT_CITED = ("_line", "key", "expect") | NOT_CITED = ("_line", "key") | the old value an update replaces (`expect`) is not cited
 gwt_lint/rules_evidence.py | words.setdefault(fold(w), set()).add(role) | words[fold(w)] = {role} | «padre» is a father (es, it) as well as a priest (pt): no locale overwrites another
 gwt_lint/rules_evidence.py | return {"Family"} | return set() | a family the list adds takes a spouse's persona, like one in the snapshot
-gwt_lint/rules_evidence.py | if ark not in evidence and persona["name"] and role_words(text, persona["name"]): | if False: | a persona named in free text with its role («padrino X <ark>») is role's to judge, not principal-nonprincipal
+gwt_lint/rules_evidence.py | if ark not in evidence and persona["name"] and role_words(text, persona["name"], | if False and role_words(text, persona["name"], | a persona named in free text with its role («padrino X <ark>») is role's to judge, not principal-nonprincipal
 gwt_lint/rules_evidence.py | if ark not in evidence and persona["name"] | if persona["name"] | a citation page is never excused by role words
 gwt_lint/rules_evidence.py | return ev._tree_page("Citation", ref) | return [] | attach_existing of a tree citation cites that citation's page
 gwt_lint/rules_evidence.py | if persona["principal"] or not persona["name"]: | if persona["principal"] or not persona["name"] or not set(persona["arks"]) & set(op_arks(op)): | role reads every persona of a cited record, not only the one whose ark is cited
@@ -63,5 +62,24 @@ gwt_lint/rules_evidence.py |  or (rel in PARENTS and claims & PARENTS) |  | a fa
 gwt_lint/rules_evidence.py |             if not origs: |             if False: | a church event with no cited record is not placement-parish
 gwt_lint/rules_evidence.py |         return [i for i, t in enumerate(toks) if t in words] |         return [] | a one-word name is found in the text
 gwt_lint/rules_evidence.py | if not isinstance(c, dict) or c.get("source") not in (None, "familysearch"): | if not isinstance(c, dict): | a candidate row of another source is not a FamilySearch record
-gwt_lint/rules_evidence.py | if ark not in evidence and persona["name"] and role_words(text, persona["name"]): | if ark not in evidence and persona["name"] and role_words(text): | a role word must sit next to the persona's name to excuse it
+gwt_lint/rules_evidence.py | and role_words(text, persona["name"], | and role_words(text, None, | a role word must sit next to the persona's name to excuse it
 gwt_lint/rules_evidence.py | if facts and wanted and not facts & wanted: | if wanted and not facts & wanted: | a candidate row with no facts gives no principal-event
+gwt_lint/rules_evidence.py |             if any(abs(i - j) <= window for j in at): |             if at: | a role word counts only near the persona's name
+gwt_lint/rules_evidence.py |             if role == "of": |             if False: | «de», «of» join a role to a person; they are no role of their own
+gwt_lint/rules_evidence.py |                 hits.append((i, ROLE_WORDS[w], k)) |                 hits.append((i, ROLE_WORDS[w], None)) | «X, hija de Y» makes X the child, not Y
+gwt_lint/rules_evidence.py | toks[k + 1] in OF_WORDS and toks[k] not in names | toks[k + 1] in OF_WORDS | «madre: Rosa de Quirell» names the mother: a «de» inside a name joins no role
+gwt_lint/rules_evidence.py |         elif any(i - window <= j < i for j in at) and | elif any(abs(i - j) <= window for j in at) and | the person after «hija de» is not the child
+gwt_lint/rules_evidence.py |  and not any(k < j <= k + window for j in seen): | : | «Luis, marido de Rosa» says nothing of how Luis stands to the record's principal
+gwt_lint/rules_evidence.py |         elif k + 1 in at and |         elif any(k < j <= k + window for j in at) and | only the person named right after «de» takes the converse role, not one after a colon («padre de Ana: Luis»)
+gwt_lint/rules_evidence.py |  and not any(i - window <= j < i for j in seen): | : | «Luis, marido de Rosa» says nothing of how Rosa stands to the record's principal
+gwt_lint/rules_evidence.py |             out |= {c for r in rs for c in CONVERSE.get(r, ())} |             pass | «hija de <the godfather>» makes the godfather a parent: role-mismatch
+gwt_lint/rules_evidence.py |             out += self._unnamed(ctx, ev, op, [a for a in pages if a.startswith("1:1:")]) |             pass | a citation hung on someone the record does not name is principal-unnamed
+gwt_lint/rules_evidence.py | for ark in dict.fromkeys(a for a in pages if a in ev.records.by_ark): | for ark in dict.fromkeys(a for a in pages if a): | a candidate row names one persona only, so it never makes anyone unnamed
+gwt_lint/rules_evidence.py |             for cls, target in attach_targets(op): |             for cls, target in attach_targets(op)[:1]: | every target of a citation is checked, so one person the record names covers no other
+gwt_lint/rules_evidence.py |                     if h in seen or not names or |                     if not names or | one finding per person, however many targets stand for them
+gwt_lint/rules_evidence.py | any(same_person(n, m) for n in names for m in named) | False | a person the record names may carry its citation
+gwt_lint/rules_evidence.py |         cls, ref = "Person", ref[1] |         pass | a citation on a child_ref speaks of the child
+gwt_lint/rules_evidence.py |         out = view.spouses(h) |         out = [] | a citation on a family speaks of its parents
+gwt_lint/rules_evidence.py |         out += [s for f in fams for s in view.spouses(f)] |         pass | a citation on a family's event speaks of the family's parents
+gwt_lint/rules_evidence.py | text_of(r.get("role")) in ("", "Primary") | True | a witness of an event is not who its citation speaks of
+gwt_lint/rules_evidence.py |  + list(person.get("alternate_names") or []) |  | a person named by an alternate name (a married name) is named

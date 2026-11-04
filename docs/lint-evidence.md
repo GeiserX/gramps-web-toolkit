@@ -3,7 +3,7 @@
 Four [gwt-lint](lint.md) rules compare what a change list says with the records you saved:
 
 - **quote**: a quotation that drifted from the record (one accent changed, a word added, a phrase from another record).
-- **principal**: a citation that points at the father's, mother's or godparent's persona instead of the record's principal, or at a record of another event.
+- **principal**: a citation that points at the father's, mother's or godparent's persona instead of the record's principal, or at a record of another event, or that hangs on someone the record does not name.
 - **role**: a godparent written down as a parent, and a record whose index gives the principal two parents of the same sex.
 - **placement**: a baptism placed on the town, the province or the country instead of the church, a birth placed on a church, and a church that is not the one the record names.
 
@@ -60,12 +60,15 @@ Every FamilySearch record ark (`1:1:`) in an op must be a persona the record mar
 |---|---|
 | `principal-nonprincipal` | the ark is the persona of someone who is not the principal (a parent, a godparent, a witness) |
 | `principal-event` | the principal has no fact of the event type the op speaks about |
+| `principal-unnamed` | a citation of the record hangs on a person the record does not name |
 
-A candidate row from a search knows its persona's role and principal flag, not the principal's ark. Save the record itself to get the ark in the fix.
+Every person a citation of a record hangs on (an `add_citation`'s targets, or the targets `attach_existing` hangs a citation on) must be one of the record's personas: two words of a name in common, or every word of a one-word name, against the person's primary name and alternate names. A citation on an event speaks of the event's primary people, or of the parents of the family whose event it is; on a family, of its parents; on a child_ref, of the child. Each person is checked on their own, so one person the record names does not cover another it does not, and each person the record does not name is one `principal-unnamed`.
+
+A candidate row from a search knows its persona's role and principal flag, not the principal's ark. Save the record itself to get the ark in the fix. A candidate row holds one persona only, so it never makes anyone `principal-unnamed`: save the record to have the people beside the principal checked.
 
 ## role
 
-For every record an op cites, each persona that is not the principal is compared with what the op says about it, whichever persona's ark the op carries. So a note that cites the principal's ark and says «padre: Tomás Brin», when the record gives Tomás Brin as the godfather, is a finding. The text gives a persona a role when a role word from the [locale tables](rules.md) (padre, madrina, godfather, testis, ...) stands within three words of where the text names it: a word of its name next to another (a namesake sharing only the surname is not the persona). A word that means several roles across locales means any of them («padre» is a father in Spanish and Italian, a priest in Portuguese). A `link_child` or `add_family` whose father or mother has the name of the record's godparent, witness or priest makes that persona a parent. The record's role comes from its relationships (father, mother, spouse, child of the principal), then the role the index gives the persona; a persona the record gives no role is not judged.
+For every record an op cites, each persona that is not the principal is compared with what the op says about it, whichever persona's ark the op carries. So a note that cites the principal's ark and says «padre: Tomás Brin», when the record gives Tomás Brin as the godfather, is a finding. The text gives a persona a role when a role word from the [locale tables](rules.md) (padre, madrina, godfather, testis, ...) stands within three words of where the text names it: a word of its name next to another (a namesake sharing only the surname is not the persona). A role word followed by «de», «di», «of» (the `of` words of the locale tables; one word may sit between, as in «hija legítima de») reads one way, and both sides are taken as said of the record's principal: «X, hija de Y» calls X a child, and the person named right after «de» a parent. «Ana, hija de Luis Zorvalo» is no finding when the record gives Luis Zorvalo as the father, and «Ana, hija de Tomás Brin» is one when it gives Tomás Brin as the godfather. When the other side names another persona of the record («Luis Zorvalo, marido de Rosa Quirell»), the words say how those two stand to each other, not to the principal, so neither is judged. A word that means several roles across locales means any of them («padre» is a father in Spanish and Italian, a priest in Portuguese). A `link_child` or `add_family` whose father or mother has the name of the record's godparent, witness or priest makes that persona a parent. The record's role comes from its relationships (father, mother, spouse, child of the principal), then the role the index gives the persona; a persona the record gives no role is not judged.
 
 | Code | When |
 |---|---|

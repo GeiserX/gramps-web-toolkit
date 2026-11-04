@@ -6,6 +6,18 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+- `gwt-lint --rules principal`: a citation of a FamilySearch record hung on someone the record does not name gets `principal-unnamed` now and exits 1, where it used to lint clean.
+
+### Fixed
+
+- `gwt-lint --rules principal` checks every person a record's citation hangs on: a person, an event's primary people, a family's parents, a child_ref's child. Each one must be a persona of the saved record by name (alternate names count), or the op gets `principal-unnamed`. It used to check only the page, so a baptism attached to someone it never names passed. One person the record names covers no other, and a candidate row, which holds one persona only, never makes anyone unnamed.
+- `gwt-lint --rules role` reads the direction of «de», «di» and «of»: «Ana, hija de Luis» calls Ana the child and Luis a parent. It used to call Luis the child, so every «hija de», «hijo legítimo de», «figlio di» or «marido de» note was a false `role-mismatch`. The words are the new `of` entry of each locale's `roles` section. When the other side of «de» names another persona of the record («Luis, marido de Rosa»), neither is judged, since the words say nothing of how they stand to the principal.
+- `gwt-lint --rules weak`: a `tag` on a `merge_*` op is no longer `weak-inert-tag`. `gwt-apply` writes a merge note on the winner and gives it the op's tags.
+- `gwt-lint --rules protect`: an `update_event` that sets only what a protected person's event already has (the same date, by what it means, the same place, type or description) is no longer a finding; `gwt-apply` skips it. When it changes something, the code names the field it changes.
+- `gwt-lint --rules count`: a number right before a comma («acta 5, imágenes ya en el árbol») is a record's number, not a count of the tree.
+
 ## [1.1.0] - 2026-11-03
 
 ### Change lists

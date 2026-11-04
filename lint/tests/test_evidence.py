@@ -518,3 +518,82 @@ def test_a_candidate_row_with_no_facts_is_no_event_finding(tmp_path):
     ops = [{"op": "add_event", "key": "e", "person": "I1", "type": "Death"},
            {"op": "add_citation", "key": "c", "source": "S1", "page": FS + "1:1:QZZ2-LLA", "attach": [{"event": "key:e"}]}]
     assert lint(write(tmp_path, ops), "principal", "--records", str(saved))[:2] == (0, {})
+
+
+@pytest.mark.parametrize("text", [
+    "Ana Zorvalo Quirell, hija de Luis Zorvalo y de Rosa Quirell",
+    "Ana Zorvalo Quirell, hija legítima de Luis Zorvalo",
+    "Ana Zorvalo Quirell, figlia di Luis Zorvalo",
+    "Ana Zorvalo Quirell, daughter of Luis Zorvalo",
+    "Luis Zorvalo, padre de Ana",
+    "Luis Zorvalo, marido de Rosa Quirell",
+    "padre de Ana: Luis Zorvalo"])
+def test_role_reads_the_direction_of_de(text, tmp_path):
+    # «X, hija de Y» makes X the child and Y a parent: the record's father is no child
+    ops = [{"op": "add_note", "key": "n", "text": f"{text} ({FS}1:1:QZZ9-AAA)", "attach": [{"person": "I1"}]}]
+    assert lint(write(tmp_path, ops), "role")[:2] == (0, {})
+
+
+@pytest.mark.parametrize("text", ["Ana Zorvalo Quirell, hija de Tomás Brin", "Tomás Brin, padre de Ana"])
+def test_role_a_godparent_made_a_parent_through_de_is_a_mismatch(text, tmp_path):
+    # the person after «hija de» is a parent, so the record's godfather there is the mistake the rule is for
+    ops = [{"op": "add_note", "key": "n", "text": f"{text} ({FS}1:1:QZZ9-AAA)", "attach": [{"person": "I1"}]}]
+    assert lint(write(tmp_path, ops), "role")[:2] == (1, {"role-mismatch": ["n"]})
+
+
+@pytest.mark.parametrize("text,codes", [("padre: Tomás de Brin", {"role-mismatch": ["n"]}), ("madre: Rosa de Quirell", {})])
+def test_role_a_role_before_a_name_with_de_in_it_names_that_person(text, codes, tmp_path):
+    # «padre: Tomás de Brin» calls Tomás the father: the «de» belongs to his name
+    ops = [{"op": "add_note", "key": "n", "text": f"{text} ({FS}1:1:QZZ9-AAA)", "attach": [{"person": "I1"}]}]
+    assert lint(write(tmp_path, ops), "role")[1] == codes
+
+
+@pytest.mark.parametrize("attach,n", [
+    ([{"person": "I1"}, {"person": "I4"}], 1), ([{"person": "I4"}], 1), ([{"event": "E1"}, {"person": "key:p-new"}], 1),
+    ([{"family": "F2"}], 2), ([{"family": "F2"}, {"person": "I5"}], 2), ([{"event": "key:e-census"}], 2),
+    ([{"child_ref": {"family": "F2", "child": "I4"}}], 1)])
+def test_principal_a_person_the_record_does_not_name_is_unnamed(attach, n, tmp_path):
+    # QZZ9-AAA is Ana's baptism, naming Ana, Luis Zorvalo, Rosa Quirell and Tomás Brin; Pedro Lurre (I4), the
+    # list's new Marco Velin and Mario Lurre and Elsa Quirell, the couple of F2, are not in it. One finding per
+    # person, however many targets stand for them
+    ops = [{"op": "add_person", "key": "p-new", "first_name": "Marco", "surname": "Velin", "gender": "M"},
+           {"op": "add_event", "key": "e-census", "family": "F2", "type": "Census"},
+           {"op": "add_citation", "key": "c", "source": "S1", "page": FS + "1:1:QZZ9-AAA", "attach": attach}]
+    code, codes, _ = lint(write(tmp_path, ops), "principal")
+    assert (code, codes) == (1, {"principal-unnamed": ["c"] * n})
+
+
+def test_principal_a_witness_of_the_event_is_not_who_its_citation_speaks_of(tmp_path):
+    ops = [{"op": "add_event", "key": "e", "person": "I4", "role": "Witness", "type": "Baptism"},
+           {"op": "add_citation", "key": "c", "source": "S1", "page": FS + "1:1:QZZ9-AAA", "attach": [{"event": "key:e"}]}]
+    assert lint(write(tmp_path, ops), "principal")[:2] == (0, {})
+
+
+def test_principal_a_person_named_by_an_alternate_name_is_named():
+    tree = F.Tree.load(TREE)
+    tree.handles["Person"]["hI4"] = dict(tree.handles["Person"]["hI4"], alternate_names=[
+        {"first_name": "Rosa", "surname_list": [{"surname": "Quirell"}]}])
+    ops = [{"op": "add_citation", "key": "c", "ruling": "R-1", "source": "S1", "page": FS + "1:1:QZZ9-AAA",
+            "attach": [{"person": "I4"}], "_line": 1}]
+    ctx = F.Context(ops, tree, cli.load_config(CONFIG), records=RECORDS)
+    assert E.Principal().check(ctx) == []
+
+
+@pytest.mark.parametrize("attach", [[{"person": "I1"}, {"person": "I2"}, {"person": "I7"}], [{"event": "E1"}],
+                                    [{"family": "F1"}], [{"child_ref": {"family": "F1", "child": "I1"}}]])
+def test_principal_every_person_the_record_names_may_carry_its_citation(attach, tmp_path):
+    ops = [{"op": "add_citation", "key": "c", "source": "S1", "page": FS + "1:1:QZZ9-AAA", "attach": attach}]
+    assert lint(write(tmp_path, ops), "principal")[:2] == (0, {})
+
+
+def test_principal_attach_existing_checks_the_people_it_hangs_the_citation_on(tmp_path):
+    # C1's page in the snapshot is Ana's baptism
+    ops = [{"op": "attach_existing", "key": "a", "object": {"citation": "C1"}, "attach": [{"person": "I4"}]}]
+    assert lint(write(tmp_path, ops), "principal")[:2] == (1, {"principal-unnamed": ["a"]})
+
+
+def test_principal_a_candidate_row_names_too_few_people_to_judge_a_target(tmp_path):
+    # a gwt-read candidate row holds one persona only: the people beside it in the record are unknown
+    ops = [{"op": "add_citation", "key": "c", "source": "S1", "page": FS + "1:1:QZZ7-DDA", "attach": [{"person": "I4"}]}]
+    code, codes, _ = lint(write(tmp_path, ops), "principal")
+    assert "principal-unnamed" not in codes
