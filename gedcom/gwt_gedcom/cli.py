@@ -5,6 +5,7 @@
                     [--decisions FILE] [--write-decisions FILE] [--ruling TEXT] [--allow-living] [--force]
   gwt-import-gedcom audit FILE [--json]
   gwt-import-gedcom split FILE --root @I1@ [--root @I40@ ...] --out-dir DIR [--force]
+  gwt-import-gedcom export TREE_FILE --out tree.ged [--report report.json] [--submitter NAME] [--force]
 
 SNAPSHOT is `gwt apply --save-snapshot` or a `gwt check` dump of the tree you import into: a person who looks
 like someone already in it is held until you say --same or --different. Then run `gwt apply changes.jsonl`.

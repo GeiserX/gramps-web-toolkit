@@ -539,3 +539,34 @@ def test_report_counts_only_the_living_the_file_holds():
     _, rep = build(data, this_year=YEAR)
     assert rep["living"] == ["I1"]
     assert rep["excluded_private"] == {"people": ["I2"]}
+
+
+def test_private_event_citation_and_place_never_leave():
+    ev = event("e2", "E2", "Burial", 1971, place="pl1")
+    ev["citation_list"] = ["c1", "c2"]
+    data = snap(Person=[person("p1", "I1", "Ana", "Vega", sex=0, events=["e1", "e2", "e3"])],
+                Event=[event("e1", "E1", "Death", 1970), ev,
+                       dict(event("e3", "E3", "Residence", 1960), description="hidden street", private=True)],
+                Citation=[_cite("c1", "C1", "s1", "p. 4"), dict(_cite("c2", "C2", "s1", "p. 77"), private=True)],
+                Source=[source("s1", "S1", "Parish book")],
+                Place=[{"handle": "pl1", "gramps_id": "P1", "name": {"value": "Farm"},
+                        "placeref_list": [{"ref": "pl2"}], "private": False},
+                       {"handle": "pl2", "gramps_id": "P2", "name": {"value": "Hidden hamlet"},
+                        "placeref_list": [{"ref": "pl3"}], "private": True},
+                       {"handle": "pl3", "gramps_id": "P3", "name": {"value": "Province"},
+                        "placeref_list": [], "private": False}])
+    out = export(data, this_year=YEAR)
+    assert "RESI" not in out and "hidden street" not in out    # a private event, even of the dead
+    assert "3 PAGE p. 4" in out and "p. 77" not in out          # a private citation
+    assert "2 PLAC Farm\n" in out and "Hidden hamlet" not in out  # a private place ends the place name
+
+
+def test_surnames_and_name_pieces_stay_on_one_name_line():
+    p = person("p1", "I1", "Ana\rMaria", "Vega/Ruiz", sex=0, events=["e1"])
+    out = export(snap(Person=[p], Event=[event("e1", "E1", "Death", 1970)]), this_year=YEAR)
+    assert "1 NAME Ana Maria /Vega Ruiz/" in out
+    long_id = "I" + "1" * 19                    # well-formed, but @...@ would pass GEDCOM's 22 characters
+    p = person("p1", long_id, "Ana", "Vega", sex=0, events=["e1"])
+    out = export(snap(Person=[p], Event=[event("e1", "E1", "Death", 1970)]), this_year=YEAR)
+    assert f"@{long_id}@" not in out
+    assert all(len(l.split(" ")[1]) <= 22 for l in out.split("\n") if l.startswith("0 @"))

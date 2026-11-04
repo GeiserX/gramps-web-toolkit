@@ -78,3 +78,9 @@ gwt_gedcom/export.py | if mod in (MOD_FROM, MOD_TO): | if False: | an open span 
 gwt_gedcom/export.py | return phrase  # a modifier this writer does not know | pass  # a modifier this writer does not know | a modifier this writer does not know is never written as an exact date
 gwt_gedcom/export.py | for h in living if h in kept_people) | for h in living) | the living count is over the people the file holds
 gwt_gedcom/export.py | g in words and all(w in words for w in sw) | g in words | a text names a living person only with the first name and the whole surname
+gwt_gedcom/export.py | if not e or _private(e) or skip: | if not e or skip: | an event marked private never leaves the tree, even on a dead person
+gwt_gedcom/export.py | if not c or _private(c): | if not c: | a citation marked private never leaves the tree
+gwt_gedcom/export.py | p = places[h] | p = dict(places[h], private=False) | a private place ends the place name, its enclosing places included
+gwt_gedcom/export.py | surs = surs.replace("/", " ") | surs = surs | a slash in a surname never ends the GEDCOM surname early
+gwt_gedcom/export.py | and len(gid) <= _XREF_MAX - 4 else | else | a well-formed Gramps ID too long for GEDCOM falls back to the short handle form
+gwt_gedcom/export.py | _esc(_BREAKS.sub(" ", str(text)).replace | _esc(str(text).replace | a lone CR in a name piece cannot start a new GEDCOM line
