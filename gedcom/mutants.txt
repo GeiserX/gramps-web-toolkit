@@ -61,7 +61,7 @@ gwt_gedcom/export.py | if not spouse_sensitive: | if True: | a family's events s
 gwt_gedcom/export.py | s not in kept_people or s in living | s not in kept_people | spouse sensitivity judges the original spouses: a living spouse hides the family's events
 gwt_gedcom/export.py | AND {ymd(val[4:7])} | AND {ymd(val[3:6])} | a range keeps its end year (Gramps dateval is d,m,y,slash,d2,m2,y2)
 gwt_gedcom/export.py | for h in sorted(used_sources, key=lambda k: kept_sources[k].get("gramps_id") or k): | for h in sorted(kept_sources, key=lambda k: kept_sources[k].get("gramps_id") or k): | only sources an exported citation points at are written
-gwt_gedcom/export.py | flat = _esc(str(text).replace("\r", " ").replace("\n", " ").strip())[:limit] | flat = _esc(str(text).replace("\r", " ").strip())[:limit] | a one-line value cannot inject a record through a newline
+gwt_gedcom/export.py | flat = _esc(_BREAKS.sub(" ", str(text)).replace("\n", " ").strip())[:limit] | flat = _esc(_BREAKS.sub(" ", str(text)).strip())[:limit] | a one-line value cannot inject a record through a newline
 gwt_gedcom/export.py | return [_cap(l) for l in out], report | return out, report | every physical line stays within 255 characters, however it was assembled
 gwt_gedcom/export.py | xref[(kind, h)] = x | xref[h] = x | an XREF never collides across record kinds that share a handle
 gwt_gedcom/export.py | if _s(r.get("role")) not in ("", "Primary", "Family") or _private(r): | if _s(r.get("role")) not in ("", "Primary") or _private(r): | a dead couple's marriage is written: Gramps gives a family's own events the role Family
@@ -77,4 +77,4 @@ gwt_gedcom/export.py | if _ID.fullmatch(gid) and len(gid) <= _XREF_MAX - 4 else 
 gwt_gedcom/export.py | if mod in (MOD_FROM, MOD_TO): | if False: | an open span (from or to a year) is never written as an exact date
 gwt_gedcom/export.py | return phrase  # a modifier this writer does not know | pass  # a modifier this writer does not know | a modifier this writer does not know is never written as an exact date
 gwt_gedcom/export.py | for h in living if h in kept_people) | for h in living) | the living count is over the people the file holds
-gwt_gedcom/export.py | if g in words and all(w in words for w in sw) | if g in words | a text names a living person only with the first name and the whole surname
+gwt_gedcom/export.py | g in words and all(w in words for w in sw) | g in words | a text names a living person only with the first name and the whole surname

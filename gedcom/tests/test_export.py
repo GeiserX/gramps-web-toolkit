@@ -525,7 +525,7 @@ def test_report_lists_texts_that_name_a_living_person():
                           _cite("c2", "C2", "s2", "p. 2")],
                 Source=[source("s1", "S1", "Civil register"), source("s2", "S2", "Letters of Bruno Saez Mora")],
                 Note=[note("n1", "N1", "her grandson Bruno Sáez Mora keeps the photos"),
-                      note("n2", "N2", "Bruno was a friend; Mora is a town")])  # half a surname: no
+                      note("n2", "N2", "Bruno Saez was a neighbour")])  # half the surname: another person
     lines, rep = build(data, this_year=YEAR)
     assert rep["living"] == ["I2"]
     assert rep["text_naming_living"] == {"citations": ["C1"], "notes": ["N1"], "sources": ["S2"]}
