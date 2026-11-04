@@ -6,6 +6,11 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Fixed
+
+- `gwt-corpus update` indexes `.tsv`, `.csv` and `.eml` files now; it used to pass over them in silence, so a search said «not downloaded yet» for tables and saved mail already on disk. A TSV or CSV is one row per line, so a hit points at its row (`people.tsv p.2`). A mail is its decoded headers and its text parts, each in its own charset; attachments that are not text stay out, and the HTML copy of a plain part is not read twice. A TSV with a `person_key` column (a gwt-ledger or gwt-queue file) is left out, because a person would find the query asked for them.
+- `gwt-corpus update` reads a list of hits under a JSON key `links` now, one row per hit with the hit's own `h`, `href` or `url`, so each hit points at its record. Every value under `links` used to be dropped, so a saved search answer of that shape was indexed with no text. A GEDCOM X `links` object (hrefs) is still left out.
+
 ## [1.1.0] - 2026-11-03
 
 ### Change lists

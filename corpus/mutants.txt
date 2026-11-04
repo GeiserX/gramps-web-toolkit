@@ -50,3 +50,17 @@ gwt_corpus.py | fcntl.flock(lock, | (lock, | a second update exits 2 while the f
 gwt_corpus.py | return EXIT_HITS if hits else EXIT_NONE | return EXIT_HITS | a sweep that finds nobody exits 1, never success
 gwt_corpus.py | None, max(a.limit, a.max_pages + 1)) | None, a.limit) | a sweep with a small --limit still counts the pages of a two-word phrase before it calls it rare
 gwt_corpus.py | if i not in done: | if True: | xref gives at most one match per person and page
+gwt_corpus.py | '.pdf', '.tsv', '.csv', '.eml'} | '.pdf'} | a .tsv, .csv or .eml under a root is indexed, never passed over in silence
+gwt_corpus.py | return [('file', name, line, url, i + 1, '') for i, line in enumerate(text.split('\n'))] | return [('file', name, text, url, 0, '')] | a TSV or CSV is one row per line, so a hit points at its row
+gwt_corpus.py |         if 'person_key' in re.split(r'[\t,]', text.split('\n', 1)[0]): |         if False: | a gwt-ledger TSV is not indexed: a person never finds the query asked for them
+gwt_corpus.py |     out = ['%s: %s' % (h, msg[h]) for h in EML_HEADERS if msg[h]] |     out = [] | a mail's encoded From and Subject are decoded and indexed
+gwt_corpus.py | if p.get_content_maintype() == 'text'] | if True] | a mail attachment that is not text is never indexed
+gwt_corpus.py |             if not plain: |             if True: | the HTML copy of a mail's plain part is not read twice
+gwt_corpus.py |                 out.append(strip_html(part_text(p))) |                 out.append(part_text(p)) | a mail's HTML part is read as text, without tags or scripts
+gwt_corpus.py | raw.decode(part.get_content_charset() or 'utf-8', 'replace') | raw.decode('utf-8', 'replace') | a mail part is decoded in its own charset
+gwt_corpus.py |     except LookupError: |     except ZeroDivisionError: | a mail part with an unknown charset is read as UTF-8, never an unreadable file
+gwt_corpus.py | if k not in SKIP_KEYS or (k == 'links' and isinstance(v, list)): | if k not in SKIP_KEYS: | a list of hits under links is read, in a reader envelope too
+gwt_corpus.py | if k not in SKIP_KEYS or (k == 'links' and isinstance(v, list)): | if k not in SKIP_KEYS or k == 'links': | a GEDCOM X links object is still not indexed
+gwt_corpus.py |         if isinstance(o, dict) and isinstance(o.get('links'), list): |         if False: | each hit of a links list is its own row with its own record link
+gwt_corpus.py |     for k in ('h', 'href', 'url'): |     for k in ('href', 'url'): | a links hit's short h key is its record link
+gwt_corpus.py |                      0, '') for h in o['links']] + [('file', name, ' · '.join(json_strings(rest, [])), url, 0, '')] |                      0, '') for h in o['links']] | the rest of a links file is still indexed

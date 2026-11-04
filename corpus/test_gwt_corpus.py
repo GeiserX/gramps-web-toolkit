@@ -239,6 +239,97 @@ class UpdateTest(Base):
             run('update', '--db', fresh, root)
         self.assertEqual(sqlite3.connect(fresh).execute('SELECT count(*) FROM files').fetchone()[0], 1000)
 
+    def write(self, name, data, mode='w'):
+        path = os.path.join(self.dir, 'books', name)
+        with open(path, mode, **({} if 'b' in mode else {'encoding': 'utf-8'})) as f:
+            f.write(data)
+        return path
+
+    def test_a_tsv_and_a_csv_are_indexed_one_row_per_line(self):
+        self.write('people.tsv', 'key\tgiven\tsurname\tnote\nI1\tAna\tZorvalo Quirell\tbautismo en Villazul, 1851\n'
+                                 'I2\tBruno\tPenadel Ostra\tboda en Villazul, 1874\n')
+        self.write('state.csv', 'key,given,surname\r\nI3,Clara,Vendimo Arrás\r\n')
+        run('update', '--db', self.db, *self.roots)
+        code, out, _ = self.search('Zorvalo Quirell')
+        self.assertEqual(code, 0)
+        self.assertIn('people.tsv p.2', out)  # the hit points at its row
+        self.assertNotIn('Penadel', out)
+        code, out, _ = self.search('Bruno Penadel')
+        self.assertIn('people.tsv p.3', out)
+        code, out, _ = self.search('Clara Vendimo Arras')
+        self.assertIn('state.csv p.2', out)
+
+    def test_a_ledger_tsv_is_not_indexed(self):
+        # a gwt-ledger file records the searches asked, misses included: a person must never find their own query
+        self.write('buscado.tsv', 'person_key\tperson_label\tsource\tquery\tdate\tresult\n'
+                                  'I9\tLucio Brenal Asto\tparish\t"Lucio Brenal Asto"\t2026-01-02\tnone\n')
+        run('update', '--db', self.db, *self.roots)
+        self.assertEqual(self.search('Lucio Brenal Asto')[0], 1)
+
+    def test_an_eml_is_indexed_as_its_headers_and_text_parts(self):
+        self.write('letter.eml', (
+            b'From: =?utf-8?q?Ana_Zorvalo_Quir=C3=A9ll?= <a@example.org>\r\n'
+            b'To: archivo@example.org\r\n'
+            b'Subject: =?iso-8859-1?q?Partida_de_Ib=E1=F1ez?=\r\n'
+            b'MIME-Version: 1.0\r\n'
+            b'Content-Type: multipart/mixed; boundary="B1"\r\n\r\n'
+            b'--B1\r\nContent-Type: multipart/alternative; boundary="B2"\r\n\r\n'
+            b'--B2\r\nContent-Type: text/plain; charset="iso-8859-1"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n'
+            b'La partida est=E1 en Villaz=FAl, libro tercero.\r\n'
+            b'--B2\r\nContent-Type: text/html; charset="utf-8"\r\n\r\n'
+            b'<p>La partida est\xc3\xa1 en <b>Villaz\xc3\xbal</b>, libro tercero. Duplicadoenhtml</p>\r\n'
+            b'--B2--\r\n'
+            b'--B1\r\nContent-Type: application/octet-stream; name="scan.bin"\r\n'
+            b'Content-Disposition: attachment; filename="scan.bin"\r\nContent-Transfer-Encoding: base64\r\n\r\n'
+            b'U2VjcmV0b2JpbmFyaW8gWm9ydmFsbw==\r\n'  # «Secretobinario Zorvalo»: binary, never text
+            b'--B1--\r\n'), 'wb')
+        run('update', '--db', self.db, *self.roots)
+        code, out, _ = self.search('esta en Villazul')  # quoted-printable latin-1 body, accents folded
+        self.assertEqual(code, 0)
+        self.assertIn('letter.eml', out)
+        self.assertEqual(self.search('Ibanez')[0], 0)  # an encoded Subject is decoded
+        self.assertEqual(self.search('Zorvalo Quirell')[0], 0)  # and an encoded From
+        self.assertEqual(self.search('Secretobinario')[0], 1)  # an attachment that is not text stays out
+        self.assertEqual(self.search('Duplicadoenhtml')[0], 1)  # the HTML copy of a plain part is not read twice
+
+    def test_an_eml_with_only_html_or_an_unknown_charset_is_read(self):
+        self.write('html.eml', b'Subject: aviso\r\nContent-Type: text/html; charset="utf-8"\r\n\r\n'
+                               b'<div>Tomasa <i>Leribal</i> Ondo</div><script>Scriptonly()</script>\r\n', 'wb')
+        self.write('odd.eml', b'Subject: aviso\r\nContent-Type: text/plain; charset="x-invented"\r\n\r\n'
+                              b'Rufino Gartecho Ulla\r\n', 'wb')
+        code, out, _ = run('update', '--db', self.db, *self.roots)
+        self.assertNotIn('could not be read', out)
+        self.assertEqual(self.search('Tomasa Leribal Ondo')[0], 0)
+        self.assertEqual(self.search('Scriptonly')[0], 1)
+        self.assertEqual(self.search('Rufino Gartecho')[0], 0)
+
+    def test_a_list_of_hits_under_links_is_one_row_per_hit_with_its_own_url(self):
+        self.write('search.links.json', json.dumps({'query': 'Zorvalo', 'note': 'Restoftheword', 'links': [
+            {'t': 'Ana Zorvalo Quirell\nBorn 1851, Villazul', 'h': 'https://www.example.org/record/123'},
+            {'t': 'Bruno Zorvalo Penadel\nBorn 1853, Villazul', 'href': 'https://www.example.org/record/456'}]}))
+        run('update', '--db', self.db, *self.roots)
+        code, out, _ = self.search('Ana Zorvalo Quirell')
+        self.assertEqual(code, 0)
+        self.assertIn('https://www.example.org/record/123', out)
+        self.assertNotIn('record/456', out)
+        code, out, _ = self.search('Bruno Zorvalo')
+        self.assertIn('https://www.example.org/record/456', out)
+        self.assertEqual(self.search('Zorvalo', '--limit', '5')[1].count('example.org/record/'), 2)
+        self.assertEqual(self.search('Restoftheword')[0], 0)  # the rest of the file is still read
+
+    def test_a_list_of_hits_under_links_in_a_reader_envelope_is_read(self):
+        self.write('mh-search.json', json.dumps({'url': 'https://www.example.org/search?q=Penadel', 'json': {
+            'links': [{'t': 'Ofelia Penadel Ruiz', 'h': 'https://www.example.org/record/789'}]}}))
+        run('update', '--db', self.db, *self.roots)
+        self.assertEqual(self.search('Ofelia Penadel')[0], 0)
+
+    def test_a_links_object_is_still_left_out(self):
+        self.write('gx.json', json.dumps({'persons': [{'names': [{'fullText': 'Elvira Mascote Run'}]}],
+                                          'links': {'self': {'title': 'Selfonlyword'}}}))
+        run('update', '--db', self.db, *self.roots)
+        self.assertEqual(self.search('Elvira Mascote')[0], 0)
+        self.assertEqual(self.search('Selfonlyword')[0], 1)  # a GEDCOM X links object holds no record words
+
 
 class SearchTest(Base):
     def test_accents_and_case_fold(self):
