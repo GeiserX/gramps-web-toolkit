@@ -230,7 +230,8 @@ def run_export(argv: list[str]) -> int:
             json.dump(rep, fh, ensure_ascii=False, indent=1)
     print(f"people {rep['people']} ({len(rep['living'])} anonymized as living) | families {rep['families']} "
           f"({rep['dropped_empty_families']} empty dropped) | sources {rep['sources']} | notes {rep['notes']} "
-          f"| private left out: {sum(len(v) for v in rep['excluded_private'].values())} -> {a.out}")
+          f"| private left out: {sum(len(v) for v in rep['excluded_private'].values())} "
+          f"| texts naming living: {sum(len(v) for v in rep['text_naming_living'].values())} -> {a.out}")
     return 0
 
 

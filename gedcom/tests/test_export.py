@@ -35,7 +35,7 @@ def event(handle, gid, etype, year=0, month=0, day=0, place=None, modifier=0, qu
 def family(handle, gid, father=None, mother=None, children=(), events=(), private=False):
     return {"handle": handle, "gramps_id": gid, "father_handle": father, "mother_handle": mother,
             "child_ref_list": [{"ref": h} for h in children],
-            "event_ref_list": [{"ref": h, "role": "Primary"} for h in events],
+            "event_ref_list": [{"ref": h, "role": "Family"} for h in events],  # Gramps' role on a family's own events
             "note_list": [], "citation_list": [], "private": private}
 
 
@@ -311,7 +311,7 @@ def test_load_rejects_a_non_tree_file(tmp_path):
         load(str(bad))
         assert False, "a file without objects must be refused"
     except Exception as e:
-        assert "objects" in str(e)
+        assert "neither a gwt-apply snapshot nor a gwt-check dump" in str(e)
 
 
 def test_long_name_and_place_stay_within_the_line():
@@ -351,3 +351,191 @@ def test_xrefs_never_collide_across_kinds():
     assert "0 @I1@ INDI" in heads         # the person keeps her own XREF...
     assert "0 @S1@ SOUR" in heads         # ...and the source keeps its own
     assert "2 SOUR @S1@" in out           # the citation points at the source, never at the person
+
+
+# --- review round 1: sub-object privacy, roles, the reader, dates, text and the report -------------------
+
+def _read(text):
+    return read(text.encode("utf-8"))
+
+
+def _cite(handle, gid, source_handle, page):
+    return {"handle": handle, "gramps_id": gid, "source_handle": source_handle, "page": page,
+            "confidence": 2, "note_list": [], "private": False}
+
+
+def test_private_names_never_leave():
+    p = person("p1", "I1", "Ana", "Vega", sex=0, events=["e1"])
+    p["alternate_names"] = [{"first_name": "Alias", "surname_list": [{"surname": "Hidden"}], "private": True},
+                            {"first_name": "Anita", "surname_list": [{"surname": "Vega"}]}]
+    q = person("p2", "I2", "Secret", "Primary", events=["e2"])
+    q["primary_name"]["private"] = True
+    data = snap(Person=[p, q], Event=[event("e1", "E1", "Death", 1970), event("e2", "E2", "Death", 1960)])
+    out = export(data, this_year=YEAR)
+    assert "Alias" not in out and "Hidden" not in out   # a private alternate name stays home
+    assert "1 NAME Anita /Vega/" in out                 # a public one goes
+    assert "Secret" not in out and "Primary" not in out  # a private primary name stays home...
+    assert "0 @I2@ INDI\n1 NAME Private\n" in out        # ...and the record still has a NAME
+
+
+def test_private_event_reference_never_leaves():
+    p = person("p1", "I1", "Ana", "Vega", sex=0, events=["e1", "e2"])
+    p["event_ref_list"][1]["private"] = True
+    ev = event("e2", "E2", "Residence", 1830)
+    ev["description"] = "HIDDEN RESIDENCE"
+    data = snap(Person=[p], Event=[event("e1", "E1", "Death", 1870), ev])
+    out = export(data, this_year=YEAR)
+    assert "1 DEAT" in out
+    assert "RESI" not in out and "HIDDEN RESIDENCE" not in out
+
+
+def test_private_child_link_never_leaves():
+    fam = family("f1", "F1", father="p1", mother="p2", children=["p3", "p4"])
+    fam["child_ref_list"][0]["private"] = True
+    data = snap(Person=[person("p1", "I1", "Luis", "Rio", events=["e1"], families=["f1"]),
+                        person("p2", "I2", "Ana", "Vega", sex=0, events=["e2"], families=["f1"]),
+                        person("p3", "I3", "Eva", "Rio", sex=0, events=["e3"], parents=["f1"]),
+                        person("p4", "I4", "Leo", "Rio", events=["e4"], parents=["f1"])],
+                Event=[event(f"e{i}", f"E{i}", "Death", 1900 + i) for i in range(1, 5)],
+                Family=[fam])
+    out = export(data, this_year=YEAR)
+    assert "1 CHIL @I3@" not in out and "1 CHIL @I4@" in out  # the family drops the private link...
+    i3 = out.split("0 @I3@ INDI")[1].split("\n0 ")[0]
+    assert "FAMC" not in i3                                    # ...and so does the child's own record
+    assert "1 FAMC @F1@" in out.split("0 @I4@ INDI")[1].split("\n0 ")[0]
+
+
+def test_a_dead_couples_marriage_is_written():
+    data = snap(Person=[person("p1", "I1", "Luis", "Rio", events=["e1"], families=["f1"]),
+                        person("p2", "I2", "Ana", "Vega", sex=0, events=["e2"], families=["f1"])],
+                Event=[event("e1", "E1", "Death", 1900), event("e2", "E2", "Death", 1910),
+                       event("e3", "E3", "Marriage", 1870)],
+                Family=[family("f1", "F1", father="p1", mother="p2", events=["e3"])])
+    assert family("f", "F")["event_ref_list"] == [] and \
+        family("f", "F", events=["x"])["event_ref_list"][0]["role"] == "Family"  # Gramps' own role
+    out = export(data, this_year=YEAR)
+    assert "1 MARR\n2 DATE 1870" in out
+
+
+def test_dict_shaped_types_and_roles_read_like_possibly_living():
+    p = person("p1", "I1", "Ana", "Vega", sex=0, events=["e1", "e2"])
+    for r in p["event_ref_list"]:
+        r["role"] = {"string": "Primary"}
+    e1, e2 = event("e1", "E1", "Death", 1970), event("e2", "E2", "Village fair", 1950)
+    e1["type"], e2["type"] = {"string": "Death"}, {"string": "Village fair"}
+    out = export(snap(Person=[p], Event=[e1, e2]), this_year=YEAR)
+    assert "1 DEAT\n2 DATE 1970" in out
+    assert "1 EVEN\n2 TYPE Village fair\n2 DATE 1950" in out
+
+
+def test_a_broken_tree_file_is_exit_2_never_a_traceback(tmp_path, capsys):
+    import gzip as _gz
+    good = _gz.compress(json.dumps(snap(Person=[person("p1", "I1", "Ana", "Vega")])).encode())
+    cut = tmp_path / "cut.json.gz"
+    cut.write_bytes(good[: len(good) // 2])
+    assert main(["export", str(cut), "--out", str(tmp_path / "a.ged")]) == 2
+    rows = tmp_path / "rows.json"
+    rows.write_text(json.dumps({"tree": "t", "objects": {"people": ["x"]}}), encoding="utf-8")
+    assert main(["export", str(rows), "--out", str(tmp_path / "b.ged")]) == 2
+    empty = tmp_path / "empty.json"
+    empty.write_text(json.dumps({"tree": "t", "objects": {}}), encoding="utf-8")
+    assert main(["export", str(empty), "--out", str(tmp_path / "c.ged")]) == 2
+    plain_gz = tmp_path / "noext"  # gzip found by its bytes, not by the name
+    plain_gz.write_bytes(good)
+    assert main(["export", str(plain_gz), "--out", str(tmp_path / "d.ged")]) == 0
+    assert not (tmp_path / "a.ged").exists() and not (tmp_path / "c.ged").exists()
+
+
+def _one_date(**kw):
+    e = event("e1", "E1", "Death", **kw)
+    _, rep = build(snap(Person=[person("p1", "I1", "Ana", "Vega", sex=0, events=["e1"])], Event=[e]),
+                   this_year=YEAR)
+    out = export(snap(Person=[person("p1", "I1", "Ana", "Vega", sex=0, events=["e1"])], Event=[e]),
+                 this_year=YEAR)
+    line = next((l for l in out.split("\n") if l.startswith("2 DATE")), None)
+    return line, rep
+
+
+def test_open_spans_and_odd_dates_are_never_written_as_exact():
+    assert _one_date(year=1850, modifier=7)[0] == "2 DATE FROM 1850"   # Gramps 6 "from 1850"
+    assert _one_date(year=1850, modifier=8)[0] == "2 DATE TO 1850"     # Gramps 6 "to 1850"
+    line, rep = _one_date(year=1850, modifier=42)                      # a modifier nobody knows yet
+    assert line is None and rep["dates_left_out"] == 1
+    assert _one_date(year=1850, modifier=42, text="sometime 1850")[0] == "2 DATE (sometime 1850)"
+    assert _one_date(year=1850, day=5)[0] == "2 DATE 1850"             # a day with no month: the year only
+    line, rep = _one_date(year=1850, modifier=MOD_RANGE)               # a range with no end
+    assert line is None and rep["dates_left_out"] == 1
+    assert _one_date(year=5610, month=3, day=4, calendar=2)[0] == "2 DATE @#DHEBREW@ 4 KSL 5610"
+    line, rep = _one_date(year=1229, month=1, day=1, calendar=4)       # Persian: GEDCOM 5.5.1 has no escape
+    assert line is None and rep["dates_left_out"] == 1
+
+
+def test_a_place_with_an_at_comes_back_as_written():
+    data = snap(Person=[person("p1", "I1", "Ana", "Vega", sex=0, events=["e1"])],
+                Event=[event("e1", "E1", "Death", 1970, place="pl1")],
+                Place=[{"handle": "pl1", "gramps_id": "P1", "name": {"value": "Casa @ Norte"},
+                        "placeref_list": [], "private": False}])
+    out = export(data, this_year=YEAR)
+    assert "2 PLAC Casa @@ Norte" in out
+    plac = _read(out).individuals[0].first("DEAT").first("PLAC").value
+    assert plac == "Casa @ Norte"
+
+
+def test_every_line_break_in_text_becomes_a_cont():
+    ev = event("e1", "E1", "Death", 1970)
+    ev["citation_list"] = ["c1"]
+    data = snap(Person=[person("p1", "I1", "Ana", "Vega", sex=0, events=["e1"])], Event=[ev],
+                Citation=[_cite("c1", "C1", "s1", "p. 4\r1 NAME Injected /Fake/ x\x0by\r\nz")],
+                Source=[source("s1", "S1", "Parish book")])
+    out = export(data, this_year=YEAR)
+    indi = _read(out).individuals[0]
+    assert [c.value for c in indi.all("NAME")] == ["Ana /Vega/"]   # no record smuggled in by a lone CR
+    assert out.count("CONT") == 4
+
+
+def test_xrefs_are_one_line_and_fit_gedcom():
+    p = person("p1", "I1\n", "Ana", "Vega", sex=0, events=["e1"], notes=["n" * 40])
+    n = note("n" * 40, "N-1", "w" * 600)
+    data = snap(Person=[p], Event=[event("e1", "E1", "Death", 1970)], Note=[n])
+    out = export(data, this_year=YEAR)
+    heads = [l.split(" ")[1] for l in out.split("\n") if l.startswith("0 @")]
+    assert all(len(x) <= 22 and "\n" not in x for x in heads)
+    assert "0 @I1@ INDI" not in out                    # "I1\n" is not a well-formed id
+    ged = _read(out)
+    assert ged.problems == [] and len(ged.individuals) == 1
+    note_rec = next(r for r in ged.of("NOTE"))
+    text = note_rec.value + "".join(c.value for c in note_rec.children if c.tag == "CONC")
+    assert text == "w" * 600                           # no character cut by the line cap
+
+
+def test_a_slash_in_a_given_name_never_moves_the_surname():
+    p = person("p1", "I1", "Ana/Maria", "Vega", sex=0, events=["e1"])
+    p["primary_name"]["suffix"] = "Jr/II"
+    out = export(snap(Person=[p], Event=[event("e1", "E1", "Death", 1970)]), this_year=YEAR)
+    assert "1 NAME Ana Maria /Vega/ Jr II" in out
+
+
+def test_report_lists_texts_that_name_a_living_person():
+    ev = event("e1", "E1", "Death", 1970)
+    ev["citation_list"] = ["c1", "c2"]
+    data = snap(Person=[person("p1", "I1", "Ana", "Vega", sex=0, events=["e1"], notes=["n1", "n2"]),
+                        person("p2", "I2", "Bruno", "Saez Mora", events=["e2"])],
+                Event=[ev, event("e2", "E2", "Birth", YEAR - 40)],
+                Citation=[_cite("c1", "C1", "s1", "certificate of BRUNO SÁEZ MORA"),
+                          _cite("c2", "C2", "s2", "p. 2")],
+                Source=[source("s1", "S1", "Civil register"), source("s2", "S2", "Letters of Bruno Saez Mora")],
+                Note=[note("n1", "N1", "her grandson Bruno Sáez Mora keeps the photos"),
+                      note("n2", "N2", "Bruno was a friend; Mora is a town")])  # half a surname: no
+    lines, rep = build(data, this_year=YEAR)
+    assert rep["living"] == ["I2"]
+    assert rep["text_naming_living"] == {"citations": ["C1"], "notes": ["N1"], "sources": ["S2"]}
+    assert not any("Bruno" in l for l in lines if l.startswith("1 NAME"))  # the person herself stays a placeholder
+
+
+def test_report_counts_only_the_living_the_file_holds():
+    data = snap(Person=[person("p1", "I1", "Ana", "Vega", sex=0, events=["e1"]),
+                        person("p2", "I2", "Hidden", "Kid", events=["e2"], private=True)],
+                Event=[event("e1", "E1", "Birth", YEAR - 30), event("e2", "E2", "Birth", YEAR - 20)])
+    _, rep = build(data, this_year=YEAR)
+    assert rep["living"] == ["I1"]
+    assert rep["excluded_private"] == {"people": ["I2"]}
