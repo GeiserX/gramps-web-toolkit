@@ -94,7 +94,7 @@ A row of your file whose id is already shipped adds its aliases to that source a
 
 ### A none needs proof
 
-A search that finds nothing proves nothing unless the site could have answered: a soft block can serve an empty page with HTTP 200. So `add --result none` needs `--control-ok RUN`, a reference to the control run that proved the source answered. Without it the row is stored as `unproven`, a note goes to stderr, and the search counts as not done, so the next lane runs it again.
+A search that finds nothing proves nothing unless the site could have answered: a soft block can serve an empty page with HTTP 200. So `add --result none` needs `--control-ok RUN`, a reference to the control run that proved the source answered. Without it the row is stored as `unproven`, a note goes to stderr, and the search counts as not done, so the next lane runs it again. A `none` logged before 1.1.0, when the ledger had no `control` column, reads the same way: every command takes it as `unproven`, though the file still says `none`.
 
 ```sh
 gwt read boe control > runs/boe-control.txt     # the canaries, see gwt-read

@@ -251,7 +251,10 @@ def read_rows(path, columns=COLUMNS):
                 continue  # header; a ledger from before next_date or control has fewer columns and reads the same
             if len(parts) < len(columns):
                 parts += [''] * (len(columns) - len(parts))
-            rows.append(dict(zip(columns, parts)))
+            row = dict(zip(columns, parts))
+            if columns == COLUMNS:  # a none from before 1.1.0 has no control: it reads as unproven, as add stores it
+                row['result'] = proven(row['result'], row['control'])
+            rows.append(row)
     return rows
 
 

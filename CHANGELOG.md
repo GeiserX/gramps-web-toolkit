@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Fixed
+
+- `gwt-ledger`: a `none` logged before 1.1.0, with no `control` column, now reads as `unproven`, the way `add` stores a `none` with no `--control-ok` since 1.1.0. Before, `check` counted it as done and lanes skipped the rerun 1.1.0 meant to send those rows to. `coverage`, `list`, `due` and `stats` read it the same way. The ledger file is not rewritten: a rerun logged with a control run is what makes the search count again.
+
 ## [1.1.0] - 2026-11-03
 
 ### Change lists
