@@ -14,6 +14,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Added
 
+- `gwt-apply`: `update_place` clears a place's point with `"set": {"lat": "", "long": ""}`, so a place no event uses can lose an old point inside a reviewed list, with its dry run, log, `--verify` and `--revert`. Both go together: one empty and one set is still refused, and `add_place` still needs numbers. A place with no point is skipped.
 - `gwt-import-gedcom export` writes a GEDCOM 5.5.1 file from an offline tree file (a `gwt-check dump` or a `gwt-apply` snapshot) without touching Gramps. People who may be living become a `Living` placeholder, private objects and private parts of objects are left out, and only sources an exported citation points at are written. Names of the living quoted in free-text notes are not redacted; the report counts those notes.
 
 ### Fixed
