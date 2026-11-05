@@ -447,8 +447,10 @@ class Run:
                 continue
             print(f"{name}:", flush=True)
             out = self.dir / f"{name}.out"
-            if out.exists():  # this step ran before: its .out keeps this run only, the last run's stays beside it
-                os.replace(out, self.dir / f"{name}.prev.out")
+            # this step ran before: its .out keeps this attempt only, the last one with output stays beside it
+            # as .out.prev, a name a *.out glob does not match
+            if out.exists():
+                os.replace(out, self.dir / f"{name}.out.prev")
             self.current = name
             getattr(self, name)()
         self.state.update(status="done", ended=_now())

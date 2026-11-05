@@ -243,7 +243,9 @@ def test_a_rerun_of_a_failed_gate_rewrites_gate_out(tmp_path, server):
     assert gwt_run_main(lst, conf, "--known", str(known)) == 0
     out = (run / "gate.out").read_text()
     assert "OK" in out and "FAIL:" not in out  # only this run's gate: a grep for FAIL no longer finds the old one
-    assert (run / "gate.prev.out").read_text() == first  # the failed run's output is kept beside it
+    assert (run / "gate.out.prev").read_text() == first  # the failed run's output is kept beside it
+    # and under a name a glob over the run's .out files does not match, so it finds no old FAIL either
+    assert not [p.name for p in run.glob("*.out") if "FAIL:" in p.read_text()]
 
 
 def test_a_list_changed_after_the_apply_wrote_is_refused(tmp_path, server):
