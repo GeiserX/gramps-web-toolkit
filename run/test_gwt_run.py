@@ -231,6 +231,30 @@ def test_the_gate_stops_on_a_new_problem(tmp_path, server):
     assert any(f["check"] == "event-order" for f in report["new"])
 
 
+NEW_PLACE = {"op": "add_place", "key": "pl-oakford", "ruling": R, "name": "Oakford", "type": "Town"}
+BORN_THERE = {"op": "add_event", "key": "e-john-birth", "ruling": R, "person": "key:p-john", "type": "Birth",
+              "date": "1890-03-14", "place": "key:pl-oakford"}
+
+
+def test_a_place_the_list_added_without_a_point_waits_for_geocode_not_the_gate(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, NEW_PLACE, BORN_THERE])
+    assert gwt_run_main(lst, conf) == 0
+    gate = state(lst)["steps"]["gate"]
+    assert gate["status"] == "ok"
+    assert gate["geocode"] == [server.fake.by_id("places", "P0002")["gramps_id"]]
+
+
+def test_a_place_without_a_point_from_before_the_run_still_fails_the_gate(tmp_path, server):
+    server.fake.add("places", {"handle": "plc2", "name": {"value": "Oakford"}})  # P0002, in the tree before, no point
+    born = {**BORN_THERE, "place": "P0002"}
+    lst, conf = setup(tmp_path, server, [JOHN, born])
+    assert gwt_run_main(lst, conf) == 7
+    gate = state(lst)["steps"]["gate"]
+    assert gate["status"] == "failed" and "geocode" not in gate
+    report = json.loads(Path(f"{lst}.run/gate.json").read_text())
+    assert [f["key"] for f in report["new"] if f["check"] == "place-no-coords"] == ["P0002"]
+
+
 def test_a_list_changed_after_the_apply_wrote_is_refused(tmp_path, server):
     lst, conf = setup(tmp_path, server, [JOHN, BIRTH])
     server.fake.busy = 1000

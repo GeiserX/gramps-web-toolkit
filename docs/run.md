@@ -22,7 +22,9 @@ gwt run changes.jsonl --config gw.env [--known known.json] [--tag r12] [--dir DI
 
 The first apply try passes the backup as `--snapshot`, so gwt-apply checks, before its first write, that the tree is the one backed up and that nothing the list reads changed since. If it did, the run stops with nothing written, and running it again takes a fresh backup.
 
-The gate compares the whole tree with the backup. A new problem from anyone else writing to the same tree between the backup and the gate fails this run too (exit 7); list the findings you expect from others in `--known`.
+The gate compares the whole tree with the backup. One finding is left to the next step: a `place-no-coords` on a place this list added (one that is not in the backup) does not fail the gate, because `gwt-geocode --only-missing` fills it after the run. The gate prints those places and `run.json` lists them under the gate's `geocode`; geocode them before you call the list done. A place that was in the tree before the run and has no point still fails the gate.
+
+A new problem from anyone else writing to the same tree between the backup and the gate fails this run too (exit 7); list the findings you expect from others in `--known`.
 
 ### Skips in the dry run
 
