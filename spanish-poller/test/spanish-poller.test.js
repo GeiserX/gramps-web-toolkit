@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { parseCases, parseDehuRows, diff, senderAllowed, isoDate, summarize } = require('../gwt_spanish_poller.js');
+const { parseCases, parseDehuRows, dehuLoadState, diff, senderAllowed, isoDate, summarize } = require('../gwt_spanish_poller.js');
 
 const CASE = (id, status, created = '19-10-2026') => ({ id, procedure: 'Certificado de nacimiento (general)', status, created, applicant: 'A', subject: 'B' });
 
@@ -29,6 +29,32 @@ test('parseDehuRows lines columns up on the id and reads the expandable row', ()
   assert.strictEqual(it.status, 'Leída');
   assert.strictEqual(it.root, 'Ministerio X');
   assert.strictEqual(it.final_date, '07/03/2025');
+});
+
+// Shape of a real pending list: calendar rows first, then a header and ids that are not hex
+// (14 digits, a letter plus digits) next to a NIF column. Values are made up.
+const PENDING_ROWS = [
+  ['26', '27', '28', '29', '30', '31', '1'],
+  ['Columna ampliable', 'Identificador', 'Concepto', 'Organismo emisor', 'Titular', 'Fecha disposición', 'Tipo de notificación', '', 'Acciones'],
+  ['', '', '11112222333344', 'ACUERDO DE ALTERACIÓN DE ...', 'Organismo A', '00000000T', '16/07/2024', 'Postal', '', 'Aceptar\nRechazar'],
+  ['', 'Organismo raíz Ministerio A Fecha caducidad No procede '],
+  ['', '', 'N123456789', 'REGIMENES ...', 'Organismo B', '00000000T', '26/11/2025', 'Postal', '', 'Aceptar\nRechazar'],
+];
+
+test('parseDehuRows reads ids that are not hex from the Identificador column', () => {
+  const items = parseDehuRows(PENDING_ROWS);
+  assert.deepStrictEqual(items.map(i => i.id), ['11112222333344', 'N123456789']);
+  assert.strictEqual(items[0].sender, 'Organismo A');
+  assert.strictEqual(items[0].date, '16/07/2024');
+  assert.strictEqual(items[0].root, 'Ministerio A');
+  assert.strictEqual(items[1].subject, 'REGIMENES ...');
+});
+
+test('dehuLoadState: loaded on a full list, did not load on a list cut after the header', () => {
+  assert.strictEqual(dehuLoadState(parseDehuRows(PENDING_ROWS), false), 'loaded');
+  assert.strictEqual(dehuLoadState(parseDehuRows(PENDING_ROWS.slice(0, 2)), false), 'did not load');
+  assert.strictEqual(dehuLoadState(parseDehuRows([]), false), 'did not load');
+  assert.strictEqual(dehuLoadState([], true), 'empty');
 });
 
 test('diff: first poll is a baseline and still reports pending notifications', () => {
