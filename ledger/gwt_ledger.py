@@ -11,7 +11,7 @@ Agents run `check` before a search and `add` after it, so two lanes never pay fo
   gwt-ledger add --person KEY --label "..." --source SRC --query "..." --result none --control-ok RUN [--evidence F]
   gwt-ledger void --person KEY --source SRC --query "..." --reason "..."  retract the rows of that exact search:
                                                              check, due, stats and coverage ignore them from now on
-  gwt-ledger list --person KEY [--source SRC]
+  gwt-ledger list --person KEY [--source SRC]                 every row, voided ones too, then its id and `voided`
   gwt-ledger due [--on YYYY-MM-DD] [--ics]                   rows whose next_date has arrived; --ics: a calendar
   gwt-ledger stats [--by source]
   gwt-ledger sources [--country XX]                          the source registry: ids, aliases, kinds, years
@@ -276,14 +276,20 @@ def with_ids(rows):
     return rows
 
 
-def live(rows):
-    """The rows that still count: no void rows, and none of the rows a void names."""
+def retracted(rows):
+    """Give the rows their ids and return the ids the void rows among them name."""
     with_ids(rows)
     gone = set()
     for r in rows:
         m = VOIDS.match(r['evidence']) if r['result'] == VOID else None
         if m:
             gone.update(m.group(1).split())
+    return gone
+
+
+def live(rows):
+    """The rows that still count: no void rows, and none of the rows a void names."""
+    gone = retracted(rows)
     return [r for r in rows if r['result'] != VOID and r['id'] not in gone]
 
 
@@ -629,7 +635,8 @@ def import_tsv(args, reg, err):
         return (key(r['person_key']), reg.canon(r['source']), normalize(r['query']), r['date'], r['result'])
 
     try:
-        seen = {same(r) for path in ledger_paths(args.ledger, args.ledger_dir) for r in read_rows(path)}
+        seen = {same(r) for r in live([r for path in ledger_paths(args.ledger, args.ledger_dir)
+                                         for r in read_rows(path)])}  # a voided row is no reason to skip
     except (OSError, UnicodeDecodeError) as exc:
         return err('cannot read the ledger: %s' % exc)
     for n, parts in enumerate(lines[1:], 2):

@@ -679,6 +679,18 @@ class VoidTest(unittest.TestCase):
         out = run('--ledger', self.path, 'list', '--person', 'Ana Peiro Toledo')[1]
         self.assertEqual([l.split('\t')[5] for l in out.splitlines()], ['none', 'void'])
 
+    def test_import_after_a_void_counts_again(self):
+        src = os.path.join(self.dir.name, 'old-log.tsv')
+        write(src, 'who\twhere\twhat\toutcome\twhen\nAna Peiro Toledo\tfs\tAna Peiro bautismo 1850-1860\tfound\t'
+                   '2026-01-02\n')
+        argv = ('--ledger', self.path, 'import-tsv', src, '--map',
+                'person_key=who,source=where,query=what,result=outcome,date=when')
+        self.assertIn('imported\t1', run(*argv)[1])
+        self.void()
+        self.assertEqual(self.check(), 1)
+        self.assertIn('imported\t1', run(*argv)[1])  # the same row, searched again: not a duplicate of a voided one
+        self.assertEqual(self.check(), 0)
+
     def test_void_takes_only_the_identical_query_and_needs_a_live_row(self):
         self.add()
         self.add(query='bautismo de Ana Peiró, 1850-1860')  # close enough for check, not the same query
