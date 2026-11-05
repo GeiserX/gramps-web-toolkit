@@ -9,6 +9,7 @@ Five steps, each one a gwt-apply or gwt-check run of its own:
     apply    gwt-apply LIST --apply --log DIR/apply.jsonl, tried again while ops fail on a busy server
     verify   gwt-apply LIST --verify: every op must read as in the tree
     gate     gwt-check check --from DIR/pre.json.gz --baseline DIR/pre.json.gz [--known K]: no new finding
+             (but a place-no-coords on a place this list's apply created is left to geocode)
 
 DIR (default LIST.run) keeps run.json with every step's status. Until the apply writes, running the same command
 again starts over (an edited list is accepted), from a backup that reads only what changed. After that it skips the
@@ -248,8 +249,16 @@ class Run:
     def step(self, name: str) -> dict:
         return self.state["steps"][name]
 
+    # what a step keeps from one mark to the next: the apply's tries count across runs (--apply-tries needs it)
+    CARRY = ("tries",)
+
     def mark(self, name: str, status: str, **info) -> None:
-        self.step(name).update(status=status, at=_now(), **info)
+        """The step's outcome is replaced, not merged: an ok after a failure must not keep its exit or findings."""
+        new = {"status": status, "at": _now(), **info}  # built first: a signal here leaves the step as it was
+        step = self.step(name)  # the same dict, emptied in place: apply() holds it across its tries
+        for k in [k for k in step if k not in self.CARRY and k not in new]:
+            del step[k]  # tries never leaves the dict, so a signal in here cannot lose it
+        step.update(new)
         self.save()
 
     # -- steps -----------------------------------------------------------
@@ -413,6 +422,29 @@ class Run:
             raise Stop(EXIT["verify"], f"verify: {len(missing)} op(s) not in the tree; see {self.dir / 'verify.out'}")
         self.mark("verify", "ok")
 
+    def _places_added(self) -> set[str]:
+        """The places this list's apply created, by Gramps ID and by handle, read from its own logs. A place
+        anyone else added since the backup is not in them."""
+        made: set[str] = set()
+        for log in sorted(self.dir.glob("apply.*.jsonl")):
+            for line in log.read_text(encoding="utf-8").splitlines():
+                if '"Place"' not in line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except ValueError:
+                    continue
+                body = entry.get("body")
+                if (entry.get("dry_run") is not False or entry.get("method") != "POST"
+                        or not isinstance(entry.get("status"), int) or not 200 <= entry["status"] < 300
+                        or not isinstance(body, list) or not body):
+                    continue
+                made |= {o["handle"] for o in body if isinstance(o, dict) and o.get("_class") == "Place"
+                         and o.get("handle")}
+                if isinstance(body[0], dict) and body[0].get("_class") == "Place" and entry.get("gramps_id"):
+                    made.add(entry["gramps_id"])  # the server's id for the first object of the POST
+        return made
+
     def gate(self) -> None:
         out = self.dir / "gate.json"
         out.unlink(missing_ok=True)
@@ -432,8 +464,22 @@ class Run:
             new = json.loads(out.read_text(encoding="utf-8")).get("new") or []
         except (OSError, ValueError, AttributeError):
             new = []
+        geocode: list[str] = []
+        if code == 1:  # a place this list created has no point until the geocode step after the run: not its fault
+            added = self._places_added()
+            geocode = sorted({f["key"] for f in new if f.get("check") == "place-no-coords" and f.get("key") in added})
+            new = [f for f in new if not (f.get("check") == "place-no-coords" and f.get("key") in geocode)]
+        if geocode:
+            note = (f"gate: {len(geocode)} place(s) this list added have no coordinates yet, so their place-no-coords "
+                    f"does not count here; geocode them next (gwt-geocode, then apply its list): {', '.join(geocode)}")
+            print(note, flush=True)
+            with open(self.dir / "gate.out", "a", encoding="utf-8") as fh:  # the file a reader opens says it too
+                fh.write(note + "\n")
+        if code == 1 and not new and geocode:
+            self.mark("gate", "ok", geocode=geocode)
+            return
         if code == 1 and new:
-            self.mark("gate", "failed", exit=code, new=len(new))
+            self.mark("gate", "failed", exit=code, new=len(new), **({"geocode": geocode} if geocode else {}))
             raise Stop(EXIT["gate"], f"gate: gwt-check found {len(new)} new problem(s) since the backup; "
                                      f"see {self.dir / 'gate.out'}")
         self.mark("gate", "failed", exit=code)  # it crashed or could not read the tree: no finding to triage
@@ -446,8 +492,15 @@ class Run:
                 print(f"{name}: done before, skipped", flush=True)
                 continue
             print(f"{name}:", flush=True)
+            out = self.dir / f"{name}.out"
+            # this step ran before: its .out keeps this attempt only, the last one with output stays beside it
+            # as .out.prev, a name a *.out glob does not match; an empty .out (a killed step) is just reused
+            if out.exists() and out.stat().st_size:
+                os.replace(out, self.dir / f"{name}.out.prev")
             self.current = name
             getattr(self, name)()
+        for k in ("exit", "why"):  # a resumed run that finished keeps no exit or why from the stop before it
+            self.state.pop(k, None)
         self.state.update(status="done", ended=_now())
         self.save()
         print(f"done: every step went through; {self.state_path}")

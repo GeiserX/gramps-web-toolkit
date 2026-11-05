@@ -31,3 +31,13 @@ gwt_run.py | written = steps["apply"]["status"] not in ("todo", "refused") | wri
 gwt_run.py | if any('"server-backup"' in line and json.loads(line).get("event") == "server-backup" | if any('"server-backup"' in line | only the server's confirmation counts as a server backup, never a logged refusal
 gwt_run.py | if not out.exists(): | if False: | a list gwt-apply refuses to read stops at the dry run with exit 2
 gwt_run.py | if not self.target["tree"]: | if False: | no tree is bad input before any step runs
+gwt_run.py | os.replace(out, self.dir / f"{name}.out.prev") | pass | a step run again rewrites its .out, so an old FAIL is never read as this run's
+gwt_run.py | if out.exists() and out.stat().st_size: | if out.exists(): | an empty .out left by a killed step never replaces the last real output
+gwt_run.py | del step[k] | pass | a step marked ok after a failure keeps none of the failure's exit or findings in run.json
+gwt_run.py | if k not in self.CARRY and k not in new] | if k not in new] | a rerun after a failed apply try never passes --snapshot again or overwrites apply-1.json
+gwt_run.py | new = {"status": status, "at": _now(), **info}  # built first | step = self.step(name); keep = {k: step[k] for k in self.CARRY if k in step}; step.clear(); new = {**keep, "status": status, "at": _now(), **info}  # built first | a signal while a step is marked never loses the apply's tries
+gwt_run.py | for k in ("exit", "why"):  # a resumed run | for k in ():  # a resumed run | a resumed run that finishes keeps no exit or why of the stop before it
+gwt_run.py | if code == 1 and not new and geocode: | if False: | a place the list itself added without a point waits for the geocode step instead of failing the gate
+gwt_run.py | and f.get("key") in added}) | }) | only a place this list created waits for geocode: one from before the run or from another writer still fails the gate
+gwt_run.py | fh.write(note + "\n") | fh.write("") | gate.out says which place-no-coords findings the gate left to geocode
+gwt_run.py | if code == 1:  # a place this list created | if True:  # a place this list created | a gwt-check that did not finish gets no geocode note

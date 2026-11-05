@@ -231,6 +231,159 @@ def test_the_gate_stops_on_a_new_problem(tmp_path, server):
     assert any(f["check"] == "event-order" for f in report["new"])
 
 
+def test_a_rerun_of_a_failed_gate_rewrites_gate_out(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, BIRTH, DEATH_EARLY])
+    assert gwt_run_main(lst, conf) == 7
+    run = Path(f"{lst}.run")
+    first = (run / "gate.out").read_text()
+    assert "FAIL" in first
+    # the finding is accepted, and the same run goes on from the gate
+    known = tmp_path / "known.json"
+    known.write_text((run / "gate.json").read_text())
+    assert gwt_run_main(lst, conf, "--known", str(known)) == 0
+    out = (run / "gate.out").read_text()
+    assert "OK" in out and "FAIL:" not in out  # only this run's gate: a grep for FAIL no longer finds the old one
+    assert (run / "gate.out.prev").read_text() == first  # the failed run's output is kept beside it
+    # and under a name a glob over the run's .out files does not match, so it finds no old FAIL either
+    assert not [p.name for p in run.glob("*.out") if "FAIL:" in p.read_text()]
+
+
+def test_an_empty_out_never_replaces_the_last_real_one(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, BIRTH, DEATH_EARLY])
+    assert gwt_run_main(lst, conf) == 7
+    assert gwt_run_main(lst, conf) == 7
+    run = Path(f"{lst}.run")
+    kept = (run / "gate.out").read_text()
+    assert "FAIL" in kept
+    (run / "gate.out").write_text("")  # a gwt-run killed right after the gate opened its .out
+    known = tmp_path / "known.json"
+    known.write_text((run / "gate.json").read_text())
+    assert gwt_run_main(lst, conf, "--known", str(known)) == 0
+    assert (run / "gate.out.prev").read_text() == kept  # the last real failure is still there
+
+
+def test_a_gate_that_passes_on_a_rerun_keeps_no_values_of_its_failure(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, BIRTH, DEATH_EARLY])
+    assert gwt_run_main(lst, conf) == 7
+    assert state(lst)["steps"]["gate"]["new"] == 1
+    known = tmp_path / "known.json"
+    known.write_text(Path(f"{lst}.run/gate.json").read_text())
+    assert gwt_run_main(lst, conf, "--known", str(known)) == 0
+    gate = state(lst)["steps"]["gate"]
+    assert gate["status"] == "ok"
+    assert "exit" not in gate and "new" not in gate  # run.json says what this run found, not the failure before
+    st = state(lst)
+    assert st["status"] == "done" and "exit" not in st and "why" not in st  # nor does the run itself
+
+
+def test_a_signal_while_a_step_is_marked_keeps_the_apply_tries(tmp_path, server, monkeypatch):
+    lst, conf = setup(tmp_path, server, [JOHN, BIRTH, ANNA])
+    real = server.fake.request
+    seen = {"puts": 0}
+
+    def busy_on_first_write(method, url, **kw):
+        if method == "PUT" and not seen["puts"]:
+            seen["puts"] += 1
+            server.fake.busy = 1  # try 1 writes John, then meets "database is locked"
+        return real(method, url, **kw)
+
+    server.fake.request = busy_on_first_write
+    real_mark, real_now = gwt_run.Run.mark, gwt_run._now
+    armed = {"on": False, "fired": False}
+
+    def mark(self, name, status, **info):
+        armed["on"] = (name, status, info.get("tries")) == ("apply", "running", 2) and not armed["fired"]
+        try:
+            real_mark(self, name, status, **info)
+        finally:
+            armed["on"] = False
+
+    def now():
+        if armed["on"]:  # SIGTERM lands while mark() builds the step's new entry
+            armed["on"], armed["fired"] = False, True
+            raise gwt_run.Signalled(15)
+        return real_now()
+
+    monkeypatch.setattr(gwt_run.Run, "mark", mark)
+    monkeypatch.setattr(gwt_run, "_now", now)
+    assert gwt_run_main(lst, conf, "--apply-tries", "3") == 128 + 15
+    assert armed["fired"]
+    assert state(lst)["steps"]["apply"]["tries"] == 1  # the tree was written: a resume must not take it as untouched
+    monkeypatch.setattr(gwt_run, "_now", real_now)
+    assert gwt_run_main(lst, conf, "--apply-tries", "3") == 0
+    st = state(lst)
+    assert st["steps"]["apply"]["tries"] == 2 and "restarts" not in st
+    persons = [o for o in server.fake.store["people"].values() if o["primary_name"]["first_name"] == "John"]
+    assert len(persons) == 1
+
+
+NEW_PLACE = {"op": "add_place", "key": "pl-oakford", "ruling": R, "name": "Oakford", "type": "Town"}
+BORN_THERE = {"op": "add_event", "key": "e-john-birth", "ruling": R, "person": "key:p-john", "type": "Birth",
+              "date": "1890-03-14", "place": "key:pl-oakford"}
+
+
+def test_a_place_the_list_added_without_a_point_waits_for_geocode_not_the_gate(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, NEW_PLACE, BORN_THERE])
+    assert gwt_run_main(lst, conf) == 0
+    gate = state(lst)["steps"]["gate"]
+    assert gate["status"] == "ok"
+    assert gate["geocode"] == [server.fake.by_id("places", "P0002")["gramps_id"]]
+    out = Path(f"{lst}.run/gate.out").read_text()  # gwt-check's own FAIL line stays; the note after it says why
+    assert out.rstrip().splitlines()[-1].startswith("gate: 1 place(s) this list added") and "P0002" in out
+
+
+def test_a_place_another_writer_added_without_a_point_still_fails_the_gate(tmp_path, server, monkeypatch):
+    lst, conf = setup(tmp_path, server, [JOHN, NEW_PLACE, BORN_THERE])
+    real = gwt_run.Run.verify
+
+    def someone_else_writes(self):
+        real(self)  # between the backup and the gate: a place with no point, on an event of someone else
+        server.fake.add("places", {"handle": "plc9", "name": {"value": "Elmwood"}})  # P0003
+        server.fake.add("events", {"handle": "ev9", "type": "Residence", "place": "plc9"})
+        server.fake.store["people"]["anna"]["event_ref_list"].append({"_class": "EventRef", "ref": "ev9",
+                                                                       "role": "Primary"})
+
+    monkeypatch.setattr(gwt_run.Run, "verify", someone_else_writes)
+    assert gwt_run_main(lst, conf) == 7
+    gate = state(lst)["steps"]["gate"]
+    assert gate["status"] == "failed" and gate["geocode"] == ["P0002"]
+    report = json.loads(Path(f"{lst}.run/gate.json").read_text())
+    assert sorted(f["key"] for f in report["new"] if f["check"] == "place-no-coords") == ["P0002", "P0003"]
+
+
+def test_a_gate_that_did_not_finish_names_no_place_to_geocode(tmp_path, server, monkeypatch, capsys):
+    lst, conf = setup(tmp_path, server, [JOHN, NEW_PLACE, BORN_THERE])
+    real = gwt_run.Run.watch
+
+    def gate_crashes_after_its_report(self, name, cmd, **kw):
+        code, why, last = real(self, name, cmd, **kw)
+        return (3 if name == "gate" else code), why, last
+
+    monkeypatch.setattr(gwt_run.Run, "watch", gate_crashes_after_its_report)
+    assert gwt_run_main(lst, conf) == 1
+    gate = state(lst)["steps"]["gate"]
+    assert gate == {**gate, "status": "failed", "exit": 3} and "geocode" not in gate
+    assert "this list added" not in capsys.readouterr().out + Path(f"{lst}.run/gate.out").read_text()
+
+
+def test_a_new_place_does_not_hide_a_real_new_problem(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, NEW_PLACE, BORN_THERE, DEATH_EARLY])
+    assert gwt_run_main(lst, conf) == 7
+    gate = state(lst)["steps"]["gate"]
+    assert gate["status"] == "failed" and gate["new"] == 1 and gate["geocode"] == ["P0002"]
+
+
+def test_a_place_without_a_point_from_before_the_run_still_fails_the_gate(tmp_path, server):
+    server.fake.add("places", {"handle": "plc2", "name": {"value": "Oakford"}})  # P0002, in the tree before, no point
+    born = {**BORN_THERE, "place": "P0002"}
+    lst, conf = setup(tmp_path, server, [JOHN, born])
+    assert gwt_run_main(lst, conf) == 7
+    gate = state(lst)["steps"]["gate"]
+    assert gate["status"] == "failed" and "geocode" not in gate
+    report = json.loads(Path(f"{lst}.run/gate.json").read_text())
+    assert [f["key"] for f in report["new"] if f["check"] == "place-no-coords"] == ["P0002"]
+
+
 def test_a_list_changed_after_the_apply_wrote_is_refused(tmp_path, server):
     lst, conf = setup(tmp_path, server, [JOHN, BIRTH])
     server.fake.busy = 1000
