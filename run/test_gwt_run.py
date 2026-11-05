@@ -317,6 +317,73 @@ def test_a_signal_while_a_step_is_marked_keeps_the_apply_tries(tmp_path, server,
     assert len(persons) == 1
 
 
+NEW_PLACE = {"op": "add_place", "key": "pl-oakford", "ruling": R, "name": "Oakford", "type": "Town"}
+BORN_THERE = {"op": "add_event", "key": "e-john-birth", "ruling": R, "person": "key:p-john", "type": "Birth",
+              "date": "1890-03-14", "place": "key:pl-oakford"}
+
+
+def test_a_place_the_list_added_without_a_point_waits_for_geocode_not_the_gate(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, NEW_PLACE, BORN_THERE])
+    assert gwt_run_main(lst, conf) == 0
+    gate = state(lst)["steps"]["gate"]
+    assert gate["status"] == "ok"
+    assert gate["geocode"] == [server.fake.by_id("places", "P0002")["gramps_id"]]
+    out = Path(f"{lst}.run/gate.out").read_text()  # gwt-check's own FAIL line stays; the note after it says why
+    assert out.rstrip().splitlines()[-1].startswith("gate: 1 place(s) this list added") and "P0002" in out
+
+
+def test_a_place_another_writer_added_without_a_point_still_fails_the_gate(tmp_path, server, monkeypatch):
+    lst, conf = setup(tmp_path, server, [JOHN, NEW_PLACE, BORN_THERE])
+    real = gwt_run.Run.verify
+
+    def someone_else_writes(self):
+        real(self)  # between the backup and the gate: a place with no point, on an event of someone else
+        server.fake.add("places", {"handle": "plc9", "name": {"value": "Elmwood"}})  # P0003
+        server.fake.add("events", {"handle": "ev9", "type": "Residence", "place": "plc9"})
+        server.fake.store["people"]["anna"]["event_ref_list"].append({"_class": "EventRef", "ref": "ev9",
+                                                                       "role": "Primary"})
+
+    monkeypatch.setattr(gwt_run.Run, "verify", someone_else_writes)
+    assert gwt_run_main(lst, conf) == 7
+    gate = state(lst)["steps"]["gate"]
+    assert gate["status"] == "failed" and gate["geocode"] == ["P0002"]
+    report = json.loads(Path(f"{lst}.run/gate.json").read_text())
+    assert sorted(f["key"] for f in report["new"] if f["check"] == "place-no-coords") == ["P0002", "P0003"]
+
+
+def test_a_gate_that_did_not_finish_names_no_place_to_geocode(tmp_path, server, monkeypatch, capsys):
+    lst, conf = setup(tmp_path, server, [JOHN, NEW_PLACE, BORN_THERE])
+    real = gwt_run.Run.watch
+
+    def gate_crashes_after_its_report(self, name, cmd, **kw):
+        code, why, last = real(self, name, cmd, **kw)
+        return (3 if name == "gate" else code), why, last
+
+    monkeypatch.setattr(gwt_run.Run, "watch", gate_crashes_after_its_report)
+    assert gwt_run_main(lst, conf) == 1
+    gate = state(lst)["steps"]["gate"]
+    assert gate == {**gate, "status": "failed", "exit": 3} and "geocode" not in gate
+    assert "this list added" not in capsys.readouterr().out + Path(f"{lst}.run/gate.out").read_text()
+
+
+def test_a_new_place_does_not_hide_a_real_new_problem(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, NEW_PLACE, BORN_THERE, DEATH_EARLY])
+    assert gwt_run_main(lst, conf) == 7
+    gate = state(lst)["steps"]["gate"]
+    assert gate["status"] == "failed" and gate["new"] == 1 and gate["geocode"] == ["P0002"]
+
+
+def test_a_place_without_a_point_from_before_the_run_still_fails_the_gate(tmp_path, server):
+    server.fake.add("places", {"handle": "plc2", "name": {"value": "Oakford"}})  # P0002, in the tree before, no point
+    born = {**BORN_THERE, "place": "P0002"}
+    lst, conf = setup(tmp_path, server, [JOHN, born])
+    assert gwt_run_main(lst, conf) == 7
+    gate = state(lst)["steps"]["gate"]
+    assert gate["status"] == "failed" and "geocode" not in gate
+    report = json.loads(Path(f"{lst}.run/gate.json").read_text())
+    assert [f["key"] for f in report["new"] if f["check"] == "place-no-coords"] == ["P0002"]
+
+
 def test_a_list_changed_after_the_apply_wrote_is_refused(tmp_path, server):
     lst, conf = setup(tmp_path, server, [JOHN, BIRTH])
     server.fake.busy = 1000
