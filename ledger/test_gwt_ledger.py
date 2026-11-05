@@ -702,6 +702,21 @@ class VoidTest(unittest.TestCase):
         self.assertIn('imported\t1', run(*argv)[1])  # the same row, searched again: not a duplicate of a voided one
         self.assertEqual(self.check(), 0)
 
+    def test_an_edited_voided_line_warns_that_it_counts_again(self):
+        self.add()
+        self.void()
+        with redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(self.check(), 1)
+        self.assertEqual(err.getvalue(), '')
+        with open(self.path, encoding='utf-8') as f:
+            lines = f.read().splitlines(True)
+        lines[1] = lines[1].replace('lane-1', 'lane-9')  # a hand edit of the voided row
+        with open(self.path, 'w', encoding='utf-8') as f:
+            f.writelines(lines)
+        with redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(self.check(), 0)
+        self.assertIn('1 void id(s) name no row', err.getvalue())
+
     def test_void_takes_only_the_identical_query_and_needs_a_live_row(self):
         self.add()
         self.add(query='bautismo de Ana Peiró, 1850-1860')  # close enough for check, not the same query

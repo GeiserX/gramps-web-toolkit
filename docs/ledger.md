@@ -136,7 +136,7 @@ gwt-ledger void --person ana-peiro-toledo --source familysearch --query "Ana Pei
 
 It takes every live row with that person, source and identical normalized query (the `--exact` rule), prints them, and appends one row with result `void` whose evidence names them: `voids 3f1c0a9b2e4d 8a7b6c5d4e3f; the 1852 record is another Ana...`. `check`, `due`, `stats` and `coverage` then leave out the void row and every row it names; `list` still shows both, so the history stays readable. Only those rows go: a close but different query stays done, and a row of the same search logged after the void counts again, even one identical to a voided row. With nothing live to retract, `void` exits 2 and writes nothing. With `--ledger-dir` it needs `--agent` like `add`.
 
-A row's id is the first 12 hex digits of the sha1 of its line and of how many identical lines come before it, in reading order. The ledger is append-only, so ids never move; do not reorder or delete lines by hand.
+A row's id is the first 12 hex digits of the sha1 of its line and of how many identical lines come before it, in reading order. The ledger is append-only, so ids never move. Moving lines around is harmless, but do not edit, copy or delete a line, delete a lane file, or put a copy of a lane file in the ledger dir: a voided line that changes, or a copy of it, counts again. Every command then warns on stderr that a void id names no row.
 
 Rows with the same score come out newest first: by `date`, then the row logged last. So a first-row reader sees a recent `hit` before an old `none` for the same search.
 

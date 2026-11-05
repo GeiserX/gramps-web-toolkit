@@ -290,6 +290,10 @@ def retracted(rows):
 def live(rows):
     """The rows that still count: no void rows, and none of the rows a void names."""
     gone = retracted(rows)
+    lost = gone - {r['id'] for r in rows}
+    if lost:  # an id is a hash of its line: an edited or copied line brings the row it voided back
+        sys.stderr.write('gwt-ledger: %d void id(s) name no row (%s): a voided line was edited, copied or deleted, '
+                         'so the row counts again\n' % (len(lost), ' '.join(sorted(lost))))
     return [r for r in rows if r['result'] != VOID and r['id'] not in gone]
 
 
