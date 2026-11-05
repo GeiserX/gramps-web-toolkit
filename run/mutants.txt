@@ -34,3 +34,4 @@ gwt_run.py | if not self.target["tree"]: | if False: | no tree is bad input befo
 gwt_run.py | del step[k] | pass | a step marked ok after a failure keeps none of the failure's exit or findings in run.json
 gwt_run.py | if k not in self.CARRY and k not in new] | if k not in new] | a rerun after a failed apply try never passes --snapshot again or overwrites apply-1.json
 gwt_run.py | new = {"status": status, "at": _now(), **info}  # built first | step = self.step(name); keep = {k: step[k] for k in self.CARRY if k in step}; step.clear(); new = {**keep, "status": status, "at": _now(), **info}  # built first | a signal while a step is marked never loses the apply's tries
+gwt_run.py | for k in ("exit", "why"):  # a resumed run | for k in ():  # a resumed run | a resumed run that finishes keeps no exit or why of the stop before it

@@ -456,6 +456,8 @@ class Run:
             print(f"{name}:", flush=True)
             self.current = name
             getattr(self, name)()
+        for k in ("exit", "why"):  # a resumed run that finished keeps no exit or why from the stop before it
+            self.state.pop(k, None)
         self.state.update(status="done", ended=_now())
         self.save()
         print(f"done: every step went through; {self.state_path}")

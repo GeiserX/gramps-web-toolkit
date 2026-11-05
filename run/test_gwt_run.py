@@ -241,6 +241,8 @@ def test_a_gate_that_passes_on_a_rerun_keeps_no_values_of_its_failure(tmp_path, 
     gate = state(lst)["steps"]["gate"]
     assert gate["status"] == "ok"
     assert "exit" not in gate and "new" not in gate  # run.json says what this run found, not the failure before
+    st = state(lst)
+    assert st["status"] == "done" and "exit" not in st and "why" not in st  # nor does the run itself
 
 
 def test_a_signal_while_a_step_is_marked_keeps_the_apply_tries(tmp_path, server, monkeypatch):
