@@ -963,7 +963,9 @@ def main(argv=None):
         print_rows(due)
         return 0
     if args.cmd == 'list':
-        print_rows(find(everything, args.person, args.source, registry=reg))
+        gone = retracted(everything)  # two more cells: the row's id, and `voided` on a row a void names
+        for _, r in find(everything, args.person, args.source, registry=reg):
+            sys.stdout.write('\t'.join([r[c] for c in COLUMNS] + [r['id'], 'voided' if r['id'] in gone else '']) + '\n')
         return 0
     if args.cmd == 'coverage':
         return coverage(args, reg, rows, err)

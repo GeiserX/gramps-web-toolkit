@@ -38,5 +38,6 @@ gwt_ledger.py | rows = live(everything)  # | rows = everything  # | a voided row
 gwt_ledger.py | return [r for r in rows if r['result'] != VOID and r['id'] not in gone] | return [r for r in rows if r['id'] not in gone] | a void row itself is no search: stats and due leave it out
 gwt_ledger.py | seen[r['line']] += 1 | seen[r['line']] = 1 | a new row identical to a voided one counts again
 gwt_ledger.py | find(rows, args.person, source, args.query, exact=True, registry=reg) | find(rows, args.person, source, args.query, registry=reg) | void retracts the identical normalized query only, never a close one
-gwt_ledger.py | print_rows(find(everything, args.person | print_rows(find(rows, args.person | list still shows the void rows and what they retracted
+gwt_ledger.py | for _, r in find(everything, args.person | for _, r in find(rows, args.person | list still shows the void rows and what they retracted
+gwt_ledger.py | 'voided' if r['id'] in gone else '' | '' | list marks a voided row, and not its identical re-add
 gwt_ledger.py | seen = {same(r) for r in live([r for path | seen = {same(r) for r in ([r for path | import-tsv imports a row identical to a voided one, so a re-search counts again

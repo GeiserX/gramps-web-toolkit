@@ -679,6 +679,17 @@ class VoidTest(unittest.TestCase):
         out = run('--ledger', self.path, 'list', '--person', 'Ana Peiro Toledo')[1]
         self.assertEqual([l.split('\t')[5] for l in out.splitlines()], ['none', 'void'])
 
+    def test_list_marks_the_voided_row_and_not_its_identical_re_add(self):
+        self.add()
+        self.void()
+        self.add()  # the same line again, logged after the void: it is live
+        out = run('--ledger', self.path, 'list', '--person', 'Ana Peiro Toledo')[1]
+        ids = [r['id'] for r in L.with_ids(L.read_rows(self.path))]
+        cells = [l.split('\t') for l in out.splitlines()]
+        self.assertEqual(sorted((c[5], c[10], c[11]) for c in cells),
+                         sorted([('none', ids[0], 'voided'), ('void', ids[1], ''), ('none', ids[2], '')]))
+        self.assertIn(ids[0], cells[[c[5] for c in cells].index('void')][6])  # the void names the marked row
+
     def test_import_after_a_void_counts_again(self):
         src = os.path.join(self.dir.name, 'old-log.tsv')
         write(src, 'who\twhere\twhat\toutcome\twhen\nAna Peiro Toledo\tfs\tAna Peiro bautismo 1850-1860\tfound\t'
