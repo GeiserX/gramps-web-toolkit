@@ -9,6 +9,8 @@ Agents run `check` before a search and `add` after it, so two lanes never pay fo
                                                              again, else 1 (--exact: same source, identical normalized
                                                              query; --any-result: any matching row counts)
   gwt-ledger add --person KEY --label "..." --source SRC --query "..." --result none --control-ok RUN [--evidence F]
+  gwt-ledger void --person KEY --source SRC --query "..." --reason "..."  retract the rows of that exact search:
+                                                             check, due, stats and coverage ignore them from now on
   gwt-ledger list --person KEY [--source SRC]
   gwt-ledger due [--on YYYY-MM-DD] [--ics]                   rows whose next_date has arrived; --ics: a calendar
   gwt-ledger stats [--by source]
@@ -43,6 +45,12 @@ SYNONYMS = {'found': 'hit', 'positive': 'hit', 'match': 'hit', 'yes': 'hit',
             'empty': 'none', 'no': 'none', 'partially': 'partial', 'block': 'blocked', 'captcha': 'blocked',
             'refused': 'denied', 'not-reviewed': 'unproven', 'unknown': 'unproven'}
 DEFAULT_THRESHOLD = 0.75
+# A `void` row retracts the rows it names (`voids <id> <id>; <reason>` in its evidence): `gwt-ledger void` writes it,
+# never `add`. A row's id is the first 12 hex digits of the sha1 of its line and of how many identical lines come before
+# it, so a void names exactly the rows that were in the ledger when it was written, and a new row of the same search,
+# even one identical to a voided row, counts again.
+VOID = 'void'
+VOIDS = re.compile(r'^voids ((?:[0-9a-f]{12} ?)+);')
 
 KINDS = ('index', 'image', 'fulltext', 'catalogue', 'newspaper')
 REGISTRY_COLUMNS = ('id', 'aliases', 'country', 'kind', 'from', 'to')
@@ -253,9 +261,30 @@ def read_rows(path, columns=COLUMNS):
                 parts += [''] * (len(columns) - len(parts))
             row = dict(zip(columns, parts))
             if columns == COLUMNS:  # a none from before 1.1.0 has no control: it reads as unproven, as add stores it
+                row['line'] = '\t'.join(parts[:len(columns)])
                 row['result'] = proven(row['result'], row['control'])
             rows.append(row)
     return rows
+
+
+def with_ids(rows):
+    """Give each row its id, in reading order: the main ledger, then the lane files by name."""
+    seen = collections.Counter()
+    for r in rows:
+        seen[r['line']] += 1
+        r['id'] = hashlib.sha1(('%s\t%d' % (r['line'], seen[r['line']])).encode('utf-8')).hexdigest()[:12]
+    return rows
+
+
+def live(rows):
+    """The rows that still count: no void rows, and none of the rows a void names."""
+    with_ids(rows)
+    gone = set()
+    for r in rows:
+        m = VOIDS.match(r['evidence']) if r['result'] == VOID else None
+        if m:
+            gone.update(m.group(1).split())
+    return [r for r in rows if r['result'] != VOID and r['id'] not in gone]
 
 
 def ledger_paths(ledger, ledger_dir=''):
@@ -712,6 +741,13 @@ def main(argv=None):
     agent_and_date(a)
     a.add_argument('--next-date', default='', type=iso_date, help='ISO date to look again, e.g. the end of an appeal window')
     a.add_argument('--new-source', action='store_true', help='log a source close to a known name as its own slug')
+    v = sub.add_parser('void', help='retract every row of one exact search (same person, source and normalized '
+                                    'query): a row logged by mistake; a later row of that search counts again')
+    v.add_argument('--person', required=True); v.add_argument('--source', required=True)
+    v.add_argument('--query', required=True); v.add_argument('--reason', required=True)
+    v.add_argument('--label', default='')
+    agent_and_date(v)
+    v.add_argument('--new-source', action='store_true', help=argparse.SUPPRESS)
     d = sub.add_parser('due', help='rows whose next_date is on or before a day (default today)')
     d.add_argument('--on', default='', type=iso_date)
     d.add_argument('--ics', action='store_true', help='print a calendar (.ics) of every pending next_date, ledger rows '
@@ -763,7 +799,7 @@ def main(argv=None):
         return 2
 
     # A query or person that normalizes to nothing (only punctuation, say) would match every row.
-    for name in ('query', 'person'):
+    for name in ('query', 'person', 'reason'):
         value = getattr(args, name, None)
         if value is not None and not normalize(value):
             p.error('--%s %r: nothing left to match after normalising' % (name, value))
@@ -789,12 +825,15 @@ def main(argv=None):
             if not args.country or row['country'].upper() == args.country.upper():
                 sys.stdout.write('\t'.join(row[c] for c in REGISTRY_COLUMNS) + '\n')
         return 0
+    def lane_path():
+        if not args.ledger_dir:
+            return args.ledger
+        if not key(args.agent):
+            p.error('%s needs --agent (or $GWT_AGENT): rows go to <ledger-dir>/<agent>.tsv' % args.cmd)
+        return os.path.join(args.ledger_dir, key(args.agent) + '.tsv')
+
     if args.cmd == 'add':
-        path = args.ledger
-        if args.ledger_dir:
-            if not key(args.agent):
-                p.error('add needs --agent (or $GWT_AGENT): rows go to <ledger-dir>/<agent>.tsv')
-            path = os.path.join(args.ledger_dir, key(args.agent) + '.tsv')
+        path = lane_path()
         source = source_id(args.source, note=True)
         if args.control_ok:
             problem = control_problem(args.control_ok)
@@ -852,9 +891,24 @@ def main(argv=None):
         print_rows([(1.0, r) for r in sel], columns=REQUEST_COLUMNS)
         return 0
     try:
-        rows = [r for path in ledger_paths(args.ledger, args.ledger_dir) for r in read_rows(path)]
+        everything = [r for path in ledger_paths(args.ledger, args.ledger_dir) for r in read_rows(path)]
     except (OSError, UnicodeDecodeError) as exc:  # an unreadable ledger is an error, never "not searched yet"
         return err('cannot read the ledger: %s' % exc)
+    rows = live(everything)  # list alone shows the void rows and what they retracted
+    if args.cmd == 'void':
+        path = lane_path()
+        source = source_id(args.source)
+        targets = [r for _, r in find(rows, args.person, source, args.query, exact=True, registry=reg)]
+        if not targets:
+            return err('no row to void: nothing live for %s, %s, %r' % (key(args.person), source,
+                                                                         normalize(args.query)))
+        print_rows([(1.0, r) for r in targets])
+        add_row(path, {'person_key': key(args.person), 'person_label': args.label, 'source': source,
+                       'query': normalize(args.query), 'date': args.date, 'result': VOID,
+                       'evidence': 'voids %s; %s' % (' '.join(r['id'] for r in targets), args.reason),
+                       'agent': args.agent, 'next_date': '', 'control': ''})
+        sys.stderr.write('gwt-ledger: voided %d row(s)\n' % len(targets))
+        return 0
     if args.cmd == 'check':
         if args.exact and not key(args.source or ''):
             p.error('check --exact needs a non-empty --source')
@@ -902,7 +956,7 @@ def main(argv=None):
         print_rows(due)
         return 0
     if args.cmd == 'list':
-        print_rows(find(rows, args.person, args.source, registry=reg))
+        print_rows(find(everything, args.person, args.source, registry=reg))
         return 0
     if args.cmd == 'coverage':
         return coverage(args, reg, rows, err)

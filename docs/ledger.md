@@ -81,7 +81,7 @@ A row of your file whose id is already shipped adds its aliases to that source a
 |---|---|---|
 | `hit` | found | yes |
 | `none` | searched, nothing there, and a control run proved the source could answer (`--control-ok`) | yes |
-| `partial` | something, not enough | yes |
+| `partial` | something, not enough: this exact query ran, so rerunning it buys nothing; a narrower query is the next step. `coverage` and `stats` show it as `partial`, never as proof of absence | yes |
 | `out-of-coverage` | the source cannot hold it (other years, other place) | yes |
 | `unproven` | a `none` with no proof the source worked | no |
 | `blocked` | could not search: a site block, or an authorization you lack; the evidence file says which | no |
@@ -89,6 +89,7 @@ A row of your file whose id is already shipped adds its aliases to that source a
 | `restricted` | the record exists but your access cannot read it | no |
 | `paid` | behind a payment you have not made | no |
 | `in-person` | only readable at the archive | no |
+| `void` | written by [`void`](#retracting-a-row) only: retracts earlier rows | no |
 
 `add` takes exactly these words: `--result found` or `--result negative` is an error, exit 2. Only [`import-tsv`](#import-another-log) maps other words (`found` to `hit`; `negative`, `nothing`, `miss` to `none`; `not-reviewed` to `unproven`).
 
@@ -123,6 +124,19 @@ The default threshold is 0.75 (`--threshold` to change it). Reworded, reordered 
 `check` prints every matching row but exits 0 only when one of them has a result that [counts as done](#results) (`hit`, `none`, `partial`, `out-of-coverage`) and an empty `next_date` or one after today. A `blocked`, `denied` or `unproven` row means the search never ran or never proved anything, and a row whose `next_date` has arrived asked to be searched again, so with only those rows `check` lists them and exits 1. `--any-result` gives the older answer: exit 0 on any matching row.
 
 A `--query` or `--person` that has nothing left after normalising (only punctuation or symbols, say `"!!"` or `"«»"`) is an error, exit 2, on every command. It would otherwise match every row: an empty query scores 1.00 against anything, and an empty person key drops the person filter.
+
+### Retracting a row
+
+A row logged by mistake (the wrong person, a hit that turned out to be someone else, a none from a broken search) would otherwise count as done for ever. `void` retracts it:
+
+```sh
+gwt-ledger void --person ana-peiro-toledo --source familysearch --query "Ana Peiro bautismo 1850-1860" \
+    --reason "the 1852 record is another Ana, daughter of Luis" --agent lane-2
+```
+
+It takes every live row with that person, source and identical normalized query (the `--exact` rule), prints them, and appends one row with result `void` whose evidence names them: `voids 3f1c0a9b2e4d 8a7b6c5d4e3f; the 1852 record is another Ana...`. `check`, `due`, `stats` and `coverage` then leave out the void row and every row it names; `list` still shows both, so the history stays readable. Only those rows go: a close but different query stays done, and a row of the same search logged after the void counts again, even one identical to a voided row. With nothing live to retract, `void` exits 2 and writes nothing. With `--ledger-dir` it needs `--agent` like `add`.
+
+A row's id is the first 12 hex digits of the sha1 of its line and of how many identical lines come before it, in reading order. The ledger is append-only, so ids never move; do not reorder or delete lines by hand.
 
 Rows with the same score come out newest first: by `date`, then the row logged last. So a first-row reader sees a recent `hit` before an old `none` for the same search.
 

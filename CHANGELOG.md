@@ -6,6 +6,14 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+None.
+
+### Added
+
+- `gwt-ledger void` retracts the rows of one exact search (same person, source and normalized query) with a reason. Before it a wrong row could not be taken back: `check` kept counting it as done, and a void was only words in a note. `check`, `due`, `stats` and `coverage` ignore the retracted rows; `list` still shows them, and a later row of that search counts again.
+
 ## [1.2.0] - 2026-11-04
 
 ### Change lists
