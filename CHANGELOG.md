@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Fixed
+
+- `gwt-run`: a step that runs again rewrites its `<step>.out` and keeps the attempt before as `<step>.out.prev`, so after a resume `gate.out` no longer shows the old `FAIL` above the new `OK` (#228).
+
 ## [1.2.0] - 2026-11-04
 
 ### Change lists
