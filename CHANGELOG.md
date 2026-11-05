@@ -8,6 +8,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Fixed
 
+- `gwt-run`: a step that runs again rewrites its `<step>.out` and keeps the attempt before as `<step>.out.prev`, so after a resume `gate.out` no longer shows the old `FAIL` above the new `OK` (#228).
 - `gwt-run`: a step that passes on a rerun no longer keeps the exit code and findings of the failure before it in `run.json`, and a resumed run that finishes no longer keeps the run's own `exit` and `why` from the stop before it. Run folders written by an earlier version keep the old values on steps that were already ok, because a resume skips those steps.
 
 ## [1.2.0] - 2026-11-04
