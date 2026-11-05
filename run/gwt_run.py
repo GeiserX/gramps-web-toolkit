@@ -448,8 +448,8 @@ class Run:
             print(f"{name}:", flush=True)
             out = self.dir / f"{name}.out"
             # this step ran before: its .out keeps this attempt only, the last one with output stays beside it
-            # as .out.prev, a name a *.out glob does not match
-            if out.exists():
+            # as .out.prev, a name a *.out glob does not match; an empty .out (a killed step) is just reused
+            if out.exists() and out.stat().st_size:
                 os.replace(out, self.dir / f"{name}.out.prev")
             self.current = name
             getattr(self, name)()

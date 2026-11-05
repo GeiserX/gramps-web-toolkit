@@ -248,6 +248,20 @@ def test_a_rerun_of_a_failed_gate_rewrites_gate_out(tmp_path, server):
     assert not [p.name for p in run.glob("*.out") if "FAIL:" in p.read_text()]
 
 
+def test_an_empty_out_never_replaces_the_last_real_one(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, BIRTH, DEATH_EARLY])
+    assert gwt_run_main(lst, conf) == 7
+    assert gwt_run_main(lst, conf) == 7
+    run = Path(f"{lst}.run")
+    kept = (run / "gate.out").read_text()
+    assert "FAIL" in kept
+    (run / "gate.out").write_text("")  # a gwt-run killed right after the gate opened its .out
+    known = tmp_path / "known.json"
+    known.write_text((run / "gate.json").read_text())
+    assert gwt_run_main(lst, conf, "--known", str(known)) == 0
+    assert (run / "gate.out.prev").read_text() == kept  # the last real failure is still there
+
+
 def test_a_list_changed_after_the_apply_wrote_is_refused(tmp_path, server):
     lst, conf = setup(tmp_path, server, [JOHN, BIRTH])
     server.fake.busy = 1000
