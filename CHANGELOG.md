@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Fixed
+
+- `gwt-run`: the gate no longer fails on `place-no-coords` for a place the list's own apply created, which geocoding fills after the run; a list that adds a place and an event on it used to stop with exit 7. Those places are named at the end of `gate.out` and under the gate's `geocode` in `run.json`. A place that was in the tree before the run, or that someone else added during it, still fails the gate.
+
 ## [1.2.0] - 2026-11-04
 
 ### Change lists

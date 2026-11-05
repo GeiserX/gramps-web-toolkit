@@ -280,6 +280,13 @@ def test_a_gate_that_did_not_finish_names_no_place_to_geocode(tmp_path, server, 
     assert "this list added" not in capsys.readouterr().out + Path(f"{lst}.run/gate.out").read_text()
 
 
+def test_a_new_place_does_not_hide_a_real_new_problem(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, NEW_PLACE, BORN_THERE, DEATH_EARLY])
+    assert gwt_run_main(lst, conf) == 7
+    gate = state(lst)["steps"]["gate"]
+    assert gate["status"] == "failed" and gate["new"] == 1 and gate["geocode"] == ["P0002"]
+
+
 def test_a_place_without_a_point_from_before_the_run_still_fails_the_gate(tmp_path, server):
     server.fake.add("places", {"handle": "plc2", "name": {"value": "Oakford"}})  # P0002, in the tree before, no point
     born = {**BORN_THERE, "place": "P0002"}
