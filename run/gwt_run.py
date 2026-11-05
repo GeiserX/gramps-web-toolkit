@@ -248,8 +248,15 @@ class Run:
     def step(self, name: str) -> dict:
         return self.state["steps"][name]
 
+    # what a step keeps from one mark to the next: the apply's tries count across runs (--apply-tries needs it)
+    CARRY = ("tries",)
+
     def mark(self, name: str, status: str, **info) -> None:
-        self.step(name).update(status=status, at=_now(), **info)
+        """The step's outcome is replaced, not merged: an ok after a failure must not keep its exit or findings."""
+        step = self.step(name)  # the same dict, cleared: apply() holds it across its tries
+        keep = {k: step[k] for k in self.CARRY if k in step}
+        step.clear()
+        step.update(keep, status=status, at=_now(), **info)
         self.save()
 
     # -- steps -----------------------------------------------------------
