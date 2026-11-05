@@ -82,21 +82,34 @@ function parseCases(rows) {
 }
 
 const DEHU_ID = /^[0-9a-f]{16,}$/i;
+const DEHU_ROW_ID = /^(?=.*\d)[A-Z0-9][A-Z0-9-]{5,}$/i;
 const DETAIL_LABELS = ['Concepto', 'Organismo raíz', 'Fecha de estado final', 'Fecha leída', 'Fecha de caducidad', 'Fecha caducidad', 'Fecha de expiración'];
+
+// Where the notification id sits in a data row, or -1.
+// Ids are not all hex: Catastro sends 14 digits («51344702310491»), the TGSS a letter and digits («N264137222»).
+// So once the header is known the id is read from the «Identificador» column, lined up from the right
+// (data rows carry extra empty cells in front), and the hex test is only the fallback before a header.
+function dehuIdAt(cells, headers, headerId) {
+  if (headerId >= 0 && headers.length && cells.length >= headers.length) {
+    const at = headerId + (cells.length - headers.length);
+    if (DEHU_ROW_ID.test(cells[at] || '')) return at;
+  }
+  return cells.findIndex(c => DEHU_ID.test(c));
+}
 
 // The rows of a DEHú result table (each an array of cell texts, header row included) into items.
 // A data row starts with the notification id; the expandable row after it holds «Concepto … Organismo raíz …».
 function parseDehuRows(rows) {
-  let headers = [], headerId = 0;
+  let headers = [], headerId = -1;
   const items = [];
   for (const raw of rows) {
     const cells = raw.map(clean);
-    const idAt = cells.findIndex(c => DEHU_ID.test(c));
     if (cells.some(c => /^Identificador$/i.test(c))) {
       headers = cells.map(c => c.toLowerCase());
       headerId = headers.indexOf('identificador');
       continue;
     }
+    const idAt = dehuIdAt(cells, headers, headerId);
     if (idAt >= 0) {
       const it = { id: cells[idAt], cells: cells.filter(Boolean) };
       // Data rows carry extra empty cells in front, so columns are lined up on the id, not on position.
@@ -489,6 +502,13 @@ async function deepRows(page) {
   });
 }
 
+// «loaded» when the table gave at least one notification row, «empty» when the page says there are none,
+// «did not load» otherwise. Rows are what deepRows returns; the same check runs on a saved .rows.json.
+function dehuLoadState(items, empty) {
+  if (items.length) return 'loaded';
+  return empty ? 'empty' : 'did not load';
+}
+
 async function dehuList(page, dumpDir, name, expected) {
   // A single-page app: wait until the table shows rows, or the page says the list is empty.
   let got = { rows: [], total: null }, items = [], empty = false;
@@ -502,7 +522,7 @@ async function dehuList(page, dumpDir, name, expected) {
   }
   await dump(page, dumpDir, name);
   if (dumpDir) fs.writeFileSync(path.join(dumpDir, name + '.rows.json'), JSON.stringify(got, null, 1));
-  if (!items.length && !empty) throw new Error(`dehu: ${name} did not load`);
+  if (dehuLoadState(items, empty) === 'did not load') throw new Error(`dehu: ${name} did not load`);
   if (expected != null && items.length < Math.min(expected, 10)) throw new Error(`dehu: ${name} counter says ${expected}, parsed ${items.length}`);
   // «1-10 de 14 elementos»: only the first page is read; say so rather than drop the rest silently.
   const m = String(got.total || '').match(/de (\d+) elementos/);
@@ -694,4 +714,4 @@ async function main(argv) {
   return changed ? EXIT_CHANGED : failed ? EXIT_ERROR : EXIT_SAME;
 }
 
-module.exports = { dump, setErrorDumpDir, isoDate, openPkcs12, openChrome, dehuLogin, loadConfig, parseCases, parseDehuRows, diff, senderAllowed, summarize, describe, main, EXIT_SAME, EXIT_CHANGED, EXIT_ERROR };
+module.exports = { dump, setErrorDumpDir, isoDate, openPkcs12, openChrome, dehuLogin, loadConfig, parseCases, parseDehuRows, dehuLoadState, diff, senderAllowed, summarize, describe, main, EXIT_SAME, EXIT_CHANGED, EXIT_ERROR };
