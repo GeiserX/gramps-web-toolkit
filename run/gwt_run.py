@@ -446,6 +446,9 @@ class Run:
                 print(f"{name}: done before, skipped", flush=True)
                 continue
             print(f"{name}:", flush=True)
+            out = self.dir / f"{name}.out"
+            if out.exists():  # this step ran before: its .out keeps this run only, the last run's stays beside it
+                os.replace(out, self.dir / f"{name}.prev.out")
             self.current = name
             getattr(self, name)()
         self.state.update(status="done", ended=_now())

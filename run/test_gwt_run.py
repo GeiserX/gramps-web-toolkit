@@ -231,6 +231,21 @@ def test_the_gate_stops_on_a_new_problem(tmp_path, server):
     assert any(f["check"] == "event-order" for f in report["new"])
 
 
+def test_a_rerun_of_a_failed_gate_rewrites_gate_out(tmp_path, server):
+    lst, conf = setup(tmp_path, server, [JOHN, BIRTH, DEATH_EARLY])
+    assert gwt_run_main(lst, conf) == 7
+    run = Path(f"{lst}.run")
+    first = (run / "gate.out").read_text()
+    assert "FAIL" in first
+    # the finding is accepted, and the same run goes on from the gate
+    known = tmp_path / "known.json"
+    known.write_text((run / "gate.json").read_text())
+    assert gwt_run_main(lst, conf, "--known", str(known)) == 0
+    out = (run / "gate.out").read_text()
+    assert "OK" in out and "FAIL:" not in out  # only this run's gate: a grep for FAIL no longer finds the old one
+    assert (run / "gate.prev.out").read_text() == first  # the failed run's output is kept beside it
+
+
 def test_a_list_changed_after_the_apply_wrote_is_refused(tmp_path, server):
     lst, conf = setup(tmp_path, server, [JOHN, BIRTH])
     server.fake.busy = 1000
