@@ -12,7 +12,7 @@ None.
 
 ### Added
 
-- `gwt-ledger void` retracts the rows of one exact search (same person, source and normalized query) with a reason. Before it a wrong row could not be taken back: `check` kept counting it as done, and a void was only words in a note. `check`, `due`, `stats` and `coverage` ignore the retracted rows; `list` still shows them, and a later row of that search counts again.
+- `gwt-ledger void` retracts the rows of one exact search (same person, source and normalized query) with a reason. Before it a wrong row could not be taken back: `check` kept counting it as done, and a void was only words in a note. `check`, `due`, `stats` and `coverage` ignore the retracted rows; `list` still shows them, ending each row with its id and `voided` on a retracted one, and a later row of that search counts again, through `add` or `import-tsv`. A void that names a row no longer there (a voided line edited by hand) warns on stderr.
 
 ### Fixed
 

@@ -675,6 +675,7 @@ class VoidTest(unittest.TestCase):
         self.void()
         rows = L.read_rows(self.path)
         self.assertEqual(rows[-1]['result'], 'void')
+        self.assertEqual(rows[-1]['person_label'], 'Ana Peiro Toledo')  # no --label: the retracted row's label
         self.assertEqual(rows[-1]['evidence'], 'voids %s; the record was another Ana' % ids[0])
         out = run('--ledger', self.path, 'list', '--person', 'Ana Peiro Toledo')[1]
         self.assertEqual([l.split('\t')[5] for l in out.splitlines()], ['none', 'void'])

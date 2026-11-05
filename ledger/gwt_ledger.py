@@ -9,8 +9,9 @@ Agents run `check` before a search and `add` after it, so two lanes never pay fo
                                                              again, else 1 (--exact: same source, identical normalized
                                                              query; --any-result: any matching row counts)
   gwt-ledger add --person KEY --label "..." --source SRC --query "..." --result none --control-ok RUN [--evidence F]
-  gwt-ledger void --person KEY --source SRC --query "..." --reason "..."  retract the rows of that exact search:
-                                                             check, due, stats and coverage ignore them from now on
+  gwt-ledger void --person KEY --source SRC --query "..." --reason "..." [--label "..."]  retract the rows of that
+                                                             exact search: check, due, stats and coverage ignore them
+                                                             from now on (--label: default, the first row's label)
   gwt-ledger list --person KEY [--source SRC]                 every row, voided ones too, then its id and `voided`
   gwt-ledger due [--on YYYY-MM-DD] [--ics]                   rows whose next_date has arrived; --ics: a calendar
   gwt-ledger stats [--by source]
@@ -756,7 +757,7 @@ def main(argv=None):
                                     'query): a row logged by mistake; a later row of that search counts again')
     v.add_argument('--person', required=True); v.add_argument('--source', required=True)
     v.add_argument('--query', required=True); v.add_argument('--reason', required=True)
-    v.add_argument('--label', default='')
+    v.add_argument('--label', default='', help='the void row\'s person_label; default, the first retracted row\'s')
     agent_and_date(v)
     v.add_argument('--new-source', action='store_true', help=argparse.SUPPRESS)
     d = sub.add_parser('due', help='rows whose next_date is on or before a day (default today)')
@@ -917,7 +918,8 @@ def main(argv=None):
                 key(args.person), source, normalize(args.query),
                 '; already voided by %s' % ' '.join(r['id'] for _, r in done) if done else ''))
         print_rows([(1.0, r) for r in targets])
-        add_row(path, {'person_key': key(args.person), 'person_label': args.label, 'source': source,
+        label = args.label or targets[0]['person_label']  # an empty middle cell shifts tab-split readers
+        add_row(path, {'person_key': key(args.person), 'person_label': label, 'source': source,
                        'query': normalize(args.query), 'date': args.date, 'result': VOID,
                        'evidence': 'voids %s; %s' % (' '.join(r['id'] for r in targets), args.reason),
                        'agent': args.agent, 'next_date': '', 'control': ''})
