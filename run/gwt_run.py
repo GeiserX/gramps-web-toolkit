@@ -9,6 +9,7 @@ Five steps, each one a gwt-apply or gwt-check run of its own:
     apply    gwt-apply LIST --apply --log DIR/apply.jsonl, tried again while ops fail on a busy server
     verify   gwt-apply LIST --verify: every op must read as in the tree
     gate     gwt-check check --from DIR/pre.json.gz --baseline DIR/pre.json.gz [--known K]: no new finding
+             (but a place-no-coords on a place this list's apply created is left to geocode)
 
 DIR (default LIST.run) keeps run.json with every step's status. Until the apply writes, running the same command
 again starts over (an edited list is accepted), from a backup that reads only what changed. After that it skips the
@@ -455,10 +456,11 @@ class Run:
             new = json.loads(out.read_text(encoding="utf-8")).get("new") or []
         except (OSError, ValueError, AttributeError):
             new = []
-        # a place this list created has no point until the geocode step after it: that finding is not this list's fault
-        added = self._places_added() if code == 1 else set()
-        geocode = sorted({f["key"] for f in new if f.get("check") == "place-no-coords" and f.get("key") in added})
-        new = [f for f in new if not (f.get("check") == "place-no-coords" and f.get("key") in geocode)]
+        geocode: list[str] = []
+        if code == 1:  # a place this list created has no point until the geocode step after the run: not its fault
+            added = self._places_added()
+            geocode = sorted({f["key"] for f in new if f.get("check") == "place-no-coords" and f.get("key") in added})
+            new = [f for f in new if not (f.get("check") == "place-no-coords" and f.get("key") in geocode)]
         if geocode:
             note = (f"gate: {len(geocode)} place(s) this list added have no coordinates yet, so their place-no-coords "
                     f"does not count here; geocode them next (gwt-geocode, then apply its list): {', '.join(geocode)}")

@@ -34,3 +34,4 @@ gwt_run.py | if not self.target["tree"]: | if False: | no tree is bad input befo
 gwt_run.py | if code == 1 and not new and geocode: | if False: | a place the list itself added without a point waits for the geocode step instead of failing the gate
 gwt_run.py | and f.get("key") in added}) | }) | only a place this list created waits for geocode: one from before the run or from another writer still fails the gate
 gwt_run.py | fh.write(note + "\n") | fh.write("") | gate.out says which place-no-coords findings the gate left to geocode
+gwt_run.py | if code == 1:  # a place this list created | if True:  # a place this list created | a gwt-check that did not finish gets no geocode note

@@ -265,6 +265,21 @@ def test_a_place_another_writer_added_without_a_point_still_fails_the_gate(tmp_p
     assert sorted(f["key"] for f in report["new"] if f["check"] == "place-no-coords") == ["P0002", "P0003"]
 
 
+def test_a_gate_that_did_not_finish_names_no_place_to_geocode(tmp_path, server, monkeypatch, capsys):
+    lst, conf = setup(tmp_path, server, [JOHN, NEW_PLACE, BORN_THERE])
+    real = gwt_run.Run.watch
+
+    def gate_crashes_after_its_report(self, name, cmd, **kw):
+        code, why, last = real(self, name, cmd, **kw)
+        return (3 if name == "gate" else code), why, last
+
+    monkeypatch.setattr(gwt_run.Run, "watch", gate_crashes_after_its_report)
+    assert gwt_run_main(lst, conf) == 1
+    gate = state(lst)["steps"]["gate"]
+    assert gate == {**gate, "status": "failed", "exit": 3} and "geocode" not in gate
+    assert "this list added" not in capsys.readouterr().out + Path(f"{lst}.run/gate.out").read_text()
+
+
 def test_a_place_without_a_point_from_before_the_run_still_fails_the_gate(tmp_path, server):
     server.fake.add("places", {"handle": "plc2", "name": {"value": "Oakford"}})  # P0002, in the tree before, no point
     born = {**BORN_THERE, "place": "P0002"}
