@@ -744,6 +744,25 @@ class VoidTest(unittest.TestCase):
         self.assertIn('rows\t1\n', out)
         self.assertNotIn('void', out)
 
+    def test_void_takes_every_lane_s_row_and_only_a_void_row_retracts(self):
+        self.add(result='hit')
+        first = L.with_ids(L.read_rows(self.path))[0]['id']
+        run('--ledger', self.path, 'add', '--person', 'Luis Gil', '--label', 'Luis Gil', '--source', 'FamilySearch',
+            '--query', 'Luis Gil 1870', '--result', 'hit', '--agent', 'lane-1', '--evidence', 'voids %s; x' % first)
+        self.assertEqual(self.check(), 0)  # a hit whose evidence reads like a void retracts nothing
+        self.add(agent='lane-3')  # the same search, logged by another lane
+        self.void()
+        rows = L.read_rows(self.path)
+        self.assertEqual(len(rows[-1]['evidence'].split(';')[0].split()), 3)  # `voids` and both rows' ids
+        self.assertEqual(run('--ledger', self.path, 'check', '--person', 'Ana Peiro Toledo', '--source',
+                             'FamilySearch', '--query', 'Ana Peiro bautismo 1850-1860', '--any-result')[0], 1)
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.void_reason('!!')  # a reason with nothing in it is refused
+
+    def void_reason(self, reason):
+        return run('--ledger', self.path, 'void', '--person', 'Ana Peiro Toledo', '--source', 'FamilySearch',
+                   '--query', 'Luis Gil 1870', '--reason', reason, '--agent', 'lane-2')
+
     def test_void_with_a_ledger_dir_goes_to_the_lane_file_and_needs_an_agent(self):
         lanes = os.path.join(self.dir.name, 'lanes')
         run('--ledger', self.path, '--ledger-dir', lanes, 'add', '--person', 'Ana Peiro Toledo', '--source', 's',

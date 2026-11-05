@@ -44,3 +44,6 @@ gwt_ledger.py | seen = {same(r) for r in live([r for path | seen = {same(r) for 
 gwt_ledger.py | if lost:  # | if False:  # | an edited voided line warns on stderr that its row counts again
 gwt_ledger.py | '; already voided by %s' % ' '.join(r['id'] for _, r in done) if done else '' | '' | a second void says the search is already voided, so a retry reads apart from a typo
 gwt_ledger.py | label = args.label or targets[0]['person_label'] | label = args.label | a void row with no --label takes the label of the first row it retracts
+gwt_ledger.py | VOIDS.match(r['evidence']) if r['result'] == VOID else None | VOIDS.match(r['evidence']) | only a void row retracts: a hit whose evidence reads like a void retracts nothing
+gwt_ledger.py | ' '.join(r['id'] for r in targets), args.reason | ' '.join(r['id'] for r in targets[:1]), args.reason | a void retracts every lane's row of the search, not just the first
+gwt_ledger.py | for name in ('query', 'person', 'reason'): | for name in ('query', 'person'): | a void reason with nothing in it is refused
