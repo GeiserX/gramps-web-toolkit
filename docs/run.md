@@ -84,7 +84,7 @@ A verify that could not read the tree (a failed login, a dropped connection) is 
 }
 ```
 
-A step's `status` is `todo`, `running`, `ok`, `refused`, `failed`, `stalled` or `stopped`. A refused dry run lists, besides each op, gwt-apply's own refusal lines (a likely duplicate, as `[refused] ...`), and a refused skip carries the action that made it one. The apply step also keeps `tries` and the counts of its last try; the run's own `why` says in words where it stopped.
+A step's `status` is `todo`, `running`, `ok`, `refused`, `failed`, `stalled` or `stopped`. A refused dry run lists, besides each op, gwt-apply's own refusal lines (a likely duplicate, as `[refused] ...`), and a refused skip carries the action that made it one. The apply step also keeps `tries`, and the counts of its last try that finished (a stopped or stalled apply has none); the run's own `why` says in words where it stopped. Each time a step is marked, its earlier outcome goes: a gate that passes on a rerun carries no `exit` or `new` from the failure before it. Only `tries` carries over, even when a signal stops the run while the step is being marked. A resumed run that finishes drops the run's own `exit` and `why` from the stop before it, so a run that says `done` carries no failure.
 
 ## Options
 
