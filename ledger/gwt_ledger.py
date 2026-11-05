@@ -911,8 +911,11 @@ def main(argv=None):
         source = source_id(args.source)
         targets = [r for _, r in find(rows, args.person, source, args.query, exact=True, registry=reg)]
         if not targets:
-            return err('no row to void: nothing live for %s, %s, %r' % (key(args.person), source,
-                                                                         normalize(args.query)))
+            done = find([r for r in everything if r['result'] == VOID], args.person, source, args.query, exact=True,
+                        registry=reg)
+            return err('no row to void: nothing live for %s, %s, %r%s' % (
+                key(args.person), source, normalize(args.query),
+                '; already voided by %s' % ' '.join(r['id'] for _, r in done) if done else ''))
         print_rows([(1.0, r) for r in targets])
         add_row(path, {'person_key': key(args.person), 'person_label': args.label, 'source': source,
                        'query': normalize(args.query), 'date': args.date, 'result': VOID,

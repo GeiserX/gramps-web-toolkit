@@ -725,8 +725,11 @@ class VoidTest(unittest.TestCase):
         with redirect_stderr(io.StringIO()) as err:
             self.assertEqual(self.void()[0], 2)  # nothing live left to void
         self.assertIn('no row to void', err.getvalue())
-        with redirect_stderr(io.StringIO()):
+        void_id = L.with_ids(L.read_rows(self.path))[2]['id']
+        self.assertIn('already voided by %s' % void_id, err.getvalue())  # a retry, not a typo
+        with redirect_stderr(io.StringIO()) as err:
             self.assertEqual(self.void('Ana Peiro boda 1870')[0], 2)
+        self.assertNotIn('already voided', err.getvalue())
         self.assertEqual(len(L.read_rows(self.path)), 3)
 
     def test_void_rows_and_what_they_retract_leave_stats_and_due(self):

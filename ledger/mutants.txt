@@ -42,3 +42,4 @@ gwt_ledger.py | for _, r in find(everything, args.person | for _, r in find(rows
 gwt_ledger.py | 'voided' if r['id'] in gone else '' | '' | list marks a voided row, and not its identical re-add
 gwt_ledger.py | seen = {same(r) for r in live([r for path | seen = {same(r) for r in ([r for path | import-tsv imports a row identical to a voided one, so a re-search counts again
 gwt_ledger.py | if lost:  # | if False:  # | an edited voided line warns on stderr that its row counts again
+gwt_ledger.py | '; already voided by %s' % ' '.join(r['id'] for _, r in done) if done else '' | '' | a second void says the search is already voided, so a retry reads apart from a typo
