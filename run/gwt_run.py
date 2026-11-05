@@ -460,8 +460,11 @@ class Run:
         geocode = sorted({f["key"] for f in new if f.get("check") == "place-no-coords" and f.get("key") in added})
         new = [f for f in new if not (f.get("check") == "place-no-coords" and f.get("key") in geocode)]
         if geocode:
-            print(f"gate: {len(geocode)} place(s) this list added have no coordinates yet; geocode them next "
-                  f"(gwt-geocode --only-missing): {', '.join(geocode)}", flush=True)
+            note = (f"gate: {len(geocode)} place(s) this list added have no coordinates yet, so their place-no-coords "
+                    f"does not count here; geocode them next (gwt-geocode, then apply its list): {', '.join(geocode)}")
+            print(note, flush=True)
+            with open(self.dir / "gate.out", "a", encoding="utf-8") as fh:  # the file a reader opens says it too
+                fh.write(note + "\n")
         if code == 1 and not new and geocode:
             self.mark("gate", "ok", geocode=geocode)
             return

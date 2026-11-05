@@ -242,6 +242,8 @@ def test_a_place_the_list_added_without_a_point_waits_for_geocode_not_the_gate(t
     gate = state(lst)["steps"]["gate"]
     assert gate["status"] == "ok"
     assert gate["geocode"] == [server.fake.by_id("places", "P0002")["gramps_id"]]
+    out = Path(f"{lst}.run/gate.out").read_text()  # gwt-check's own FAIL line stays; the note after it says why
+    assert out.rstrip().splitlines()[-1].startswith("gate: 1 place(s) this list added") and "P0002" in out
 
 
 def test_a_place_another_writer_added_without_a_point_still_fails_the_gate(tmp_path, server, monkeypatch):
