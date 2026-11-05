@@ -86,7 +86,7 @@ const DEHU_ROW_ID = /^(?=.*\d)[A-Z0-9][A-Z0-9-]{5,}$/i;
 const DETAIL_LABELS = ['Concepto', 'Organismo raíz', 'Fecha de estado final', 'Fecha leída', 'Fecha de caducidad', 'Fecha caducidad', 'Fecha de expiración'];
 
 // Where the notification id sits in a data row, or -1.
-// Ids are not all hex: Catastro sends 14 digits («51344702310491»), the TGSS a letter and digits («N264137222»).
+// Ids are not all hex: Catastro sends 14 digits («12345678901234»), the TGSS a letter and digits («A123456789»).
 // So once the header is known the id is read from the «Identificador» column, lined up from the right
 // (data rows carry extra empty cells in front), and the hex test is only the fallback before a header.
 function dehuIdAt(cells, headers, headerId) {
