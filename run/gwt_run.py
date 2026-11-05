@@ -249,8 +249,16 @@ class Run:
     def step(self, name: str) -> dict:
         return self.state["steps"][name]
 
+    # what a step keeps from one mark to the next: the apply's tries count across runs (--apply-tries needs it)
+    CARRY = ("tries",)
+
     def mark(self, name: str, status: str, **info) -> None:
-        self.step(name).update(status=status, at=_now(), **info)
+        """The step's outcome is replaced, not merged: an ok after a failure must not keep its exit or findings."""
+        new = {"status": status, "at": _now(), **info}  # built first: a signal here leaves the step as it was
+        step = self.step(name)  # the same dict, emptied in place: apply() holds it across its tries
+        for k in [k for k in step if k not in self.CARRY and k not in new]:
+            del step[k]  # tries never leaves the dict, so a signal in here cannot lose it
+        step.update(new)
         self.save()
 
     # -- steps -----------------------------------------------------------
@@ -484,8 +492,15 @@ class Run:
                 print(f"{name}: done before, skipped", flush=True)
                 continue
             print(f"{name}:", flush=True)
+            out = self.dir / f"{name}.out"
+            # this step ran before: its .out keeps this attempt only, the last one with output stays beside it
+            # as .out.prev, a name a *.out glob does not match; an empty .out (a killed step) is just reused
+            if out.exists() and out.stat().st_size:
+                os.replace(out, self.dir / f"{name}.out.prev")
             self.current = name
             getattr(self, name)()
+        for k in ("exit", "why"):  # a resumed run that finished keeps no exit or why from the stop before it
+            self.state.pop(k, None)
         self.state.update(status="done", ended=_now())
         self.save()
         print(f"done: every step went through; {self.state_path}")
