@@ -413,11 +413,28 @@ class Run:
             raise Stop(EXIT["verify"], f"verify: {len(missing)} op(s) not in the tree; see {self.dir / 'verify.out'}")
         self.mark("verify", "ok")
 
-    def _places_before(self) -> set[str]:
-        """Every place in the backup, by Gramps ID and by handle: the tree before this run."""
-        with gzip.open(self.pre, "rt", encoding="utf-8") as fh:
-            places = (json.load(fh).get("objects") or {}).get("Place") or []
-        return {v for p in places for v in (p.get("gramps_id"), p.get("handle")) if v}
+    def _places_added(self) -> set[str]:
+        """The places this list's apply created, by Gramps ID and by handle, read from its own logs. A place
+        anyone else added since the backup is not in them."""
+        made: set[str] = set()
+        for log in sorted(self.dir.glob("apply.*.jsonl")):
+            for line in log.read_text(encoding="utf-8").splitlines():
+                if '"Place"' not in line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except ValueError:
+                    continue
+                body = entry.get("body")
+                if (entry.get("dry_run") is not False or entry.get("method") != "POST"
+                        or not isinstance(entry.get("status"), int) or not 200 <= entry["status"] < 300
+                        or not isinstance(body, list) or not body):
+                    continue
+                made |= {o["handle"] for o in body if isinstance(o, dict) and o.get("_class") == "Place"
+                         and o.get("handle")}
+                if isinstance(body[0], dict) and body[0].get("_class") == "Place" and entry.get("gramps_id"):
+                    made.add(entry["gramps_id"])  # the server's id for the first object of the POST
+        return made
 
     def gate(self) -> None:
         out = self.dir / "gate.json"
@@ -438,9 +455,9 @@ class Run:
             new = json.loads(out.read_text(encoding="utf-8")).get("new") or []
         except (OSError, ValueError, AttributeError):
             new = []
-        # a place this run added has no point until the geocode step after it: that finding is not this list's fault
-        before = self._places_before() if code == 1 else set()
-        geocode = sorted({f["key"] for f in new if f.get("check") == "place-no-coords" and f.get("key") not in before})
+        # a place this list created has no point until the geocode step after it: that finding is not this list's fault
+        added = self._places_added() if code == 1 else set()
+        geocode = sorted({f["key"] for f in new if f.get("check") == "place-no-coords" and f.get("key") in added})
         new = [f for f in new if not (f.get("check") == "place-no-coords" and f.get("key") in geocode)]
         if geocode:
             print(f"gate: {len(geocode)} place(s) this list added have no coordinates yet; geocode them next "

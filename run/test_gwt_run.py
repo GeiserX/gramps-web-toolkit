@@ -244,6 +244,25 @@ def test_a_place_the_list_added_without_a_point_waits_for_geocode_not_the_gate(t
     assert gate["geocode"] == [server.fake.by_id("places", "P0002")["gramps_id"]]
 
 
+def test_a_place_another_writer_added_without_a_point_still_fails_the_gate(tmp_path, server, monkeypatch):
+    lst, conf = setup(tmp_path, server, [JOHN, NEW_PLACE, BORN_THERE])
+    real = gwt_run.Run.verify
+
+    def someone_else_writes(self):
+        real(self)  # between the backup and the gate: a place with no point, on an event of someone else
+        server.fake.add("places", {"handle": "plc9", "name": {"value": "Elmwood"}})  # P0003
+        server.fake.add("events", {"handle": "ev9", "type": "Residence", "place": "plc9"})
+        server.fake.store["people"]["anna"]["event_ref_list"].append({"_class": "EventRef", "ref": "ev9",
+                                                                       "role": "Primary"})
+
+    monkeypatch.setattr(gwt_run.Run, "verify", someone_else_writes)
+    assert gwt_run_main(lst, conf) == 7
+    gate = state(lst)["steps"]["gate"]
+    assert gate["status"] == "failed" and gate["geocode"] == ["P0002"]
+    report = json.loads(Path(f"{lst}.run/gate.json").read_text())
+    assert sorted(f["key"] for f in report["new"] if f["check"] == "place-no-coords") == ["P0002", "P0003"]
+
+
 def test_a_place_without_a_point_from_before_the_run_still_fails_the_gate(tmp_path, server):
     server.fake.add("places", {"handle": "plc2", "name": {"value": "Oakford"}})  # P0002, in the tree before, no point
     born = {**BORN_THERE, "place": "P0002"}
