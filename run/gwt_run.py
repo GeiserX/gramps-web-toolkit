@@ -253,10 +253,11 @@ class Run:
 
     def mark(self, name: str, status: str, **info) -> None:
         """The step's outcome is replaced, not merged: an ok after a failure must not keep its exit or findings."""
-        step = self.step(name)  # the same dict, cleared: apply() holds it across its tries
-        keep = {k: step[k] for k in self.CARRY if k in step}
-        step.clear()
-        step.update(keep, status=status, at=_now(), **info)
+        new = {"status": status, "at": _now(), **info}  # built first: a signal here leaves the step as it was
+        step = self.step(name)  # the same dict, emptied in place: apply() holds it across its tries
+        for k in [k for k in step if k not in self.CARRY and k not in new]:
+            del step[k]  # tries never leaves the dict, so a signal in here cannot lose it
+        step.update(new)
         self.save()
 
     # -- steps -----------------------------------------------------------

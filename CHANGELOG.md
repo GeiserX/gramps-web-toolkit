@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Fixed
+
+- `gwt-run`: a step that passes on a rerun no longer keeps the exit code and findings of the failure before it in `run.json`. Run folders written by an earlier version keep the old values on steps that were already ok, because a resume skips those steps.
+
 ## [1.2.0] - 2026-11-04
 
 ### Change lists

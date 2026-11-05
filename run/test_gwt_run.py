@@ -243,6 +243,47 @@ def test_a_gate_that_passes_on_a_rerun_keeps_no_values_of_its_failure(tmp_path, 
     assert "exit" not in gate and "new" not in gate  # run.json says what this run found, not the failure before
 
 
+def test_a_signal_while_a_step_is_marked_keeps_the_apply_tries(tmp_path, server, monkeypatch):
+    lst, conf = setup(tmp_path, server, [JOHN, BIRTH, ANNA])
+    real = server.fake.request
+    seen = {"puts": 0}
+
+    def busy_on_first_write(method, url, **kw):
+        if method == "PUT" and not seen["puts"]:
+            seen["puts"] += 1
+            server.fake.busy = 1  # try 1 writes John, then meets "database is locked"
+        return real(method, url, **kw)
+
+    server.fake.request = busy_on_first_write
+    real_mark, real_now = gwt_run.Run.mark, gwt_run._now
+    armed = {"on": False, "fired": False}
+
+    def mark(self, name, status, **info):
+        armed["on"] = (name, status, info.get("tries")) == ("apply", "running", 2) and not armed["fired"]
+        try:
+            real_mark(self, name, status, **info)
+        finally:
+            armed["on"] = False
+
+    def now():
+        if armed["on"]:  # SIGTERM lands while mark() builds the step's new entry
+            armed["on"], armed["fired"] = False, True
+            raise gwt_run.Signalled(15)
+        return real_now()
+
+    monkeypatch.setattr(gwt_run.Run, "mark", mark)
+    monkeypatch.setattr(gwt_run, "_now", now)
+    assert gwt_run_main(lst, conf, "--apply-tries", "3") == 128 + 15
+    assert armed["fired"]
+    assert state(lst)["steps"]["apply"]["tries"] == 1  # the tree was written: a resume must not take it as untouched
+    monkeypatch.setattr(gwt_run, "_now", real_now)
+    assert gwt_run_main(lst, conf, "--apply-tries", "3") == 0
+    st = state(lst)
+    assert st["steps"]["apply"]["tries"] == 2 and "restarts" not in st
+    persons = [o for o in server.fake.store["people"].values() if o["primary_name"]["first_name"] == "John"]
+    assert len(persons) == 1
+
+
 def test_a_list_changed_after_the_apply_wrote_is_refused(tmp_path, server):
     lst, conf = setup(tmp_path, server, [JOHN, BIRTH])
     server.fake.busy = 1000
