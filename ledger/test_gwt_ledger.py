@@ -646,6 +646,137 @@ class RegistryTest(unittest.TestCase):
         self.assertEqual(run(*argv, '--new-source')[0], 0)
 
 
+class VoidTest(unittest.TestCase):
+    setUp, tearDown, add = LedgerTest.setUp, LedgerTest.tearDown, LedgerTest.add
+
+    def void(self, query='Ana Peiro bautismo 1850-1860', *extra):
+        return run('--ledger', self.path, *extra, 'void', '--person', 'Ana Peiro Toledo', '--source', 'FamilySearch',
+                   '--query', query, '--reason', 'the record was another Ana', '--agent', 'lane-2')
+
+    def check(self, query='Ana Peiro bautismo 1850-1860'):
+        return run('--ledger', self.path, 'check', '--person', 'Ana Peiro Toledo', '--source', 'FamilySearch',
+                   '--query', query)[0]
+
+    def test_void_retracts_a_search_and_a_later_row_counts_again(self):
+        self.add()
+        self.assertEqual(self.check(), 0)
+        code, out = self.void()
+        self.assertEqual(code, 0)
+        self.assertIn('\tnone\t', out)  # it prints the rows it voids
+        self.assertEqual(self.check(), 1)
+        self.add()  # the search is run again and logged: it counts
+        self.assertEqual(self.check(), 0)
+        self.assertEqual(self.void()[0], 0)  # and a second void retracts that row as well
+        self.assertEqual(self.check(), 1)
+
+    def test_void_names_the_rows_it_retracts_and_list_still_shows_them(self):
+        self.add()
+        ids = [r['id'] for r in L.with_ids(L.read_rows(self.path))]
+        self.void()
+        rows = L.read_rows(self.path)
+        self.assertEqual(rows[-1]['result'], 'void')
+        self.assertEqual(rows[-1]['person_label'], 'Ana Peiro Toledo')  # no --label: the retracted row's label
+        self.assertEqual(rows[-1]['evidence'], 'voids %s; the record was another Ana' % ids[0])
+        out = run('--ledger', self.path, 'list', '--person', 'Ana Peiro Toledo')[1]
+        self.assertEqual([l.split('\t')[5] for l in out.splitlines()], ['none', 'void'])
+
+    def test_list_marks_the_voided_row_and_not_its_identical_re_add(self):
+        self.add()
+        self.void()
+        self.add()  # the same line again, logged after the void: it is live
+        out = run('--ledger', self.path, 'list', '--person', 'Ana Peiro Toledo')[1]
+        ids = [r['id'] for r in L.with_ids(L.read_rows(self.path))]
+        cells = [l.split('\t') for l in out.splitlines()]
+        self.assertEqual(sorted((c[5], c[10], c[11]) for c in cells),
+                         sorted([('none', ids[0], 'voided'), ('void', ids[1], ''), ('none', ids[2], '')]))
+        self.assertIn(ids[0], cells[[c[5] for c in cells].index('void')][6])  # the void names the marked row
+
+    def test_import_after_a_void_counts_again(self):
+        src = os.path.join(self.dir.name, 'old-log.tsv')
+        write(src, 'who\twhere\twhat\toutcome\twhen\nAna Peiro Toledo\tfs\tAna Peiro bautismo 1850-1860\tfound\t'
+                   '2026-01-02\n')
+        argv = ('--ledger', self.path, 'import-tsv', src, '--map',
+                'person_key=who,source=where,query=what,result=outcome,date=when')
+        self.assertIn('imported\t1', run(*argv)[1])
+        self.void()
+        self.assertEqual(self.check(), 1)
+        self.assertIn('imported\t1', run(*argv)[1])  # the same row, searched again: not a duplicate of a voided one
+        self.assertEqual(self.check(), 0)
+
+    def test_an_edited_voided_line_warns_that_it_counts_again(self):
+        self.add()
+        self.void()
+        with redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(self.check(), 1)
+        self.assertEqual(err.getvalue(), '')
+        with open(self.path, encoding='utf-8') as f:
+            lines = f.read().splitlines(True)
+        lines[1] = lines[1].replace('lane-1', 'lane-9')  # a hand edit of the voided row
+        with open(self.path, 'w', encoding='utf-8') as f:
+            f.writelines(lines)
+        with redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(self.check(), 0)
+        self.assertIn('1 void id(s) name no row', err.getvalue())
+
+    def test_void_takes_only_the_identical_query_and_needs_a_live_row(self):
+        self.add()
+        self.add(query='bautismo de Ana Peiró, 1850-1860')  # close enough for check, not the same query
+        self.void()
+        self.assertEqual(self.check('bautismo de Ana Peiró, 1850-1860'), 0)
+        with redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(self.void()[0], 2)  # nothing live left to void
+        self.assertIn('no row to void', err.getvalue())
+        void_id = L.with_ids(L.read_rows(self.path))[2]['id']
+        self.assertIn('already voided by %s' % void_id, err.getvalue())  # a retry, not a typo
+        with redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(self.void('Ana Peiro boda 1870')[0], 2)
+        self.assertNotIn('already voided', err.getvalue())
+        self.assertEqual(len(L.read_rows(self.path)), 3)
+
+    def test_void_rows_and_what_they_retract_leave_stats_and_due(self):
+        run('--ledger', self.path, 'add', '--person', 'Ana Peiro Toledo', '--source', 'FamilySearch', '--query',
+            'Ana Peiro bautismo 1850-1860', '--result', 'blocked', '--agent', 'lane-1', '--next-date', '2026-01-01')
+        self.add(person='Luis Gil')
+        self.assertIn('2026-01-01', run('--ledger', self.path, 'due', '--on', '2026-02-01')[1])
+        self.void()
+        self.assertEqual(run('--ledger', self.path, 'due', '--on', '2026-02-01'), (0, ''))
+        out = run('--ledger', self.path, 'stats')[1]
+        self.assertIn('rows\t1\n', out)
+        self.assertNotIn('void', out)
+
+    def test_void_takes_every_lane_s_row_and_only_a_void_row_retracts(self):
+        self.add(result='hit')
+        first = L.with_ids(L.read_rows(self.path))[0]['id']
+        run('--ledger', self.path, 'add', '--person', 'Luis Gil', '--label', 'Luis Gil', '--source', 'FamilySearch',
+            '--query', 'Luis Gil 1870', '--result', 'hit', '--agent', 'lane-1', '--evidence', 'voids %s; x' % first)
+        self.assertEqual(self.check(), 0)  # a hit whose evidence reads like a void retracts nothing
+        self.add(agent='lane-3')  # the same search, logged by another lane
+        self.void()
+        rows = L.read_rows(self.path)
+        self.assertEqual(len(rows[-1]['evidence'].split(';')[0].split()), 3)  # `voids` and both rows' ids
+        self.assertEqual(run('--ledger', self.path, 'check', '--person', 'Ana Peiro Toledo', '--source',
+                             'FamilySearch', '--query', 'Ana Peiro bautismo 1850-1860', '--any-result')[0], 1)
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.void_reason('!!')  # a reason with nothing in it is refused
+
+    def void_reason(self, reason):
+        return run('--ledger', self.path, 'void', '--person', 'Ana Peiro Toledo', '--source', 'FamilySearch',
+                   '--query', 'Luis Gil 1870', '--reason', reason, '--agent', 'lane-2')
+
+    def test_void_with_a_ledger_dir_goes_to_the_lane_file_and_needs_an_agent(self):
+        lanes = os.path.join(self.dir.name, 'lanes')
+        run('--ledger', self.path, '--ledger-dir', lanes, 'add', '--person', 'Ana Peiro Toledo', '--source', 's',
+            '--query', 'q', '--result', 'hit', '--agent', 'lane-1')
+        argv = ('--ledger', self.path, '--ledger-dir', lanes, 'void', '--person', 'Ana Peiro Toledo', '--source', 's',
+                '--query', 'q', '--reason', 'wrong person')
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            run(*argv)
+        self.assertEqual(run(*argv, '--agent', 'lane-2')[0], 0)
+        self.assertEqual(L.read_rows(os.path.join(lanes, 'lane-2.tsv'))[0]['result'], 'void')
+        self.assertEqual(run('--ledger', self.path, '--ledger-dir', lanes, 'check', '--person', 'Ana Peiro Toledo',
+                             '--source', 's', '--query', 'q')[0], 1)
+
+
 def person(handle, gid, first, surname, events=(), parent_family=None):
     return {'handle': handle, 'gramps_id': gid, 'primary_name': {'first_name': first,
             'surname_list': [{'surname': surname}]}, 'event_ref_list': [{'ref': e} for e in events],
@@ -694,6 +825,12 @@ class CoverageTest(unittest.TestCase):
         self.assertEqual(rows['I1'], ['hit', 'n/a', '-'])  # matchid starts in 1970; born 1850, Ana's life ends by 1960
         self.assertEqual(rows['I2'], ['-', 'n/a', 'blocked'])  # logged under his name, and under an alias of boe
         self.assertEqual(rows['I3'], ['-', '-', 'due'])    # no dates: never n/a; the row's next_date has passed
+
+    def test_a_voided_hit_leaves_the_matrix(self):
+        run('--ledger', self.path, 'void', '--person', 'i1', '--source', 'fs', '--query', 'q2', '--reason', 'not her',
+            '--agent', 'lane-1')
+        rows = {r[0]: r[2:] for r in self.matrix('--root', 'I1')[1:]}
+        self.assertEqual(rows['I1'][0], 'none')  # the hit is gone; the older none shows
 
     def test_a_none_with_no_control_shows_as_unproven(self):
         with open(self.path, 'a', encoding='utf-8') as f:  # a pre-1.1.0 none: no control column filled

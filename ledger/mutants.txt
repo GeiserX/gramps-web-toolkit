@@ -34,3 +34,16 @@ gwt_ledger.py | return bool((src['to'] and int(src['to']) < lo) or (src['from'] 
 gwt_ledger.py | if any(r['result'] == 'hit' for r in rows): | if False: | coverage shows an older hit over a newer none
 gwt_ledger.py | for n in range(len(parts), 0, -1)) | for n in range(1, len(parts) + 1)) | a key of a suffixed id (i0042-b-...) goes to I0042-b, never to I0042
 gwt_ledger.py | if columns == COLUMNS: | if False: | a none from before 1.1.0 (no control column) reads as unproven, so check does not count it as done
+gwt_ledger.py | rows = live(everything)  # | rows = everything  # | a voided row no longer counts for check
+gwt_ledger.py | return [r for r in rows if r['result'] != VOID and r['id'] not in gone] | return [r for r in rows if r['id'] not in gone] | a void row itself is no search: stats and due leave it out
+gwt_ledger.py | seen[r['line']] += 1 | seen[r['line']] = 1 | a new row identical to a voided one counts again
+gwt_ledger.py | find(rows, args.person, source, args.query, exact=True, registry=reg) | find(rows, args.person, source, args.query, registry=reg) | void retracts the identical normalized query only, never a close one
+gwt_ledger.py | for _, r in find(everything, args.person | for _, r in find(rows, args.person | list still shows the void rows and what they retracted
+gwt_ledger.py | 'voided' if r['id'] in gone else '' | '' | list marks a voided row, and not its identical re-add
+gwt_ledger.py | seen = {same(r) for r in live([r for path | seen = {same(r) for r in ([r for path | import-tsv imports a row identical to a voided one, so a re-search counts again
+gwt_ledger.py | if lost:  # | if False:  # | an edited voided line warns on stderr that its row counts again
+gwt_ledger.py | '; already voided by %s' % ' '.join(r['id'] for _, r in done) if done else '' | '' | a second void says the search is already voided, so a retry reads apart from a typo
+gwt_ledger.py | label = args.label or targets[0]['person_label'] | label = args.label | a void row with no --label takes the label of the first row it retracts
+gwt_ledger.py | VOIDS.match(r['evidence']) if r['result'] == VOID else None | VOIDS.match(r['evidence']) | only a void row retracts: a hit whose evidence reads like a void retracts nothing
+gwt_ledger.py | ' '.join(r['id'] for r in targets), args.reason | ' '.join(r['id'] for r in targets[:1]), args.reason | a void retracts every lane's row of the search, not just the first
+gwt_ledger.py | for name in ('query', 'person', 'reason'): | for name in ('query', 'person'): | a void reason with nothing in it is refused

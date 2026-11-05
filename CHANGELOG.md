@@ -6,6 +6,14 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+None.
+
+### Added
+
+- `gwt-ledger void` retracts the rows of one exact search (same person, source and normalized query) with a reason. Before it a wrong row could not be taken back: `check` kept counting it as done, and a void was only words in a note. `check`, `due`, `stats` and `coverage` ignore the retracted rows; `list` still shows them, ending each row with its id and `voided` on a retracted one, and a later row of that search counts again, through `add` or `import-tsv`. A void that names a row no longer there (a voided line edited by hand) warns on stderr.
+
 ### Fixed
 
 - `gwt-run`: a step that runs again rewrites its `<step>.out` and keeps the attempt before as `<step>.out.prev`, so after a resume `gate.out` no longer shows the old `FAIL` above the new `OK` (#228).
