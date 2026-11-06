@@ -103,6 +103,18 @@ class Search(Boe):
         self.assertEqual(lines['results'], '2 of 2 (cache)')
         self.assertTrue(json.load(open(lines['evidence'], encoding='utf-8'))['from_cache'])
 
+    def test_one_live_page_means_the_answer_is_not_from_the_cache(self):
+        # page 1 is cached by a first run; a two-page run reads it from the cache and page 2 from the site
+        gate = FakeGate()
+        self.search(FakeNet(gate, (200, PAGE1)), gate)
+        gate2 = FakeGate()
+        net2 = FakeNet(gate2, (200, PAGE2))
+        code, lines, text = self.search(net2, gate2, ['--pages', '2'])
+        self.assertEqual(code, 0, text)
+        self.assertEqual(len(net2.requests), 1)
+        self.assertEqual(lines['results'], '4 of 1003')
+        self.assertFalse(json.load(open(lines['evidence'], encoding='utf-8'))['from_cache'])
+
     def test_a_cached_zero_says_so_and_refresh_asks_the_site(self):
         gate = FakeGate()
         self.assertEqual(self.search(FakeNet(gate, (200, EMPTY)), gate)[0], 2)
