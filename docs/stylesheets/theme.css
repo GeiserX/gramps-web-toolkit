@@ -2,7 +2,7 @@
  *
  * banner.svg draws parchment pages (#f3e6c8) on a dark brown plate (#2f2418)
  * with a gold seal (#e8b04a). The header uses the plate colour, the text on it
- * the parchment, and the accent is the seal's gold. mkdocs.yml sets primary
+ * the parchment, and the accent is the seal's gold. zensical.toml sets primary
  * and accent to custom, so nothing is painted until these variables exist.
  */
 :root {

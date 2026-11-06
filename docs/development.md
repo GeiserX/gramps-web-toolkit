@@ -41,11 +41,12 @@ Every pull request that changes how an existing change list behaves (an op newly
 
 ```sh
 python3 -m pip install -r docs/requirements-docs.txt
-mkdocs serve            # http://127.0.0.1:8000, rebuilds on save
-mkdocs build --strict   # the build CI runs
+python3 -m zensical serve                          # http://127.0.0.1:8000, rebuilds on save
+python3 -m zensical build --clean --strict         # the build CI runs
+python3 -I .github/scripts/site-check.py site      # the check CI runs after it
 ```
 
-The build is strict: a broken link, a link to a missing heading, a page left out of the nav, or a link that leaves `docs/` fails it. Link a file outside `docs/` by its GitHub URL. MkDocs logs a link to an excluded file (a capitalised `.md`) only as `INFO`, which `--strict` lets through, so CI also fails the build when the log says `which is excluded from the built site`. A push to `main` that changes the docs publishes the site.
+The site is built with [Zensical](https://zensical.org/) from `docs/` and `zensical.toml`. The strict build fails on a broken link, a link to a missing heading, a link that leaves `docs/`, or a link to an excluded file (a capitalised `.md`); link a file outside `docs/` by its GitHub URL. `site-check.py` fails on what the build lets through: a page left out of the nav, a nav entry for a missing file, a missing image, a link rooted at `/`. A push to `main` that changes the docs publishes the site.
 
 ## Rules for a change
 

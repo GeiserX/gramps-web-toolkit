@@ -1,0 +1,147 @@
+# Generated from mkdocs.yml by mkdocs-to-zensical.py; the why of every block is in
+# new-repo/templates/zensical.toml. Edit this file, not mkdocs.yml, which is gone.
+
+[project]
+site_name = "gramps-web-toolkit"
+site_url = "https://geiserx.github.io/gramps-web-toolkit/"
+site_description = "Command-line tools for running AI research agents against a Gramps Web family tree without letting them write guesses into it."
+repo_url = "https://github.com/GeiserX/gramps-web-toolkit"
+repo_name = "GeiserX/gramps-web-toolkit"
+edit_uri = "edit/main/docs/"
+strict = true
+extra_css = ["stylesheets/theme.css"]
+exclude_docs = """
+[A-Z]*.md
+design/
+research/
+notes/
+requirements-docs.txt
+"""
+nav = [
+  { Home = "index.md" },
+  { "Get started" = [
+      { "Getting started" = "getting-started.md" },
+      { "The research pipeline" = "pipeline.md" },
+      { "The autonomous research loop" = "agent-loop.md" },
+    ] },
+  { "Tree tools" = [
+      { gwt-apply = "apply.md" },
+      { gwt-check = "check.md" },
+      { gwt-import-excel = "import-excel.md" },
+      { gwt-leads = "leads.md" },
+      { "Archives catalogue" = "archives.md" },
+      { gwt-report = "report.md" },
+      { gwt-geocode = "geocode.md" },
+      { gwt-run = "run.md" },
+      { gwt-import-dna = "import-dna.md" },
+      { gwt-lint = "lint.md" },
+      { gwt-import-gedcom = "import-gedcom.md" },
+      { gwt-corpus = "corpus.md" },
+      { "gwt-lint evidence rules" = "lint-evidence.md" },
+    ] },
+  { "Research tools" = [
+      { gwt-queue = "queue.md" },
+      { gwt-ledger = "ledger.md" },
+      { gwt-rank = "rank.md" },
+      { gwt-fetch = "fetch.md" },
+      { gwt-mh = "myheritage.md" },
+      { gwt-read = "read.md" },
+      { "gwt-read sources" = "sources/index.md" },
+      { "gwt-read openarch" = "sources/openarch.md" },
+      { "gwt-read wikitree" = "sources/wikitree.md" },
+      { "gwt-read archiveorg" = "sources/archiveorg.md" },
+      { "gwt-read matchid" = "sources/matchid.md" },
+      { "gwt-read riksarkivet" = "sources/riksarkivet.md" },
+      { "gwt-read tna" = "sources/tna.md" },
+      { "gwt-read census1950" = "sources/census1950.md" },
+      { "gwt-read digitalnz" = "sources/digitalnz.md" },
+      { "gwt-read dokuklik" = "sources/dokuklik.md" },
+      { "gwt-read hiski" = "sources/hiski.md" },
+      { "gwt-read digitalarkivet" = "sources/digitalarkivet.md" },
+      { "gwt-read geneteka" = "sources/geneteka.md" },
+      { "gwt-read freeukgen" = "sources/freeukgen.md" },
+      { "gwt-read bvph" = "sources/bvph.md" },
+      { "gwt-read delpher" = "sources/delpher.md" },
+      { "gwt-read trove" = "sources/trove.md" },
+      { "gwt-read kramerius" = "sources/kramerius.md" },
+      { gwt-rawstore = "rawstore.md" },
+      { ocr-bench = "ocr-bench.md" },
+      { gwt-spanish-poller = "spanish-poller.md" },
+    ] },
+  { "Safety and pacing" = [
+      { "Hard-won lessons" = "hard-won.md" },
+      { gwt-gate = "gate.md" },
+      { gwt-fscache = "fscache.md" },
+    ] },
+  { Development = [
+      { Development = "development.md" },
+      { "Shared rules and locales" = "rules.md" },
+    ] },
+]
+
+[project.validation]
+invalid_links = true
+invalid_link_anchors = true
+
+[project.theme]
+language = "en"
+variant = "modern"
+logo = "images/logo.svg"
+favicon = "images/icon.svg"
+font = false
+features = [
+  "navigation.tabs",
+  "navigation.sections",
+  "navigation.expand",
+  "navigation.top",
+  "content.code.copy",
+  "content.action.edit",
+  "search.highlight",
+  "toc.follow",
+  "navigation.instant",
+  "navigation.instant.progress",
+  "content.action.copy",
+]
+icon.repo = "fontawesome/brands/github"
+
+[[project.theme.palette]]
+scheme = "slate"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+scheme = "default"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to dark mode"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/GeiserX/gramps-web-toolkit"
+
+[project.plugins.search]
+
+[project.plugins.llmstxt.sections]
+Documentation = ["*.md", "*/*.md"]
+
+[project.markdown_extensions]
+admonition = {}
+"pymdownx.details" = {}
+"pymdownx.superfences".custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+"pymdownx.tabbed".alternate_style = true
+"pymdownx.highlight".anchor_linenums = true
+"pymdownx.inlinehilite" = {}
+"pymdownx.snippets".base_path = [".", "docs"]
+"pymdownx.snippets".check_paths = true
+"pymdownx.mark" = {}
+attr_list = {}
+md_in_html = {}
+"pymdownx.emoji".emoji_index = "zensical.extensions.emoji.twemoji"
+"pymdownx.emoji".emoji_generator = "zensical.extensions.emoji.to_svg"
+tables = {}
+toc.permalink = true

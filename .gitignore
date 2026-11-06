@@ -17,5 +17,6 @@ out/
 .beads/interactions.jsonl
 .beads/events.jsonl
 
-# mkdocs build output
+# docs build output, and Zensical's build cache
 site/
+.cache/
