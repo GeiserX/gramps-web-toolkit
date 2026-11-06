@@ -369,12 +369,14 @@ def cmd_genae_search(a, R):
                 seen.add(c['id'])
                 cands.append(c)
     key = gwt_reader.search_key(gwt_genae.block_url('bautismos', query), ['genae', a.given] + list(a.surname))
+    cached = all(p['from_cache'] for p in pages.values())
     env = gwt_reader.envelope(gwt_genae.block_url('bautismos', query), None,
-                              text=' '.join(gwt_genae.text(p['html']) for p in pages.values()), blocks=pages)
+                              text=' '.join(gwt_genae.text(p['html']) for p in pages.values()), blocks=pages,
+                              from_cache=cached)
     base = gwt_reader.write_search(a.out, key, env, cands)
     gwt_reader.print_paths(gwt_genae.SOURCE, base, out)
-    out('results\t%s' % ', '.join('%s %d%s' % (b, pages[b]['rows'], '+ (cut: narrow the search)' if pages[b]['cut'] else '')
-                                   for b in gwt_genae.BLOCKS))
+    out('results\t%s%s' % (', '.join('%s %d%s' % (b, pages[b]['rows'], '+ (cut: narrow the search)' if pages[b]['cut'] else '')
+                                     for b in gwt_genae.BLOCKS), ' (cache)' if cached else ''))
     return EXIT_OK if cands else EXIT_EMPTY
 
 
