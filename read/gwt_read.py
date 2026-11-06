@@ -383,12 +383,14 @@ def _boe_phrase(name):
 
 
 def _boe_read(a, R, phrase, pages, born=None):
-    """The candidates of one phrase over up to `pages` pages of results, and how many rows the site found."""
+    """The candidates of one phrase over up to `pages` pages of results, how many rows the site found, and whether
+    every page read came from the cache rather than the site."""
     h = {'accept': gwt_boe.ACCEPT, 'accept-language': gwt_boe.LANGUAGE}
     url = gwt_boe.search_url(phrase, a.year_from, a.year_to)
-    cands, found, first = [], 0, url
+    cands, found, first, cached_all = [], 0, url, True
     for n in range(pages):
         status, rh, body, cached = R.get(url, h, refresh=a.refresh, page=gwt_boe.is_results)
+        cached_all = cached_all and cached
         page = body.decode('utf-8', 'replace')
         if n == 0:
             found = gwt_boe.total(page)
@@ -396,7 +398,7 @@ def _boe_read(a, R, phrase, pages, born=None):
         url = gwt_boe.next_url(page)
         if not url or len(cands) >= found:
             break
-    return first, cands, found, page
+    return first, cands, found, page, cached_all
 
 
 def _boe_pdf_context(a, R, cands, phrase):
@@ -440,17 +442,17 @@ def cmd_boe_search(a, R):
     if len(phrase.split()) < 2:
         err('give --name with at least a given name and a surname')
         return EXIT_USAGE
-    first, cands, found, page = _boe_read(a, R, phrase, max(1, min(a.pages, 5)), a.born)
+    first, cands, found, page, cached = _boe_read(a, R, phrase, max(1, min(a.pages, 5)), a.born)
     _boe_pdf_context(a, R, cands, phrase)
     _boe_verdicts(cands)
     words = ['boe', phrase, str(a.pages), str(a.pdf_context), str(a.born), str(a.parents)] + sorted(a.near)
     # the readable part is cut at 60 characters, so the options go into the hash too: a long name rerun with other
     # --born, --parents or --near still gets its own file
     key = gwt_reader.search_key('\n'.join([first] + words), words)
-    env = gwt_reader.envelope(first, None, text=gwt_boe.text(page), total=found)
+    env = gwt_reader.envelope(first, None, text=gwt_boe.text(page), total=found, from_cache=cached)
     base = gwt_reader.write_search(a.out, key, env, cands)
     gwt_reader.print_paths(gwt_boe.SOURCE, base, out)
-    out('results\t%d of %d' % (len(cands), found))
+    out('results\t%d of %d%s' % (len(cands), found, ' (cache)' if cached else ''))
     for v in ('consistent', 'open', 'excluded'):
         out('%s\t%d' % (v, sum(1 for c in cands if c['verdict'] == v)))
     return EXIT_OK if cands else EXIT_EMPTY

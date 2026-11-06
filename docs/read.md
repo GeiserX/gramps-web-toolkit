@@ -232,7 +232,7 @@ The phrase is always sent in quotes, so the site reads it as one name; it ignore
 | --- | --- |
 | `--name` | given name and surname(s), sent as one phrase; at least two words |
 | `--from`, `--to` | first and last publication, a year or `yyyy-mm-dd`; text search covers 1836 to 1959 |
-| `--pages N` | read up to N pages of 50 results (1 to 5, default 1); `results` prints how many rows were read and how many the site found |
+| `--pages N` | read up to N pages of 50 results (1 to 5, default 1); `results` prints how many rows were read and how many the site found, and ends in ` (cache)` when every page came from the cache (the envelope's `from_cache`) |
 | `--born YEAR` | the person's birth year: a row published before that year or more than 100 years after it is marked `IMPLAUSIBLE`, never hidden. A child is not ruled out: pension lists name orphans |
 | `--parents "Father y Mother"` | the parents' first names the tree holds; with `--pdf-context`, an act that writes the parents after the name (the draft lists do: "Ana Zorvalo, de Juan y Antonia") is marked as the tree's parents or as other ones. Each parent is compared by first given name, so "José María" matches "José" |
 | `--pdf-context N` | read the PDF of the first N rows `--born` has not ruled out (0 to 10, default 0), one request each, and add the words around the name to the note; needs `pdftotext` (poppler-utils), and without it nothing is fetched |
