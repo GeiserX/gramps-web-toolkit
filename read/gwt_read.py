@@ -35,7 +35,9 @@ Exit codes: 0 ok, 1 an error answer (nothing saved; insee: a file that cannot be
 (HTTP 429: every lane on the account pauses; HTTP 403: the account's gate is blocked for 24 h; do other
 work; also a canary that read less than its minimum: the run is void), 4 signed out or the token
 expired (get a fresh token; never retry in a loop), 5 restricted (a FamilySearch record refused to this access
-level, not a block; the gate is not told), 6 the account's gate is paused (nothing was requested), 64 usage (no token).
+level, not a block; the gate is not told), 6 the account's gate is paused (nothing was requested), 7 unreadable
+(pares: an empty page the source's control answered: this query's own problem, not a block; nothing saved, the
+gate is not told), 64 usage (no token).
 """
 import argparse, contextlib, io, json, os, re, shutil, sys, tempfile, urllib.error, urllib.parse, urllib.request
 
@@ -326,6 +328,23 @@ def cmd_record(a, R):
         return gwt_reader.EXIT_RESTRICTED
 
 
+def _pares_control_probe(R, h):
+    """The on_empty check for a pares search: the source's declared canary, read live through the gate at
+    its normal pace. True only when the canary answers with at least its minimum: the site is fine, so the empty
+    page is that query's own problem. A canary that reads short keeps the wall; one that cannot answer raises its
+    own Stop from inside the check, with its own gate signal."""
+    ctl = next(s['controls'][0] for s in LEGACY if s['id'] == 'pares')
+    args = argparse.ArgumentParser()
+    _pares_search_args(args)
+    ns = args.parse_args(list(ctl['argv']))
+    url = gwt_pares.search_url(ns.given, ns.surname, ns.words)
+
+    def on_empty():
+        _st, _rh, body, _cached = R.get(url, h, refresh=True, page=gwt_pares.is_results)
+        return len(gwt_pares.search_candidates(body.decode('utf-8', 'replace'))) >= ctl['min_count']
+    return on_empty
+
+
 def cmd_pares_search(a, R):
     if not (a.given or a.surname or a.words):
         err('give --given, --surname, --words or any of them')
@@ -337,7 +356,14 @@ def cmd_pares_search(a, R):
     if a.refresh or R.cache.lookup('GET', url, h) is None:
         R.get(gwt_pares.FORM_URL, h, refresh=True, page=gwt_pares.is_form)
     key = gwt_reader.search_key(url, ['pares', a.given] + list(a.surname) + [a.words])
-    return _save_page(a, R, url, h, gwt_pares.is_results, key, gwt_pares.search_candidates, gwt_pares.total)
+    try:
+        return _save_page(a, R, url, h, gwt_pares.is_results, key, gwt_pares.search_candidates, gwt_pares.total,
+                          on_empty=_pares_control_probe(R, h))
+    except gwt_reader.Unreadable as e:
+        err(str(e))
+        out("results\tunreadable: the page came back empty, but the source's control answered; this query, "
+            "not the site (nothing saved, no gate hit)")
+        return gwt_reader.EXIT_UNREADABLE
 
 
 def cmd_pares_record(a, R):
@@ -495,8 +521,8 @@ def cmd_insee_search(a, R=None):
     return EXIT_OK if cands else EXIT_EMPTY
 
 
-def _save_page(a, R, url, h, page_ok, key, to_cands, total_of):
-    status, rh, body, cached = R.get(url, h, refresh=a.refresh, page=page_ok)
+def _save_page(a, R, url, h, page_ok, key, to_cands, total_of, on_empty=None):
+    status, rh, body, cached = R.get(url, h, refresh=a.refresh, page=page_ok, on_empty=on_empty)
     page = body.decode('utf-8', 'replace')
     cands = to_cands(page)
     env = gwt_reader.envelope(url, (rh or {}).get(FINAL_URL_HEADER), text=gwt_pares.text(page), html=page,
