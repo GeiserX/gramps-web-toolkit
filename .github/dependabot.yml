@@ -37,3 +37,10 @@ updates:
       security:
         applies-to: security-updates
         patterns: ["*"]
+  - package-ecosystem: pip
+    directory: /docs
+    schedule:
+      interval: monthly
+    labels: ["documentation", "automated"]
+    commit-message:
+      prefix: "build(docs)"
