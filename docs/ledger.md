@@ -48,7 +48,7 @@ gwt-ledger due            # rows whose next_date is today or earlier; --on YYYY-
 
 A ledger written with the older 8 or 9 columns needs no upgrade: its rows read with an empty `next_date` and `control`, and new rows are appended with all ten.
 
-`add` records the lane from `--agent` (default `$GWT_AGENT`) and the date from `--date` (default today, `YYYY-MM-DD`). `check` accepts `--agent`, `--label` and `--date` too, so a lane can pass both commands the same arguments; on `check`, `--date` is the day the check judges by (whether a `next_date` has arrived). `check --person P --source S` without `--query` asks whether that source was searched for that person at all.
+`add` records the lane from `--agent` (default `$GWT_AGENT`) and the date from `--date` (default today, `YYYY-MM-DD`). `check` accepts `--agent`, `--label` and `--date` too, so a lane can pass both commands the same arguments; on `check`, `--date` is the day the check judges by (whether a `next_date` has arrived). `check --person P --source S` without `--query` asks whether that source was searched for that person at all. `add` skips a row the ledger already holds, in any lane file (same person, source, normalized query, date and result), with a note on stderr naming it and exit 0, so a logger run twice logs each search once; a voided row does not count, so a search run again after a void is logged.
 
 In a script: `gwt-ledger check ... >/dev/null && echo "already done, skip"`. Exit 0 already means a search that ran and is not due again, so a `blocked` or `denied` row, or one whose `next_date` has arrived, never skips the search. Add `--any-result` only when you want to know whether anything at all was logged.
 

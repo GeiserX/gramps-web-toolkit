@@ -303,6 +303,11 @@ def ledger_paths(ledger, ledger_dir=''):
     return [ledger] + (sorted(glob.glob(os.path.join(ledger_dir, '*.tsv'))) if ledger_dir else [])
 
 
+def same_search(r, reg):
+    """What makes two rows the same logged search: person, source, query, day and result."""
+    return (key(r['person_key']), reg.canon(r['source']), normalize(r['query']), r['date'], r['result'])
+
+
 def add_rows(path, rows, columns=COLUMNS):
     """Append rows under an exclusive lock, writing the header if the file is new or empty."""
     lines = ''.join('\t'.join(clean(row.get(c)) for c in columns) + '\n' for row in rows)
@@ -637,7 +642,7 @@ def import_tsv(args, reg, err):
     checked, skipped = {}, 0
 
     def same(r):  # a row already in the ledger: importing the same file twice adds nothing
-        return (key(r['person_key']), reg.canon(r['source']), normalize(r['query']), r['date'], r['result'])
+        return same_search(r, reg)
 
     try:
         seen = {same(r) for r in live([r for path in ledger_paths(args.ledger, args.ledger_dir)
@@ -855,10 +860,21 @@ def main(argv=None):
         if result != args.result:
             sys.stderr.write('gwt-ledger: stored as unproven: a none needs --control-ok, the proof the source could '
                              'answer; the search counts as not done\n')
-        add_row(path, {'person_key': key(args.person), 'person_label': args.label,
-                       'source': source, 'query': normalize(args.query), 'date': args.date,
-                       'result': result, 'evidence': args.evidence, 'agent': args.agent,
-                       'next_date': args.next_date, 'control': clean(args.control_ok)})
+        row = {'person_key': key(args.person), 'person_label': args.label,
+               'source': source, 'query': normalize(args.query), 'date': args.date,
+               'result': result, 'evidence': args.evidence, 'agent': args.agent,
+               'next_date': args.next_date, 'control': clean(args.control_ok)}
+        try:  # a logger run twice must not log every search twice; a voided row is no reason to skip
+            rows = live([r for lp in ledger_paths(args.ledger, args.ledger_dir) for r in read_rows(lp)])
+        except (OSError, UnicodeDecodeError) as exc:
+            return err('cannot read the ledger: %s' % exc)
+        mine = same_search(row, reg)
+        twins = [r['id'] for r in rows if key(r['person_key']) == mine[0] and same_search(r, reg) == mine]
+        if twins:
+            sys.stderr.write('gwt-ledger: not added: the same search (person, source, query, date and result) is '
+                             'already logged as %s\n' % ' '.join(twins))
+            return 0
+        add_row(path, row)
         return 0
     if args.cmd == 'import-tsv':
         return import_tsv(args, reg, err)

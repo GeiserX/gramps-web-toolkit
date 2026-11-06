@@ -47,3 +47,4 @@ gwt_ledger.py | label = args.label or targets[0]['person_label'] | label = args.
 gwt_ledger.py | VOIDS.match(r['evidence']) if r['result'] == VOID else None | VOIDS.match(r['evidence']) | only a void row retracts: a hit whose evidence reads like a void retracts nothing
 gwt_ledger.py | ' '.join(r['id'] for r in targets), args.reason | ' '.join(r['id'] for r in targets[:1]), args.reason | a void retracts every lane's row of the search, not just the first
 gwt_ledger.py | for name in ('query', 'person', 'reason'): | for name in ('query', 'person'): | a void reason with nothing in it is refused
+gwt_ledger.py | if twins: | if False: | add skips a row the ledger already holds (same person, source, query, date and result)

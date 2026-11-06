@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Fixed
+
+- `gwt-ledger add` no longer logs the same search twice. A row the ledger already holds, in any lane file (same person, source, query, date and result), is skipped with a note on stderr naming it, and `add` exits 0. Before, a lane that ran its logger a second time doubled every row, as `import-tsv` already refused to do.
+
 ## [1.3.1] - 2026-11-06
 
 ### Change lists

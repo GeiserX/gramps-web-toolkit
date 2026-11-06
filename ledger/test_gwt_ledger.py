@@ -157,6 +157,33 @@ class LedgerTest(unittest.TestCase):
         self.assertEqual(run('--ledger', self.path, 'check', '--person', 'Ana Peiro Toledo', '--source', 'FamilySearch',
                              '--query', 'Ana Peiro boda 1875')[0], 1)  # without the dir, the lane files are not read
 
+    def test_a_logger_run_twice_logs_each_search_once(self):
+        # a lane that reruns its logger must not log every search a second time, in its own file or another's
+        lanes = os.path.join(self.dir.name, 'lanes')
+
+        def add(agent='lane-a', result='none', date='2026-03-04'):
+            err = io.StringIO()
+            with redirect_stderr(err):
+                code, _ = run('--ledger', self.path, '--ledger-dir', lanes, 'add', '--person', 'Ana Peiro Toledo',
+                              '--source', 'FamilySearch', '--query', 'Ana Peiro bautismo 1850', '--result', result,
+                              '--control-ok', 'run-1', '--agent', agent, '--date', date, '--evidence', 'runs/1.log')
+            return code, err.getvalue()
+
+        def rows():
+            return [r for f in sorted(os.listdir(lanes)) for r in L.read_rows(os.path.join(lanes, f))]
+
+        self.assertEqual(add(), (0, ''))
+        code, err = add()
+        self.assertEqual(code, 0)  # a script keeps going
+        self.assertIn('not added', err)
+        self.assertIn(L.with_ids(rows())[0]['id'], err)  # it names the row already there
+        self.assertEqual(add(agent='lane-b')[0], 0)
+        self.assertEqual(len(rows()), 1)  # another lane logging the same search adds nothing either
+        add(result='hit')
+        add(date='2026-03-05')
+        self.assertEqual([(r['result'], r['date']) for r in rows()],
+                         [('none', '2026-03-04'), ('hit', '2026-03-04'), ('none', '2026-03-05')])
+
     def test_ledger_dir_add_needs_an_agent(self):
         err = io.StringIO()
         with redirect_stderr(err), self.assertRaises(SystemExit):
