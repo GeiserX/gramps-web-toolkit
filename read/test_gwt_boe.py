@@ -91,6 +91,35 @@ class Search(Boe):
         self.assertEqual(code, 0, text)
         self.assertEqual(net2.requests, [])
 
+    def test_a_repeat_says_it_came_from_the_cache(self):
+        # without the mark a cached zero reads like a live one, and a lane logs it as a search it never ran
+        gate = FakeGate()
+        code, lines, text = self.search(FakeNet(gate, (200, RESULTS)), gate)
+        self.assertEqual(lines['results'], '2 of 2')
+        self.assertFalse(json.load(open(lines['evidence'], encoding='utf-8'))['from_cache'])
+        gate2 = FakeGate()
+        code, lines, text = self.search(FakeNet(gate2), gate2)
+        self.assertEqual(code, 0, text)
+        self.assertEqual(lines['results'], '2 of 2 (cache)')
+        self.assertTrue(json.load(open(lines['evidence'], encoding='utf-8'))['from_cache'])
+
+    def test_a_cached_zero_says_so_and_refresh_asks_the_site(self):
+        gate = FakeGate()
+        self.assertEqual(self.search(FakeNet(gate, (200, EMPTY)), gate)[0], 2)
+        gate2 = FakeGate()
+        code, lines, text = self.search(FakeNet(gate2), gate2)
+        self.assertEqual(code, 2, text)
+        self.assertEqual(lines['results'], '0 of 0 (cache)')
+        gate3 = FakeGate()
+        net3 = FakeNet(gate3, (200, EMPTY))
+        o, e = io.StringIO(), io.StringIO()
+        argv = ['boe', '--cache-dir', self.cache, '--lane', 't', '--refresh', 'search', '--name', 'Ana Zorvalo Quemada',
+                '--out', self.out]
+        with contextlib.redirect_stdout(o), contextlib.redirect_stderr(e):
+            code = gwt_read.main(argv, urlopen=net3, gate=gate3)
+        self.assertEqual((code, len(net3.requests)), (2, 1))
+        self.assertIn('results\t0 of 0\n', o.getvalue())
+
     def test_another_birth_year_parents_or_near_word_is_another_file(self):
         gate = FakeGate()
         net = FakeNet(gate, (200, RESULTS))
