@@ -30,6 +30,52 @@ class Genae(Base):
         return self.run_genae(['--given', 'Ana', '--surname', 'Zorvalo'] + list(extra), net, gate)
 
 
+LOCALITIES = (b'<html><body><form id="form-busqueda" action="buscar">'
+              b'<select name="l">'
+              b'<option value="" selected>Todas</option>'
+              b'<option value="701" data-provincia="mu" data-desde="1700" data-hasta="1900">Villazul</option>'
+              b'<option value="702" data-provincia="mu">Pe\xc3\xb1afria (Norte)</option>'
+              b'<option value="703" data-provincia="mu">Pe\xc3\xb1afria (Sur)</option>'
+              b'<option value="801" data-provincia="ab">Villarreal de Arriba</option>'
+              b'</select></form></body></html>')
+
+
+class Localities(unittest.TestCase):
+    MAP = gwt_genae.locality_map(LOCALITIES.decode())
+
+    def test_map_parses_listed_options_by_province(self):
+        self.assertEqual(self.MAP['mu'], [('701', 'Villazul'), ('702', 'Peñafria (Norte)'), ('703', 'Peñafria (Sur)')])
+        self.assertEqual(self.MAP['ab'], [('801', 'Villarreal de Arriba')])
+        self.assertTrue(gwt_genae.is_locality_list(LOCALITIES.decode()))
+        self.assertFalse(gwt_genae.is_locality_list(PAGE['bautismos'].decode()))
+
+    def test_a_numeric_id_passes_through(self):
+        self.assertEqual(gwt_genae.resolve_locality('701', 'mu', self.MAP), '701')
+        self.assertEqual(gwt_genae.resolve_locality('', 'mu', self.MAP), '')
+
+    def test_a_name_resolves_ignoring_case_accents_and_spaces(self):
+        self.assertEqual(gwt_genae.resolve_locality('villazul', 'mu', self.MAP), '701')
+        self.assertEqual(gwt_genae.resolve_locality('  Peñafría  (norte) ', 'mu', self.MAP), '702')
+
+    def test_a_name_of_another_province_is_unknown(self):
+        with self.assertRaises(gwt_genae.LocalityError):
+            gwt_genae.resolve_locality('Villarreal de Arriba', 'mu', self.MAP)
+
+    def test_an_ambiguous_name_stops_and_lists_the_options(self):
+        with self.assertRaises(gwt_genae.LocalityError) as ctx:
+            gwt_genae.resolve_locality('Peñafria', 'mu', self.MAP)
+        self.assertIn('Peñafria (Norte)', str(ctx.exception))
+        self.assertIn('Peñafria (Sur)', str(ctx.exception))
+
+    def test_an_unknown_name_stops(self):
+        with self.assertRaises(gwt_genae.LocalityError):
+            gwt_genae.resolve_locality('Noloconozco', 'mu', self.MAP)
+
+    def test_a_blank_value_stops(self):
+        with self.assertRaises(gwt_genae.LocalityError):
+            gwt_genae.resolve_locality('   ', 'mu', self.MAP)
+
+
 class Parse(unittest.TestCase):
     def test_params_use_the_sites_own_names_and_skip_empty_ones(self):
         self.assertEqual(gwt_genae.params('Ana', 'Zorvalo', '', 'mu', '', 1850, 1900),
@@ -94,6 +140,48 @@ class Parse(unittest.TestCase):
 
 
 class Search(Genae):
+    def test_a_named_locality_is_resolved_before_the_search(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, LOCALITIES), *ANSWERS)
+        code, lines, text = self.search(net, gate, ('--locality', 'Villazul'))
+        self.assertEqual(code, 0, text)
+        self.assertEqual(len(net.requests), 5)   # the form, then the four blocks
+        for req in net.requests[1:]:
+            self.assertIn('l=701', req.full_url)
+
+    def test_a_blank_locality_stops_before_any_request(self):
+        gate = FakeGate()
+        net = FakeNet(gate)
+        code, _, text = self.search(net, gate, ('--locality', '   '))
+        self.assertEqual(code, 64)
+        self.assertIn('blank', text)
+        self.assertEqual(net.requests, [])   # not even the form was asked for
+
+    def test_an_empty_locality_stops_before_any_request(self):
+        gate = FakeGate()
+        net = FakeNet(gate)
+        code, _, text = self.search(net, gate, ('--locality', ''))
+        self.assertEqual(code, 64)
+        self.assertIn('blank', text)
+        self.assertEqual(net.requests, [])
+
+    def test_an_omitted_locality_searches_regionally_on_purpose(self):
+        gate = FakeGate()
+        net = FakeNet(gate, *ANSWERS)
+        code, lines, text = self.search(net, gate)
+        self.assertEqual(code, 0, text)
+        self.assertEqual(len(net.requests), 4)
+        for req in net.requests:
+            self.assertNotIn('l=', req.full_url)
+
+    def test_an_unknown_locality_stops_before_any_search_request(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, LOCALITIES))
+        code, _, text = self.search(net, gate, ('--locality', 'Noloconozco'))
+        self.assertEqual(code, 64)
+        self.assertIn('not a listed locality', text)
+        self.assertEqual(len(net.requests), 1)   # only the form; no block was asked for
+
     def test_search_reads_the_four_blocks_and_writes_candidates_gwt_rank_ranks(self):
         gate = FakeGate()
         net = FakeNet(gate, *ANSWERS)

@@ -1,0 +1,2 @@
+gwt_read.py |     if a.locality and not a.locality.isdigit(): |     if False: | a genae locality name is resolved to its id before searching: an unknown name stops the search, never a silent whole-region search
+gwt_read.py |     if a.locality is not None and not a.locality.strip(): |     if False: | an explicitly blank --locality stops with exit 64 before any request; only an omitted flag searches regionally

@@ -14,7 +14,7 @@ a spelling variant for an exact hit. Only the first page of each block is read (
 it is flagged as cut, and the lane narrows the search instead of paging. A block the site answers with "no indexed
 records for these years in this place" is a real answer with no rows. Standard library only.
 """
-import html, re, urllib.parse
+import html, re, unicodedata, urllib.parse
 
 HOST = 'https://genae.org'
 SOURCE = 'genae'
@@ -26,6 +26,7 @@ ACCEPT = 'text/html'
 LANGUAGE = 'es-ES,es;q=0.9'
 BLOCKS = ('bautismos', 'casados', 'casadas', 'defunciones')
 PROVINCES = ('mu', 'ab', 'al', 'am', 'gr')
+LOCALITIES_URL = HOST + '/buscar'   # its search form lists every locality as <option value=id>
 
 _ROW = re.compile(r'<tr class="([^"]*)" data-registro-tipo="([^"]*)" data-registro-id="(\d+)" data-registro-ano="(\d*)"[^>]*>(.*?)</tr>', re.S)
 _CELL = re.compile(r'<td data-col="([^"]+)"[^>]*>(.*?)</td>', re.S)
@@ -38,8 +39,62 @@ def text(fragment):
     return re.sub(r'\s+', ' ', t).strip()
 
 
+_OPTION = re.compile(r'<option value="(\d+)" data-provincia="(\w+)"[^>]*>(.*?)</option>', re.S)
+
+
+class LocalityError(ValueError):
+    """A --locality that is not the site's numeric id and no listed name resolves to."""
+
+
+def fold(name):
+    """Name folding for matching: no accents, lower, single spaces."""
+    return re.sub(r'\s+', ' ', ''.join(c for c in unicodedata.normalize('NFKD', name or '')
+                                        if not unicodedata.combining(c)).casefold()).strip()
+
+
+def is_locality_list(page):
+    """True for the site's search form, which lists every locality as <option value=id data-provincia=..>."""
+    return bool(_OPTION.search(page or ''))
+
+
+def locality_map(page):
+    """{province: [(id, label)]} from the search form's locality <select>."""
+    out = {}
+    for lid, prov, label in _OPTION.findall(page or ''):
+        out.setdefault(prov, []).append((lid, text(label)))
+    return out
+
+
+def resolve_locality(value, province, localities):
+    """The site's numeric locality id for one --locality word. A digit string passes through; a name must match
+    one listed label of the province (folded, exactly or as a single prefix); anything else raises LocalityError.
+    The site never errors on an unknown l, it silently returns the whole region, so an unknown name must stop
+    the search here, not there."""
+    raw = value or ''
+    value = raw.strip()
+    if raw and not value:
+        raise LocalityError('blank locality: give the site\'s numeric id or a listed name')
+    if not value or value.isdigit():
+        return value
+    listed = localities.get(province, [])
+    folded = fold(value)
+    exact = [(lid, label) for lid, label in listed if fold(label) == folded]
+    if len(exact) == 1:
+        return exact[0][0]
+    prefix = [] if exact else [(lid, label) for lid, label in listed if fold(label).startswith(folded)]
+    if len(prefix) == 1:
+        return prefix[0][0]
+    found = exact or prefix
+    if found:
+        raise LocalityError('%r is ambiguous in %s: %s'
+                            % (value, province, ', '.join(sorted({label for _, label in found}))))
+    raise LocalityError('%r is not a listed locality of %s' % (value, province))
+
+
 def params(given='', surname1='', surname2='', province='mu', locality='', year_from=1503, year_to=1986):
-    """The site's own query: n, a1, a2 (each 'starts with'), r province, l locality, d and h year range."""
+    """The site's own query: n, a1, a2 (each 'starts with'), r province, l locality, d and h year range.
+    `locality` is the site's numeric id; the site silently ignores an l it does not know, so callers resolve
+    names with resolve_locality first (cmd_genae_search does)."""
     q = [('n', given), ('a1', surname1), ('a2', surname2), ('r', province)]
     if locality:
         q.append(('l', locality))
