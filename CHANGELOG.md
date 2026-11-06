@@ -6,6 +6,12 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-06
+
+### Change lists
+
+None.
+
 ### Fixed
 
 - `gwt-read boe search` now marks a cached answer like every other reader: the `results` line ends in ` (cache)` and the evidence has `from_cache: true` when every page came from the cache. Before, a cached zero printed `0 of 0` exactly like a live one, so a lane could log it as a search it never sent (#239).
