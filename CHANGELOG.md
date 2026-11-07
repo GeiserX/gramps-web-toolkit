@@ -8,8 +8,18 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Fixed
 
-- `gwt-read genae search` now marks a cached answer like every other reader: the `results` line ends in ` (cache)` and the evidence has `from_cache: true` when all four blocks came from the cache. Before, a cached zero printed exactly like a live one, so a lane could log it as a search it never sent (#241).
 - `gwt-read genae search --locality` now checks the value against the site's search form for the province: a listed name becomes its id, and an id is confirmed to belong to that province. Before, a name or an unknown id went out as `l=` and the site silently ignored it, so the search looked filtered but returned the whole province. An unknown, ambiguous or blank value now exits 64 (`--locality ''` used to search the whole province), and the run prints which locality it searched (#246).
+
+## [1.3.2] - 2026-11-07
+
+### Change lists
+
+None.
+
+### Fixed
+
+- `gwt-read genae search` now marks a cached answer like every other reader: the `results` line ends in ` (cache)` and the evidence has `from_cache: true` when all four blocks came from the cache. Before, a cached zero printed exactly like a live one, so a lane could log it as a search it never sent (#241).
+- `gwt-ledger add` no longer logs the same search twice. A row the ledger already holds, in any lane file (same person, source, query, date and result), is skipped with a note on stderr naming it, and `add` exits 0. Before, a lane that ran its logger a second time doubled every row, as `import-tsv` already refused to do.
 
 ## [1.3.1] - 2026-11-06
 

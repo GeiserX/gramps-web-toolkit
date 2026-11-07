@@ -303,13 +303,22 @@ def ledger_paths(ledger, ledger_dir=''):
     return [ledger] + (sorted(glob.glob(os.path.join(ledger_dir, '*.tsv'))) if ledger_dir else [])
 
 
-def add_rows(path, rows, columns=COLUMNS):
-    """Append rows under an exclusive lock, writing the header if the file is new or empty."""
+def same_search(r, reg):
+    """What makes two rows the same logged search: person, source, query, day and result."""
+    return (key(r['person_key']), reg.canon(r['source']), normalize(r['query']), r['date'], r['result'])
+
+
+def add_rows(path, rows, columns=COLUMNS, unless=None):
+    """Append rows under an exclusive lock, writing the header if the file is new or empty. With unless, call it
+    under the lock first and write nothing when it returns something true, which is then returned."""
     lines = ''.join('\t'.join(clean(row.get(c)) for c in columns) + '\n' for row in rows)
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(path, 'a', encoding='utf-8') as f:
         fcntl.flock(f, fcntl.LOCK_EX)
         try:
+            found = unless() if unless else None
+            if found:
+                return found
             f.seek(0, os.SEEK_END)
             if f.tell() == 0:
                 f.write('\t'.join(columns) + '\n')
@@ -320,9 +329,9 @@ def add_rows(path, rows, columns=COLUMNS):
             fcntl.flock(f, fcntl.LOCK_UN)
 
 
-def add_row(path, row):
+def add_row(path, row, unless=None):
     """Append one row under an exclusive lock, writing the header if the file is new or empty."""
-    add_rows(path, [row])
+    return add_rows(path, [row], unless=unless)
 
 
 def find(rows, person=None, source=None, query=None, threshold=DEFAULT_THRESHOLD, exact=False, registry=None,
@@ -637,7 +646,7 @@ def import_tsv(args, reg, err):
     checked, skipped = {}, 0
 
     def same(r):  # a row already in the ledger: importing the same file twice adds nothing
-        return (key(r['person_key']), reg.canon(r['source']), normalize(r['query']), r['date'], r['result'])
+        return same_search(r, reg)
 
     try:
         seen = {same(r) for r in live([r for path in ledger_paths(args.ledger, args.ledger_dir)
@@ -855,10 +864,23 @@ def main(argv=None):
         if result != args.result:
             sys.stderr.write('gwt-ledger: stored as unproven: a none needs --control-ok, the proof the source could '
                              'answer; the search counts as not done\n')
-        add_row(path, {'person_key': key(args.person), 'person_label': args.label,
-                       'source': source, 'query': normalize(args.query), 'date': args.date,
-                       'result': result, 'evidence': args.evidence, 'agent': args.agent,
-                       'next_date': args.next_date, 'control': clean(args.control_ok)})
+        row = {'person_key': key(args.person), 'person_label': args.label,
+               'source': source, 'query': normalize(args.query), 'date': args.date,
+               'result': result, 'evidence': args.evidence, 'agent': args.agent,
+               'next_date': args.next_date, 'control': clean(args.control_ok)}
+        mine = same_search(row, reg)
+
+        def twins():  # a logger run twice must not log every search twice; a voided row is no reason to skip
+            rows = live([r for lp in ledger_paths(args.ledger, args.ledger_dir) for r in read_rows(lp)])
+            return [r['id'] for r in rows if key(r['person_key']) == mine[0] and same_search(r, reg) == mine]
+
+        try:  # read under the lane file's lock, so two runs of one logger cannot both find no row and both write
+            found = add_row(path, row, unless=twins)
+        except (OSError, UnicodeDecodeError) as exc:
+            return err('cannot read the ledger: %s' % exc)
+        if found:
+            sys.stderr.write('gwt-ledger: not added: the same search (person, source, query, date and result) is '
+                             'already logged as %s\n' % ' '.join(found))
         return 0
     if args.cmd == 'import-tsv':
         return import_tsv(args, reg, err)
