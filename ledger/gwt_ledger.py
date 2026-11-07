@@ -28,6 +28,9 @@ A `none` needs --control-ok (proof the source could have answered), or it is sto
 
 The ledger path comes from --ledger, else $GWT_LEDGER, else ./buscado.tsv. With --ledger-dir (or $GWT_LEDGER_DIR),
 `add` writes to <dir>/<agent>.tsv, one file per lane, and every reader reads the ledger plus all <dir>/*.tsv.
+A write never creates ./buscado.tsv on its own: with neither --ledger nor $GWT_LEDGER, and no --ledger-dir, add and
+import-tsv stop (exit 2) when that file does not exist yet, so a logger run from the wrong folder cannot log into a
+stray file. An existing ./buscado.tsv is still written; with --ledger-dir they write the lane file as before.
 Standard library only (`coverage` also uses the toolkit's gwt_core).
 """
 import argparse, collections, datetime, decimal, difflib, fcntl, glob, gzip, hashlib, json, os, re, sys, unicodedata
@@ -727,7 +730,7 @@ def main(argv=None):
         sys.stderr.write('gwt-ledger: %s\n' % exc)
         return 2
     p = argparse.ArgumentParser(prog='gwt-ledger', description=__doc__.split('\n')[0])
-    p.add_argument('--ledger', default=os.environ.get('GWT_LEDGER', 'buscado.tsv'))
+    p.add_argument('--ledger', default=os.environ.get('GWT_LEDGER') or None)
     p.add_argument('--ledger-dir', default=os.environ.get('GWT_LEDGER_DIR', ''),
                    help='one file per lane: add writes <dir>/<agent>.tsv, readers read the ledger and every file here')
     p.add_argument('--registry', default=os.environ.get('GWT_LEDGER_SOURCES', ''),
@@ -819,6 +822,17 @@ def main(argv=None):
         sys.stderr.write('gwt-ledger: %s\n' % msg)
         return 2
 
+    # Nobody named a ledger: reads fall back to ./buscado.tsv, but a write must not create it. A logger run
+    # without its variables put a lane's rows in a stray ./buscado.tsv, and the rerun was refused as logged.
+    unnamed = args.ledger is None
+    if unnamed:
+        args.ledger = 'buscado.tsv'
+
+    def stray(path):
+        if unnamed and path == args.ledger and not os.path.exists(path):
+            return err('no ledger named and %s does not exist: pass --ledger or set $GWT_LEDGER (and --ledger-dir '
+                       'or $GWT_LEDGER_DIR for lane files); nothing written' % os.path.abspath(path))
+
     # A query or person that normalizes to nothing (only punctuation, say) would match every row.
     for name in ('query', 'person', 'reason'):
         value = getattr(args, name, None)
@@ -855,6 +869,8 @@ def main(argv=None):
 
     if args.cmd == 'add':
         path = lane_path()
+        if stray(path):
+            return 2
         source = source_id(args.source, note=True)
         if args.control_ok:
             problem = control_problem(args.control_ok)
@@ -883,6 +899,8 @@ def main(argv=None):
                              'already logged as %s\n' % ' '.join(found))
         return 0
     if args.cmd == 'import-tsv':
+        if not args.ledger_dir and stray(args.ledger):
+            return 2
         return import_tsv(args, reg, err)
     if args.cmd in ('request', 'costs'):
         try:
