@@ -71,3 +71,9 @@ gwt_read.py | return v if isinstance(v, str) and v else None | return v | place_
 gwt_reader.py | if not (isinstance(c, dict) and isinstance(c.get('argv'), list) and c['argv'] | if not (isinstance(c, dict) and isinstance(c.get('argv'), list) | a canary must name at least one search option: an empty search is not a canary
 gwt_read.py | if not isinstance(t, str) or not t: | if not t: | place_orig keeps only text, never an object a field holds
 gwt_read.py | R.cache.store = store | pass | a void forgets only the answers its search cached, never the canaries' own
+gwt_reader.py | if verdict == 'empty' and on_empty is not None and on_empty(): | if False: | an empty pares page its own control answers is unreadable (exit 7, no gate hit), never a wall
+gwt_reader.py | self.gate.denied(self.lane, 'UNREADABLE HTTP %s %s' % (state['status'], url[:120])) | pass | an unreadable pares page leaves a line in the gate log, so a run of them can be seen
+gwt_read.py | return len(gwt_pares.search_candidates(body.decode('utf-8', 'replace'))) >= ctl['min_count'] | return True | a control that reads fewer rows than its minimum cannot clear an empty page: the wall stands
+gwt_read.py | return len(gwt_pares.search_candidates(body.decode('utf-8', 'replace'))) >= ctl['min_count'] | return len(gwt_pares.search_candidates(body.decode('utf-8', 'replace'))) > ctl['min_count'] | a control that reads exactly its minimum clears an empty page
+gwt_read.py | return False    # no proof the site is fine: the empty page keeps its wall | return True | a control that cannot be reached (a 5xx, a dropped connection) keeps the empty page's wall
+gwt_read.py | if url == probe: | if False: | an empty canary page is a wall: a canary never proves itself

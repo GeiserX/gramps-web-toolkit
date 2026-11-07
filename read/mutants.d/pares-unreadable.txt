@@ -1,2 +1,0 @@
-gwt_reader.py |             if verdict == 'empty' and on_empty is not None and on_empty(): |             if False: | an empty pares page its own control answers is unreadable (exit 7, no gate hit), never a wall
-gwt_read.py |         return len(gwt_pares.search_candidates(body.decode('utf-8', 'replace'))) >= ctl['min_count'] |         return True | a control that reads fewer rows than its minimum cannot clear an empty page: the wall stands

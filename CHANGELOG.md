@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Fixed
+
+- `gwt-read pares search` no longer pauses every lane when one query gets an empty or unreadable page. It reads the source's canary once, live, through the gate; when the canary answers with at least its minimum, the search exits 7 (`unreadable`, new), saves and caches nothing for that query, and the gate only logs it. A canary that is empty, short, walled, unreachable or the search itself keeps the wall (exit 3). Record an exit 7 as `unproven`, never `none` (#237).
+
 ## [1.3.1] - 2026-11-06
 
 ### Change lists

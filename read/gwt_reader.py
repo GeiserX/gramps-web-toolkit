@@ -304,9 +304,8 @@ class Reader:
         403 before the gate blocks: 'restricted' only logs it as a denial (gate.denied: no pause, no block) and raises
         Restricted; anything else is a block, as without it. `data` (bytes) makes it a POST, for a site whose search
         is a form or a JSON body; the cache keeps a POST only when it was built with methods=('GET', 'POST').
-        `on_empty()` is checked before an empty response hits the gate. A successful live source control
-        returns true and raises Unreadable with no gate hit; false or absent preserves the existing wall.
-        A failed control raises its own Stop and records its own gate signal."""
+        `on_empty()` is asked about an empty answer before the gate hears it: true (a live source control answered)
+        only logs it to the gate (gate.denied: no pause) and raises Unreadable; false or absent keeps the wall."""
         state = {}
 
         def gated(method, u, h, data):
@@ -326,6 +325,7 @@ class Reader:
                              state['status'], state['body'])
         if verdict != 'ok':
             if verdict == 'empty' and on_empty is not None and on_empty():
+                self.gate.denied(self.lane, 'UNREADABLE HTTP %s %s' % (state['status'], url[:120]))
                 raise Unreadable(f"empty or unreadable page, but the source's control answered: this query's own "
                                  f"problem, not a block; nothing saved, no gate hit (HTTP {state['status']} "
                                  f"at {url[:120]})")
