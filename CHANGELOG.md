@@ -6,6 +6,12 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-11-07
+
+### Change lists
+
+None.
+
 ### Fixed
 
 - `gwt-read genae search --locality` now checks the value against the site's search form for the province: a listed name becomes its id, and an id is confirmed to belong to that province. Before, a name or an unknown id went out as `l=` and the site silently ignored it, so the search looked filtered but returned the whole province. An unknown, ambiguous or blank value now exits 64 (`--locality ''` used to search the whole province), and the run prints which locality it searched (#246).
