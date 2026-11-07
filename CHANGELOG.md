@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Fixed
+
+- `gwt-read genae search` now marks a cached answer like every other reader: the `results` line ends in ` (cache)` and the evidence has `from_cache: true` when all four blocks came from the cache. Before, a cached zero printed exactly like a live one, so a lane could log it as a search it never sent (#241).
+
 ## [1.3.1] - 2026-11-06
 
 ### Change lists
