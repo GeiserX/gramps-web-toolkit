@@ -39,56 +39,70 @@ def text(fragment):
     return re.sub(r'\s+', ' ', t).strip()
 
 
-_OPTION = re.compile(r'<option value="(\d+)" data-provincia="(\w+)"[^>]*>(.*?)</option>', re.S)
+_OPTION = re.compile(r'<option\b([^>]*)>(.*?)</option>', re.S)
+_ATTR = re.compile(r'([\w-]+)="([^"]*)"')
 
 
 class LocalityError(ValueError):
-    """A --locality that is not the site's numeric id and no listed name resolves to."""
+    """A --locality the site does not list under the province: an unknown or ambiguous name, or an unknown id."""
+
+
+class LocalityFormError(RuntimeError):
+    """The search form lists no locality for the province: the site changed its form, not the user's typo."""
 
 
 def fold(name):
-    """Name folding for matching: no accents, lower, single spaces."""
-    return re.sub(r'\s+', ' ', ''.join(c for c in unicodedata.normalize('NFKD', name or '')
-                                        if not unicodedata.combining(c)).casefold()).strip()
+    """Name folding for matching: no accents, lower, hyphens as spaces, single spaces."""
+    return re.sub(r'[\s-]+', ' ', ''.join(c for c in unicodedata.normalize('NFKD', name or '')
+                                          if not unicodedata.combining(c)).casefold()).strip()
+
+
+def _options(page):
+    """(id, province, label) of each locality <option>, its attributes in any order."""
+    for attrs, label in _OPTION.findall(page or ''):
+        a = dict(_ATTR.findall(attrs))
+        if re.fullmatch(r'[0-9]+', a.get('value', '')) and re.fullmatch(r'\w+', a.get('data-provincia', '')):
+            yield a['value'], a['data-provincia'], label
 
 
 def is_locality_list(page):
     """True for the site's search form, which lists every locality as <option value=id data-provincia=..>."""
-    return bool(_OPTION.search(page or ''))
+    return any(True for _ in _options(page))
 
 
 def locality_map(page):
     """{province: [(id, label)]} from the search form's locality <select>."""
     out = {}
-    for lid, prov, label in _OPTION.findall(page or ''):
+    for lid, prov, label in _options(page):
         out.setdefault(prov, []).append((lid, text(label)))
     return out
 
 
 def resolve_locality(value, province, localities):
-    """The site's numeric locality id for one --locality word. A digit string passes through; a name must match
-    one listed label of the province (folded, exactly or as a single prefix); anything else raises LocalityError.
-    The site never errors on an unknown l, it silently returns the whole region, so an unknown name must stop
-    the search here, not there."""
-    raw = value or ''
-    value = raw.strip()
-    if raw and not value:
-        raise LocalityError('blank locality: give the site\'s numeric id or a listed name')
-    if not value or value.isdigit():
-        return value
-    listed = localities.get(province, [])
+    """(id, label) of the one locality of the province that --locality names: its numeric id, or its listed name
+    (folded, exact match only). Anything else raises LocalityError, naming the near names; a province the form
+    does not list raises LocalityFormError. The site never errors on an l it does not know, it silently returns the
+    whole region, so an unknown name or id must stop the search here, not there. A prefix is never taken: a place
+    the site does not list would silently become a longer listed name."""
+    value = value.strip()
+    listed = localities.get(province)
+    if not listed:
+        raise LocalityFormError('the search form lists no locality for %s: the site changed its form' % province)
+    if re.fullmatch(r'[0-9]+', value):
+        found = [(lid, label) for lid, label in listed if lid == value]
+        if found:
+            return found[0]
+        raise LocalityError('%s is not a listed locality id of %s' % (value, province))
     folded = fold(value)
     exact = [(lid, label) for lid, label in listed if fold(label) == folded]
     if len(exact) == 1:
-        return exact[0][0]
-    prefix = [] if exact else [(lid, label) for lid, label in listed if fold(label).startswith(folded)]
-    if len(prefix) == 1:
-        return prefix[0][0]
-    found = exact or prefix
-    if found:
-        raise LocalityError('%r is ambiguous in %s: %s'
-                            % (value, province, ', '.join(sorted({label for _, label in found}))))
-    raise LocalityError('%r is not a listed locality of %s' % (value, province))
+        return exact[0]
+    if exact:
+        raise LocalityError('%r is ambiguous in %s: %s; give the id'
+                            % (value, province, ', '.join('%s %s' % o for o in exact)))
+    near = [(lid, label) for lid, label in listed if folded and fold(label).startswith(folded)]
+    raise LocalityError('%r is not a listed locality of %s%s' % (
+        value, province, '; did you mean: ' + ', '.join('%s %s' % o for o in near) if near else ''))
 
 
 def params(given='', surname1='', surname2='', province='mu', locality='', year_from=1503, year_to=1986):

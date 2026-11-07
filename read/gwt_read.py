@@ -357,18 +357,23 @@ def cmd_genae_search(a, R):
     if a.locality is not None and not a.locality.strip():
         err("--locality is blank: give the site's numeric locality id or a listed name, or leave the flag out for a regional search")
         return EXIT_USAGE
-    h = {'accept': gwt_genae.ACCEPT, 'accept-language': gwt_genae.LANGUAGE, 'hx-request': 'true'}
-    if a.locality and not a.locality.isdigit():
-        _st, _rh, mbody, _cached = R.get(gwt_genae.LOCALITIES_URL, h, refresh=a.refresh,
-                                         page=gwt_genae.is_locality_list)
+    if a.locality:   # an id too: the site ignores an l it does not know, and an id belongs to one province
+        # the form lists the localities and rarely changes: the cache's own age, never --refresh
+        _st, _rh, mbody, _cached = R.get(gwt_genae.LOCALITIES_URL, {'accept': gwt_genae.ACCEPT,
+                                         'accept-language': gwt_genae.LANGUAGE}, page=gwt_genae.is_locality_list)
         try:
-            a.locality = gwt_genae.resolve_locality(a.locality, a.province,
-                                                    gwt_genae.locality_map(mbody.decode('utf-8', 'replace')))
+            a.locality, label = gwt_genae.resolve_locality(a.locality, a.province,
+                                                           gwt_genae.locality_map(mbody.decode('utf-8', 'replace')))
+        except gwt_genae.LocalityFormError as exc:
+            err(str(exc))
+            return EXIT_ERROR
         except gwt_genae.LocalityError as exc:
             err(str(exc))
             return EXIT_USAGE
+        out('locality\t%s\t%s' % (a.locality, label))
     sur = (list(a.surname) + ['', ''])[:2]
     query = gwt_genae.params(a.given, sur[0], sur[1], a.province, a.locality, a.year_from, a.year_to)
+    h = {'accept': gwt_genae.ACCEPT, 'accept-language': gwt_genae.LANGUAGE, 'hx-request': 'true'}
     cands, pages, seen = [], {}, set()
     for block in gwt_genae.BLOCKS:
         url = gwt_genae.block_url(block, query)

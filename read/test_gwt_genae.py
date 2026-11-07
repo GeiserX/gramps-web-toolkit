@@ -49,13 +49,44 @@ class Localities(unittest.TestCase):
         self.assertTrue(gwt_genae.is_locality_list(LOCALITIES.decode()))
         self.assertFalse(gwt_genae.is_locality_list(PAGE['bautismos'].decode()))
 
-    def test_a_numeric_id_passes_through(self):
-        self.assertEqual(gwt_genae.resolve_locality('701', 'mu', self.MAP), '701')
-        self.assertEqual(gwt_genae.resolve_locality('', 'mu', self.MAP), '')
+    def test_a_listed_numeric_id_resolves_to_itself_and_its_name(self):
+        self.assertEqual(gwt_genae.resolve_locality('701', 'mu', self.MAP), ('701', 'Villazul'))
+
+    def test_an_unknown_id_or_an_id_of_another_province_stops(self):
+        # the site ignores an l it does not know: an unchecked id is the same silent regional search as a name
+        for lid in ('999', '801'):
+            with self.assertRaises(gwt_genae.LocalityError):
+                gwt_genae.resolve_locality(lid, 'mu', self.MAP)
 
     def test_a_name_resolves_ignoring_case_accents_and_spaces(self):
-        self.assertEqual(gwt_genae.resolve_locality('villazul', 'mu', self.MAP), '701')
-        self.assertEqual(gwt_genae.resolve_locality('  Peñafría  (norte) ', 'mu', self.MAP), '702')
+        self.assertEqual(gwt_genae.resolve_locality('villazul', 'mu', self.MAP), ('701', 'Villazul'))
+        self.assertEqual(gwt_genae.resolve_locality('  Peñafría  (norte) ', 'mu', self.MAP)[0], '702')
+
+    def test_a_hyphen_folds_like_a_space(self):
+        self.assertEqual(gwt_genae.fold('Torre-Mayor'), gwt_genae.fold('torre mayor'))
+
+    def test_a_unique_prefix_is_never_taken_only_suggested(self):
+        # a place the site does not list must not silently become a longer listed name
+        with self.assertRaises(gwt_genae.LocalityError) as ctx:
+            gwt_genae.resolve_locality('Villa', 'mu', self.MAP)
+        self.assertIn('did you mean: 701 Villazul', str(ctx.exception))
+
+    def test_two_options_with_one_name_stop_and_list_their_ids(self):
+        page = ('<option value="711" data-provincia="mu">Villazul</option>'
+                '<option value="712" data-provincia="mu">Villazul</option>')
+        with self.assertRaises(gwt_genae.LocalityError) as ctx:
+            gwt_genae.resolve_locality('Villazul', 'mu', gwt_genae.locality_map(page))
+        self.assertIn('711 Villazul', str(ctx.exception))
+        self.assertIn('712 Villazul', str(ctx.exception))
+
+    def test_options_parse_whatever_their_attribute_order(self):
+        page = '<option data-provincia="mu" class="x" value="701">Villazul</option>'
+        self.assertTrue(gwt_genae.is_locality_list(page))
+        self.assertEqual(gwt_genae.locality_map(page), {'mu': [('701', 'Villazul')]})
+
+    def test_a_province_the_form_does_not_list_is_a_changed_form_not_a_typo(self):
+        with self.assertRaises(gwt_genae.LocalityFormError):
+            gwt_genae.resolve_locality('Villazul', 'gr', self.MAP)
 
     def test_a_name_of_another_province_is_unknown(self):
         with self.assertRaises(gwt_genae.LocalityError):
@@ -70,10 +101,6 @@ class Localities(unittest.TestCase):
     def test_an_unknown_name_stops(self):
         with self.assertRaises(gwt_genae.LocalityError):
             gwt_genae.resolve_locality('Noloconozco', 'mu', self.MAP)
-
-    def test_a_blank_value_stops(self):
-        with self.assertRaises(gwt_genae.LocalityError):
-            gwt_genae.resolve_locality('   ', 'mu', self.MAP)
 
 
 class Parse(unittest.TestCase):
@@ -148,6 +175,46 @@ class Search(Genae):
         self.assertEqual(len(net.requests), 5)   # the form, then the four blocks
         for req in net.requests[1:]:
             self.assertIn('l=701', req.full_url)
+        self.assertEqual(lines['locality'], '701\tVillazul')   # the evidence shows which town was searched
+        self.assertIsNone(net.requests[0].get_header('Hx-request'))   # the full form, never an htmx fragment
+
+    def test_a_numeric_locality_is_checked_against_the_form(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, LOCALITIES), *ANSWERS)
+        code, lines, text = self.search(net, gate, ('--locality', '701'))
+        self.assertEqual(code, 0, text)
+        self.assertEqual(len(net.requests), 5)
+        self.assertEqual(lines['locality'], '701\tVillazul')
+
+    def test_an_unknown_numeric_locality_stops_before_any_search_request(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, LOCALITIES))
+        code, _, text = self.search(net, gate, ('--locality', '801'))   # listed, but under ab
+        self.assertEqual(code, 64, text)
+        self.assertEqual(len(net.requests), 1)
+
+    def test_a_form_without_the_province_is_a_source_error_not_a_usage_error(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, LOCALITIES))
+        code, _, text = self.search(net, gate, ('--province', 'gr', '--locality', 'Villazul'))
+        self.assertEqual(code, 1, text)
+        self.assertIn('changed its form', text)
+        self.assertEqual(len(net.requests), 1)
+
+    def test_refresh_reads_the_locality_form_from_the_cache(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, LOCALITIES), *ANSWERS)
+        self.assertEqual(self.search(net, gate, ('--locality', 'Villazul'))[0], 0)
+        gate = FakeGate()
+        net = FakeNet(gate, *ANSWERS)
+        o, e = io.StringIO(), io.StringIO()
+        argv = ['genae', '--cache-dir', self.cache, '--lane', 't', '--refresh', 'search', '--given', 'Ana',
+                '--surname', 'Zorvalo', '--locality', 'Villazul', '--out', self.out]
+        with contextlib.redirect_stdout(o), contextlib.redirect_stderr(e):
+            code = gwt_read.main(argv, urlopen=net, gate=gate)
+        text = o.getvalue() + e.getvalue()
+        self.assertEqual(code, 0, text)
+        self.assertEqual(len(net.requests), 4)   # the four blocks again; the form came from the cache
 
     def test_a_blank_locality_stops_before_any_request(self):
         gate = FakeGate()
