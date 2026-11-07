@@ -9,6 +9,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 ### Fixed
 
 - `gwt-read genae search --locality` now checks the value against the site's search form for the province: a listed name becomes its id, and an id is confirmed to belong to that province. Before, a name or an unknown id went out as `l=` and the site silently ignored it, so the search looked filtered but returned the whole province. An unknown, ambiguous or blank value now exits 64 (`--locality ''` used to search the whole province), and the run prints which locality it searched (#246).
+- `gwt-read pares search` no longer pauses every lane when one query gets an empty or unreadable page. It reads the source's canary once, live, through the gate; when the canary answers with at least its minimum, the search exits 7 (`unreadable`, new), saves and caches nothing for that query, and the gate only logs it. A canary that is empty, short, walled, unreachable or the search itself keeps the wall (exit 3). Record an exit 7 as `unproven`, never `none` (#237).
 
 ## [1.3.2] - 2026-11-07
 
