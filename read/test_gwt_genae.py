@@ -278,6 +278,38 @@ class Search(Genae):
         self.assertEqual(code, 0, text)
         self.assertEqual(net2.requests, [])
 
+    def test_a_repeat_says_it_came_from_the_cache(self):
+        # without the mark a cached zero reads like a live one, and a lane logs it as a search it never ran
+        gate = FakeGate()
+        code, lines, text = self.search(FakeNet(gate, *ANSWERS), gate)
+        self.assertEqual(lines['results'], 'bautismos 2, casados 1, casadas 0, defunciones 1')
+        self.assertFalse(json.load(open(lines['evidence'], encoding='utf-8'))['from_cache'])
+        gate2 = FakeGate()
+        code, lines, text = self.search(FakeNet(gate2), gate2)
+        self.assertEqual(code, 0, text)
+        self.assertEqual(lines['results'], 'bautismos 2, casados 1, casadas 0, defunciones 1 (cache)')
+        self.assertTrue(json.load(open(lines['evidence'], encoding='utf-8'))['from_cache'])
+
+    def test_one_live_block_means_the_answer_is_not_from_the_cache(self):
+        # a first run caches the four blocks; drop the burials entry so the repeat reads that one block live
+        gate = FakeGate()
+        self.search(FakeNet(gate, *ANSWERS), gate)
+        dropped = 0
+        for root, _, files in os.walk(self.cache):
+            for f in files:
+                if f.endswith('.json') and 'defunciones' in open(os.path.join(root, f), encoding='utf-8').read():
+                    for ext in ('.json', '.body'):
+                        os.remove(os.path.join(root, f[:-5] + ext))
+                    dropped += 1
+        self.assertEqual(dropped, 1)
+        gate2 = FakeGate()
+        net2 = FakeNet(gate2, (200, PAGE['defunciones']))
+        code, lines, text = self.search(net2, gate2)
+        self.assertEqual(code, 0, text)
+        self.assertEqual(len(net2.requests), 1)
+        self.assertEqual(lines['results'], 'bautismos 2, casados 1, casadas 0, defunciones 1')
+        self.assertFalse(json.load(open(lines['evidence'], encoding='utf-8'))['from_cache'])
+
     def test_no_rows_is_exit_2(self):
         gate = FakeGate()
         empty = open(os.path.join(FIX, 'genae-casadas.html'), 'rb').read()
