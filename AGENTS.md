@@ -7,7 +7,7 @@ Instructions for coding agents working in this repository. `CLAUDE.md` imports t
 Command-line tools for running AI research agents against a Gramps Web family tree. Each folder is one
 tool with its own tests; `docs/` has one page per tool, plus `pipeline.md` (how the pieces fit) and
 `hard-won.md` (the failures behind them). `docs/` is also the site at https://geiserx.github.io/gramps-web-toolkit/: a new
-page goes into the `mkdocs.yml` nav and `docs/index.md`, and `mkdocs build --strict` must pass. The toolkit is for any country; Spain-specific code says so in its name
+page goes into the `zensical.toml` nav and `docs/index.md`, and `python -m zensical build --clean --strict` plus `python -I .github/scripts/site-check.py site` must pass. The toolkit is for any country; Spain-specific code says so in its name
 (`spanish-poller`) or in its docs (the Spanish sources in `gwt-fetch`).
 
 | Folder | Tool | Runtime |
