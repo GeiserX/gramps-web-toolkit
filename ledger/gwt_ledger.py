@@ -308,13 +308,17 @@ def same_search(r, reg):
     return (key(r['person_key']), reg.canon(r['source']), normalize(r['query']), r['date'], r['result'])
 
 
-def add_rows(path, rows, columns=COLUMNS):
-    """Append rows under an exclusive lock, writing the header if the file is new or empty."""
+def add_rows(path, rows, columns=COLUMNS, unless=None):
+    """Append rows under an exclusive lock, writing the header if the file is new or empty. With unless, call it
+    under the lock first and write nothing when it returns something true, which is then returned."""
     lines = ''.join('\t'.join(clean(row.get(c)) for c in columns) + '\n' for row in rows)
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(path, 'a', encoding='utf-8') as f:
         fcntl.flock(f, fcntl.LOCK_EX)
         try:
+            found = unless() if unless else None
+            if found:
+                return found
             f.seek(0, os.SEEK_END)
             if f.tell() == 0:
                 f.write('\t'.join(columns) + '\n')
@@ -325,9 +329,9 @@ def add_rows(path, rows, columns=COLUMNS):
             fcntl.flock(f, fcntl.LOCK_UN)
 
 
-def add_row(path, row):
+def add_row(path, row, unless=None):
     """Append one row under an exclusive lock, writing the header if the file is new or empty."""
-    add_rows(path, [row])
+    return add_rows(path, [row], unless=unless)
 
 
 def find(rows, person=None, source=None, query=None, threshold=DEFAULT_THRESHOLD, exact=False, registry=None,
@@ -864,17 +868,19 @@ def main(argv=None):
                'source': source, 'query': normalize(args.query), 'date': args.date,
                'result': result, 'evidence': args.evidence, 'agent': args.agent,
                'next_date': args.next_date, 'control': clean(args.control_ok)}
-        try:  # a logger run twice must not log every search twice; a voided row is no reason to skip
+        mine = same_search(row, reg)
+
+        def twins():  # a logger run twice must not log every search twice; a voided row is no reason to skip
             rows = live([r for lp in ledger_paths(args.ledger, args.ledger_dir) for r in read_rows(lp)])
+            return [r['id'] for r in rows if key(r['person_key']) == mine[0] and same_search(r, reg) == mine]
+
+        try:  # read under the lane file's lock, so two runs of one logger cannot both find no row and both write
+            found = add_row(path, row, unless=twins)
         except (OSError, UnicodeDecodeError) as exc:
             return err('cannot read the ledger: %s' % exc)
-        mine = same_search(row, reg)
-        twins = [r['id'] for r in rows if key(r['person_key']) == mine[0] and same_search(r, reg) == mine]
-        if twins:
+        if found:
             sys.stderr.write('gwt-ledger: not added: the same search (person, source, query, date and result) is '
-                             'already logged as %s\n' % ' '.join(twins))
-            return 0
-        add_row(path, row)
+                             'already logged as %s\n' % ' '.join(found))
         return 0
     if args.cmd == 'import-tsv':
         return import_tsv(args, reg, err)

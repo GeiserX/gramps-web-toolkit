@@ -1,4 +1,5 @@
-import datetime, io, json, os, subprocess, sys, tempfile, unittest
+import datetime, io, json, os, subprocess, sys, tempfile, threading, unittest
+from unittest import mock
 from contextlib import redirect_stderr, redirect_stdout
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -156,6 +157,26 @@ class LedgerTest(unittest.TestCase):
         self.assertIn('rows\t3', run('--ledger', self.path, '--ledger-dir', lanes, 'stats')[1])
         self.assertEqual(run('--ledger', self.path, 'check', '--person', 'Ana Peiro Toledo', '--source', 'FamilySearch',
                              '--query', 'Ana Peiro boda 1875')[0], 1)  # without the dir, the lane files are not read
+
+    def test_two_runs_of_one_logger_at_once_log_each_search_once(self):
+        # run B adds the same search while run A is between its check and its write; the check runs under the
+        # file lock, so B waits for A, then finds A's row and adds nothing
+        argv = ['--ledger', self.path, 'add', '--person', 'p', '--source', 's', '--query', 'q', '--result',
+                'partial', '--date', '2026-03-04']
+        real, other = L.read_rows, []
+
+        def read_rows(*a, **k):
+            rows = real(*a, **k)
+            if not other:  # A has read the ledger and found nothing; now B runs
+                other.append(threading.Thread(target=lambda: run(*argv)))
+                other[0].start()
+                other[0].join(1)  # without the lock B writes here; with it, B blocks until A has written
+            return rows
+
+        with mock.patch.object(L, 'read_rows', read_rows), redirect_stderr(io.StringIO()):
+            self.assertEqual(run(*argv)[0], 0)
+            other[0].join(10)
+        self.assertEqual(len(real(self.path)), 1)
 
     def test_a_logger_run_twice_logs_each_search_once(self):
         # a lane that reruns its logger must not log every search a second time, in its own file or another's
