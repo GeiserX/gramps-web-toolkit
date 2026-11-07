@@ -2,7 +2,7 @@
 leaves this machine. Run: cd read && python3 -m unittest -v test_gwt_pares"""
 import contextlib, io, json, os, unittest
 
-from test_gwt_read import Base, FakeGate, FakeNet, CAPTCHA
+from test_gwt_read import Base, FakeGate, FakeNet, CAPTCHA, Paused
 import gwt_pares  # noqa: E402
 import gwt_read  # noqa: E402
 import gwt_reader  # noqa: E402
@@ -15,6 +15,31 @@ FORM = b'<html><body><form id="formBusqueda" name="formBusqueda" action="find" m
 ERROR_PAGE = (b'<html><body><div id="error_mensaje"><div class="error">Ha ocurrido un error en la aplicaci\xc3\xb3n. '
               b'Por favor, vuelva a intentarlo de nuevo.</div></div></body></html>')
 EMPTY_FRAME = b'<html><body><iframe src="/x" style="width:100%"></iframe></body></html>'
+SEARCH_URL = gwt_pares.search_url('Ana', ['Zorvalo'], '')
+CONTROL_URL = gwt_pares.search_url('Cristóbal', ['Colón'], '')   # the source's declared canary (LEGACY)
+
+
+def control_page(rows):
+    """A results page with `rows` invented descriptions: the canary's answer when the site is fine."""
+    items = b''.join(b'<p class="titulo"><a href="/ParesBusquedas20/catalogo/description/8000%03d">'
+                     b'Expediente de prueba %d</a></td>' % (i, i) for i in range(rows))
+    return b'<html><body><div id="texto_resultados">' + items + b'</div></body></html>'
+
+
+class LoggingGate(FakeGate):
+    """A fake gate that records the lines only logged to it (gate.denied) and can pause from the n-th request."""
+
+    def __init__(self, pause_at=None):
+        super().__init__()
+        self.denials, self.pause_at = [], pause_at
+
+    def wait(self, lane):
+        if self.pause_at is not None and len(self.waits) + 1 >= self.pause_at:
+            raise Paused(600, 'another lane hit the wall')
+        super().wait(lane)
+
+    def denied(self, lane, what):
+        self.denials.append(what)
 
 
 class Pares(Base):
@@ -127,11 +152,86 @@ class Stops(Pares):
         self.assert_stop([(200, FORM), (200, b'<html><body><div id="_Incapsula_Resource">x</div></body></html>')],
                          gwt_reader.EXIT_WALL, 'hits', 2)
 
-    def test_empty_frame_is_a_stop(self):
-        self.assert_stop([(200, FORM), (200, EMPTY_FRAME)], gwt_reader.EXIT_WALL, 'hits', 2)
+    def test_empty_frame_the_control_answers_is_unreadable_and_the_gate_only_logs_it(self):
+        gate = LoggingGate()
+        answers = [(200, FORM), (200, EMPTY_FRAME), (200, control_page(10))]    # exactly the canary's minimum
+        net = FakeNet(gate, *answers * 2)
+        code, lines, text = self.search(net, gate)
+        self.assertEqual(code, gwt_reader.EXIT_UNREADABLE, text)
+        self.assertEqual(gate.hits, [], 'an empty page the control answers is not a block')
+        self.assertEqual(len(gate.denials), 1, 'an unreadable page left no line in the gate log')
+        self.assertIn('UNREADABLE', gate.denials[0])
+        self.assertEqual(self.out_files(), [], 'an unreadable page wrote files')
+        self.assertNotIn('candidates', lines)
+        self.assertIn('unreadable', lines['results'])
+        self.assertEqual([r.full_url for r in net.requests], [gwt_pares.FORM_URL, SEARCH_URL, CONTROL_URL])
+        self.assertEqual(self.search(net, gate)[0], gwt_reader.EXIT_UNREADABLE)
+        self.assertEqual(len(net.requests), 6, 'an unreadable answer was served from the cache')
+
+    def test_empty_frame_is_a_stop_when_the_control_is_empty_too(self):
+        gate = FakeGate()
+        answers = [(200, FORM), (200, EMPTY_FRAME), (200, EMPTY_FRAME)]
+        net = FakeNet(gate, *answers * 2)
+        code, lines, text = self.search(net, gate)
+        self.assertEqual(code, gwt_reader.EXIT_WALL, text)
+        self.assertNotIn('candidates', lines)
+        self.assertEqual(self.out_files(), [], 'a STOP wrote files')
+        self.assertEqual(len(gate.hits), 1, 'the gate did not hear about it')
+        self.assertEqual([r.full_url for r in net.requests], [gwt_pares.FORM_URL, SEARCH_URL, CONTROL_URL])
+        self.search(net, gate)
+        self.assertEqual(len(net.requests), 6, 'a STOP answer was served from the cache')
+
+    def test_empty_frame_with_a_short_control_is_still_a_wall(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, FORM), (200, EMPTY_FRAME), (200, control_page(3)))
+        code, _, text = self.search(net, gate)
+        self.assertEqual(code, gwt_reader.EXIT_WALL, text)
+        self.assertEqual(len(gate.hits), 1, 'a canary under its minimum cannot clear the empty page')
+        self.assertEqual(self.out_files(), [])
+
+    def test_empty_frame_with_an_unreachable_control_is_still_a_wall(self):
+        gate = LoggingGate()
+        net = FakeNet(gate, (200, FORM), (200, EMPTY_FRAME), (503, b'down'))
+        code, _, text = self.search(net, gate)
+        self.assertEqual(code, gwt_reader.EXIT_WALL, text)
+        self.assertEqual(len(gate.hits), 1, 'a control that cannot answer proves nothing: the empty page is a wall')
+        self.assertEqual(gate.denials, [])
+        self.assertEqual(self.out_files(), [])
+
+    def test_empty_frame_whose_control_meets_a_paused_gate_is_still_a_wall(self):
+        gate = LoggingGate(pause_at=3)
+        net = FakeNet(gate, (200, FORM), (200, EMPTY_FRAME))
+        code, _, text = self.search(net, gate)
+        self.assertEqual(code, gwt_reader.EXIT_WALL, text)
+        self.assertEqual(len(gate.hits), 1, 'the empty page never reached the gate')
+        self.assertEqual(len(net.requests), 2)
+
+    def test_an_empty_canary_page_is_a_wall_and_never_probes_itself(self):
+        gate = LoggingGate()
+        net = FakeNet(gate, (200, FORM), (200, EMPTY_FRAME), (200, control_page(15)))
+        code, _, text = self.run_pares(['search', '--given', 'Cristóbal', '--surname', 'Colón'], net, gate)
+        self.assertEqual(code, gwt_reader.EXIT_WALL, text)
+        self.assertEqual(len(gate.hits), 1, 'an empty canary page must pause every lane')
+        self.assertEqual([r.full_url for r in net.requests], [gwt_pares.FORM_URL, CONTROL_URL])
+
+    def test_empty_frame_with_a_captcha_on_the_control_is_the_controls_wall(self):
+        gate = FakeGate()
+        net = FakeNet(gate, (200, FORM), (200, EMPTY_FRAME), (200, CAPTCHA))
+        code, _, text = self.search(net, gate)
+        self.assertEqual(code, gwt_reader.EXIT_WALL, text)
+        self.assertEqual(len(gate.hits), 1, 'the control met the wall first and reported it')
+        self.assertEqual(self.out_files(), [])
 
     def test_site_error_page_is_a_stop(self):
-        self.assert_stop([(200, FORM), (200, ERROR_PAGE)], gwt_reader.EXIT_WALL, 'hits', 2)
+        gate = FakeGate()
+        answers = [(200, FORM), (200, ERROR_PAGE), (200, ERROR_PAGE)]
+        net = FakeNet(gate, *answers * 2)
+        code, _, text = self.search(net, gate)
+        self.assertEqual(code, gwt_reader.EXIT_WALL, text)
+        self.assertEqual(self.out_files(), [])
+        self.assertEqual(len(gate.hits), 1)
+        self.search(net, gate)
+        self.assertEqual(len(net.requests), 6, 'a STOP answer was served from the cache')
 
     def test_403_blocks_the_gate_for_a_day(self):
         gate = FakeGate()
@@ -173,6 +273,20 @@ class Record(Pares):
         net = FakeNet(gate)
         self.assertEqual(self.run_pares(['record', 'not-an-id'], net, gate)[0], 64)
         self.assertEqual(net.requests, [])
+
+
+class SharedReaderPostCompatibility(unittest.TestCase):
+    def test_empty_post_with_successful_control_is_unreadable_without_gate_hit(self):
+        class Cache:
+            def fetch(cache, method, url, headers, data, fetcher, refresh=False):
+                self.assertEqual((method, data), ('POST', b'query=test'))
+                return fetcher(method, url, headers, data)
+        gate = LoggingGate()
+        reader = gwt_reader.Reader(Cache(), gate, 't', lambda *args: (200, {}, b''))
+        with self.assertRaises(gwt_reader.Unreadable) as stopped:
+            reader.get('https://example.invalid/search', data=b'query=test', on_empty=lambda: True)
+        self.assertEqual(stopped.exception.exit_code, 7)
+        self.assertEqual((gate.hits, gate.blocks, gate.deads, len(gate.denials)), ([], [], [], 1))
 
 
 if __name__ == '__main__':

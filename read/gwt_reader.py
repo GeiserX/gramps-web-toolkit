@@ -24,6 +24,7 @@ of the headers the cache sees. Standard library only.
 import datetime, hashlib, json, os, re, struct, unicodedata
 
 EXIT_OK, EXIT_ERROR, EXIT_EMPTY, EXIT_WALL, EXIT_DEAD, EXIT_PAUSED = 0, 1, 2, 3, 4, 6
+EXIT_UNREADABLE = 7    # a query-specific unreadable answer whose live control succeeds
 EXIT_RESTRICTED = 5      # the site refuses this one record to every account of this access level: a result, not a block
 
 # ---------------------------------------------------------------- small helpers
@@ -280,6 +281,13 @@ class Restricted(Stop):
         self.status, self.body = status, body
 
 
+class Unreadable(Stop):
+    """An unreadable query with a successful live control: a result, not a gate hit."""
+
+    def __init__(self, msg):
+        super().__init__(msg, EXIT_UNREADABLE, verdict='unreadable')
+
+
 class Reader:
     """GET through gwt-fscache and gwt-gate. fetcher(method, url, headers, data) -> (status, headers, body)
     is gwt-fscache's fetcher signature; the token belongs inside it, never in `headers`, which the cache sees."""
@@ -290,12 +298,14 @@ class Reader:
         self.cache, self.gate, self.lane, self.fetcher = cache, gate, lane, fetcher
         self.log = log or (lambda m: None)
 
-    def get(self, url, headers=None, expect=None, refresh=False, page=None, on_403=None, data=None):
+    def get(self, url, headers=None, expect=None, refresh=False, page=None, on_403=None, data=None, on_empty=None):
         """(status, headers, body, from_cache) for a 2xx answer the site really gave; raises Stop otherwise.
         `expect` checks a JSON answer, `page` an HTML one (see classify_answer). `on_403(body)` is asked about a
         403 before the gate blocks: 'restricted' only logs it as a denial (gate.denied: no pause, no block) and raises
         Restricted; anything else is a block, as without it. `data` (bytes) makes it a POST, for a site whose search
-        is a form or a JSON body; the cache keeps a POST only when it was built with methods=('GET', 'POST')."""
+        is a form or a JSON body; the cache keeps a POST only when it was built with methods=('GET', 'POST').
+        `on_empty()` is asked about an empty answer before the gate hears it: true (a live source control answered)
+        only logs it to the gate (gate.denied: no pause) and raises Unreadable; false or absent keeps the wall."""
         state = {}
 
         def gated(method, u, h, data):
@@ -314,6 +324,11 @@ class Reader:
             raise Restricted('restricted: HTTP 403 at %s is about this record\'s access, not a block; no gate hit' % url,
                              state['status'], state['body'])
         if verdict != 'ok':
+            if verdict == 'empty' and on_empty is not None and on_empty():
+                self.gate.denied(self.lane, 'UNREADABLE HTTP %s %s' % (state['status'], url[:120]))
+                raise Unreadable(f"empty or unreadable page, but the source's control answered: this query's own "
+                                 f"problem, not a block; nothing saved, no gate hit (HTTP {state['status']} "
+                                 f"at {url[:120]})")
             code, why, tell = STOP_FOR[verdict]
             what = 'HTTP %s %s' % (state['status'], url[:120])
             if tell == 'block':
