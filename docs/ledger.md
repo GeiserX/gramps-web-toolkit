@@ -21,7 +21,7 @@ One row per search, tab-separated, with a header line:
 | `next_date` | optional ISO date to look again; for an appeal, a few days before the deadline, so there is time to act |
 | `control` | the proof a `none` stands on: the `--control-ok` reference ([below](#a-none-needs-proof)) |
 
-The path comes from `--ledger`, else `$GWT_LEDGER`, else `./buscado.tsv`. The agent name defaults to `$GWT_AGENT`.
+The path comes from `--ledger`, else `$GWT_LEDGER`, else `./buscado.tsv`. That last default is only read, never created: when no ledger is named and `./buscado.tsv` does not exist, `add` and `import-tsv` exit 2, name the path and write nothing, so a logger run from the wrong folder cannot log into a stray file. The agent name defaults to `$GWT_AGENT`.
 
 ## Commands
 
