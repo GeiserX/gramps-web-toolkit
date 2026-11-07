@@ -629,37 +629,32 @@ class RegistryTest(unittest.TestCase):
         add = ('add', '--person', 'Ana Zorvalo', '--source', 'gaceta', '--query', 'edicto 1902', '--result', 'hit',
                '--agent', 'lane-1')
         imp = ('import-tsv', src, '--map', 'person_key=who,source=where,query=what,result=outcome')
-        cwd, env = os.getcwd(), os.environ.pop('GWT_LEDGER', None)
         work = os.path.join(self.dir.name, 'elsewhere')
         os.makedirs(work)
-        os.chdir(work)
-        try:
-            for argv in (add, imp):
-                err = io.StringIO()
-                with redirect_stderr(err):
-                    code, _ = run(*argv)
-                self.assertEqual(code, 2, argv[0])
-                self.assertFalse(os.path.exists('buscado.tsv'), argv[0])
-                self.assertIn(os.path.join(os.path.realpath(work), 'buscado.tsv') + ' does not exist', err.getvalue())
-                self.assertIn('nothing written', err.getvalue())
-            # a ./buscado.tsv that already exists is still the default ledger, as before
-            write('buscado.tsv', '\t'.join(L.COLUMNS) + '\n')
+        cwd = os.getcwd()
+        env = {k: v for k, v in os.environ.items() if k not in ('GWT_LEDGER', 'GWT_LEDGER_DIR')}
+        with mock.patch.dict(os.environ, env, clear=True):  # a lane's own variables must not leak in
+            os.chdir(work)
+            try:
+                for argv in (add, imp):
+                    err = io.StringIO()
+                    with redirect_stderr(err):
+                        code, _ = run(*argv)
+                    self.assertEqual(code, 2, argv[0])
+                    self.assertFalse(os.path.exists('buscado.tsv'), argv[0])
+                    self.assertIn(os.path.join(os.path.realpath(work), 'buscado.tsv') + ' does not exist', err.getvalue())
+                    self.assertIn('nothing written', err.getvalue())
+                # a ./buscado.tsv that already exists is still the default ledger, as before
+                write('buscado.tsv', '\t'.join(L.COLUMNS) + '\n')
+                self.assertEqual(run(*add)[0], 0)
+                self.assertEqual(len(L.read_rows('buscado.tsv')), 1)
+            finally:
+                os.chdir(cwd)
+            # naming the ledger, by flag or by $GWT_LEDGER, still creates it
+            named = os.path.join(work, 'named.tsv')
+            self.assertEqual(run('--ledger', named, *add)[0], 0)
+            os.environ['GWT_LEDGER'] = os.path.join(work, 'by-env.tsv')
             self.assertEqual(run(*add)[0], 0)
-            self.assertEqual(len(L.read_rows('buscado.tsv')), 1)
-        finally:
-            os.chdir(cwd)
-            if env is not None:
-                os.environ['GWT_LEDGER'] = env
-        # naming the ledger, by flag or by $GWT_LEDGER, still creates it
-        named = os.path.join(work, 'named.tsv')
-        self.assertEqual(run('--ledger', named, *add)[0], 0)
-        os.environ['GWT_LEDGER'] = os.path.join(work, 'by-env.tsv')
-        try:
-            self.assertEqual(run(*add)[0], 0)
-        finally:
-            os.environ.pop('GWT_LEDGER')
-            if env is not None:
-                os.environ['GWT_LEDGER'] = env
         self.assertTrue(os.path.exists(named) and os.path.exists(os.path.join(work, 'by-env.tsv')))
 
     def test_import_checks_each_control_like_add(self):

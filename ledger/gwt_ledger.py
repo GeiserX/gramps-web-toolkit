@@ -28,8 +28,9 @@ A `none` needs --control-ok (proof the source could have answered), or it is sto
 
 The ledger path comes from --ledger, else $GWT_LEDGER, else ./buscado.tsv. With --ledger-dir (or $GWT_LEDGER_DIR),
 `add` writes to <dir>/<agent>.tsv, one file per lane, and every reader reads the ledger plus all <dir>/*.tsv.
-A write never creates ./buscado.tsv on its own: with neither --ledger nor $GWT_LEDGER, add and import-tsv
-stop (exit 2) when that file does not exist yet, so a logger run from the wrong folder cannot log into a stray file.
+A write never creates ./buscado.tsv on its own: with neither --ledger nor $GWT_LEDGER, and no --ledger-dir, add and
+import-tsv stop (exit 2) when that file does not exist yet, so a logger run from the wrong folder cannot log into a
+stray file. An existing ./buscado.tsv is still written; with --ledger-dir they write the lane file as before.
 Standard library only (`coverage` also uses the toolkit's gwt_core).
 """
 import argparse, collections, datetime, decimal, difflib, fcntl, glob, gzip, hashlib, json, os, re, sys, unicodedata
