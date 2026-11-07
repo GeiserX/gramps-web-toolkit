@@ -14,7 +14,7 @@ a spelling variant for an exact hit. Only the first page of each block is read (
 it is flagged as cut, and the lane narrows the search instead of paging. A block the site answers with "no indexed
 records for these years in this place" is a real answer with no rows. Standard library only.
 """
-import html, re, urllib.parse
+import html, re, unicodedata, urllib.parse
 
 HOST = 'https://genae.org'
 SOURCE = 'genae'
@@ -26,6 +26,7 @@ ACCEPT = 'text/html'
 LANGUAGE = 'es-ES,es;q=0.9'
 BLOCKS = ('bautismos', 'casados', 'casadas', 'defunciones')
 PROVINCES = ('mu', 'ab', 'al', 'am', 'gr')
+LOCALITIES_URL = HOST + '/buscar'   # its search form lists every locality as <option value=id>
 
 _ROW = re.compile(r'<tr class="([^"]*)" data-registro-tipo="([^"]*)" data-registro-id="(\d+)" data-registro-ano="(\d*)"[^>]*>(.*?)</tr>', re.S)
 _CELL = re.compile(r'<td data-col="([^"]+)"[^>]*>(.*?)</td>', re.S)
@@ -38,8 +39,76 @@ def text(fragment):
     return re.sub(r'\s+', ' ', t).strip()
 
 
+_OPTION = re.compile(r'<option\b([^>]*)>(.*?)</option>', re.S)
+_ATTR = re.compile(r'([\w-]+)="([^"]*)"')
+
+
+class LocalityError(ValueError):
+    """A --locality the site does not list under the province: an unknown or ambiguous name, or an unknown id."""
+
+
+class LocalityFormError(RuntimeError):
+    """The search form lists no locality for the province: the site changed its form, not the user's typo."""
+
+
+def fold(name):
+    """Name folding for matching: no accents, lower, hyphens as spaces, single spaces."""
+    return re.sub(r'[\s-]+', ' ', ''.join(c for c in unicodedata.normalize('NFKD', name or '')
+                                          if not unicodedata.combining(c)).casefold()).strip()
+
+
+def _options(page):
+    """(id, province, label) of each locality <option>, its attributes in any order."""
+    for attrs, label in _OPTION.findall(page or ''):
+        a = dict(_ATTR.findall(attrs))
+        if re.fullmatch(r'[0-9]+', a.get('value', '')) and re.fullmatch(r'\w+', a.get('data-provincia', '')):
+            yield a['value'], a['data-provincia'], label
+
+
+def is_locality_list(page):
+    """True for the site's search form, which lists every locality as <option value=id data-provincia=..>."""
+    return any(True for _ in _options(page))
+
+
+def locality_map(page):
+    """{province: [(id, label)]} from the search form's locality <select>."""
+    out = {}
+    for lid, prov, label in _options(page):
+        out.setdefault(prov, []).append((lid, text(label)))
+    return out
+
+
+def resolve_locality(value, province, localities):
+    """(id, label) of the one locality of the province that --locality names: its numeric id, or its listed name
+    (folded, exact match only). Anything else raises LocalityError, naming the near names; a province the form
+    does not list raises LocalityFormError. The site never errors on an l it does not know, it silently returns the
+    whole region, so an unknown name or id must stop the search here, not there. A prefix is never taken: a place
+    the site does not list would silently become a longer listed name."""
+    value = value.strip()
+    listed = localities.get(province)
+    if not listed:
+        raise LocalityFormError('the search form lists no locality for %s: the site changed its form' % province)
+    if re.fullmatch(r'[0-9]+', value):
+        found = [(lid, label) for lid, label in listed if lid == value]
+        if found:
+            return found[0]
+        raise LocalityError('%s is not a listed locality id of %s' % (value, province))
+    folded = fold(value)
+    exact = [(lid, label) for lid, label in listed if fold(label) == folded]
+    if len(exact) == 1:
+        return exact[0]
+    if exact:
+        raise LocalityError('%r is ambiguous in %s: %s; give the id'
+                            % (value, province, ', '.join('%s %s' % o for o in exact)))
+    near = [(lid, label) for lid, label in listed if folded and fold(label).startswith(folded)]
+    raise LocalityError('%r is not a listed locality of %s%s' % (
+        value, province, '; did you mean: ' + ', '.join('%s %s' % o for o in near) if near else ''))
+
+
 def params(given='', surname1='', surname2='', province='mu', locality='', year_from=1503, year_to=1986):
-    """The site's own query: n, a1, a2 (each 'starts with'), r province, l locality, d and h year range."""
+    """The site's own query: n, a1, a2 (each 'starts with'), r province, l locality, d and h year range.
+    `locality` is the site's numeric id; the site silently ignores an l it does not know, so callers resolve
+    names with resolve_locality first (cmd_genae_search does)."""
     q = [('n', given), ('a1', surname1), ('a2', surname2), ('r', province)]
     if locality:
         q.append(('l', locality))
