@@ -51,6 +51,7 @@ class Localities(unittest.TestCase):
 
     def test_a_listed_numeric_id_resolves_to_itself_and_its_name(self):
         self.assertEqual(gwt_genae.resolve_locality('701', 'mu', self.MAP), ('701', 'Villazul'))
+        self.assertEqual(gwt_genae.resolve_locality(' 701 ', 'mu', self.MAP), ('701', 'Villazul'))
 
     def test_an_unknown_id_or_an_id_of_another_province_stops(self):
         # the site ignores an l it does not know: an unchecked id is the same silent regional search as a name
@@ -83,6 +84,11 @@ class Localities(unittest.TestCase):
         page = '<option data-provincia="mu" class="x" value="701">Villazul</option>'
         self.assertTrue(gwt_genae.is_locality_list(page))
         self.assertEqual(gwt_genae.locality_map(page), {'mu': [('701', 'Villazul')]})
+
+    def test_an_option_without_a_numeric_id_is_not_a_locality(self):
+        page = '<option value="todas" data-provincia="mu">Todas</option>'
+        self.assertFalse(gwt_genae.is_locality_list(page))
+        self.assertEqual(gwt_genae.locality_map(page), {})
 
     def test_a_province_the_form_does_not_list_is_a_changed_form_not_a_typo(self):
         with self.assertRaises(gwt_genae.LocalityFormError):
