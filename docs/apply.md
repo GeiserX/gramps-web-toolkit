@@ -20,6 +20,7 @@ Settings come from the environment, or from a `KEY=VALUE` file passed with `--co
 | `GWT_USERNAME`, `GWT_PASSWORD` | A user of the tree you want to change |
 | `GWT_TOKEN` | Instead of a username and password: a persistent Gramps Web access token of scope `sync` ([how to create and revoke one](getting-started.md#log-in-with-a-token-instead-of-a-password)). Works on servers that allow only single sign-on |
 | `GWT_TREE` | The tree id the login must land in. Required with `--apply` |
+| `GWT_BACKUP_USERNAME`, `GWT_BACKUP_PASSWORD` | Optional, with `--server-backup`: an owner or admin of the same tree that makes only the server backup ([a separate backup login](#a-backup-stored-by-the-server-server-backup)) |
 
 On a multi-tree server, the tree comes from the user: the login (`POST /api/token/` with a password, `POST /api/token/sync/` with `GWT_TOKEN`) returns a token whose `tree` claim names that user's tree. `gwt-apply` refuses to go on if that claim is not `GWT_TREE`, so a wrong account or a token of another user cannot write into the wrong tree. The sync endpoint gives no refresh token, so when the short-lived login expires mid-run, `gwt-apply` exchanges `GWT_TOKEN` again and repeats the call once.
 
@@ -436,6 +437,8 @@ What the server allows decides how often to use it. Gramps Web API's defaults: b
 
 The backup is taken while the tree lock is held, so it holds the lock note (`GWTLOCK`). A restore brings that note back; within 15 minutes of the backup the next apply then needs `--break-lock`. A `--revert` ignores the backup request in the log: it is not a change to the tree.
 
+Only an owner or admin can create a backup, so a writer that is an editor needs a second login for it. Put `GWT_BACKUP_USERNAME` and `GWT_BACKUP_PASSWORD` of an owner or admin of the same tree in the `--config` file or the environment (the environment wins, as for the other keys). With `--server-backup`, that login makes the backup, on the writer's `GWT_URL` and `GWT_TREE`, and must land in that tree; the writer keeps the lock and makes every write. The backup login's calls go into the writer's log marked `backup_login`, with no credential. `gwt-apply` sends that login only the backup calls (`/backups/` and `/tasks/<id>`) and follows no redirect for it, but the server would allow it everything an owner can do, so guard it like any owner password. A token cannot do this: a `sync` token never gets the backup permission, so `GWT_BACKUP_TOKEN` is refused, as is only one of the two keys (exit 2, before any request). Without `--server-backup` the keys are ignored, so one `--config` serves every step of a `gwt-run`.
+
 A dry run needs no backup, so `--server-backup` without `--apply` is refused.
 
 ## Undo a run
@@ -470,30 +473,3 @@ The revert never overwrites anything that differs from what the run left:
 With `--apply` the tree lock is taken before the plan reads anything. Each object is read again right before it is written, and an object that changed since the plan is skipped. Busy answers are tried again. If the revert stops halfway, run the same command again: what is already undone reads as a skip. At the end it reads every restored object back and checks every deleted one again.
 
 The exit code is 0 when the run is undone. It is 1 on a problem, when a `manual` step is left, or when an object changed since the run and was left alone. The revert writes its own log, as an apply does: with `--apply`, `gwt-apply-revert-<run id>.jsonl` in the same per-tree folder, or `<stem>.<run id><suffix>` next to `--log`; a plan writes one only with `--log`. A revert is a tree write like any other, so run it as that tree's only writer and check the tree after it.
-
-### A separate backup login
-
-An editor can keep applying changes under its own login while an owner/admin
-creates the backup. Add `--backup-config /private/backup.env` together with
-`--apply --server-backup`. This is a separate KEY=VALUE file, owned by the
-current user and readable only by that user (mode `0600`). It needs its own
-`GWT_USERNAME` and `GWT_PASSWORD`, or `GWT_TOKEN`. The writer's environment does
-not override or fill in these credentials. Keep the file out of git, command
-arguments and logs; get its contents from your secret store.
-
-`GWT_URL` and `GWT_TREE` may be omitted in the backup file: they default to the
-writer's API URL and tree. If supplied, both must match. The backup login must
-land in that same tree. A different URL/tree, incomplete credentials, login
-failure, refused backup, failed task or missing/unrestorable result stops the
-run before the change list is applied. The writer still takes/releases the
-lock and performs every object operation; the separate client only creates or
-lists backups and reads their tasks. Backup calls and the backup id remain in
-the writer's run log, without either credential. All requests by the backup
-login, including password/token authentication, disable redirects. Any HTTP 3xx
-refuses the run before the change list, rather than sending its credentials or
-Bearer token to a redirect destination.
-
-This does not change server retention. Check `BACKUP_KEEP` and preserve older
-archives outside the store's per-tree directory before a backup can prune
-them. An existing backup receipt does not replace this gate. Without
-`--backup-config`, the existing single-login behavior is unchanged.

@@ -1,5 +1,6 @@
-"""A backup-only identity must never become the change-list writer."""
+"""The GWT_BACKUP_* login makes only the server backup; the writer keeps the lock and every tree write."""
 import json
+import os
 from urllib.parse import urlparse
 
 import pytest
@@ -33,7 +34,7 @@ class Session:
         self.closed = True
 
 
-def setup(tmp_path, monkeypatch, *, config_extra='', mode=0o600, tree='tree-test', login_status=200):
+def setup(tmp_path, monkeypatch, *, config_extra='', tree='tree-test', login_status=200, env=False):
     import gwt_apply.client as clientmod
     fake = FakeGrampsWeb()
     fake.add('people', {'handle': 'person', 'gender': 0, 'primary_name': {'first_name': 'Example'}})
@@ -43,22 +44,29 @@ def setup(tmp_path, monkeypatch, *, config_extra='', mode=0o600, tree='tree-test
     sessions = iter([writer, backup])
     monkeypatch.setattr(clientmod.requests, 'Session', lambda: next(sessions))
     monkeypatch.setenv('XDG_STATE_HOME', str(tmp_path / 'state'))
+    for key in [k for k in os.environ if k.startswith('GWT_')]:
+        monkeypatch.delenv(key)
     for key, value in {'GWT_URL': 'https://gw.example', 'GWT_USERNAME': 'writer',
                        'GWT_PASSWORD': 'writer-secret', 'GWT_TREE': 'tree-test'}.items():
         monkeypatch.setenv(key, value)
     changes = tmp_path / 'changes.jsonl'
     changes.write_text(json.dumps({'op': 'add_note', 'key': 'n', 'ruling': 'ruling-example',
                                   'text': 'Example evidence', 'attach': [{'person': 'I0001'}]}) + '\n')
-    config = tmp_path / 'backup.env'
-    config.write_text('GWT_USERNAME=backup\nGWT_PASSWORD=backup-secret\n' + config_extra)
-    config.chmod(mode)
-    args = [str(changes), '--apply', '--server-backup', '--backup-config', str(config),
+    config = tmp_path / 'gw.env'
+    if env:
+        monkeypatch.setenv('GWT_BACKUP_USERNAME', 'backup')
+        monkeypatch.setenv('GWT_BACKUP_PASSWORD', 'backup-secret')
+        config.write_text(config_extra)
+    else:
+        config.write_text('GWT_BACKUP_USERNAME=backup\nGWT_BACKUP_PASSWORD=backup-secret\n' + config_extra)
+    args = [str(changes), '--apply', '--server-backup', '--config', str(config),
             '--log', str(tmp_path / 'run.jsonl')]
     return fake, calls, backup, args, config
 
 
-def test_two_identities_keep_tree_writes_on_writer(tmp_path, monkeypatch):
-    fake, calls, backup, args, config = setup(tmp_path, monkeypatch)
+@pytest.mark.parametrize('env', [False, True])
+def test_two_identities_keep_tree_writes_on_writer(tmp_path, monkeypatch, env):
+    fake, calls, backup, args, config = setup(tmp_path, monkeypatch, env=env)
     assert main(args) == 0
     assert backup.closed
     assert ('backup', 'POST', '/api/backups/') in calls
@@ -68,34 +76,56 @@ def test_two_identities_keep_tree_writes_on_writer(tmp_path, monkeypatch):
     assert 'writer-secret' not in logs and 'backup-secret' not in logs
 
 
-@pytest.mark.parametrize('extra,mode,tree,status', [
-    ('GWT_URL=https://other.example\n', 0o600, 'tree-test', 200),
-    ('GWT_TREE=other-tree\n', 0o600, 'tree-test', 200),
-    ('', 0o644, 'tree-test', 200),
-    ('', 0o600, 'other-tree', 200),
-    ('', 0o600, 'tree-test', 403),
+def test_backup_keys_without_server_backup_are_ignored(tmp_path, monkeypatch):
+    """gwt-run hands the same --config to every step: the keys must not change a run without --server-backup."""
+    fake, calls, backup, args, config = setup(tmp_path, monkeypatch)
+    args.remove('--server-backup')
+    assert main(args) == 0
+    assert calls and all(identity == 'writer' for identity, _, _ in calls)
+    assert not any(path == '/api/backups/' for _, _, path in calls)
+
+
+def test_half_backup_login_is_ignored_without_server_backup(tmp_path, monkeypatch):
+    fake, calls, backup, args, config = setup(tmp_path, monkeypatch)
+    config.write_text('GWT_BACKUP_USERNAME=backup\n')
+    args.remove('--server-backup')
+    assert main(args) == 0
+
+
+@pytest.mark.parametrize('tree,status,says', [
+    ('other-tree', 200, 'the backup login failed: login landed in tree'),
+    ('tree-test', 403, 'the backup login failed: login failed: HTTP 403'),
 ])
-def test_bad_config_or_login_never_applies(tmp_path, monkeypatch, extra, mode, tree, status):
-    fake, calls, backup, args, config = setup(tmp_path, monkeypatch, config_extra=extra, mode=mode,
-                                             tree=tree, login_status=status)
+def test_bad_backup_login_never_applies(tmp_path, monkeypatch, capsys, tree, status, says):
+    fake, calls, backup, args, config = setup(tmp_path, monkeypatch, tree=tree, login_status=status)
     assert main(args) == 1
     assert not fake.store['notes']  # temporary writer lock released, no change-list note
     assert ('backup', 'POST', '/api/backups/') not in calls
+    assert says in capsys.readouterr().err
 
 
-def test_missing_credentials_do_not_inherit_writer_environment(tmp_path, monkeypatch):
+@pytest.mark.parametrize('content,says', [
+    ('GWT_BACKUP_USERNAME=backup\n', 'missing setting: GWT_BACKUP_PASSWORD'),
+    ('GWT_BACKUP_PASSWORD=backup-secret\n', 'missing setting: GWT_BACKUP_USERNAME'),
+    ('GWT_BACKUP_TOKEN=example-sync\n', 'cannot create backups'),
+    ('GWT_BACKUP_USERNAME=backup\nGWT_BACKUP_PASSWORD=backup-secret\nGWT_BACKUP_TOKEN=example-sync\n',
+     'cannot create backups'),
+])
+def test_incomplete_backup_login_stops_before_the_server(tmp_path, monkeypatch, capsys, content, says):
     fake, calls, backup, args, config = setup(tmp_path, monkeypatch)
-    config.write_text('GWT_USERNAME=backup\n')
-    assert main(args) == 1
-    assert not fake.store['notes']
-    assert not any(identity == 'backup' for identity, method, path in calls)
+    config.write_text(content)
+    assert main(args) == 2
+    assert not calls  # no login, no lock
+    err = capsys.readouterr().err
+    assert says in err and 'backup-secret' not in err and 'example-sync' not in err
 
 
-def test_separate_backup_refusal_stops_tree_changes(tmp_path, monkeypatch):
+def test_separate_backup_refusal_stops_tree_changes(tmp_path, monkeypatch, capsys):
     fake, calls, backup, args, config = setup(tmp_path, monkeypatch)
     fake.backup_status = 403
     assert main(args) == 1
     assert not fake.store['notes'] and backup.closed
+    assert 'needs an owner or admin login' in capsys.readouterr().err
 
 
 def test_separate_backup_task_and_list_verified(tmp_path, monkeypatch):
@@ -132,11 +162,6 @@ def test_backup_client_rejects_unrelated_routes(method, path):
     client.session.close()
 
 
-def test_backup_config_without_gate_is_refused():
-    with pytest.raises(SystemExit):
-        main(['example.jsonl', '--apply', '--backup-config', 'backup.env'])
-
-
 def test_backup_login_returned_tree_is_checked_independently(tmp_path, monkeypatch):
     import gwt_apply.cli as cli
     fake, calls, backup, args, config = setup(tmp_path, monkeypatch)
@@ -148,15 +173,6 @@ def test_backup_login_returned_tree_is_checked_independently(tmp_path, monkeypat
     assert main(args) == 1
     assert not fake.store['notes']
     assert ('backup', 'POST', '/api/backups/') not in calls
-
-
-def test_backup_symlink_is_refused(tmp_path, monkeypatch):
-    fake, calls, backup, args, config = setup(tmp_path, monkeypatch)
-    link = tmp_path / 'linked.env'
-    link.symlink_to(config)
-    args[args.index('--backup-config') + 1] = str(link)
-    assert main(args) == 1
-    assert not fake.store['notes']
 
 
 def test_backup_task_failure_is_fail_closed(tmp_path, monkeypatch):
@@ -196,7 +212,7 @@ def test_privileged_requests_never_follow_redirects(code, route):
 
 
 @pytest.mark.parametrize('code', [301, 302, 307, 308])
-def test_backup_redirect_stops_applier(tmp_path, monkeypatch, code):
+def test_backup_redirect_stops_applier(tmp_path, monkeypatch, capsys, code):
     fake, calls, backup, args, config = setup(tmp_path, monkeypatch)
     original = backup.request
     def redirect(method, url, **kw):
@@ -207,3 +223,4 @@ def test_backup_redirect_stops_applier(tmp_path, monkeypatch, code):
     backup.request = redirect
     assert main(args) == 1
     assert not fake.store['notes'] and backup.closed
+    assert 'refused an HTTP redirect' in capsys.readouterr().err

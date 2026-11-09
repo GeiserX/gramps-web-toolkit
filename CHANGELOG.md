@@ -6,6 +6,14 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+None.
+
+### Added
+
+- `gwt-apply --server-backup` can make the backup with a second login: `GWT_BACKUP_USERNAME` and `GWT_BACKUP_PASSWORD` of an owner or admin of the same tree, in `--config` or the environment. The writer stays an editor and keeps the lock and every write; the backup login gets only the backup calls and follows no redirect. `GWT_BACKUP_TOKEN` or only one of the two keys exits 2 before any request. `gwt-run` passes the keys through its `--config` with no change (#251).
+
 ## [1.3.3] - 2026-11-07
 
 ### Change lists
