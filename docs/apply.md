@@ -470,3 +470,27 @@ The revert never overwrites anything that differs from what the run left:
 With `--apply` the tree lock is taken before the plan reads anything. Each object is read again right before it is written, and an object that changed since the plan is skipped. Busy answers are tried again. If the revert stops halfway, run the same command again: what is already undone reads as a skip. At the end it reads every restored object back and checks every deleted one again.
 
 The exit code is 0 when the run is undone. It is 1 on a problem, when a `manual` step is left, or when an object changed since the run and was left alone. The revert writes its own log, as an apply does: with `--apply`, `gwt-apply-revert-<run id>.jsonl` in the same per-tree folder, or `<stem>.<run id><suffix>` next to `--log`; a plan writes one only with `--log`. A revert is a tree write like any other, so run it as that tree's only writer and check the tree after it.
+
+### A separate backup login
+
+An editor can keep applying changes under its own login while an owner/admin
+creates the backup. Add `--backup-config /private/backup.env` together with
+`--apply --server-backup`. This is a separate KEY=VALUE file, owned by the
+current user and readable only by that user (mode `0600`). It needs its own
+`GWT_USERNAME` and `GWT_PASSWORD`, or `GWT_TOKEN`. The writer's environment does
+not override or fill in these credentials. Keep the file out of git, command
+arguments and logs; get its contents from your secret store.
+
+`GWT_URL` and `GWT_TREE` may be omitted in the backup file: they default to the
+writer's API URL and tree. If supplied, both must match. The backup login must
+land in that same tree. A different URL/tree, incomplete credentials, login
+failure, refused backup, failed task or missing/unrestorable result stops the
+run before the change list is applied. The writer still takes/releases the
+lock and performs every object operation; the separate client only creates or
+lists backups and reads their tasks. Backup calls and the backup id remain in
+the writer's run log, without either credential.
+
+This does not change server retention. Check `BACKUP_KEEP` and preserve older
+archives outside the store's per-tree directory before a backup can prune
+them. An existing backup receipt does not replace this gate. Without
+`--backup-config`, the existing single-login behavior is unchanged.
