@@ -50,6 +50,68 @@ def _client(conf: dict, **kw) -> Client:
                   tree=conf.get("GWT_TREE"), token=conf.get("GWT_TOKEN") or None, **kw)
 
 
+def backup_login_problem(conf: dict) -> str | None:
+    """What is wrong with the separate backup login (GWT_BACKUP_*), or None. No keys means the writer makes it."""
+    if conf.get("GWT_BACKUP_TOKEN"):
+        return ("GWT_BACKUP_TOKEN: a token of scope sync cannot create backups on Gramps Web; give "
+                "GWT_BACKUP_USERNAME and GWT_BACKUP_PASSWORD of an owner or admin of the tree")
+    missing = [k for k in ("GWT_BACKUP_USERNAME", "GWT_BACKUP_PASSWORD") if not conf.get(k)]
+    if len(missing) == 1:
+        return f"missing setting: {missing[0]} (the backup login needs a username and a password)"
+    return None
+
+
+class _NoRedirectSession:
+    """Keep the owner login off redirect destinations, including during authentication."""
+
+    def __init__(self, session):
+        self.session = session
+
+    def request(self, method, url, **kw):
+        kw["allow_redirects"] = False
+        response = self.session.request(method, url, **kw)
+        if 300 <= response.status_code < 400:
+            raise ApiError("the backup login refused an HTTP redirect", response.status_code)
+        return response
+
+    def close(self):
+        self.session.close()
+
+
+class _BackupClient(Client):
+    """The backup-only client of a separate owner/admin login: gwt-apply sends it nothing but backup calls. The
+    server would allow that login everything; this client is what limits it."""
+
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+        self.session = _NoRedirectSession(self.session)
+
+    def _request(self, method: str, path: str, **kw):
+        allowed = (path == "/backups/" and method in ("GET", "POST")) or (
+            method == "GET" and re.fullmatch(r"/tasks/[A-Za-z0-9-]+", path) is not None)
+        if not allowed:
+            raise ApiError("the backup login can only create/list backups and read backup tasks")
+        return super()._request(method, path, **kw)
+
+
+def _separate_server_backup(conf: dict, writer: Client, args, lock) -> str | None:
+    """The server backup made by the GWT_BACKUP_* login, on the writer's URL and tree. The writer keeps the lock
+    and every tree write; the backup login is closed even when the backup fails."""
+    backup = _BackupClient(conf["GWT_URL"], conf["GWT_BACKUP_USERNAME"], conf["GWT_BACKUP_PASSWORD"],
+                           tree=writer.tree, dry_run=False)
+    # Every backup call goes into the writer's run log, marked; never a credential or a token.
+    backup.log = lambda **entry: writer.log(backup_login=True, **entry)
+    try:
+        _retried("backup login", backup.login, writer, args, lock)
+        if backup.tree != writer.tree:
+            return "the backup login landed in another tree"
+        return _server_backup(backup, args, lock)
+    except ApiError as exc:
+        return f"the backup login failed: {exc}"
+    finally:
+        backup.session.close()
+
+
 def _plan_on_snapshot(ops: list[dict], snap: dict, client: Client, *, tag: str | None = None,
                       landed: frozenset = frozenset()) -> list[str]:
     """Plan the whole list on the snapshot, offline; then what stops the plan or changed since the snapshot."""
@@ -332,6 +394,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.apply and not conf.get("GWT_TREE"):
         print("--apply needs GWT_TREE (the tree id the login must land in)", file=sys.stderr)
         return 2
+    # gwt-run passes the same --config to every step: the GWT_BACKUP_* keys count only with --server-backup
+    problem = args.server_backup and backup_login_problem(conf)
+    if problem:
+        print(problem, file=sys.stderr)
+        return 2
+    backup_conf = conf if args.server_backup and conf.get("GWT_BACKUP_USERNAME") else None
     run_id = f"{datetime.now():%Y%m%d-%H%M%S}-{secrets.token_hex(3)}"
     log = _log_path(args, run_id, conf.get("GWT_TREE"), prefix="gwt-apply",
                     writes=args.apply)
@@ -339,7 +407,8 @@ def main(argv: list[str] | None = None) -> int:
     _first_line(run_id, log)
     outcome: dict = {}
     landed = _landed(args, conf.get("GWT_TREE") or (snap or {}).get("tree"))
-    return _ended(client, lambda: _run(args, argv, client, run_id, ops, snap, old, offline, outcome, landed), outcome)
+    return _ended(client, lambda: _run(args, argv, client, run_id, ops, snap, old, offline, outcome, landed,
+                                                  backup_conf), outcome)
 
 
 def _backup_id_of_task(t: dict):
@@ -436,7 +505,7 @@ def _server_backup(client: Client, args, lock) -> str | None:
 
 
 def _run(args, argv, client: Client, run_id: str, ops, snap, old, offline: bool, outcome: dict,
-         landed: frozenset = frozenset()) -> int:
+         landed: frozenset = frozenset(), backup_conf: dict | None = None) -> int:
     client.run_info = {"run": run_id, "version": version(), "argv": argv, "list": args.change_list,
                        "list_sha256": _sha256(args.change_list) if args.change_list else None,
                        "snapshot": args.snapshot}
@@ -504,7 +573,8 @@ def _run(args, argv, client: Client, run_id: str, ops, snap, old, offline: bool,
             _write_json(args.json, ops, [], "not run: the list stopped on likely duplicates")
             return 1
         if args.server_backup:
-            refused = _server_backup(client, args, lock)
+            refused = (_separate_server_backup(backup_conf, client, args, lock)
+                       if backup_conf else _server_backup(client, args, lock))
             if refused:
                 client.log(event="refused", reason="server-backup", problems=[refused])
                 print(f"{refused}; nothing was written", file=sys.stderr)

@@ -93,7 +93,7 @@ A step's `status` is `todo`, `running`, `ok`, `refused`, `failed`, `stalled` or 
 | Option | Default | |
 |---|---|---|
 | `--dir DIR` | `LIST.run` | the run's folder |
-| `--config FILE` | | GWT_URL, the login and GWT_TREE, for every step |
+| `--config FILE` | | GWT_URL, the login and GWT_TREE, for every step; with `--server-backup`, also GWT_BACKUP_USERNAME and GWT_BACKUP_PASSWORD for an owner login that makes only the backup ([apply](apply.md#a-backup-stored-by-the-server-server-backup)) |
 | `--tree ID` | | the tree the login must land in (GWT_TREE for every step) |
 | `--known FILE` | | a gwt-check known file: findings the gate accepts |
 | `--tag NAME`, `--private-new` | | passed to every gwt-apply step |
