@@ -18,6 +18,7 @@ class Session:
     def request(self, method, url, **kw):
         path = urlparse(url).path
         self.calls.append((self.identity, method, path))
+        assert urlparse(url).netloc == 'gw.example'  # both logins on the writer's GWT_URL
         if path == '/api/token/':
             expected = {'username': self.identity, 'password': self.identity + '-secret'}
             assert kw['json'] == expected  # writer environment must not replace backup config
@@ -154,7 +155,9 @@ def test_separate_backup_bad_list_stops_changes(tmp_path, monkeypatch, items):
 
 
 @pytest.mark.parametrize('method,path', [('POST', '/objects/'), ('GET', '/people/'),
-                                        ('DELETE', '/backups/example'), ('POST', '/tasks/example')])
+                                        ('DELETE', '/backups/example'), ('POST', '/tasks/example'),
+                                        ('DELETE', '/backups/'), ('PUT', '/backups/'),
+                                        ('GET', '/backups/example/file'), ('GET', '/tasks/x/../people/')])
 def test_backup_client_rejects_unrelated_routes(method, path):
     client = _BackupClient('https://gw.example', 'backup', 'example', tree='tree-test')
     with pytest.raises(ApiError, match='only create/list backups'):

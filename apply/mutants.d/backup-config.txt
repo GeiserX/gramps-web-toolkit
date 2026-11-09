@@ -6,3 +6,7 @@ gwt_apply/cli.py | if conf.get("GWT_BACKUP_TOKEN"): | if False: | a sync token c
 gwt_apply/cli.py | if len(missing) == 1: | if False: | half a backup login stops before the server, never falls back to the writer
 gwt_apply/cli.py | backup_conf = conf if args.server_backup and conf.get("GWT_BACKUP_USERNAME") else None | backup_conf = None | the backup keys route the backup to the separate login
 gwt_apply/cli.py | problem = args.server_backup and backup_login_problem(conf) | problem = backup_login_problem(conf) | the backup keys are checked only with --server-backup
+gwt_apply/cli.py | re.fullmatch(r"/tasks/[A-Za-z0-9-]+", path) | re.match(r"/tasks/[A-Za-z0-9-]+", path) | the task route is the whole path, so /tasks/x/../people/ is refused
+gwt_apply/cli.py | method in ("GET", "POST")) or ( | True) or ( | the backup login can only GET and POST /backups/, never DELETE or PUT it
+gwt_apply/cli.py | (path == "/backups/" and | (path.startswith("/backups") and | the backup login cannot reach a backup's own routes, such as its file
+gwt_apply/cli.py | _BackupClient(conf["GWT_URL"], | _BackupClient("https://other.example", | the backup login uses the writer's GWT_URL
