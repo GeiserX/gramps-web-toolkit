@@ -25,6 +25,8 @@ class Session:
             assert path == '/api/backups/' or path.startswith('/api/tasks/'), path
         else:
             assert path != '/api/backups/' and not path.startswith('/api/tasks/'), path
+        if self.identity == 'backup':
+            assert kw.pop("allow_redirects") is False
         return self.fake.request(method, url, **kw)
 
     def close(self):
@@ -161,5 +163,47 @@ def test_backup_task_failure_is_fail_closed(tmp_path, monkeypatch):
     fake, calls, backup, args, config = setup(tmp_path, monkeypatch)
     fake.backup_status = 202
     fake.task_script = [{'state': 'FAILURE'}]
+    assert main(args) == 1
+    assert not fake.store['notes'] and backup.closed
+
+
+@pytest.mark.parametrize('code', [301, 302, 307, 308])
+@pytest.mark.parametrize('route', ['login', 'sync', 'backup', 'task', 'list'])
+def test_privileged_requests_never_follow_redirects(code, route):
+    class RedirectSession:
+        def __init__(self):
+            self.calls = []
+        def request(self, method, url, **kw):
+            self.calls.append((method, url, kw))
+            assert kw.get('allow_redirects') is False
+            return Resp(code, {}, {'Location': '/api/objects/'})
+        def close(self):
+            pass
+    session = RedirectSession()
+    client = _BackupClient('https://gw.example', 'backup', 'example', tree='tree-test',
+                           token='example-sync' if route == 'sync' else None, session=session)
+    with pytest.raises(ApiError, match='refused an HTTP redirect'):
+        if route in ('login', 'sync'):
+            client.login()
+        else:
+            client.token = 'example-jwt'
+            paths = {'backup': ('POST', '/backups/'), 'task': ('GET', '/tasks/example'),
+                     'list': ('GET', '/backups/')}
+            client._request(*paths[route])
+    assert len(session.calls) == 1
+    assert not any('/objects/' in url for _, url, _ in session.calls)
+    client.session.close()
+
+
+@pytest.mark.parametrize('code', [301, 302, 307, 308])
+def test_backup_redirect_stops_applier(tmp_path, monkeypatch, code):
+    fake, calls, backup, args, config = setup(tmp_path, monkeypatch)
+    original = backup.request
+    def redirect(method, url, **kw):
+        assert kw.get('allow_redirects') is False
+        if urlparse(url).path == '/api/backups/':
+            return Resp(code, {}, {'Location': '/api/objects/'})
+        return original(method, url, **kw)
+    backup.request = redirect
     assert main(args) == 1
     assert not fake.store['notes'] and backup.closed

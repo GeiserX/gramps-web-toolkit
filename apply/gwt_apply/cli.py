@@ -51,8 +51,29 @@ def _client(conf: dict, **kw) -> Client:
                   tree=conf.get("GWT_TREE"), token=conf.get("GWT_TOKEN") or None, **kw)
 
 
+class _NoRedirectSession:
+    """Keep a privileged login off redirect destinations, including during authentication."""
+
+    def __init__(self, session):
+        self.session = session
+
+    def request(self, method, url, **kw):
+        kw["allow_redirects"] = False
+        response = self.session.request(method, url, **kw)
+        if 300 <= response.status_code < 400:
+            raise ApiError("the backup login refused an HTTP redirect", response.status_code)
+        return response
+
+    def close(self):
+        self.session.close()
+
+
 class _BackupClient(Client):
     """A separate login that cannot be used for tree object operations."""
+
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+        self.session = _NoRedirectSession(self.session)
 
     def _request(self, method: str, path: str, **kw):
         allowed = (path == "/backups/" and method in ("GET", "POST")) or (

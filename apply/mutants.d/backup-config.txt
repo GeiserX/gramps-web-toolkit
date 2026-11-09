@@ -2,3 +2,4 @@
 gwt_apply/cli.py | if backup.base != writer.base or not writer.tree or conf.get("GWT_TREE") != writer.tree: | if False: | separate backup config cannot select another API or tree
 gwt_apply/cli.py | if backup.tree != writer.tree: | if False: | returned backup login must match the writer tree
 gwt_apply/cli.py | if not allowed: | if False: | backup-only client rejects tree object routes
+gwt_apply/cli.py | kw["allow_redirects"] = False | kw["allow_redirects"] = True | backup authentication and API calls never follow redirects

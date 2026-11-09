@@ -488,7 +488,10 @@ failure, refused backup, failed task or missing/unrestorable result stops the
 run before the change list is applied. The writer still takes/releases the
 lock and performs every object operation; the separate client only creates or
 lists backups and reads their tasks. Backup calls and the backup id remain in
-the writer's run log, without either credential.
+the writer's run log, without either credential. All requests by the backup
+login, including password/token authentication, disable redirects. Any HTTP 3xx
+refuses the run before the change list, rather than sending its credentials or
+Bearer token to a redirect destination.
 
 This does not change server retention. Check `BACKUP_KEEP` and preserve older
 archives outside the store's per-tree directory before a backup can prune
