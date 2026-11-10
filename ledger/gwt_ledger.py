@@ -18,6 +18,8 @@ Agents run `check` before a search and `add` after it, so two lanes never pay fo
   gwt-ledger sources [--country XX]                          the source registry: ids, aliases, kinds, years
   gwt-ledger coverage --dump DUMP --sources FILE [--root I]  person x source matrix of what was searched
   gwt-ledger import-tsv FILE --map COL=FILECOL,... [--control-ok RUN]  append rows from another TSV log
+  gwt-ledger scan add|check --source SRC --book ID --start N --end M [--person KEY] [--skip LIST]  images of a
+                                                             book read (rows `<book> img N M`); check prints the gaps
   gwt-ledger request add|update|list|due ...                 letters and forms sent to archives
   gwt-ledger costs [--by payer|archive|person]               what the requests cost, per currency
 
@@ -335,6 +337,22 @@ def add_rows(path, rows, columns=COLUMNS, unless=None):
 def add_row(path, row, unless=None):
     """Append one row under an exclusive lock, writing the header if the file is new or empty."""
     return add_rows(path, [row], unless=unless)
+
+
+def log_search(path, row, reg, paths):
+    """Append one search row unless a live row of any lane file is the same search (same_search)."""
+    mine = same_search(row, reg)
+
+    def twins():  # a logger run twice must not log every search twice; a voided row is no reason to skip
+        rows = live([r for lp in paths for r in read_rows(lp)])
+        return [r['id'] for r in rows if key(r['person_key']) == mine[0] and same_search(r, reg) == mine]
+
+    # read under the lane file's lock, so two runs of one logger cannot both find no row and both write
+    found = add_row(path, row, unless=twins)
+    if found:
+        sys.stderr.write('gwt-ledger: not added: the same search (person, source, query, date and result) is '
+                         'already logged as %s\n' % ' '.join(found))
+    return found
 
 
 def find(rows, person=None, source=None, query=None, threshold=DEFAULT_THRESHOLD, exact=False, registry=None,
@@ -720,6 +738,105 @@ def import_tsv(args, reg, err):
     return 0
 
 
+# ---------------------------------------------------------------- image ranges of a book, as ordinary rows
+
+# A scan row is an ordinary row whose normalized query is `<book> img <first> <last>`: readable in the TSV, matched
+# by check, retracted by void. Any other query is no scan row, so no hand-written row can make `scan check` fail.
+SCAN_QUERY = re.compile(r'^(.+) img (\d+) (\d+)$')
+
+
+def scan_span(row, book):
+    """(first, last) when the row records images first..last of this normalized book, else None."""
+    m = SCAN_QUERY.match(normalize(row['query']))
+    if not m or m.group(1) != book:
+        return None
+    first, last = int(m.group(2)), int(m.group(3))
+    return (first, last) if 1 <= first <= last else None
+
+
+def image_list(text):
+    """`165,167,240-241` -> {165, 167, 240, 241}; anything else is an argparse error."""
+    out = set()
+    for part in text.split(','):
+        m = re.fullmatch(r'\s*(\d+)\s*(?:-\s*(\d+)\s*)?', part)
+        first, last = (int(m.group(1)), int(m.group(2) or m.group(1))) if m else (0, 0)
+        if not 1 <= first <= last:
+            raise argparse.ArgumentTypeError('not an image list: %r (say 165,167,240-241)' % text)
+        out.update(range(first, last + 1))
+    return out
+
+
+def read_runs(first, last, skip):
+    """The contiguous runs of first..last left once the skipped images (all inside it) are taken out."""
+    runs, start = [], first
+    for n in sorted(skip) + [last + 1]:
+        if n > start:
+            runs.append((start, n - 1))
+        start = max(start, n + 1)
+    return runs
+
+
+def scan_gaps(start, end, intervals):
+    cursor, gaps = start, []
+    for lo, hi in sorted(intervals):
+        lo, hi = max(lo, start), min(hi, end)
+        if lo > hi:
+            continue
+        if lo > cursor:
+            gaps.append([cursor, lo - 1])
+        cursor = max(cursor, hi + 1)
+    if cursor <= end:
+        gaps.append([cursor, end])
+    return gaps
+
+
+def scan_command(args, reg, err, stray, lane_path, source, paths):
+    book = normalize(args.book)
+    if not book:
+        return err('--book %r: nothing left to match after normalising' % args.book)
+    if not 1 <= args.start <= args.end:
+        return err('scan range must be positive and inclusive: 1 <= --start <= --end')
+    person = key(args.person or '')
+    if args.scmd == 'add':
+        if args.skip and (min(args.skip) < args.start or max(args.skip) > args.end):
+            return err('--skip names images outside --start..--end')
+        runs = read_runs(args.start, args.end, args.skip)
+        if not runs:
+            return err('--skip leaves no image read')
+        path = lane_path()
+        if stray(path):
+            return 2
+        if args.control_ok:
+            problem = control_problem(args.control_ok)
+            if problem:
+                return err('--control-ok: %s' % problem)
+        result = proven(args.result, args.control_ok)
+        if result != args.result:
+            sys.stderr.write('gwt-ledger: stored as unproven: a none needs --control-ok, the proof the source could '
+                             'answer; the images count as not read\n')
+        for first, last in runs:
+            log_search(path, {'person_key': person, 'person_label': args.label or ('' if person else args.book),
+                              'source': source, 'query': normalize('%s img %d %d' % (book, first, last)),
+                              'date': args.date, 'result': result, 'evidence': args.evidence, 'agent': args.agent,
+                              'next_date': '', 'control': clean(args.control_ok)}, reg, paths)
+        return 0
+    rows = []
+    for r in live([r for lp in paths for r in read_rows(lp)]):
+        if reg.canon(r['source']) != source:
+            continue
+        if person and key(r['person_key']) not in (person, ''):
+            continue  # a read logged with no person was a read of every image, for whoever is sought
+        span = scan_span(r, book)
+        if span and span[0] <= args.end and span[1] >= args.start:
+            rows.append((r, span))
+    done = [span for r, span in rows if r['result'] in SEARCHED and (not r['next_date'] or r['next_date'] > args.date)]
+    gaps = scan_gaps(args.start, args.end, done)
+    print(json.dumps({'gaps': gaps, 'rows': [dict({c: r[c] for c in ('id', 'person_key', 'date', 'result', 'agent',
+                                                                       'evidence')}, start=s[0], end=s[1])
+                                             for r, s in rows]}, ensure_ascii=False))
+    return 1 if gaps else 0
+
+
 # ---------------------------------------------------------------- command line
 
 
@@ -742,6 +859,25 @@ def main(argv=None):
     def agent_and_date(sp):
         sp.add_argument('--agent', default=os.environ.get('GWT_AGENT', ''))
         sp.add_argument('--date', default=datetime.date.today().isoformat(), type=iso_date)
+
+    sc = sub.add_parser('scan', help='image ranges of a book: log the images read, or print the ones nobody read')
+    scsub = sc.add_subparsers(dest='scmd', required=True)
+    for action in ('add', 'check'):
+        sp = scsub.add_parser(action)
+        sp.add_argument('--source', required=True)
+        sp.add_argument('--book', required=True, help='the book\'s id at the source: a film, catalogue or item id')
+        sp.add_argument('--start', type=int, required=True, help='first image')
+        sp.add_argument('--end', type=int, required=True, help='last image')
+        sp.add_argument('--person', help='add: the person sought (none: every image was read in full); check: count '
+                                         'this person\'s rows and the rows with no person (none: every row)')
+        sp.add_argument('--new-source', action='store_true')
+        agent_and_date(sp)
+        if action == 'add':
+            sp.add_argument('--label', default='', help='person_label; default, the book when there is no --person')
+            sp.add_argument('--skip', type=image_list, default=set(), help='images not read: 165,167,240-241')
+            sp.add_argument('--result', required=True, choices=RESULTS)
+            sp.add_argument('--control-ok', default='', metavar='RUN')
+            sp.add_argument('--evidence', default='')
 
     c = sub.add_parser('check', help='has this search been done? print the matching rows; exit 0 if one is a '
                                      'search that ran and is not due again, 1 if not')
@@ -836,6 +972,8 @@ def main(argv=None):
     # A query or person that normalizes to nothing (only punctuation, say) would match every row.
     for name in ('query', 'person', 'reason'):
         value = getattr(args, name, None)
+        if args.cmd == 'void' and name == 'person' and value == '':
+            continue  # void --person '': the rows logged with no person (a whole book or collection searched)
         if value is not None and not normalize(value):
             p.error('--%s %r: nothing left to match after normalising' % (name, value))
     try:
@@ -867,6 +1005,12 @@ def main(argv=None):
             p.error('%s needs --agent (or $GWT_AGENT): rows go to <ledger-dir>/<agent>.tsv' % args.cmd)
         return os.path.join(args.ledger_dir, key(args.agent) + '.tsv')
 
+    if args.cmd == 'scan':
+        try:
+            return scan_command(args, reg, err, stray, lane_path, source_id(args.source, note=args.scmd == 'add'),
+                                ledger_paths(args.ledger, args.ledger_dir))
+        except (OSError, UnicodeDecodeError) as exc:
+            return err('cannot read the ledger: %s' % exc)
     if args.cmd == 'add':
         path = lane_path()
         if stray(path):
@@ -884,19 +1028,10 @@ def main(argv=None):
                'source': source, 'query': normalize(args.query), 'date': args.date,
                'result': result, 'evidence': args.evidence, 'agent': args.agent,
                'next_date': args.next_date, 'control': clean(args.control_ok)}
-        mine = same_search(row, reg)
-
-        def twins():  # a logger run twice must not log every search twice; a voided row is no reason to skip
-            rows = live([r for lp in ledger_paths(args.ledger, args.ledger_dir) for r in read_rows(lp)])
-            return [r['id'] for r in rows if key(r['person_key']) == mine[0] and same_search(r, reg) == mine]
-
-        try:  # read under the lane file's lock, so two runs of one logger cannot both find no row and both write
-            found = add_row(path, row, unless=twins)
+        try:
+            log_search(path, row, reg, ledger_paths(args.ledger, args.ledger_dir))
         except (OSError, UnicodeDecodeError) as exc:
             return err('cannot read the ledger: %s' % exc)
-        if found:
-            sys.stderr.write('gwt-ledger: not added: the same search (person, source, query, date and result) is '
-                             'already logged as %s\n' % ' '.join(found))
         return 0
     if args.cmd == 'import-tsv':
         if not args.ledger_dir and stray(args.ledger):
@@ -950,7 +1085,8 @@ def main(argv=None):
     if args.cmd == 'void':
         path = lane_path()
         source = source_id(args.source)
-        targets = [r for _, r in find(rows, args.person, source, args.query, exact=True, registry=reg)]
+        targets = [r for _, r in find(rows, args.person, source, args.query, exact=True, registry=reg)
+                   if key(r['person_key']) == key(args.person)]  # find drops the person filter for ''
         if not targets:
             done = find([r for r in everything if r['result'] == VOID], args.person, source, args.query, exact=True,
                         registry=reg)

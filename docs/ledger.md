@@ -252,3 +252,24 @@ export GWT_LEDGER=research/buscado.tsv GWT_LEDGER_DIR=research/ledger.d GWT_AGEN
 python3 -m unittest discover -s ledger
 python3 .github/scripts/run_tests.py --mutants --only ledger   # each guard in ledger/mutants.txt removed in turn
 ```
+
+## Image ranges: check before opening a book
+
+A sweep reads a digitised book image by image. `check` cannot tell whether images 1 to 30 of a book were already read: a row logged for images 1 to 530 never matches a query for 1 to 300, and nothing works out which images are left. `scan` does that arithmetic over ordinary rows.
+
+```sh
+# Before opening the book: which images of 1-300 has nobody read?
+gwt-ledger scan check --source familysearch --book 'book-42' --start 1 --end 300 [--person "Ana Example"]
+
+# After reading 1-120, every image read in full, except three that would not load.
+gwt-ledger scan add --source familysearch --book 'book-42' --start 1 --end 120 --skip 17,88-89 \
+  --result hit --evidence notes/book-42.md --agent lane-7
+```
+
+`scan add` writes one ordinary row per run of images read, with the query `<book> img <first> <last>`, normalized like every query: `book 42 img 1 16`, `book 42 img 18 87` and `book 42 img 90 120` above. `--skip` takes the images not read (`17,88-89`), and they stay gaps. Without `--person` the row has no person: every image was read in full, so the read counts for whoever is sought, and its `person_label` is the book. With `--person` (and `--label`) the row belongs to that person, as with `add`. `--result`, `--control-ok`, `--evidence`, `--agent` and `--date` work as on `add`: a `none` without `--control-ok` is stored as `unproven` and its images count as not read, and a row the ledger already holds is skipped.
+
+`scan check` reads the live rows of that source whose normalized query is exactly `<book> img <first> <last>`, the book compared normalized (`Book 42` and `book-42` are one book). With `--person P` it counts P's rows and the rows with no person; without it, every row of the book. A row counts when its result [counts as done](#results) and its `next_date` has not arrived, as for `check`. It prints one JSON object: `gaps`, the image runs nobody read, and `rows`, the overlapping rows with their `id`, `person_key`, `date`, `result`, `agent`, `evidence`, `start` and `end`. Exit 0 when nothing is left to read, 1 when there are gaps, 2 on a usage error.
+
+Number the images as the source's viewer does (image, vue, canvas), and give one book the same id every time: the film, catalogue or item id, not its title. A row of any other shape is simply no scan row, so a row typed by hand can never make `scan check` fail. A row you wrote yourself in the same shape counts: an older log that already says `<book> img <first> <last>` needs no conversion.
+
+The rows are ordinary rows, so `check`, `stats` and `void` see them, and `list --person P` shows the rows logged for P. To retract a wrong read, `void` its query, for instance `void --person '' --source familysearch --query 'book 42 img 1 16' --reason "..."`; `--person ''` takes only the rows with no person.

@@ -48,3 +48,15 @@ gwt_ledger.py | VOIDS.match(r['evidence']) if r['result'] == VOID else None | VO
 gwt_ledger.py | ' '.join(r['id'] for r in targets), args.reason | ' '.join(r['id'] for r in targets[:1]), args.reason | a void retracts every lane's row of the search, not just the first
 gwt_ledger.py | for name in ('query', 'person', 'reason'): | for name in ('query', 'person'): | a void reason with nothing in it is refused
 gwt_ledger.py | found = unless() if unless else None | found = None | add skips a row the ledger already holds (same person, source, query, date and result)
+gwt_ledger.py | if not m or m.group(1) != book: | if not m: | scan check never counts a range of another book
+gwt_ledger.py | if reg.canon(r['source']) != source: | if False: | scan check never counts a range read at another source
+gwt_ledger.py | if person and key(r['person_key']) not in (person, ''): | if False: | scan check --person never counts a range read for another person
+gwt_ledger.py | not in (person, ''): | != person: | a range read with no person counts for every person
+gwt_ledger.py | for n in sorted(skip) + [last + 1]: | for n in [last + 1]: | images left out with --skip stay gaps
+gwt_ledger.py | cursor = max(cursor, hi + 1) | cursor = hi + 1 | a range inside a longer one reopens no gap
+gwt_ledger.py | done = [span for r, span in rows if r['result'] in SEARCHED and | done = [span for r, span in rows if True and | a blocked or unproven range fills no gap
+gwt_ledger.py | if key(r['person_key']) == key(args.person)]  # find | if True]  # find | void --person '' retracts only the rows with no person
+gwt_ledger.py | if args.skip and (min(args.skip) < args.start or max(args.skip) > args.end): | if False: | scan add refuses a --skip image outside the range
+gwt_ledger.py | span for r, span in rows if r['result'] in SEARCHED and (not r['next_date'] or r['next_date'] > args.date) | span for r, span in rows if r['result'] in SEARCHED and True | scan check: a row due again (next_date reached) fills no gap
+gwt_ledger.py | return scan_command(args, reg, err, stray, lane_path, | return scan_command(args, reg, err, lambda path: None, lane_path, | scan add with no ledger named never creates ./buscado.tsv
+gwt_ledger.py | if args.cmd == 'void' and name == 'person' and value == '': | if name == 'person' and value == '': | only void takes an empty --person; add, check, list and scan refuse it
