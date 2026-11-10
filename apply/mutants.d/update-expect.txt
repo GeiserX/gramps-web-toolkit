@@ -20,3 +20,7 @@ gwt_apply/ops.py |         if k not in (PRIVATE, "lat", "long") and not isinstan
 gwt_apply/ops.py |             parse_date(v) |             pass | validate refuses an unreadable expect.date
 gwt_apply/ops.py |         if k in ("place", "enclosed_by") and v and not (v.startswith("key:") or _GRAMPS_ID.match(v)): |         if False: | validate refuses an expect place that is a handle
 gwt_apply/ops.py |             if name in EXPECT_FIELDS and "expect" in op: |             if False: | validate checks expect on the four updates
+gwt_apply/ops.py |         for f, read in (op.get("expect") or {}).items(): |         for f, read in list((op.get("expect") or {}).items())[:1]: | every field expect names is compared, not only the first
+gwt_apply/ops.py |         value = str(value or "").strip() |         value = str(value or "") | expect ignores spaces at either end of the text the tree has
+gwt_apply/ops.py |         return str(value).strip() |         return str(value) | expect ignores spaces at either end of the text the list read
+gwt_apply/ops.py |             refs = [obj.get("place") or ""] if f == "place" |             refs = [obj.get("place")] if f == "place" | an event with no place matches expect.place ""

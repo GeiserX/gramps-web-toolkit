@@ -159,7 +159,7 @@ A `detach` whose object is gone, when a `delete` op of the same list takes it (d
  "expect": {"description": "Baptised at home", "date": "1890"}}
 ```
 
-Dates compare as dates, so `1890-3-16` and `1890-03-16` are the same value; a place (`place`, `enclosed_by`) compares by the place its Gramps ID or `key:<key>` names. A field `set` changes and `expect` leaves out is not compared, as before. The list check refuses an `expect` that is not an object with at least one field, a field that is not in `set`, and a value `set` would refuse. `update_family` takes no `father` or `mother` in `expect`: it never replaces a parent it finds, so there is nothing to guard.
+Text compares exactly, case and accents included; only spaces at either end are ignored. Dates compare as dates, so `1890-3-16` and `1890-03-16` are the same value; a place (`place`, `enclosed_by`) compares by the place its Gramps ID or `key:<key>` names. A field `set` changes and `expect` leaves out is not compared, as before. The list check refuses an `expect` that is not an object with at least one field, a field that is not in `set`, and a value `set` would refuse. `update_family` takes no `father` or `mother` in `expect`: it never replaces a parent it finds, so there is nothing to guard.
 
 Place names, place types and person names are compared without case, accents or repeated spaces: `Mónte  Alto` matches `monte alto`.
 

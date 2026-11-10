@@ -59,6 +59,18 @@ def test_a_landed_update_with_expect_reruns_and_verifies_as_a_skip(fake):
     assert run(fake, [EVENT], verify=True)[0].status == "skip"
 
 
+def test_every_field_expect_names_is_compared(fake):
+    op = dict(EVENT, set={"description": "new text", "date": "1891"}, expect={"description": "old text", "date": "1889"})
+    res = run(fake, [op], dry_run=True)[0]
+    assert res.status == "conflict" and "no longer has date '1889' (it has '1890-03-16')" in res.actions[-1], res.actions
+
+
+def test_expect_text_ignores_spaces_at_either_end_but_not_case(fake):
+    fake.store["events"]["ev"]["description"] = "old text "
+    assert run(fake, [dict(EVENT, expect={"description": " old text"})], dry_run=True)[0].status == "done"
+    assert run(fake, [dict(EVENT, expect={"description": "Old text"})], dry_run=True)[0].status == "conflict"
+
+
 def test_a_field_expect_does_not_name_is_not_compared(fake):
     fake.store["events"]["ev"]["description"] = "an edit made since"
     op = dict(EVENT, set={"description": "new text", "type": "Baptism"}, expect={"type": "Birth"})
@@ -136,3 +148,6 @@ def test_expect_is_optional_and_empty_values_mean_none(fake):
     assert validate([{k: v for k, v in EVENT.items() if k != "expect"}]) == []
     fake.store["events"]["ev"].pop("description")
     assert run(fake, [dict(EVENT, expect={"description": ""})], dry_run=True)[0].status == "done"
+    fake.store["events"]["ev"]["place"] = None
+    op = dict(EVENT, set={"place": "P0002"}, expect={"place": ""})
+    assert run(fake, [op], dry_run=True)[0].status == "done"
