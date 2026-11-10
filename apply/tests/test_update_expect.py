@@ -96,6 +96,12 @@ def test_update_person_expect(fake):
         assert res.status == "conflict" and f"(it has {has!r})" in res.actions[-1], res.actions
     res = run(fake, [dict(op, set={"surname": "Sample"}, expect={"surname": "Other"})], dry_run=True)[0]
     assert res.status == "conflict" and "(it has 'Example')" in res.actions[-1], res.actions
+    name = fake.store["people"]["ana"]["primary_name"]
+    name["surname_list"] = [{"surname": "Birthname"}, {"surname": "Example", "primary": True}]
+    res = run(fake, [dict(op, set={"surname": "Sample"}, expect={"surname": "Birthname"})], dry_run=True)[0]
+    assert res.status == "conflict" and "(it has 'Example')" in res.actions[-1], res.actions  # the primary surname
+    name["surname_list"] = []  # a person known by first name only
+    assert run(fake, [dict(op, set={"surname": "Sample"}, expect={"surname": ""})], dry_run=True)[0].status == "done"
 
 
 def test_update_place_expect(fake):

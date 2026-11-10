@@ -24,3 +24,5 @@ gwt_apply/ops.py |         for f, read in (op.get("expect") or {}).items(): |   
 gwt_apply/ops.py |         value = str(value or "").strip() |         value = str(value or "") | expect ignores spaces at either end of the text the tree has
 gwt_apply/ops.py |         return str(value).strip() |         return str(value) | expect ignores spaces at either end of the text the list read
 gwt_apply/ops.py |             refs = [obj.get("place") or ""] if f == "place" |             refs = [obj.get("place")] if f == "place" | an event with no place matches expect.place ""
+gwt_apply/ops.py |                 surnames = name.get("surname_list") or [{}] |                 surnames = name.get("surname_list") | expect reads a person with no surname as surname ""
+gwt_apply/ops.py | value = next((x for x in surnames if x.get("primary")), surnames[0]).get("surname") | value = surnames[0].get("surname") | expect reads the primary surname, not the first one
