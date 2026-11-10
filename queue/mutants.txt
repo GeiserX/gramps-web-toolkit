@@ -2,3 +2,5 @@
 # `python3 .github/scripts/run_tests.py --mutants --only queue` applies each row to a scratch copy
 # and fails when the tests still pass. The text must occur exactly once in the file.
 gwt_queue.py | 'priority': priority_value(priority), 'status': 'open', | 'priority': '' if priority is None else str(int(priority)), 'status': 'open', | JSONL float priority is refused (CLI already rejects floats)
+gwt_queue.py | if isinstance(priority, bool): | if False: | a JSON true priority is refused, not stored as 1
+gwt_queue.py | if isinstance(priority, float): | if False: | a JSON 2.9 or 2.0 priority is refused, not truncated

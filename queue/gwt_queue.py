@@ -258,18 +258,15 @@ def dedupe_match(rows, row, retry_failed):
 
 
 def priority_value(priority):
-    """An int priority for a new row. JSONL used to pass floats through int(), which truncates 2.9 to 2
-    while `--priority 2.9` is refused; keep both paths strict."""
-    if priority is None or priority == '':
+    """The priority of a new row, parsed as `--priority` (argparse type=int) parses it. JSON adds floats and
+    bools, which int() would truncate or coerce (2.9 to 2, true to 1), so those are refused."""
+    if priority is None:
         return ''
-    if isinstance(priority, bool) or isinstance(priority, float):
+    if isinstance(priority, bool):
         raise ValueError('priority must be an integer, not %r' % (priority,))
-    if isinstance(priority, int):
-        return str(priority)
-    text = str(priority).strip()
-    if not re.fullmatch(r'-?\d+', text):
+    if isinstance(priority, float):
         raise ValueError('priority must be an integer, not %r' % (priority,))
-    return str(int(text))
+    return str(int(priority))
 
 
 def new_row(rows, person, label='', kind='search', source='', query='', priority=None, note='', next_at='',
