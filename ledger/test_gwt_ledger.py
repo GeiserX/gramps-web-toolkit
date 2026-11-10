@@ -1,4 +1,4 @@
-import datetime, io, json, os, subprocess, sys, tempfile, threading, unittest
+import datetime, hashlib, io, json, os, subprocess, sys, tempfile, threading, unittest
 from unittest import mock
 from contextlib import redirect_stderr, redirect_stdout
 
@@ -902,6 +902,75 @@ class VoidTest(unittest.TestCase):
                              '--source', 's', '--query', 'q')[0], 1)
 
 
+class HandWrittenRowsTest(unittest.TestCase):
+    """A row typed into a lane file skips the checks of add: readers map the words import-tsv maps, and warn once,
+    on stderr, about a result or a next_date they cannot use."""
+    setUp, tearDown = LedgerTest.setUp, LedgerTest.tearDown
+
+    def rows(self, *rows):
+        write(self.path, '\t'.join(L.COLUMNS) + '\n' + ''.join(
+            '\t'.join(('ana-example', 'Ana Example', 'archive', q, '2026-10-01', result, '', 'lane-1', next_date,
+                       control)) + '\n' for q, result, next_date, control in rows))
+
+    def cmd(self, *argv):
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = L.main(['--ledger', self.path, *argv])
+        return code, out.getvalue(), err.getvalue()
+
+    def check(self, query):
+        return self.cmd('check', '--person', 'ana-example', '--source', 'archive', '--query', query, '--exact',
+                        '--date', '2026-11-10')
+
+    def test_a_synonym_reads_as_import_tsv_would_store_it_and_keeps_its_id(self):
+        self.rows(('book 42', 'found', '', ''), ('book 43', 'Negative', '', 'run-1'), ('book 44', 'nothing', '', ''))
+        with open(self.path, encoding='utf-8') as f:
+            lines = f.read().splitlines()[1:]
+        self.assertEqual(self.check('book 42')[0], 0)  # found is a hit: the search is done
+        self.assertEqual(self.check('book 43')[0], 0)  # a none with its control
+        self.assertEqual(self.check('book 44')[0], 1)  # a none with no control reads as unproven, as import stores it
+        code, out, err = self.cmd('stats')
+        self.assertEqual([l for l in out.splitlines() if l.startswith('result')],
+                         ['result\thit\t1', 'result\tnone\t1', 'result\tunproven\t1'])
+        self.assertEqual(err, '')  # every word is known now: no warning
+        rows = L.with_ids(L.read_rows(self.path))  # the id hashes the line as written, not the mapped word
+        self.assertEqual([r['id'] for r in rows],
+                         [hashlib.sha1((l + '\t1').encode('utf-8')).hexdigest()[:12] for l in lines])
+        code, _, err = self.cmd('void', '--person', 'ana-example', '--source', 'archive', '--query', 'book 42',
+                                '--reason', 'another Ana', '--agent', 'lane-2')
+        self.assertEqual((code, self.check('book 42')[0]), (0, 1))
+        self.assertEqual(self.cmd('stats')[2], '')  # the void still names its row
+
+    def test_a_result_word_in_other_case_or_spacing_reads_as_that_result(self):
+        self.rows(('book 1', 'Hit', '', ''), ('book 2', 'Out of coverage', '', ''), ('book 3', 'NONE', '', 'run-1'))
+        for query in ('book 1', 'book 2', 'book 3'):
+            self.assertEqual(self.check(query)[0], 0, query)
+        code, out, err = self.cmd('stats')
+        self.assertEqual(sorted(l for l in out.splitlines() if l.startswith('result')),
+                         ['result\thit\t1', 'result\tnone\t1', 'result\tout-of-coverage\t1'])
+        self.assertEqual(err, '')
+
+    def test_an_unknown_word_or_a_next_date_that_is_no_date_warns_once(self):
+        self.rows(('book 1', 'hit', '', ''), ('book 2', 'maybe', '', ''), ('book 3', 'pending', '', ''),
+                  ('book 4', 'hit', '', 'ask the archive first'), ('book 5', 'hit', '1901 to 1905 still to read', ''),
+                  ('book 6', 'hit', '2026-02-30', ''), ('book 7', 'hit', '20250101', ''))
+        code, out, err = self.check('book 2')
+        self.assertEqual(code, 1)  # an unknown word counts as not searched
+        self.assertTrue(out.startswith('1.00\tana-example\t'))  # stdout is the rows, as before
+        self.assertEqual(err.splitlines(), [
+            "gwt-ledger: 2 row(s) have a result that is none of %s, so they count as not searched (first: %s:3, "
+            "'maybe')" % (', '.join(L.RESULTS), self.path),
+            "gwt-ledger: 3 row(s) have a next_date that is not YYYY-MM-DD, so they are never due (first: %s:6, "
+            "'1901 to 1905 still to read')" % self.path])
+        self.assertEqual(self.check('book 4')[0], 0)  # a control in the wrong column changes nothing
+        for query in ('book 5', 'book 6', 'book 7'):  # text, an impossible day, a date in another shape: not due
+            self.assertEqual(self.check(query)[0], 0, query)
+        code, out, err = self.cmd('due', '--on', '2099-01-01')
+        self.assertEqual((code, out, len(err.splitlines())), (0, '', 2))
+        code, out, _ = self.cmd('due', '--ics')
+        self.assertEqual((code, 'VEVENT' in out), (0, False))
+
+
 def person(handle, gid, first, surname, events=(), parent_family=None):
     return {'handle': handle, 'gramps_id': gid, 'primary_name': {'first_name': first,
             'surname_list': [{'surname': surname}]}, 'event_ref_list': [{'ref': e} for e in events],
@@ -1016,6 +1085,11 @@ class CoverageTest(unittest.TestCase):
         self.sources = os.path.join(self.dir.name, 'family.tsv')
         write(self.sources, 'id\taliases\nfs\nparish-scan-*\t\tXX\timage\n')  # a family row is no column
         self.assertEqual(self.matrix()[0], ['id', 'name', 'familysearch'])
+
+    def test_a_next_date_that_is_no_date_is_never_due(self):
+        with open(self.path, 'a', encoding='utf-8') as f:
+            f.write('i4\tLuis\tfs\tq\t2026-01-01\thit\t\t\t1901 to 1905 still to read\t\n')
+        self.assertEqual({r[0]: r[2:] for r in self.matrix()[1:]}['I4'], ['hit', '-', '-'])
 
 
 if __name__ == '__main__':
