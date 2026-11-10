@@ -1142,9 +1142,12 @@ def main(argv=None):
         if args.person is not None or args.source is not None or args.query is not None:
             p.error('check --jsonl takes person, source and query from its lines, not from --person, --source or --query')
         try:
-            stream = sys.stdin if args.jsonl == '-' else open(args.jsonl, encoding='utf-8')
-            with stream:
-                batch = read_checks(stream.readlines())
+            if args.jsonl == '-':
+                lines = sys.stdin.readlines()  # stdin is the caller's: read it, never close it
+            else:
+                with open(args.jsonl, encoding='utf-8') as stream:
+                    lines = stream.readlines()
+            batch = read_checks(lines)
         except (OSError, UnicodeDecodeError) as e:
             p.error('cannot read %s: %s' % (args.jsonl, e))
         except ValueError as e:

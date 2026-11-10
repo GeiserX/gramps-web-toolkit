@@ -8,3 +8,4 @@ gwt_ledger.py | if args.person is not None or args.source is not None or args.qu
 gwt_ledger.py | return default if obj.get(name) is None else obj[name] | return default | a line's exact, any_result and threshold win over the command line
 gwt_ledger.py | rows = by_person.get(key(person), []) | rows = by_person.get(person, []) | check --jsonl finds a person's rows by their key, as the single check does
 gwt_ledger.py | return None, scored, bool(scored if any_result else done) | return None, scored, bool(scored) | check counts only a search that ran and is not due again, unless any_result
+gwt_ledger.py | lines = sys.stdin.readlines()  # stdin is the caller's: read it, never close it | lines = sys.stdin.readlines(); sys.stdin.close() | check --jsonl - reads stdin and leaves it open for the caller

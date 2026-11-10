@@ -143,6 +143,7 @@ class CheckBatchTest(unittest.TestCase):
             code, out = self.ledger('check', '--date', DAY, '--jsonl', '-')
         self.assertEqual(code, 0, self.last_error)
         self.assertEqual([json.loads(l)['done'] for l in out.splitlines()], [True])
+        self.assertFalse(stdin.closed, 'stdin belongs to the caller: a second read in the same process must still work')
 
     def test_a_bad_line_stops_the_batch_naming_it_and_prints_no_answer(self):
         self.seed()
