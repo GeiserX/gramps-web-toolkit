@@ -1040,7 +1040,10 @@ class Applier:
     def _run(self, ops: list[dict], results: list[Result]) -> None:
         self._list_deletes = {_delete_object(op["object"]) for op in ops if op.get("op") == "delete"}
         self._amended = _amended_people(ops)
-        self._merge_of = {op["loser"]: (i, op) for i, op in enumerate(ops) if "loser" in op}
+        self._merge_of = {}
+        for i, op in enumerate(ops):
+            if "loser" in op:
+                self._merge_of.setdefault(op["loser"], (i, op))  # the first merge of a loser is the one that can land
         for index, op in enumerate(ops):
             res = Result(op["key"], op["op"], op["ruling"])
             self._op_tags = list(dict.fromkeys(t for t in [self.run_tag, *_tag_names(op.get("tag"))] if t))

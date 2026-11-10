@@ -1528,6 +1528,18 @@ def test_an_op_after_the_merge_that_names_the_merged_key_still_stops():
     assert res[-1].status == "conflict" and "no Person made by that key" in res[-1].actions[-1], res[-1].actions
 
 
+def test_rerun_skips_an_add_whose_first_merge_landed_when_a_later_op_merges_the_same_loser_again():
+    fake = _add_then_merge_fake()
+    again = {"op": "merge_person", "key": "p-merge-2", "ruling": R, "winner": "I0001", "loser": "key:p-new"}
+    ops = [*ADD_THEN_MERGE["Person"], again]
+    first = run(fake, ops)
+    assert [r.status for r in first][:4] == ["done"] * 4 and first[-1].status == "conflict", [r.actions for r in first]
+    count, writes = len(fake.store["people"]), len(fake.writes())
+    res = run(fake, ops)  # the add must read the merge that landed, not the later one that never can
+    assert [r.status for r in res][:4] == ["skip"] * 4 and res[-1].status == "conflict", [r.actions for r in res]
+    assert len(fake.store["people"]) == count and len(fake.writes()) == writes
+
+
 def test_an_add_merged_into_a_winner_the_list_makes_later_runs_and_reruns():
     ops = [{"op": "add_person", "key": "p-new", "ruling": R, "first_name": "Ana", "surname": "Example", "gender": "F"},
            {"op": "add_person", "key": "p-kept", "ruling": R, "first_name": "Eve", "surname": "Example", "gender": "F"},
