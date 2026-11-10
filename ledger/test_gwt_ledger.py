@@ -97,6 +97,45 @@ class LedgerTest(unittest.TestCase):
         # One logged word cannot cover two new ones.
         self.assertFalse(L.words_covered({'antonio', 'antonia'}, {'antonio'}))
 
+    def test_fast_paths_match_the_plain_rules(self):
+        # normalize skips NFKD for ASCII and words_covered sorts its candidates once: both must answer
+        # exactly what the plain rules below answer, for every script and every word mix.
+        import itertools, re, unicodedata
+
+        def plain_normalize(text):
+            text = unicodedata.normalize('NFKD', (text or '').casefold())
+            text = ''.join(c for c in text if not unicodedata.combining(c))
+            return ' '.join(re.findall(r'[^\W_]+', text))
+
+        def plain_covered(new, logged):
+            free, rest = set(logged), []
+            for w in new:
+                if w in free:
+                    free.discard(w)
+                else:
+                    rest.append(w)
+            for w in rest:
+                if len(w) < 5 or any(c.isdigit() for c in w):
+                    return False
+                hit = next((x for x in sorted(free) if len(x) >= 5 and not any(c.isdigit() for c in x)
+                            and L.one_edit(w, x)), None)
+                if hit is None:
+                    return False
+                free.discard(hit)
+            return True
+
+        texts = ['Peiró, José', 'Señal Ñandú', 'ﬁzz ﬂux Æsir œuvre ﬀ ﬃ ﬆ', 'ＡＢＣ　１２３', 'é ñ Ä',
+                 'Ἀθῆναι ΐ ΰ ͅ', 'Иван Йошкар Ёлка', 'Straße GROSS ẞ', 'ılık İstanbul I ı', 'Ørsted Łódź Đặng',
+                 '½ ² ⅓ Ⅻ', 'K Kelvin', 'ǅ ǈ ǋ ŉ ǰ', '李 小龍', 'עִבְרִית', 'a_b c-d  e\tf', 'Book 42, img 7', '', None]
+        for t in texts:
+            self.assertEqual(L.normalize(t), plain_normalize(t), t)
+        words = ['peiro', 'peira', 'peir', 'peirox', 'peir0', 'zuq', 'zuqq', 'zebrafish', 'zebrafisk', 'a1850', 'a1851']
+        for n in range(4):
+            for new in itertools.combinations(words, n):
+                for logged in itertools.combinations(words, 2):
+                    self.assertEqual(L.words_covered(set(new), set(logged)), plain_covered(set(new), set(logged)),
+                                     (new, logged))
+
     def test_tabs_and_newlines_in_values_cannot_break_the_file(self):
         self.add(query='line one\nline\ttwo')
         rows = L.read_rows(self.path)

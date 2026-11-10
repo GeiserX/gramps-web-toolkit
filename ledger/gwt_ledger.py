@@ -74,12 +74,17 @@ STATUSES = ('planned', 'sent', 'answered', 'paid', 'closed', 'refused')
 CLOSED = ('closed', 'refused')
 
 
+WORD = re.compile(r'[^\W_]+')
+
+
 def normalize(text):
     """Casefold, strip accents and punctuation, collapse spaces: «Peiró, José» -> «peiro jose». Letters and
     digits of every script stay (Иван -> иван, Ørsted -> ørsted); the underscore separates words."""
-    text = unicodedata.normalize('NFKD', (text or '').casefold())
-    text = ''.join(c for c in text if not unicodedata.combining(c))
-    return ' '.join(re.findall(r'[^\W_]+', text))
+    text = (text or '').casefold()
+    if not text.isascii():  # ASCII has nothing to decompose: skip NFKD, the cost of every row
+        text = unicodedata.normalize('NFKD', text)
+        text = ''.join(c for c in text if not unicodedata.combining(c))
+    return ' '.join(WORD.findall(text))
 
 
 def key(text):
@@ -111,13 +116,16 @@ def words_covered(new, logged):
             free.discard(w)
         else:
             rest.append(w)
+    if not rest:
+        return True
+    if any(len(w) < 5 or any(c.isdigit() for c in w) for w in rest):
+        return False
+    pool = sorted(x for x in free if len(x) >= 5 and not any(c.isdigit() for c in x))
     for w in rest:
-        if len(w) < 5 or any(c.isdigit() for c in w):
-            return False
-        hit = next((x for x in sorted(free) if len(x) >= 5 and not any(c.isdigit() for c in x) and one_edit(w, x)), None)
+        hit = next((x for x in pool if one_edit(w, x)), None)
         if hit is None:
             return False
-        free.discard(hit)
+        pool.remove(hit)
     return True
 
 
