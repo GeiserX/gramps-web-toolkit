@@ -62,6 +62,7 @@ gwt_ledger.py | return scan_command(args, reg, err, stray, lane_path, | return s
 gwt_ledger.py | if args.cmd == 'void' and name == 'person' and value == '': | if name == 'person' and value == '': | only void takes an empty --person; add, check, list and scan refuse it
 gwt_ledger.py | if result not in RESULTS:  # a hand-written word | if False:  # a hand-written word | a reader takes a hand-written found as a hit, as import-tsv would store it
 gwt_ledger.py | result = word if word in RESULTS else SYNONYMS.get(word, result) | result = word if word in RESULTS else result | a reader maps a hand-written synonym (found, negative) to its result
+gwt_ledger.py | result = word if word in RESULTS else SYNONYMS.get(word, result) | result = SYNONYMS.get(word, result) | a reader takes a hand-written Hit or Out of coverage as that result
 gwt_ledger.py | if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', value): | if False: | a next_date in another shape (20250101) is never due
 gwt_ledger.py | datetime.date.fromisoformat(value)  # 2026-02-30 | pass  # 2026-02-30 | a next_date that is no day (2026-02-30) is never due
 gwt_ledger.py | bad = [r for r in rows if r['result'] not in RESULTS] | bad = [] | readers warn about a result word outside the vocabulary

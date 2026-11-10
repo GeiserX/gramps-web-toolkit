@@ -902,6 +902,15 @@ class HandWrittenRowsTest(unittest.TestCase):
         self.assertEqual((code, self.check('book 42')[0]), (0, 1))
         self.assertEqual(self.cmd('stats')[2], '')  # the void still names its row
 
+    def test_a_result_word_in_other_case_or_spacing_reads_as_that_result(self):
+        self.rows(('book 1', 'Hit', '', ''), ('book 2', 'Out of coverage', '', ''), ('book 3', 'NONE', '', 'run-1'))
+        for query in ('book 1', 'book 2', 'book 3'):
+            self.assertEqual(self.check(query)[0], 0, query)
+        code, out, err = self.cmd('stats')
+        self.assertEqual(sorted(l for l in out.splitlines() if l.startswith('result')),
+                         ['result\thit\t1', 'result\tnone\t1', 'result\tout-of-coverage\t1'])
+        self.assertEqual(err, '')
+
     def test_an_unknown_word_or_a_next_date_that_is_no_date_warns_once(self):
         self.rows(('book 1', 'hit', '', ''), ('book 2', 'maybe', '', ''), ('book 3', 'pending', '', ''),
                   ('book 4', 'hit', '', 'ask the archive first'), ('book 5', 'hit', '1901 to 1905 still to read', ''),
