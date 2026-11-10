@@ -56,6 +56,17 @@ class ScanTest(unittest.TestCase):
         code, out = self.ledger('check', '--source', 'fs', '--exact', '--query', 'book 42 img 1 10')
         self.assertEqual(code, 0)
 
+    def test_hand_written_rows_read_like_check_reads_them(self):
+        with open(self.path, 'w', encoding='utf-8') as f:
+            f.write('\t'.join(L.COLUMNS) + '\n' + ''.join('\t'.join(('', 'book-42', 'familysearch', q, '2026-10-01',
+                                                                       result, '', 'reader-1', next_date, '')) + '\n'
+                                                            for q, result, next_date in (
+                ('book 42 img 1 5', 'found', ''), ('book 42 img 6 10', 'hit', '1901 to 1905 still to read'),
+                ('book 42 img 11 12', 'maybe', ''))))
+        self.assertEqual(self.gaps(1, 12), [[11, 12]])  # found is a hit; a next_date that is no date is never due
+        self.assertIn('count as not searched', self.last_error)
+        self.assertIn('never due', self.last_error)
+
     def test_another_book_or_source_never_counts(self):
         self.add(1, 10, book='book-42')
         self.assertEqual(self.check(book='book-420')[0], 1)

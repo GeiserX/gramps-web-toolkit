@@ -57,6 +57,20 @@ gwt_ledger.py | cursor = max(cursor, hi + 1) | cursor = hi + 1 | a range inside 
 gwt_ledger.py | done = [span for r, span in rows if r['result'] in SEARCHED and | done = [span for r, span in rows if True and | a blocked or unproven range fills no gap
 gwt_ledger.py | if key(r['person_key']) == key(args.person)]  # find | if True]  # find | void --person '' retracts only the rows with no person
 gwt_ledger.py | if args.skip and (min(args.skip) < args.start or max(args.skip) > args.end): | if False: | scan add refuses a --skip image outside the range
-gwt_ledger.py | span for r, span in rows if r['result'] in SEARCHED and (not r['next_date'] or r['next_date'] > args.date) | span for r, span in rows if r['result'] in SEARCHED and True | scan check: a row due again (next_date reached) fills no gap
+gwt_ledger.py | span for r, span in rows if r['result'] in SEARCHED and (not next_day(r) or next_day(r) > args.date) | span for r, span in rows if r['result'] in SEARCHED and True | scan check: a row due again (next_date reached) fills no gap
 gwt_ledger.py | return scan_command(args, reg, err, stray, lane_path, | return scan_command(args, reg, err, lambda path: None, lane_path, | scan add with no ledger named never creates ./buscado.tsv
 gwt_ledger.py | if args.cmd == 'void' and name == 'person' and value == '': | if name == 'person' and value == '': | only void takes an empty --person; add, check, list and scan refuse it
+gwt_ledger.py | if result not in RESULTS:  # a hand-written word | if False:  # a hand-written word | a reader takes a hand-written found as a hit, as import-tsv would store it
+gwt_ledger.py | result = word if word in RESULTS else SYNONYMS.get(word, result) | result = word if word in RESULTS else result | a reader maps a hand-written synonym (found, negative) to its result
+gwt_ledger.py | result = word if word in RESULTS else SYNONYMS.get(word, result) | result = SYNONYMS.get(word, result) | a reader takes a hand-written Hit or Out of coverage as that result
+gwt_ledger.py | if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', value): | if False: | a next_date in another shape (20250101) is never due
+gwt_ledger.py | datetime.date.fromisoformat(value)  # 2026-02-30 | pass  # 2026-02-30 | a next_date that is no day (2026-02-30) is never due
+gwt_ledger.py | bad = [r for r in rows if r['result'] not in RESULTS] | bad = [] | readers warn about a result word outside the vocabulary
+gwt_ledger.py | bad = [r for r in rows if r['next_date'] and not next_day(r)] | bad = [] | readers warn about a next_date that is not YYYY-MM-DD
+gwt_ledger.py | odd_rows(rows)  # one note per command | pass  # one note per command | check, due, list, stats warn about hand-written rows they cannot use
+gwt_ledger.py | odd_rows(every) | pass | scan check warns about hand-written rows it cannot use
+gwt_ledger.py | if next_day(newest) and next_day(newest) <= today: | if newest['next_date'] and newest['next_date'] <= today: | coverage never marks due a row whose next_date is no date
+gwt_ledger.py | done = [span for r, span in rows if r['result'] in SEARCHED and (not next_day(r) or next_day(r) > args.date)] | done = [span for r, span in rows if r['result'] in SEARCHED and (not r['next_date'] or r['next_date'] > args.date)] | scan check never reopens images whose row has a next_date that is no date
+gwt_ledger.py | done = [r for _, r in scored if r['result'] in SEARCHED and (not next_day(r) or next_day(r) > args.date)] | done = [r for _, r in scored if r['result'] in SEARCHED and (not r['next_date'] or r['next_date'] > args.date)] | check never takes a row whose next_date is no date as due
+gwt_ledger.py | if next_day(r) and (not args.on or next_day(r) <= args.on): | if r['next_date'] and (not args.on or r['next_date'] <= args.on): | due --ics leaves out a next_date that is not YYYY-MM-DD
+gwt_ledger.py | due = [(1.0, r) for r in rows if next_day(r) and next_day(r) <= on] | due = [(1.0, r) for r in rows if r['next_date'] and r['next_date'] <= on] | due never lists a row whose next_date is no date
