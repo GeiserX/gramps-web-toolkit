@@ -129,13 +129,15 @@ def write_rows(path, rows):
 
 def with_queue(path, fn, write=True):
     """Run fn(rows) under an exclusive lock on <queue>.lock (a file that is never replaced, so the lock
-    survives the atomic rename) and save the rows; fn returns (rows, exit_code)."""
+    survives the atomic rename) and save the rows; fn returns (rows, exit_code). A refused command (exit 2)
+    changed nothing, so it writes nothing: the queue file keeps its bytes, and a queue that did not exist
+    is not created."""
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(path + '.lock', 'a', encoding='utf-8') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         try:
             rows, code = fn(read_file(path))
-            if write:
+            if write and code != 2:
                 write_rows(path, rows)
             return code
         finally:
@@ -414,9 +416,11 @@ def main(argv=None):
         batch = None
         if args.jsonl:
             try:
-                stream = sys.stdin if args.jsonl == '-' else open(args.jsonl, encoding='utf-8')
-                with stream:
-                    batch = stream.readlines()
+                if args.jsonl == '-':
+                    batch = sys.stdin.readlines()  # stdin is the caller's: read it, never close it
+                else:
+                    with open(args.jsonl, encoding='utf-8') as stream:
+                        batch = stream.readlines()
             except OSError as e:
                 p.error('cannot read %s: %s' % (args.jsonl, e))
 

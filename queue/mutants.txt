@@ -11,3 +11,5 @@ gwt_queue.py | if normalize(r['query']) == row['query']), None) | if r['query'] 
 gwt_queue.py | if r['status'] in statuses and (r['status'] != 'done' or r['result'] in SEARCHED): | if r['status'] in statuses: | a blocked or denied done row stays out of the dedupe index
 gwt_queue.py | statuses = ('open', 'claimed', 'done') if retry_failed else ('open', 'claimed', 'done', 'failed') | statuses = ('open', 'claimed', 'done', 'failed') | --retry-failed leaves failed rows out of the dedupe index
 gwt_queue.py | index(row) | pass | a row appended by a batch is a dedupe match for the rest of the batch
+gwt_queue.py | if write and code != 2: | if write: | a refused command writes nothing: no new queue file, no rewrite of an existing one
+gwt_queue.py | batch = sys.stdin.readlines()  # stdin is the caller's: read it, never close it | batch = sys.stdin.readlines(); sys.stdin.close() | add --jsonl - reads stdin and leaves it open for the caller
