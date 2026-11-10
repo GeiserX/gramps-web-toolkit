@@ -554,6 +554,34 @@ class QueueTest(unittest.TestCase):
             self.assertIn('line 1', err)
         self.assertEqual(self.rows(), [])
 
+    def test_jsonl_float_priority_is_refused_like_cli(self):
+        code, _, err = self.jsonl(json.dumps({'person': 'I1', 'priority': 2.9, 'query': 'q'}) + '\n')
+        self.assertEqual(code, 2)
+        self.assertIn('priority must be an integer', err)
+        self.assertEqual(self.rows(), [])
+
+    def test_jsonl_integer_priority_is_kept(self):
+        code, out, _ = self.jsonl(json.dumps({'person': 'I1', 'priority': 5, 'query': 'q'}) + '\n')
+        self.assertEqual(code, 0)
+        self.assertEqual(self.rows()[0]['priority'], '5')
+
+    def test_jsonl_bool_priority_is_refused_like_cli(self):
+        code, _, err = self.jsonl(json.dumps({'person': 'I1', 'priority': True, 'query': 'q'}) + '\n')
+        self.assertEqual(code, 2)
+        self.assertIn('priority must be an integer', err)
+        self.assertEqual(self.rows(), [])
+
+    def test_jsonl_string_priority_parses_like_cli(self):
+        code, _, _ = self.jsonl(json.dumps({'person': 'I1', 'priority': '+5', 'query': 'q'}) + '\n')
+        self.assertEqual(code, 0)
+        self.assertEqual(self.rows()[0]['priority'], '5')
+
+    def test_jsonl_empty_priority_is_refused_like_cli(self):
+        code, _, err = self.jsonl(json.dumps({'person': 'I1', 'priority': '', 'query': 'q'}) + '\n')
+        self.assertEqual(code, 2)
+        self.assertIn('line 1', err)
+        self.assertEqual(self.rows(), [])
+
     def test_a_blank_first_line_does_not_turn_the_header_into_a_task(self):
         self.add()
         with open(self.path) as f:
