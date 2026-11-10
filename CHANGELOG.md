@@ -6,6 +6,8 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-10
+
 ### Change lists
 
 - A list that makes a person or a family (`add_person`, `add_family`) and then merges it into another with its own `merge_person` or `merge_family` (loser `key:<key>`) now skips both ops on a rerun or a `--verify` once the merge landed, and so does every op between them that names `key:<key>`. Before, the rerun made the object again and merged it a second time, and `--verify` reported both ops as not in the tree.
