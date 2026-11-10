@@ -4,3 +4,10 @@
 gwt_queue.py | 'priority': priority_value(priority), 'status': 'open', | 'priority': '' if priority is None else str(int(priority)), 'status': 'open', | JSONL float priority is refused (CLI already rejects floats)
 gwt_queue.py | if isinstance(priority, bool): | if False: | a JSON true priority is refused, not stored as 1
 gwt_queue.py | if isinstance(priority, float): | if False: | a JSON 2.9 or 2.0 priority is refused, not truncated
+gwt_queue.py | task_id = out[-1]['id']  # every row of a batch gets the same placeholder id | pass | a JSONL batch computes its placeholder id once, not once per line
+gwt_queue.py | top = top_id(rows) if top is None else top | top = top_id(rows) | add_rows scans the queue for the top id once per batch, not once per new row
+gwt_queue.py | by_key.setdefault(r['dedupe_key'], r) | by_key[r['dedupe_key']] = r | the dedupe_key index keeps the first matching row, as the linear scan did
+gwt_queue.py | if normalize(r['query']) == row['query']), None) | if r['query'] == row['query']), None) | the index compares the stored query normalized at lookup, as the linear scan did
+gwt_queue.py | if r['status'] in statuses and (r['status'] != 'done' or r['result'] in SEARCHED): | if r['status'] in statuses: | a blocked or denied done row stays out of the dedupe index
+gwt_queue.py | statuses = ('open', 'claimed', 'done') if retry_failed else ('open', 'claimed', 'done', 'failed') | statuses = ('open', 'claimed', 'done', 'failed') | --retry-failed leaves failed rows out of the dedupe index
+gwt_queue.py | index(row) | pass | a row appended by a batch is a dedupe match for the rest of the batch

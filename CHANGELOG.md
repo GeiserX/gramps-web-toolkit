@@ -12,6 +12,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Fixed
 
+- `gwt-queue add --jsonl` no longer slows down with the square of the batch. It looked for the highest task id, and with `--dedupe` scanned the whole queue for a match, once per line. It now reads the queue once per batch: 20,000 lines into an empty queue take under a second instead of half a minute. Ids, order, dedupe decisions and output are the same as before.
 - `gwt-queue add --jsonl` reads `priority` the way `--priority` does. A float or a bool (2.9, 2.0, 1e2, true) now stops the batch with exit 2 and writes nothing. Before, it was cut to an integer (2.9 became 2, true became 1). An integer string such as `"+5"` is still accepted, and an empty string is still refused (#253).
 
 ## [1.4.0] - 2026-11-09
