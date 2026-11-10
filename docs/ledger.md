@@ -18,7 +18,7 @@ One row per search, tab-separated, with a header line:
 | `result` | one of the words in [Results](#results) |
 | `evidence` | file that holds the result or the negative |
 | `agent` | who searched |
-| `next_date` | optional ISO date to look again; for an appeal, a few days before the deadline, so there is time to act |
+| `next_date` | optional ISO date (`YYYY-MM-DD`) to look again; for an appeal, a few days before the deadline, so there is time to act. Any other text, typed into the file by hand, is ignored: the row is never due ([rows written by hand](#rows-written-by-hand)) |
 | `control` | the proof a `none` stands on: the `--control-ok` reference ([below](#a-none-needs-proof)) |
 
 The path comes from `--ledger`, else `$GWT_LEDGER`, else `./buscado.tsv`. A write never creates that last default: when no ledger is named, no `--ledger-dir` or `$GWT_LEDGER_DIR` is set and `./buscado.tsv` does not exist, `add` and `import-tsv` exit 2, name the path and write nothing, so a logger run from the wrong folder cannot log into a stray file. An existing `./buscado.tsv` is still written, and with a ledger directory both commands write the agent's lane file as before. The agent name defaults to `$GWT_AGENT`.
@@ -50,7 +50,7 @@ A ledger written with the older 8 or 9 columns needs no upgrade: its rows read w
 
 `add` records the lane from `--agent` (default `$GWT_AGENT`) and the date from `--date` (default today, `YYYY-MM-DD`). `check` accepts `--agent`, `--label` and `--date` too, so a lane can pass both commands the same arguments; on `check`, `--date` is the day the check judges by (whether a `next_date` has arrived). `check --person P --source S` without `--query` asks whether that source was searched for that person at all. `add` skips a row the ledger already holds, in any lane file (same person, source, normalized query, date and result), with a note on stderr naming it and exit 0, so a logger run twice logs each search once, even two runs at the same moment (the check runs under the file's lock); a voided row does not count, so a search run again after a void is logged.
 
-In a script: `gwt-ledger check ... >/dev/null && echo "already done, skip"`. Exit 0 already means a search that ran and is not due again, so a `blocked` or `denied` row, or one whose `next_date` has arrived, never skips the search. Add `--any-result` only when you want to know whether anything at all was logged.
+In a script: `gwt-ledger check ... >/dev/null && echo "already done, skip"`. Exit 0 already means a search that ran and is not due again, so a `blocked` or `denied` row, or one whose `next_date` has arrived, never skips the search. Add `--any-result` only when you want to know whether anything at all was logged. A sweep that checks many searches in a row sends them as [one batch](#many-checks-at-once).
 
 ## Sources
 
@@ -92,6 +92,12 @@ A row of your file whose id is already shipped adds its aliases to that source a
 | `void` | written by [`void`](#retracting-a-row) only: retracts earlier rows | no |
 
 `add` takes exactly these words: `--result found` or `--result negative` is an error, exit 2. Only [`import-tsv`](#import-another-log) maps other words (`found` to `hit`; `negative`, `nothing`, `miss` to `none`; `not-reviewed` to `unproven`).
+
+### Rows written by hand
+
+A row typed straight into a ledger or lane file skips the checks of `add`. Every command reads such a row the way `import-tsv` would have stored it: a word of its synonym map counts as its result (`found` as `hit`; `negative`, `nothing` or `miss` as `none`, and as `unproven` when the `control` column is empty). The file keeps the word as written, so the row's id, and any `void` that names it, stay the same. `list` prints the mapped word.
+
+A row whose result is still none of the words above counts as not searched. A row whose `next_date` is not a `YYYY-MM-DD` date (free text, `20270101`, `2026-02-30`) is never due: `check`, `due`, `due --ics`, `scan check` and `coverage` read it as having no `next_date`. `check`, `void`, `due`, `list`, `stats`, `coverage` and `scan check` print one note on stderr for each of the two cases, with the count and the first such row as `file:line`. Their stdout does not change, so a script that reads it keeps working. Fix the row in the file, or void it and log it again with `add`.
 
 ### A none needs proof
 
@@ -158,6 +164,29 @@ The default fuzzy check is for a person deciding whether to search. Before a scr
 - **A fuzzy match is not the same search.** A shorter query counts as done when a longer logged one covers it, and one typo is allowed, so the logged row can be a different search that happens to share the words.
 
 Exit 0 from `--exact` already leaves out `blocked` and `denied` rows and rows whose `next_date` has arrived. The first printed row can still be one of those (a newer `blocked` above an older `hit`), so a script that reuses the first row checks its `result` and `next_date` too.
+
+### Many checks at once
+
+Each `check` reads and normalises the whole ledger before it answers. On a large ledger that is most of the time of each call, so a sweep that checks hundreds of searches pays it hundreds of times. `check --jsonl FILE` reads the ledger once and answers one check per line. `-` reads the lines from stdin.
+
+```sh
+cat > checks.jsonl <<'END'
+{"person": "Ana Example", "source": "familysearch", "query": "Example Town baptisms 1801-1850 Ana Example"}
+{"person": "Ana Example", "source": "familysearch", "query": "Ana Example burial 1910", "exact": true}
+{"person": "Ana Example", "source": "pares"}
+END
+gwt-ledger check --jsonl checks.jsonl --date 2026-11-10
+```
+
+A line is one JSON object with the fields of a single check: `person`, `source` and `query`, and optionally `exact`, `any_result` (true or false) and `threshold` (a number). A field that is missing or `null` is the same as an option left out. `--exact`, `--any-result` and `--threshold` on the command line apply to every line that does not set its own. `--date` and `--new-source` apply to the whole batch. `--jsonl` takes no `--person`, `--source` or `--query` (exit 2).
+
+It prints one JSON object per line, in input order: the line's own fields, then `done` and `rows`. `done` is true exactly when the single `check` with the same options would exit 0. `rows` are the matching rows in the order `check` prints them, each with its `id`, `date`, `result`, `agent` and `next_date`:
+
+```json
+{"person": "Ana Example", "source": "pares", "done": true, "rows": [{"id": "3f1c0a9b2e4d", "date": "2026-01-01", "result": "hit", "agent": "lane-2", "next_date": ""}]}
+```
+
+Each line goes through the same code as a single `check`, so a batch never answers differently. The batch exits 0 when it ran, even when some searches are not done: read `done`. A line the single check would refuse stops the whole batch with exit 2, and no answer is printed. That covers a line that is not a JSON object, an unknown field, a field of the wrong type, and a usage error such as `exact` with no `source`. The message names the line: `gwt-ledger: line 3: check --exact needs a non-empty --source`. Blank lines are skipped.
 
 ## Stats by source
 

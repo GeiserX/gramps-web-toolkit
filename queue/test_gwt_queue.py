@@ -560,6 +560,34 @@ class QueueTest(unittest.TestCase):
         self.assertIn('priority must be an integer', err)
         self.assertEqual(self.rows(), [])
 
+    def test_a_refused_batch_does_not_create_the_queue_file(self):
+        good = json.dumps({'person': 'I0', 'query': 'q'}) + '\n'  # a valid line first: it must not be written either
+        code, _, _ = self.jsonl(good + json.dumps({'person': 'I1', 'priority': 2.9}) + '\n')
+        self.assertEqual(code, 2)
+        self.assertFalse(os.path.exists(self.path), 'a refused batch must not leave a header-only queue behind')
+
+    def test_a_refused_command_leaves_the_queue_file_untouched(self):
+        self.jsonl(json.dumps({'person': 'I1', 'query': 'q'}) + '\n')
+
+        def state():
+            with open(self.path, 'rb') as f:
+                return os.stat(self.path).st_ino, f.read()
+        before = state()
+        code, _, _ = self.jsonl(json.dumps({'person': 'I0', 'query': 'q2'}) + '\n' + json.dumps({'person': 'I2', 'kind': 'bogus'}) + '\n')
+        self.assertEqual(code, 2)
+        code, _, _ = run('--queue', self.path, 'done', '--id', 'q1', '--token', 'wrong', '--result', 'none')
+        self.assertEqual(code, 2)
+        self.assertEqual(state(), before)
+
+    def test_jsonl_from_stdin_leaves_stdin_open(self):
+        old, sys.stdin = sys.stdin, io.StringIO(json.dumps({'person': 'I1'}) + '\n')
+        try:
+            code, _, _ = run('--queue', self.path, 'add', '--jsonl', '-')
+            self.assertEqual(code, 0)
+            self.assertFalse(sys.stdin.closed, 'stdin belongs to the caller: a later read must still work')
+        finally:
+            sys.stdin = old
+
     def test_jsonl_integer_priority_is_kept(self):
         code, out, _ = self.jsonl(json.dumps({'person': 'I1', 'priority': 5, 'query': 'q'}) + '\n')
         self.assertEqual(code, 0)
@@ -606,6 +634,99 @@ class QueueTest(unittest.TestCase):
             ids.append(out.split('\t')[0])
         self.assertEqual(len(set(ids)), 12)
         self.assertEqual({r['status'] for r in self.rows()}, {'claimed'})
+
+
+    def test_a_jsonl_batch_scans_the_queue_for_ids_once_not_per_row(self):
+        # add --jsonl used to look for the highest qN once per row, twice: 20,000 rows took half a minute
+        self.add()
+        calls = []
+        real = Q.top_id
+        Q.top_id = lambda rows: calls.append(1) or real(rows)
+        try:
+            code, out, _ = self.jsonl(''.join(json.dumps({'person': 'P%d' % i}) + '\n' for i in range(50)),
+                                      '--dedupe')
+        finally:
+            Q.top_id = real
+        self.assertEqual(code, 0)
+        self.assertEqual([l.split('\t')[0] for l in out.splitlines()], ['q%d' % i for i in range(2, 52)])
+        self.assertLessEqual(len(calls), 2)  # one placeholder id for the batch, one top for add_rows
+
+
+def linear_add_rows(rows, wanted, dedupe, retry_failed):
+    """add_rows as it was before the index: one scan of the queue per wanted row. The reference the indexed
+    add_rows must match row for row."""
+    def match(row):
+        statuses = ('open', 'claimed', 'done') if retry_failed else ('open', 'claimed', 'done', 'failed')
+        for r in rows:
+            if r['status'] not in statuses:
+                continue
+            if r['status'] == 'done' and r['result'] not in Q.SEARCHED:
+                continue
+            if r['dedupe_key'] or row['dedupe_key']:
+                if r['dedupe_key'] == row['dedupe_key']:
+                    return r
+            elif (r['person_key'] == row['person_key'] and r['kind'] == row['kind']
+                  and r['source'] == row['source'] and Q.normalize(r['query']) == row['query']):
+                return r
+        return None
+    shown = []
+    for row in wanted:
+        hit = match(row) if dedupe else None
+        if hit is None:
+            row['id'] = Q.new_id(rows)
+            row['priority'] = row['priority'] or '0'
+            rows.append(row)
+            shown.append(row)
+            continue
+        if hit['status'] == 'open':
+            for col in ('person_label', 'query', 'priority', 'note'):
+                if row[col]:
+                    hit[col] = row[col]
+        shown.append(hit)
+    return shown
+
+
+class IndexedAddTest(unittest.TestCase):
+    """add_rows indexes the queue once per batch. Same ids, same row order, same dedupe decisions and same
+    printed rows as the linear scan, on invented queues with every status, keys on one side only, odd ids,
+    duplicates inside a batch, and queries whose normal form changes when normalized twice."""
+    QUERIES = ('Ana Example 1850', 'ana example 1851', '\u2121 \u01c4', 'TEL d\u017e', 'Peir\u00f3, Jos\u00e9', '')
+
+    def queue(self, rnd):
+        rows = []
+        for i in range(rnd.randrange(60)):
+            r = dict.fromkeys(Q.COLUMNS, '')
+            r.update(id=rnd.choice(['q%d' % (i + 1), 'q%03d' % (3 * i), 'x%d' % i, '']),
+                     person_key='p%d' % rnd.randrange(8), kind=rnd.choice(('search', 'sweep')),
+                     source=rnd.choice(('book-42', '')), query=rnd.choice(self.QUERIES),
+                     status=rnd.choice(Q.STATUS + ('odd',)), priority=rnd.choice(('0', '5')), tries='0')
+            r['result'] = rnd.choice(Q.RESULTS + ('',)) if r['status'] == 'done' else ''
+            if rnd.random() < 0.3:
+                r['dedupe_key'] = 'k%d' % rnd.randrange(6)
+            rows.append(r)
+        return rows
+
+    def batch(self, rnd):
+        return [Q.new_row([], 'P%d' % rnd.randrange(8), rnd.choice(('', 'Ana')), rnd.choice(('search', 'sweep')),
+                          rnd.choice(('Book 42', '')), rnd.choice(self.QUERIES), rnd.choice((None, 1, 9)),
+                          rnd.choice(('', 'n')), '', rnd.choice(('', '', 'k%d' % rnd.randrange(6))))
+                for _ in range(rnd.randrange(40))]
+
+    def test_indexed_add_rows_matches_the_linear_scan(self):
+        import copy, random
+        for seed in range(400):
+            rnd = random.Random(seed)
+            rows, wanted = self.queue(rnd), self.batch(rnd)
+            for dedupe, retry_failed in ((False, False), (True, False), (True, True)):
+                old_rows, old_wanted = copy.deepcopy(rows), copy.deepcopy(wanted)
+                new_rows, new_wanted = copy.deepcopy(rows), copy.deepcopy(wanted)
+                old = linear_add_rows(old_rows, old_wanted, dedupe, retry_failed)
+                new = Q.add_rows(new_rows, new_wanted, dedupe, retry_failed)
+                self.assertEqual(new_rows, old_rows, (seed, dedupe, retry_failed))
+                self.assertEqual(new, old, (seed, dedupe, retry_failed))
+                # the printed rows are the same objects of the queue, not equal copies
+                self.assertEqual([[i for i, x in enumerate(new_rows) if x is r] for r in new],
+                                 [[i for i, x in enumerate(old_rows) if x is r] for r in old])
 
 
 if __name__ == '__main__':
