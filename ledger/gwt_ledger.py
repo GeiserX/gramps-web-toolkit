@@ -269,8 +269,13 @@ def read_rows(path, columns=COLUMNS):
                 parts += [''] * (len(columns) - len(parts))
             row = dict(zip(columns, parts))
             if columns == COLUMNS:  # a none from before 1.1.0 has no control: it reads as unproven, as add stores it
-                row['line'] = '\t'.join(parts[:len(columns)])
-                row['result'] = proven(row['result'], row['control'])
+                row['line'] = '\t'.join(parts[:len(columns)])  # the id hashes the line as written, never the mapped word
+                row['at'] = '%s:%d' % (path, n + 1)
+                result = row['result']
+                if result not in RESULTS:  # a hand-written word reads as import-tsv would store it; void stays void
+                    word = key(result)
+                    result = word if word in RESULTS else SYNONYMS.get(word, result)
+                row['result'] = proven(result, row['control'])
             rows.append(row)
     return rows
 
@@ -293,6 +298,31 @@ def retracted(rows):
         if m:
             gone.update(m.group(1).split())
     return gone
+
+
+def next_day(r):
+    """The row's next_date when it is a YYYY-MM-DD date, else '': text a hand edit put there is never due."""
+    value = r['next_date']
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', value):
+        return ''
+    try:
+        datetime.date.fromisoformat(value)  # 2026-02-30 has the shape and is no day
+    except ValueError:
+        return ''
+    return value
+
+
+def odd_rows(rows):
+    """One note on stderr per kind of hand edit a reader cannot use: a result word outside the vocabulary (the row
+    counts as not searched) and a next_date that is no date (the row is never due). Each names the first such row."""
+    bad = [r for r in rows if r['result'] not in RESULTS]
+    if bad:
+        sys.stderr.write('gwt-ledger: %d row(s) have a result that is none of %s, so they count as not searched '
+                         '(first: %s, %r)\n' % (len(bad), ', '.join(RESULTS), bad[0]['at'], bad[0]['result']))
+    bad = [r for r in rows if r['next_date'] and not next_day(r)]
+    if bad:
+        sys.stderr.write('gwt-ledger: %d row(s) have a next_date that is not YYYY-MM-DD, so they are never due '
+                         '(first: %s, %r)\n' % (len(bad), bad[0]['at'], bad[0]['next_date']))
 
 
 def live(rows):
@@ -409,7 +439,7 @@ def check_search(rows, reg, person=None, source=None, query=None, threshold=DEFA
     if by_person is not None and person:
         rows = by_person.get(key(person), [])
     scored = find(rows, person, source, query, threshold, exact, reg, newest_first=True)
-    done = [r for _, r in scored if r['result'] in SEARCHED and (not r['next_date'] or r['next_date'] > date)]
+    done = [r for _, r in scored if r['result'] in SEARCHED and (not next_day(r) or next_day(r) > date)]
     return None, scored, bool(scored if any_result else done)
 
 
@@ -604,7 +634,7 @@ def cell(rows, today):
     if not rows:
         return '-'
     newest = max(rows, key=lambda r: r['date'])
-    if newest['next_date'] and newest['next_date'] <= today:
+    if next_day(newest) and next_day(newest) <= today:
         return 'due'
     if any(r['result'] == 'hit' for r in rows):
         return 'hit'
@@ -876,8 +906,9 @@ def scan_command(args, reg, err, stray, lane_path, source, paths):
                               'date': args.date, 'result': result, 'evidence': args.evidence, 'agent': args.agent,
                               'next_date': '', 'control': clean(args.control_ok)}, reg, paths)
         return 0
-    rows = []
-    for r in live([r for lp in paths for r in read_rows(lp)]):
+    rows, every = [], live([r for lp in paths for r in read_rows(lp)])
+    odd_rows(every)
+    for r in every:
         if reg.canon(r['source']) != source:
             continue
         if person and key(r['person_key']) not in (person, ''):
@@ -885,7 +916,7 @@ def scan_command(args, reg, err, stray, lane_path, source, paths):
         span = scan_span(r, book)
         if span and span[0] <= args.end and span[1] >= args.start:
             rows.append((r, span))
-    done = [span for r, span in rows if r['result'] in SEARCHED and (not r['next_date'] or r['next_date'] > args.date)]
+    done = [span for r, span in rows if r['result'] in SEARCHED and (not next_day(r) or next_day(r) > args.date)]
     gaps = scan_gaps(args.start, args.end, done)
     print(json.dumps({'gaps': gaps, 'rows': [dict({c: r[c] for c in ('id', 'person_key', 'date', 'result', 'agent',
                                                                        'evidence')}, start=s[0], end=s[1])
@@ -1157,6 +1188,7 @@ def main(argv=None):
     except (OSError, UnicodeDecodeError) as exc:  # an unreadable ledger is an error, never "not searched yet"
         return err('cannot read the ledger: %s' % exc)
     rows = live(everything)  # list alone shows the void rows and what they retracted
+    odd_rows(rows)  # one note per command, never one per row
     if args.cmd == 'void':
         path = lane_path()
         source = source_id(args.source)
@@ -1209,7 +1241,7 @@ def main(argv=None):
                 return err('cannot read the requests file: %s' % exc)
             events = []
             for r in rows:
-                if r['next_date'] and (not args.on or r['next_date'] <= args.on):
+                if next_day(r) and (not args.on or next_day(r) <= args.on):
                     uid = hashlib.sha1('\t'.join(r[c] for c in COLUMNS).encode('utf-8')).hexdigest()[:16]
                     events.append((uid, r['next_date'], 'Look again: %s, %s' % (r['person_label'] or r['person_key'],
                                                                                r['source']),
@@ -1231,7 +1263,7 @@ def main(argv=None):
             sys.stdout.write(ics(sorted(good, key=lambda e: e[1])))
             return 0
         on = args.on or today
-        due = [(1.0, r) for r in rows if r['next_date'] and r['next_date'] <= on]
+        due = [(1.0, r) for r in rows if next_day(r) and next_day(r) <= on]
         due.sort(key=lambda x: x[1]['next_date'])
         print_rows(due)
         return 0
