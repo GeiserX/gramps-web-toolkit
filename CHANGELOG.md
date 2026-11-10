@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+- A list that makes a person or a family (`add_person`, `add_family`) and then merges it into another with its own `merge_person` or `merge_family` (loser `key:<key>`) now skips both ops on a rerun or a `--verify` once the merge landed, and so does every op between them that names `key:<key>`. Before, the rerun made the object again and merged it a second time, and `--verify` reported both ops as not in the tree.
+
 ### Added
 
 - `gwt-ledger check --jsonl FILE|-` answers many checks against one read of the ledger: one JSON object per line in, one JSON answer per line out, with `done` and the matching rows. A sweep that checks hundreds of searches no longer reads and normalises the whole ledger for each one. Each line goes through the same code as a single `check`, so the answers are the same. A bad line stops the batch with exit 2 and names the line. The single `check` does not change.
@@ -22,6 +26,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 - `gwt-ledger` reads a row written by hand with `found`, `negative`, `nothing`, `miss` or another word of the `import-tsv` synonym map as that result. Before, every reader took such a row as not searched, so a lane ran a found record again; `stats` now counts these rows under `hit`, `none` or `unproven` instead of under their own words. The file and the row ids do not change. A result outside the vocabulary and a `next_date` that is not `YYYY-MM-DD` now get one note on stderr per command, with the count and the first `file:line`; such a `next_date` is never due, where before it was compared as text.
 - `gwt-queue add --jsonl` no longer slows down with the square of the batch. It looked for the highest task id, and with `--dedupe` scanned the whole queue for a match, once per line. It now reads the queue once per batch: 20,000 lines into an empty queue take under a second instead of half a minute. Ids, order, dedupe decisions and output are the same as before.
 - `gwt-queue add --jsonl` reads `priority` the way `--priority` does. A float or a bool (2.9, 2.0, 1e2, true) now stops the batch with exit 2 and writes nothing. Before, it was cut to an integer (2.9 became 2, true became 1). An integer string such as `"+5"` is still accepted, and an empty string is still refused (#253).
+- `gwt-apply --verify` and a rerun of a list that makes a person or family and then merges it into another no longer report the add and the merge as missing, and a second `--apply` writes nothing. The add skips when the winner carries the note of that merge.
 
 ## [1.4.0] - 2026-11-09
 

@@ -268,6 +268,8 @@ The merge itself is the server's (`POST /api/people/<winner>/merge/<loser>`, `PO
 
 Before the merge, the winner gets a note that records it: `Merged Person I0042 (John Smith) into this person (ruling R-12). <reason>`. The note is how a rerun knows the merge is done: when the loser is gone and the winner has that note, the op is skipped; when the loser is gone and there is no note, the op is a conflict.
 
+A list can make an object and then merge it away: `add_family` with key `f-new`, then `merge_family` with winner `F0001` and loser `key:f-new` (or `add_person` and `merge_person`). After the first apply the object made by `f-new` is gone. A rerun or `--verify` of that list finds the note of its `merge_family` on `F0001`. So the `add_family` skips with `already merged into F0001` instead of making the family again, and the merge skips too. An op between the two that names `key:f-new` skips as well: it ran before the merge, since a list runs in order. It is never sent to `F0001`, which kept its own values in the merge. An op after the merge that names `key:f-new` still stops, as it did on the first run. When the winner has no such note, nothing changes: if the run stopped before the merge, the rerun finds the family by its key and then merges it, and if the family is gone with no note, the add makes it again. `--verify` writes nothing in either case.
+
 ### Private by default
 
 `--private-new` saves every object the run creates with `private` set: a person, family, event, place, source, citation, media object or note. The tags `--tag` makes are not marked, because a Gramps tag has no private flag. Gramps Web hides private objects from a guest login, so a tree that shows guests only a chosen set of people never shows a new object to them. Members and every role above them still see private objects. Without the flag every created object is public; no op can set `private`.
@@ -303,7 +305,7 @@ A merge counts as applied when the loser is gone and the winner has the note the
 What it does not see:
 
 - A family Gramps merged on its own, because a person merge left two families with the same spouses. Our merge op wrote no note for it, so an op that names it is a `conflict`. Check those with `gwt-check` instead ([lesson 18](hard-won.md#18-a-merge-brings-the-losers-events-along-and-a-second-run-of-the-list-does-not-skip)).
-- An object a list made by key and that was later merged away: its key no longer finds it, so the op reads `missing`.
+- An object a list made by key and that was later merged away by another list: its key no longer finds it, so the op reads `missing`. A merge in the same list is recognised ([Merges](#merges)).
 - A field changed after the apply on an object a list made by key: the key finds the object and the op skips, as in any rerun ([Reuse only what is the same](#reuse-only-what-is-the-same)). An `add_person` is the exception: a changed name, gender or Gramps ID reads `conflict`, unless this list's own `update_person` set it or the verify reads this list's apply log. An `update_*` op does compare its fields, so a value someone changed back reads `differs`.
 
 `--json FILE` writes one object per op of the list, in order, for scripts. It works with any run that has a change list, not only `--verify`:
