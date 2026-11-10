@@ -1,0 +1,4 @@
+# Mutations the queue tests must catch. One row each: file | exact text | replacement | why
+# `python3 .github/scripts/run_tests.py --mutants --only queue` applies each row to a scratch copy
+# and fails when the tests still pass. The text must occur exactly once in the file.
+gwt_queue.py | 'priority': priority_value(priority), 'status': 'open', | 'priority': '' if priority is None else str(int(priority)), 'status': 'open', | JSONL float priority is refused (CLI already rejects floats)

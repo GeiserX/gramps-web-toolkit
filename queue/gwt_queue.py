@@ -257,13 +257,28 @@ def dedupe_match(rows, row, retry_failed):
     return None
 
 
+def priority_value(priority):
+    """An int priority for a new row. JSONL used to pass floats through int(), which truncates 2.9 to 2
+    while `--priority 2.9` is refused; keep both paths strict."""
+    if priority is None or priority == '':
+        return ''
+    if isinstance(priority, bool) or isinstance(priority, float):
+        raise ValueError('priority must be an integer, not %r' % (priority,))
+    if isinstance(priority, int):
+        return str(priority)
+    text = str(priority).strip()
+    if not re.fullmatch(r'-?\d+', text):
+        raise ValueError('priority must be an integer, not %r' % (priority,))
+    return str(int(text))
+
+
 def new_row(rows, person, label='', kind='search', source='', query='', priority=None, note='', next_at='',
             dedupe_key=''):
     if kind not in KINDS:
         raise ValueError('kind must be one of %s, not %r' % (', '.join(KINDS), kind))
     return {'id': new_id(rows), 'person_key': key(person), 'person_label': clean(label), 'kind': kind,
             'source': key(source), 'query': normalize(query),
-            'priority': '' if priority is None else str(int(priority)), 'status': 'open',
+            'priority': priority_value(priority), 'status': 'open',
             'lane': '', 'claimed_at': '', 'done_at': '', 'result': '', 'evidence': '', 'tries': '0',
             'next_at': iso_or_empty(next_at), 'note': clean(note), 'token': '', 'lease_until': '',
             'dedupe_key': clean(dedupe_key)}
