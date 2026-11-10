@@ -16,6 +16,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 - `gwt-ledger scan add` and `scan check` log which images of a book were read and print the ones nobody read yet, so a lane does not sweep the same images twice. The rows are ordinary ledger rows with the query `<book> img <first> <last>`; a read with no `--person` counts for everyone, and `--skip` keeps unread images as gaps. `gwt-ledger void --person ''` retracts only the rows logged with no person (#255).
 - `gwt-apply` `update_person`, `update_event`, `update_place` and `update_family` take an optional `expect` object: for fields of `set`, the value the object had when the list was written. A field someone changed since is a conflict in the dry run and in `--apply`, and nothing of the op is written; the conflict line shows the value the tree has now. A field that already has the new value is a skip, so a rerun and `--verify` of a landed list still pass. Dates compare as dates and places by the place they name. `update_family` takes no `father` or `mother` in `expect`, since it never replaces a parent. A list without `expect` behaves as before.
 
+### Changed
+
+- `gwt-ledger check`, `add` and `void` run about a third faster on a large ledger. `normalize` skips the accent strip for ASCII text, and the typo match sorts its candidate words once per query instead of once per word. The output is the same (#261).
+
 ### Fixed
 
 - A refused `gwt-queue` command (exit 2) no longer writes the queue file. A rejected `add --jsonl` batch used to create a header-only queue on a new path, and every refused command rewrote an existing queue with the same rows. The file now keeps its bytes, and a queue that did not exist is not created. `add --jsonl -` also leaves stdin open for the caller.
