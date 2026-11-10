@@ -57,7 +57,7 @@ Two lanes never receive the same task: every command runs under an exclusive loc
 
 ## Seeding
 
-`add` one task (`--person`, `--label`, `--kind`, `--source`, `--query`, `--priority`, `--note`, `--next-at` for a task not claimable before that instant, `--dedupe-key`), or many with `--jsonl FILE` (`-` for stdin): one JSON object per line with `person` and any of `label`, `kind`, `source`, `query`, `priority`, `note`, `next_at` and `dedupe_key`. A batch runs under one lock and one write, and a bad line stops it before anything is written.
+`add` one task (`--person`, `--label`, `--kind`, `--source`, `--query`, `--priority`, `--note`, `--next-at` for a task not claimable before that instant, `--dedupe-key`), or many with `--jsonl FILE` (`-` for stdin): one JSON object per line with `person` and any of `label`, `kind`, `source`, `query`, `priority`, `note`, `next_at` and `dedupe_key`. A batch runs under one lock and one write, and a bad line stops it before anything is written. A `priority` is read as `--priority` reads it: a float or a bool (2.9, 2.0, true) is a bad line, not a truncated number.
 
 `--dedupe` skips a task that is already queued, running or done: the same `dedupe_key` when either side has one, else the same person, kind, source and query. A done task counts only when its search ran (`hit`, `none`, `partial` or `out-of-coverage`, the results [gwt-ledger](ledger.md#results) counts as done); one closed as `blocked`, `denied`, `restricted`, `paid`, `in-person` or `unproven` does not stop a re-seed. A `failed` match is skipped too, unless `--retry-failed` is given. On an open match the new label, query, note and priority replace the old ones, so a re-seed carries the latest picture.
 

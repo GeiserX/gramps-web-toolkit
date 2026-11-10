@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Fixed
+
+- `gwt-queue add --jsonl` reads `priority` the way `--priority` does. A float or a bool (2.9, 2.0, 1e2, true) now stops the batch with exit 2 and writes nothing. Before, it was cut to an integer (2.9 became 2, true became 1). An integer string such as `"+5"` is still accepted, and an empty string is still refused (#253).
+
 ## [1.4.0] - 2026-11-09
 
 ### Change lists
