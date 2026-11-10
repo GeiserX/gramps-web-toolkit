@@ -560,6 +560,34 @@ class QueueTest(unittest.TestCase):
         self.assertIn('priority must be an integer', err)
         self.assertEqual(self.rows(), [])
 
+    def test_a_refused_batch_does_not_create_the_queue_file(self):
+        good = json.dumps({'person': 'I0', 'query': 'q'}) + '\n'  # a valid line first: it must not be written either
+        code, _, _ = self.jsonl(good + json.dumps({'person': 'I1', 'priority': 2.9}) + '\n')
+        self.assertEqual(code, 2)
+        self.assertFalse(os.path.exists(self.path), 'a refused batch must not leave a header-only queue behind')
+
+    def test_a_refused_command_leaves_the_queue_file_untouched(self):
+        self.jsonl(json.dumps({'person': 'I1', 'query': 'q'}) + '\n')
+
+        def state():
+            with open(self.path, 'rb') as f:
+                return os.stat(self.path).st_ino, f.read()
+        before = state()
+        code, _, _ = self.jsonl(json.dumps({'person': 'I0', 'query': 'q2'}) + '\n' + json.dumps({'person': 'I2', 'kind': 'bogus'}) + '\n')
+        self.assertEqual(code, 2)
+        code, _, _ = run('--queue', self.path, 'done', '--id', 'q1', '--token', 'wrong', '--result', 'none')
+        self.assertEqual(code, 2)
+        self.assertEqual(state(), before)
+
+    def test_jsonl_from_stdin_leaves_stdin_open(self):
+        old, sys.stdin = sys.stdin, io.StringIO(json.dumps({'person': 'I1'}) + '\n')
+        try:
+            code, _, _ = run('--queue', self.path, 'add', '--jsonl', '-')
+            self.assertEqual(code, 0)
+            self.assertFalse(sys.stdin.closed, 'stdin belongs to the caller: a later read must still work')
+        finally:
+            sys.stdin = old
+
     def test_jsonl_integer_priority_is_kept(self):
         code, out, _ = self.jsonl(json.dumps({'person': 'I1', 'priority': 5, 'query': 'q'}) + '\n')
         self.assertEqual(code, 0)
