@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Added
+
+- `gwt-ledger scan add` and `scan check` log which images of a book were read and print the ones nobody read yet, so a lane does not sweep the same images twice. The rows are ordinary ledger rows with the query `<book> img <first> <last>`; a read with no `--person` counts for everyone, and `--skip` keeps unread images as gaps. `gwt-ledger void --person ''` retracts only the rows logged with no person (#255).
+
 ## [1.4.0] - 2026-11-09
 
 ### Change lists

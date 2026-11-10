@@ -18,6 +18,8 @@ Agents run `check` before a search and `add` after it, so two lanes never pay fo
   gwt-ledger sources [--country XX]                          the source registry: ids, aliases, kinds, years
   gwt-ledger coverage --dump DUMP --sources FILE [--root I]  person x source matrix of what was searched
   gwt-ledger import-tsv FILE --map COL=FILECOL,... [--control-ok RUN]  append rows from another TSV log
+  gwt-ledger scan add|check --source SRC --book ID --start N --end M [--person KEY] [--skip LIST]  images of a
+                                                             book read (rows `<book> img N M`); check prints the gaps
   gwt-ledger request add|update|list|due ...                 letters and forms sent to archives
   gwt-ledger costs [--by payer|archive|person]               what the requests cost, per currency
 
