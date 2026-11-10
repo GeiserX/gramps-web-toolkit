@@ -60,3 +60,6 @@ gwt_ledger.py | if args.skip and (min(args.skip) < args.start or max(args.skip) 
 gwt_ledger.py | span for r, span in rows if r['result'] in SEARCHED and (not r['next_date'] or r['next_date'] > args.date) | span for r, span in rows if r['result'] in SEARCHED and True | scan check: a row due again (next_date reached) fills no gap
 gwt_ledger.py | return scan_command(args, reg, err, stray, lane_path, | return scan_command(args, reg, err, lambda path: None, lane_path, | scan add with no ledger named never creates ./buscado.tsv
 gwt_ledger.py | if args.cmd == 'void' and name == 'person' and value == '': | if name == 'person' and value == '': | only void takes an empty --person; add, check, list and scan refuse it
+gwt_ledger.py | if not text.isascii(): | if False: | normalize still strips accents and folds every non-ASCII text after the ASCII fast path
+gwt_ledger.py | if any(len(w) < 5 or any(c.isdigit() for c in w) for w in rest): | if False: | a short or numbered word of a new query needs its exact twin in the logged one
+gwt_ledger.py | pool.remove(hit) | pass | one logged word never covers two words of the new query
