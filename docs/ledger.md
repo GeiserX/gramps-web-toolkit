@@ -255,59 +255,21 @@ python3 .github/scripts/run_tests.py --mutants --only ledger   # each guard in l
 
 ## Image ranges: check before opening a book
 
-`scan` keeps structured image-reading coverage in the same ledger, with the same locks,
-per-lane files and retractions. It does not write to Gramps. An image sweep and a
-second reading are different work, as are different objectives in the same book.
+A sweep reads a digitised book image by image. `check` cannot tell whether images 1 to 30 of a book were already read: a row logged for images 1 to 530 never matches a query for 1 to 300, and nothing works out which images are left. `scan` does that arithmetic over ordinary rows.
 
 ```sh
-gwt-ledger scan check --source familysearch --book 'catalogue:book-42' \
-  --objective 'target-baptism' --start 1 --end 30
-gwt-ledger scan add --source familysearch --book 'catalogue:book-42' \
-  --book-label 'Invented parish book 1800-1820' --source-url https://example.org/book-42 \
-  --objective 'target-baptism' --start 1 --end 30 --year-from 1800 --year-to 1802 \
-  --coverage complete --legibility partial --result partial --agent reader-1 \
-  --date 2026-11-10 --evidence private/notes.md --limitations 'Image 12 faded'
-gwt-ledger scan list --source familysearch
+# Before opening the book: which images of 1-300 has nobody read?
+gwt-ledger scan check --source familysearch --book 'book-42' --start 1 --end 300 [--person "Ana Example"]
+
+# After reading 1-120, every image read in full, except three that would not load.
+gwt-ledger scan add --source familysearch --book 'book-42' --start 1 --end 120 --skip 17,88-89 \
+  --result hit --evidence notes/book-42.md --agent lane-7
 ```
 
-The ranges are positive inclusive integers. `--unit` is `vue` (default), `image`,
-`page` or `folio`; these units do not match each other. `--book` is a stable exact
-identifier shared by readers, not a title or a temporary download URL. Book and
-objective identifiers compare exactly after trimming outside spaces, including case
-and punctuation. Use an agreed objective id, and keep its meaning in the evidence.
-Years and book labels are descriptive, not matching keys. Sources use the existing
-registry aliases. `--review original` is the default; `second-reading` is separate
-and does not by itself assert an independent reader. The stored agent identifies the reader.
+`scan add` writes one ordinary row per run of images read, with the query `<book> img <first> <last>`, normalized like every query: `book 42 img 1 16`, `book 42 img 18 87` and `book 42 img 90 120` above. `--skip` takes the images not read (`17,88-89`), and they stay gaps. Without `--person` the row has no person: every image was read in full, so the read counts for whoever is sought, and its `person_label` is the book. With `--person` (and `--label`) the row belongs to that person, as with `add`. `--result`, `--control-ok`, `--evidence`, `--agent` and `--date` work as on `add`: a `none` without `--control-ok` is stored as `unproven` and its images count as not read, and a row the ledger already holds is skipped.
 
-`scan check` prints JSON with every overlapping row, `traversed`, `traversal_gaps`,
-`covered` and `gaps`. It unions adjacent ranges but does not add overlapping images
-twice. Only `hit`, controlled `none`, or `partial` with `coverage=complete` count
-as traversed. Partial or unreadable legibility can still mean the range was traversed:
-use the overlap evidence to plan targeted rereading instead of another whole-book sweep.
-Exit 0 requires complete coverage **and** complete legibility across the requested
-range for this source, book, objective, unit and review kind. Exit 1 leaves gaps; exit
-2 reports invalid input or an unreadable ledger. A blocked or unproven search fills
-no gaps. A negative is scoped to its objective and range, not absence from the archive.
+`scan check` reads the live rows of that source whose normalized query is exactly `<book> img <first> <last>`, the book compared normalized (`Book 42` and `book-42` are one book). With `--person P` it counts P's rows and the rows with no person; without it, every row of the book. A row counts when its result [counts as done](#results) and its `next_date` has not arrived, as for `check`. It prints one JSON object: `gaps`, the image runs nobody read, and `rows`, the overlapping rows with their `id`, `person_key`, `date`, `result`, `agent`, `evidence`, `start` and `end`. Exit 0 when nothing is left to read, 1 when there are gaps, 2 on a usage error.
 
-A half-page-only search must be logged as partial coverage for that vue, with the
-panel limits in `--limitations`; it cannot cover the whole vue. Keep original source
-records when importing historical summaries. Do not upgrade a traversal to full
-legibility or an uncertain result to a controlled negative. Missing metadata needs
-review, not a guessed default. `scan list` emits JSONL for private exchange and audit.
+Number the images as the source's viewer does (image, vue, canvas), and give one book the same id every time: the film, catalogue or item id, not its title. A row of any other shape is simply no scan row, so a row typed by hand can never make `scan check` fail. A row you wrote yourself in the same shape counts: an older log that already says `<book> img <first> <last>` needs no conversion.
 
-Storage uses ordinary ledger rows with person key `scan-coverage`, an exact versioned
-query (book and objective SHA256 identifiers, unit, review, start, end), and JSON in
-`evidence` containing the readable metadata and original evidence reference. No
-columns are added, so older row ids and void references stay stable. Free-text rows
-are not treated as scan coverage. `scan add` repeats with identical metadata, agent,
-day and result are skipped; different readers or limitations remain separate rows.
-To retract a mistaken scan, use `void --person scan-coverage --source S --query Q`
-with its stored query, then add the corrected record. This retracts all live rows of
-that exact query, so inspect and re-add any other reader's valid rows too.
-
-Structured scan metadata is validated before filtering: an invalid scan row makes
-`scan check` and `scan list` exit 2 with its row id and a clear error, without a
-traceback, even when another source was requested. Repair or retract the bad row
-before relying on coverage. JSON must be an object with the required string fields,
-positive integer endpoints (not bool), and the documented unit/review/coverage/legibility
-values. Ordinary legacy free-text rows remain unchanged.
+The rows are ordinary rows, so `check`, `list`, `stats` and `void` see them. To retract a wrong read, `void` its query, for instance `void --person '' --source familysearch --query 'book 42 img 1 16' --reason "..."`; `--person ''` takes only the rows with no person.

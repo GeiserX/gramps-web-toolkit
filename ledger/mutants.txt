@@ -48,6 +48,12 @@ gwt_ledger.py | VOIDS.match(r['evidence']) if r['result'] == VOID else None | VO
 gwt_ledger.py | ' '.join(r['id'] for r in targets), args.reason | ' '.join(r['id'] for r in targets[:1]), args.reason | a void retracts every lane's row of the search, not just the first
 gwt_ledger.py | for name in ('query', 'person', 'reason'): | for name in ('query', 'person'): | a void reason with nothing in it is refused
 gwt_ledger.py | found = unless() if unless else None | found = None | add skips a row the ledger already holds (same person, source, query, date and result)
-gwt_ledger.py | if book is not None and meta['book'].strip() != book.strip(): | if False: | scan never reuses coverage from a different exact book
-gwt_ledger.py | if review and meta['review'] != review: | if False: | an original sweep never replaces a second reading
-gwt_ledger.py | and r['scan']['coverage'] == 'complete' and r['scan']['legibility'] == 'complete'] | and r['scan']['coverage'] == 'complete'] | traversed but unreadable scans do not fill fully read gaps
+gwt_ledger.py | if not m or m.group(1) != book: | if not m: | scan check never counts a range of another book
+gwt_ledger.py | if reg.canon(r['source']) != source: | if False: | scan check never counts a range read at another source
+gwt_ledger.py | if person and key(r['person_key']) not in (person, ''): | if False: | scan check --person never counts a range read for another person
+gwt_ledger.py | not in (person, ''): | != person: | a range read with no person counts for every person
+gwt_ledger.py | for n in sorted(skip) + [last + 1]: | for n in [last + 1]: | images left out with --skip stay gaps
+gwt_ledger.py | cursor = max(cursor, hi + 1) | cursor = hi + 1 | a range inside a longer one reopens no gap
+gwt_ledger.py | done = [span for r, span in rows if r['result'] in SEARCHED and | done = [span for r, span in rows if True and | a blocked or unproven range fills no gap
+gwt_ledger.py | if key(r['person_key']) == key(args.person)]  # find | if True]  # find | void --person '' retracts only the rows with no person
+gwt_ledger.py | if args.skip and (min(args.skip) < args.start or max(args.skip) > args.end): | if False: | scan add refuses a --skip image outside the range

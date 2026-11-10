@@ -337,6 +337,22 @@ def add_row(path, row, unless=None):
     return add_rows(path, [row], unless=unless)
 
 
+def log_search(path, row, reg, paths):
+    """Append one search row unless a live row of any lane file is the same search (same_search)."""
+    mine = same_search(row, reg)
+
+    def twins():  # a logger run twice must not log every search twice; a voided row is no reason to skip
+        rows = live([r for lp in paths for r in read_rows(lp)])
+        return [r['id'] for r in rows if key(r['person_key']) == mine[0] and same_search(r, reg) == mine]
+
+    # read under the lane file's lock, so two runs of one logger cannot both find no row and both write
+    found = add_row(path, row, unless=twins)
+    if found:
+        sys.stderr.write('gwt-ledger: not added: the same search (person, source, query, date and result) is '
+                         'already logged as %s\n' % ' '.join(found))
+    return found
+
+
 def find(rows, person=None, source=None, query=None, threshold=DEFAULT_THRESHOLD, exact=False, registry=None,
          newest_first=False):
     """Rows for this person and source whose query is close enough, best match first and, among equal
@@ -720,72 +736,49 @@ def import_tsv(args, reg, err):
     return 0
 
 
-# ---------------------------------------------------------------- structured image coverage, in the existing ledger
+# ---------------------------------------------------------------- image ranges of a book, as ordinary rows
 
-SCAN_PREFIX = 'gwt scan v1 '
-
-
-def scan_identity(book, objective, unit, review):
-    # Book identifiers are opaque: punctuation and case can identify different archive items.
-    digest = lambda value: hashlib.sha256(value.strip().encode('utf-8')).hexdigest()
-    return '%sbook %s objective %s unit %s review %s' % (
-        SCAN_PREFIX, digest(book), digest(objective), unit, review)
+# A scan row is an ordinary row whose normalized query is `<book> img <first> <last>`: readable in the TSV, matched
+# by check, retracted by void. Any other query is no scan row, so no hand-written row can make `scan check` fail.
+SCAN_QUERY = re.compile(r'^(.+) img (\d+) (\d+)$')
 
 
-def scan_records(rows, reg, source=None, book=None, objective=None, unit=None, review=None):
-    """Read scan metadata from ordinary live ledger rows; old free-text searches stay untouched."""
-    out = []
-    for row in rows:
-        if not row['query'].startswith(SCAN_PREFIX):
-            continue
-        try:
-            meta = json.loads(row['evidence'])
-            if not isinstance(meta, dict):
-                raise ValueError('metadata must be an object')
-            for name in ('book', 'book_label', 'source_url', 'objective', 'limitations', 'evidence'):
-                if not isinstance(meta.get(name), str):
-                    raise ValueError('%s must be a string' % name)
-            if not meta['book'].strip() or not meta['objective'].strip() or not meta['evidence'].strip():
-                raise ValueError('book, objective and evidence must not be empty')
-            for name, choices in (('unit', ('vue', 'page', 'folio', 'image')),
-                                  ('review', ('original', 'second-reading')),
-                                  ('coverage', ('complete', 'partial')),
-                                  ('legibility', ('complete', 'partial', 'unreadable'))):
-                if not isinstance(meta.get(name), str) or meta[name] not in choices:
-                    raise ValueError('%s must be one of %s' % (name, ', '.join(choices)))
-            for name in ('start', 'end'):
-                if type(meta.get(name)) is not int or meta[name] < 1:
-                    raise ValueError('%s must be a positive integer (not bool)' % name)
-            if meta['end'] < meta['start']:
-                raise ValueError('end must not precede start')
-            for name in ('year_from', 'year_to'):
-                if name not in meta or (meta[name] is not None and type(meta[name]) is not int):
-                    raise ValueError('%s must be an integer or null' % name)
-            identity = scan_identity(meta['book'], meta['objective'], meta['unit'], meta['review'])
-            expected = '%s start %d end %d' % (identity, meta['start'], meta['end'])
-            if row['query'] != expected:
-                raise ValueError('query and metadata disagree')
-        except (ValueError, TypeError, KeyError) as exc:
-            raise ValueError('invalid scan row %s: %s' % (row.get('id', '?'), exc)) from exc
-        if source and reg.canon(row['source']) != source:
-            continue
-        if book is not None and meta['book'].strip() != book.strip():
-            continue
-        if objective is not None and meta['objective'].strip() != objective.strip():
-            continue
-        if unit and meta['unit'] != unit:
-            continue
-        if review and meta['review'] != review:
-            continue
-        out.append(dict(row, scan=meta))
+def scan_span(row, book):
+    """(first, last) when the row records images first..last of this normalized book, else None."""
+    m = SCAN_QUERY.match(normalize(row['query']))
+    if not m or m.group(1) != book:
+        return None
+    first, last = int(m.group(2)), int(m.group(3))
+    return (first, last) if 1 <= first <= last else None
+
+
+def image_list(text):
+    """`165,167,240-241` -> {165, 167, 240, 241}; anything else is an argparse error."""
+    out = set()
+    for part in text.split(','):
+        m = re.fullmatch(r'\s*(\d+)\s*(?:-\s*(\d+)\s*)?', part)
+        first, last = (int(m.group(1)), int(m.group(2) or m.group(1))) if m else (0, 0)
+        if not 1 <= first <= last:
+            raise argparse.ArgumentTypeError('not an image list: %r (say 165,167,240-241)' % text)
+        out.update(range(first, last + 1))
     return out
+
+
+def read_runs(first, last, skip):
+    """The contiguous runs of first..last left once the skipped images (all inside it) are taken out."""
+    runs, start = [], first
+    for n in sorted(skip) + [last + 1]:
+        if n > start:
+            runs.append((start, n - 1))
+        start = max(start, n + 1)
+    return runs
 
 
 def scan_gaps(start, end, intervals):
     cursor, gaps = start, []
     for lo, hi in sorted(intervals):
         lo, hi = max(lo, start), min(hi, end)
-        if lo > hi or hi < cursor:
+        if lo > hi:
             continue
         if lo > cursor:
             gaps.append([cursor, lo - 1])
@@ -795,59 +788,50 @@ def scan_gaps(start, end, intervals):
     return gaps
 
 
-def scan_command(args, reg, err, stray, lane_path):
-    source = None
-    if args.source:
-        source, problem = reg.resolve(args.source, args.new_source)
-        if problem:
-            return err(problem)
-    if args.scmd != 'list':
-        if args.start < 1 or args.end < args.start:
-            return err('scan range must be positive and inclusive: start <= end')
-        if not args.book.strip() or not args.objective.strip():
-            return err('scan needs a non-empty book and objective')
+def scan_command(args, reg, err, stray, lane_path, source, paths):
+    book = normalize(args.book)
+    if not book:
+        return err('--book %r: nothing left to match after normalising' % args.book)
+    if not 1 <= args.start <= args.end:
+        return err('scan range must be positive and inclusive: 1 <= --start <= --end')
+    person = key(args.person or '')
     if args.scmd == 'add':
+        if args.skip and (min(args.skip) < args.start or max(args.skip) > args.end):
+            return err('--skip names images outside --start..--end')
+        runs = read_runs(args.start, args.end, args.skip)
+        if not runs:
+            return err('--skip leaves no image read')
         path = lane_path()
         if stray(path):
             return 2
-        if not args.agent.strip() or not args.evidence.strip():
-            return err('scan add needs --agent and --evidence')
-        if args.year_from is not None and args.year_to is not None and args.year_from > args.year_to:
-            return err('year-from must not exceed year-to')
         if args.control_ok:
             problem = control_problem(args.control_ok)
             if problem:
-                return err('--control-ok: ' + problem)
-        meta = {name: getattr(args, name) for name in (
-            'book', 'book_label', 'source_url', 'unit', 'start', 'end', 'objective',
-            'review', 'coverage', 'legibility', 'year_from', 'year_to', 'limitations', 'evidence')}
-        query = '%s start %d end %d' % (scan_identity(args.book, args.objective, args.unit, args.review),
-                                       args.start, args.end)
-        row = dict(person_key='scan-coverage', person_label=args.book_label, source=source, query=query,
-                   date=args.date, result=proven(args.result, args.control_ok), agent=args.agent,
-                   evidence=json.dumps(meta, ensure_ascii=False, sort_keys=True), control=args.control_ok, next_date='')
-        def twins():
-            rows = live([r for lp in ledger_paths(args.ledger, args.ledger_dir) for r in read_rows(lp)])
-            return [r['id'] for r in rows if same_search(r, reg) == same_search(row, reg)
-                    and r['evidence'] == row['evidence'] and r['agent'] == row['agent']]
-        add_row(path, row, unless=twins)
-        print(json.dumps(dict(row, scan=meta), ensure_ascii=False, sort_keys=True))
+                return err('--control-ok: %s' % problem)
+        result = proven(args.result, args.control_ok)
+        if result != args.result:
+            sys.stderr.write('gwt-ledger: stored as unproven: a none needs --control-ok, the proof the source could '
+                             'answer; the images count as not read\n')
+        for first, last in runs:
+            log_search(path, {'person_key': person, 'person_label': args.label or ('' if person else args.book),
+                              'source': source, 'query': normalize('%s img %d %d' % (book, first, last)),
+                              'date': args.date, 'result': result, 'evidence': args.evidence, 'agent': args.agent,
+                              'next_date': '', 'control': clean(args.control_ok)}, reg, paths)
         return 0
-    rows = live([r for lp in ledger_paths(args.ledger, args.ledger_dir) for r in read_rows(lp)])
-    matches = scan_records(rows, reg, source, args.book, args.objective, args.unit, args.review)
-    if args.scmd == 'list':
-        for row in matches:
-            print(json.dumps(row, ensure_ascii=False, sort_keys=True))
-        return 0
-    overlaps = [r for r in matches if r['scan']['start'] <= args.end and r['scan']['end'] >= args.start]
-    completed = [r for r in overlaps if r['result'] in ('hit', 'none', 'partial')
-                 and r['scan']['coverage'] == 'complete' and r['scan']['legibility'] == 'complete']
-    gaps = scan_gaps(args.start, args.end, [(r['scan']['start'], r['scan']['end']) for r in completed])
-    traversed = [r for r in overlaps if r['result'] in ('hit', 'none', 'partial')
-                 and r['scan']['coverage'] == 'complete']
-    traversal_gaps = scan_gaps(args.start, args.end, [(r['scan']['start'], r['scan']['end']) for r in traversed])
-    print(json.dumps(dict(covered=not gaps, gaps=gaps, traversed=not traversal_gaps,
-                          traversal_gaps=traversal_gaps, overlaps=overlaps), ensure_ascii=False, sort_keys=True))
+    rows = []
+    for r in live([r for lp in paths for r in read_rows(lp)]):
+        if reg.canon(r['source']) != source:
+            continue
+        if person and key(r['person_key']) not in (person, ''):
+            continue  # a read logged with no person was a read of every image, for whoever is sought
+        span = scan_span(r, book)
+        if span and span[0] <= args.end and span[1] >= args.start:
+            rows.append((r, span))
+    done = [span for r, span in rows if r['result'] in SEARCHED and (not r['next_date'] or r['next_date'] > args.date)]
+    gaps = scan_gaps(args.start, args.end, done)
+    print(json.dumps({'gaps': gaps, 'rows': [dict({c: r[c] for c in ('id', 'person_key', 'date', 'result', 'agent',
+                                                                       'evidence')}, start=s[0], end=s[1])
+                                             for r, s in rows]}, ensure_ascii=False))
     return 1 if gaps else 0
 
 
@@ -874,32 +858,24 @@ def main(argv=None):
         sp.add_argument('--agent', default=os.environ.get('GWT_AGENT', ''))
         sp.add_argument('--date', default=datetime.date.today().isoformat(), type=iso_date)
 
-    sc = sub.add_parser('scan', help='structured book/image coverage in the shared ledger')
+    sc = sub.add_parser('scan', help='image ranges of a book: log the images read, or print the ones nobody read')
     scsub = sc.add_subparsers(dest='scmd', required=True)
-    for action in ('add', 'check', 'list'):
+    for action in ('add', 'check'):
         sp = scsub.add_parser(action)
-        required = action != 'list'
-        sp.add_argument('--source', required=required)
-        sp.add_argument('--book', required=required, help='stable exact book/manifest identifier, not its title')
-        sp.add_argument('--objective', required=required, help='exact shared objective identifier')
-        sp.add_argument('--unit', choices=('vue', 'page', 'folio', 'image'), default='vue' if required else None)
-        sp.add_argument('--review', choices=('original', 'second-reading'), default='original' if required else None)
+        sp.add_argument('--source', required=True)
+        sp.add_argument('--book', required=True, help='the book\'s id at the source: a film, catalogue or item id')
+        sp.add_argument('--start', type=int, required=True, help='first image')
+        sp.add_argument('--end', type=int, required=True, help='last image')
+        sp.add_argument('--person', help='add: the person sought (none: every image was read in full); check: count '
+                                         'this person\'s rows and the rows with no person (none: every row)')
         sp.add_argument('--new-source', action='store_true')
-        if required:
-            sp.add_argument('--start', type=int, required=True)
-            sp.add_argument('--end', type=int, required=True)
+        agent_and_date(sp)
         if action == 'add':
-            sp.add_argument('--book-label', default='')
-            sp.add_argument('--source-url', required=True)
-            sp.add_argument('--year-from', type=int)
-            sp.add_argument('--year-to', type=int)
-            sp.add_argument('--coverage', choices=('complete', 'partial'), required=True)
-            sp.add_argument('--legibility', choices=('complete', 'partial', 'unreadable'), required=True)
-            sp.add_argument('--result', choices=RESULTS, required=True)
-            sp.add_argument('--limitations', default='')
-            sp.add_argument('--evidence', required=True)
-            sp.add_argument('--control-ok', default='')
-            agent_and_date(sp)
+            sp.add_argument('--label', default='', help='person_label; default, the book when there is no --person')
+            sp.add_argument('--skip', type=image_list, default=set(), help='images not read: 165,167,240-241')
+            sp.add_argument('--result', required=True, choices=RESULTS)
+            sp.add_argument('--control-ok', default='', metavar='RUN')
+            sp.add_argument('--evidence', default='')
 
     c = sub.add_parser('check', help='has this search been done? print the matching rows; exit 0 if one is a '
                                      'search that ran and is not due again, 1 if not')
@@ -994,6 +970,8 @@ def main(argv=None):
     # A query or person that normalizes to nothing (only punctuation, say) would match every row.
     for name in ('query', 'person', 'reason'):
         value = getattr(args, name, None)
+        if args.cmd == 'void' and name == 'person' and value == '':
+            continue  # void --person '': the rows logged with no person (a whole book or collection searched)
         if value is not None and not normalize(value):
             p.error('--%s %r: nothing left to match after normalising' % (name, value))
     try:
@@ -1027,9 +1005,10 @@ def main(argv=None):
 
     if args.cmd == 'scan':
         try:
-            return scan_command(args, reg, err, stray, lane_path)
-        except (OSError, UnicodeDecodeError, ValueError) as exc:
-            return err('cannot read/write scan ledger: %s' % exc)
+            return scan_command(args, reg, err, stray, lane_path, source_id(args.source, note=args.scmd == 'add'),
+                                ledger_paths(args.ledger, args.ledger_dir))
+        except (OSError, UnicodeDecodeError) as exc:
+            return err('cannot read the ledger: %s' % exc)
     if args.cmd == 'add':
         path = lane_path()
         if stray(path):
@@ -1047,19 +1026,10 @@ def main(argv=None):
                'source': source, 'query': normalize(args.query), 'date': args.date,
                'result': result, 'evidence': args.evidence, 'agent': args.agent,
                'next_date': args.next_date, 'control': clean(args.control_ok)}
-        mine = same_search(row, reg)
-
-        def twins():  # a logger run twice must not log every search twice; a voided row is no reason to skip
-            rows = live([r for lp in ledger_paths(args.ledger, args.ledger_dir) for r in read_rows(lp)])
-            return [r['id'] for r in rows if key(r['person_key']) == mine[0] and same_search(r, reg) == mine]
-
-        try:  # read under the lane file's lock, so two runs of one logger cannot both find no row and both write
-            found = add_row(path, row, unless=twins)
+        try:
+            log_search(path, row, reg, ledger_paths(args.ledger, args.ledger_dir))
         except (OSError, UnicodeDecodeError) as exc:
             return err('cannot read the ledger: %s' % exc)
-        if found:
-            sys.stderr.write('gwt-ledger: not added: the same search (person, source, query, date and result) is '
-                             'already logged as %s\n' % ' '.join(found))
         return 0
     if args.cmd == 'import-tsv':
         if not args.ledger_dir and stray(args.ledger):
@@ -1113,7 +1083,8 @@ def main(argv=None):
     if args.cmd == 'void':
         path = lane_path()
         source = source_id(args.source)
-        targets = [r for _, r in find(rows, args.person, source, args.query, exact=True, registry=reg)]
+        targets = [r for _, r in find(rows, args.person, source, args.query, exact=True, registry=reg)
+                   if key(r['person_key']) == key(args.person)]  # find drops the person filter for ''
         if not targets:
             done = find([r for r in everything if r['result'] == VOID], args.person, source, args.query, exact=True,
                         registry=reg)

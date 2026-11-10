@@ -1,4 +1,4 @@
-"""Invented books and objectives; no family-tree data."""
+"""gwt-ledger scan: image ranges of a book. Invented books and people; no family-tree data."""
 import io
 import json
 import os
@@ -16,127 +16,107 @@ class ScanTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def run_scan(self, action, *extra):
+    def ledger(self, *argv):
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
-            code = L.main(['--ledger', self.path, 'scan', action, *extra])
+            code = L.main(['--ledger', self.path, *argv])
         self.last_error = err.getvalue()
         return code, out.getvalue()
 
-    def common(self, start=1, end=10, book='archive:book-1', objective='target-baptism', review='original'):
-        return ['--source', 'familysearch', '--book', book, '--objective', objective,
-                '--start', str(start), '--end', str(end), '--review', review]
+    def add(self, start=1, end=10, *extra, book='book-42', result='hit', source='familysearch'):
+        return self.ledger('scan', 'add', '--source', source, '--book', book, '--start', str(start), '--end', str(end),
+                        '--result', result, '--evidence', 'notes/book-42.md', '--agent', 'reader-1', *extra)[0]
 
-    def add(self, start=1, end=10, coverage='complete', legibility='complete', result='partial',
-            book='archive:book-1', objective='target-baptism', review='original', control='run-ok'):
-        return self.run_scan('add', *self.common(start, end, book, objective, review),
-                             '--coverage', coverage, '--legibility', legibility, '--result', result,
-                             '--control-ok', control, '--agent', 'reader-1', '--source-url',
-                             'https://example.org/book-1', '--evidence', 'private/notes.md')
+    def check(self, start=1, end=10, *extra, book='book-42', source='familysearch'):
+        code, out = self.ledger('scan', 'check', '--source', source, '--book', book, '--start', str(start),
+                             '--end', str(end), *extra)
+        return code, json.loads(out) if out else None
 
-    def check(self, *args):
-        code, out = self.run_scan('check', *self.common(*args))
-        return code, json.loads(out)
+    def gaps(self, *args, **kw):
+        return self.check(*args, **kw)[1]['gaps']
 
-    def test_empty_and_union_gaps(self):
-        self.assertEqual(self.check()[1]['gaps'], [[1, 10]])
+    def test_ranges_union_and_leave_gaps(self):
+        self.assertEqual(self.check(), (1, {'gaps': [[1, 10]], 'rows': []}))
         self.add(1, 4); self.add(6, 10)
-        self.assertEqual(self.check()[1]['gaps'], [[5, 5]])
+        self.assertEqual(self.gaps(), [[5, 5]])
         self.add(5, 5)
         self.assertEqual(self.check()[0], 0)
-        self.assertEqual(self.check(1, 12)[1]['gaps'], [[11, 12]])
+        self.assertEqual(self.gaps(1, 12), [[11, 12]])
 
-    def test_book_and_objective_and_review_are_exact(self):
-        self.add()
-        for args in [(1, 10, 'archive book 1'), (1, 10, 'archive:Book-1'),
-                     (1, 10, 'archive:book-1', 'other'),
-                     (1, 10, 'archive:book-1', 'target-baptism', 'second-reading')]:
-            self.assertEqual(self.check(*args)[0], 1)
+    def test_a_range_inside_a_longer_one_reopens_nothing(self):
+        self.add(1, 20); self.add(5, 10)
+        self.assertEqual(self.check(1, 20)[0], 0)
 
-    def test_partial_legibility_is_traversed_not_fully_read(self):
-        self.add(legibility='partial')
-        code, data = self.check()
-        self.assertEqual(code, 1)
-        self.assertTrue(data['traversed'])
-        self.assertFalse(data['covered'])
-        self.assertEqual(len(data['overlaps']), 1)
-
-    def test_incomplete_coverage_never_fills_gap(self):
-        self.add(coverage='partial')
-        self.assertEqual(self.check()[1]['traversal_gaps'], [[1, 10]])
-
-    def test_blocked_and_unproven_never_count(self):
-        for result, control in [('blocked', 'run-ok'), ('none', '')]:
-            self.add(result=result, control=control)
-        self.assertEqual(self.check()[0], 1)
-        self.assertFalse(self.check()[1]['traversed'])
-
-    def test_proven_none_counts_but_not_absence_elsewhere(self):
-        self.add(result='none')
-        self.assertEqual(self.check()[0], 0)
-        self.assertEqual(self.check(11, 12)[0], 1)
-
-    def test_idempotent_and_void_using_existing_ledger(self):
-        self.add(); self.add()
-        self.assertEqual(len(L.read_rows(self.path)), 1)
+    def test_rows_are_ordinary_readable_rows(self):
+        self.add(1, 10, book='Book 42')
         row = L.read_rows(self.path)[0]
-        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            self.assertEqual(L.main(['--ledger', self.path, 'void', '--person', 'scan-coverage',
-                                    '--source', row['source'], '--query', row['query'],
-                                    '--reason', 'wrong book']), 0)
-        self.assertEqual(self.check()[0], 1)
-        self.add()
+        self.assertEqual((row['person_key'], row['person_label'], row['query']), ('', 'Book 42', 'book 42 img 1 10'))
+        code, out = self.ledger('check', '--source', 'fs', '--exact', '--query', 'book 42 img 1 10')
+        self.assertEqual(code, 0)
+
+    def test_another_book_or_source_never_counts(self):
+        self.add(1, 10, book='book-42')
+        self.assertEqual(self.check(book='book-420')[0], 1)
+        self.assertEqual(self.check(book='book-42', source='boe')[0], 1)
+        self.assertEqual(self.check(book='Book 42')[0], 0)  # the book compares normalized, like every query
+
+    def test_a_row_logged_by_hand_in_the_same_shape_counts(self):
+        L.add_row(self.path, dict(person_key='', source='fs', query='book 42 img 1 10', date='2026-11-10',
+                                  result='hit'))
         self.assertEqual(self.check()[0], 0)
 
-    def test_invalid_ranges_write_nothing(self):
-        for start, end in [(0, 10), (11, 10)]:
-            self.assertEqual(self.add(start, end)[0], 2)
+    def test_no_row_can_make_scan_check_fail(self):
+        for query in ('gwt scan v1 notes', 'book 42 img 9 3', 'book 42 img 0 4', 'book 42 views 1 10'):
+            self.assertEqual(self.ledger('add', '--person', 'x', '--source', 'familysearch', '--query', query,
+                                      '--result', 'hit')[0], 0)
+        self.add(5, 10)
+        self.assertEqual(self.check(), (1, {'gaps': [[1, 4]], 'rows': self.check()[1]['rows']}))
+        self.assertEqual([(r['start'], r['end']) for r in self.check()[1]['rows']], [(5, 10)])
+
+    def test_a_read_with_no_person_counts_for_everyone(self):
+        self.add(1, 10)
+        self.assertEqual(self.check(1, 10, '--person', 'Ana Example')[0], 0)
+
+    def test_a_read_for_one_person_counts_for_that_person_only(self):
+        self.add(1, 10, '--person', 'Ana Example')
+        self.assertEqual(self.check(1, 10, '--person', 'ana-example')[0], 0)
+        self.assertEqual(self.check(1, 10, '--person', 'Luis Example')[0], 1)
+        self.assertEqual(self.check(1, 10)[0], 0)  # no --person: every row of the book
+
+    def test_skipped_images_stay_gaps(self):
+        self.add(1, 30, '--skip', '12,20-21')
+        self.assertEqual(self.gaps(1, 30), [[12, 12], [20, 21]])
+        self.assertEqual(len(L.read_rows(self.path)), 3)
+
+    def test_a_bad_skip_or_range_writes_nothing(self):
+        for start, end, extra in [(1, 10, ['--skip', '11']), (1, 3, ['--skip', '1-3']), (0, 10, []),
+                                  (11, 10, [])]:
+            self.assertEqual(self.add(start, end, *extra), 2)
+        self.assertEqual(self.add(1, 2, book='!!'), 2)
+        with self.assertRaises(SystemExit), redirect_stderr(io.StringIO()):
+            L.main(['--ledger', self.path, 'scan', 'add', '--source', 'fs', '--book', 'b', '--start', '1',
+                    '--end', '2', '--skip', 'x', '--result', 'hit'])
         self.assertFalse(os.path.exists(self.path))
 
-    def test_existing_free_text_not_interpreted_as_scan(self):
-        L.add_row(self.path, dict(source='familysearch', query='book 1 views 1 10', result='hit'))
-        self.assertEqual(self.check()[1]['overlaps'], [])
+    def test_blocked_and_unproven_fill_no_gap(self):
+        self.add(1, 10, result='blocked')
+        self.add(1, 10, result='none')
+        self.assertIn('stored as unproven', self.last_error)
+        self.assertEqual(self.check()[0], 1)
+        self.add(1, 10, '--control-ok', 'run-7', result='none')
+        self.assertEqual(self.check()[0], 0)
 
-    def test_list_and_source_alias(self):
-        self.add()
-        code, out = self.run_scan('list', '--source', 'fs')
-        self.assertEqual(code, 0)
-        self.assertEqual(json.loads(out)['scan']['book'], 'archive:book-1')
-        code, out = self.run_scan('list', '--source', 'boe')
-        self.assertEqual(out, '')
+    def test_twice_logs_once(self):
+        self.add(1, 30, '--skip', '12'); self.add(1, 30, '--skip', '12')
+        self.assertEqual(len(L.read_rows(self.path)), 2)
 
-    def test_malformed_scan_metadata_is_clear_error_even_outside_filter(self):
-        changes = [lambda m: m.pop('coverage'), lambda m: m.pop('legibility'),
-                   lambda m: m.update(book=42), lambda m: m.update(start=True),
-                   lambda m: m.update(end=1.5), lambda m: m.update(unit='unknown'),
-                   lambda m: m.update(review='unknown'), lambda m: m.update(coverage=[]),
-                   lambda m: m.update(legibility='unknown'), lambda m: m.clear()]
-        for change in changes:
-            if os.path.exists(self.path):
-                os.unlink(self.path)
-            self.add()
-            row = L.read_rows(self.path)[0]
-            metadata = json.loads(row['evidence'])
-            change(metadata)
-            row['evidence'] = json.dumps(metadata)
-            os.unlink(self.path)
-            L.add_row(self.path, row)
-            for action, extra in [('check', self.common()), ('list', []),
-                                  ('list', ['--source', 'boe'])]:
-                err = io.StringIO()
-                with redirect_stderr(err):
-                    code, output = self.run_scan(action, *extra)
-                self.assertEqual(code, 2)
-                self.assertIn('invalid scan row', self.last_error)
-                self.assertNotIn('Traceback', self.last_error)
-
-    def test_non_object_metadata_is_clear_error(self):
-        self.add()
-        row = L.read_rows(self.path)[0]
-        for value in ([], None, 3, 'book'):
-            os.unlink(self.path)
-            L.add_row(self.path, dict(row, evidence=json.dumps(value)))
-            self.assertEqual(self.run_scan('list')[0], 2)
+    def test_void_with_no_person_retracts_only_the_rows_with_no_person(self):
+        self.add(1, 10)
+        self.add(1, 10, '--person', 'Ana Example')
+        self.assertEqual(self.ledger('void', '--person', '', '--source', 'fs', '--query', 'book 42 img 1 10',
+                                  '--reason', 'wrong book', '--agent', 'reader-1')[0], 0)
+        self.assertEqual(self.check(1, 10, '--person', 'Luis Example')[0], 1)
+        self.assertEqual(self.check(1, 10, '--person', 'Ana Example')[0], 0)
 
 
 if __name__ == '__main__':
