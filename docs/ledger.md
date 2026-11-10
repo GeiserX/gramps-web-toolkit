@@ -18,7 +18,7 @@ One row per search, tab-separated, with a header line:
 | `result` | one of the words in [Results](#results) |
 | `evidence` | file that holds the result or the negative |
 | `agent` | who searched |
-| `next_date` | optional ISO date to look again; for an appeal, a few days before the deadline, so there is time to act |
+| `next_date` | optional ISO date (`YYYY-MM-DD`) to look again; for an appeal, a few days before the deadline, so there is time to act. Any other text, typed into the file by hand, is ignored: the row is never due ([rows written by hand](#rows-written-by-hand)) |
 | `control` | the proof a `none` stands on: the `--control-ok` reference ([below](#a-none-needs-proof)) |
 
 The path comes from `--ledger`, else `$GWT_LEDGER`, else `./buscado.tsv`. A write never creates that last default: when no ledger is named, no `--ledger-dir` or `$GWT_LEDGER_DIR` is set and `./buscado.tsv` does not exist, `add` and `import-tsv` exit 2, name the path and write nothing, so a logger run from the wrong folder cannot log into a stray file. An existing `./buscado.tsv` is still written, and with a ledger directory both commands write the agent's lane file as before. The agent name defaults to `$GWT_AGENT`.
@@ -92,6 +92,12 @@ A row of your file whose id is already shipped adds its aliases to that source a
 | `void` | written by [`void`](#retracting-a-row) only: retracts earlier rows | no |
 
 `add` takes exactly these words: `--result found` or `--result negative` is an error, exit 2. Only [`import-tsv`](#import-another-log) maps other words (`found` to `hit`; `negative`, `nothing`, `miss` to `none`; `not-reviewed` to `unproven`).
+
+### Rows written by hand
+
+A row typed straight into a ledger or lane file skips the checks of `add`. Every command reads such a row the way `import-tsv` would have stored it: a word of its synonym map counts as its result (`found` as `hit`; `negative`, `nothing` or `miss` as `none`, and as `unproven` when the `control` column is empty). The file keeps the word as written, so the row's id, and any `void` that names it, stay the same. `list` prints the mapped word.
+
+A row whose result is still none of the words above counts as not searched. A row whose `next_date` is not a `YYYY-MM-DD` date (free text, `20270101`, `2026-02-30`) is never due: `check`, `due`, `due --ics`, `scan check` and `coverage` read it as having no `next_date`. `check`, `void`, `due`, `list`, `stats`, `coverage` and `scan check` print one note on stderr for each of the two cases, with the count and the first such row as `file:line`. Their stdout does not change, so a script that reads it keeps working. Fix the row in the file, or void it and log it again with `add`.
 
 ### A none needs proof
 
