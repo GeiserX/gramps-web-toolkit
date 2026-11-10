@@ -252,3 +252,62 @@ export GWT_LEDGER=research/buscado.tsv GWT_LEDGER_DIR=research/ledger.d GWT_AGEN
 python3 -m unittest discover -s ledger
 python3 .github/scripts/run_tests.py --mutants --only ledger   # each guard in ledger/mutants.txt removed in turn
 ```
+
+## Image ranges: check before opening a book
+
+`scan` keeps structured image-reading coverage in the same ledger, with the same locks,
+per-lane files and retractions. It does not write to Gramps. An image sweep and a
+second reading are different work, as are different objectives in the same book.
+
+```sh
+gwt-ledger scan check --source familysearch --book 'catalogue:book-42' \
+  --objective 'target-baptism' --start 1 --end 30
+gwt-ledger scan add --source familysearch --book 'catalogue:book-42' \
+  --book-label 'Invented parish book 1800-1820' --source-url https://example.org/book-42 \
+  --objective 'target-baptism' --start 1 --end 30 --year-from 1800 --year-to 1802 \
+  --coverage complete --legibility partial --result partial --agent reader-1 \
+  --date 2026-11-10 --evidence private/notes.md --limitations 'Image 12 faded'
+gwt-ledger scan list --source familysearch
+```
+
+The ranges are positive inclusive integers. `--unit` is `vue` (default), `image`,
+`page` or `folio`; these units do not match each other. `--book` is a stable exact
+identifier shared by readers, not a title or a temporary download URL. Book and
+objective identifiers compare exactly after trimming outside spaces, including case
+and punctuation. Use an agreed objective id, and keep its meaning in the evidence.
+Years and book labels are descriptive, not matching keys. Sources use the existing
+registry aliases. `--review original` is the default; `second-reading` is separate
+and does not by itself assert an independent reader. The stored agent identifies the reader.
+
+`scan check` prints JSON with every overlapping row, `traversed`, `traversal_gaps`,
+`covered` and `gaps`. It unions adjacent ranges but does not add overlapping images
+twice. Only `hit`, controlled `none`, or `partial` with `coverage=complete` count
+as traversed. Partial or unreadable legibility can still mean the range was traversed:
+use the overlap evidence to plan targeted rereading instead of another whole-book sweep.
+Exit 0 requires complete coverage **and** complete legibility across the requested
+range for this source, book, objective, unit and review kind. Exit 1 leaves gaps; exit
+2 reports invalid input or an unreadable ledger. A blocked or unproven search fills
+no gaps. A negative is scoped to its objective and range, not absence from the archive.
+
+A half-page-only search must be logged as partial coverage for that vue, with the
+panel limits in `--limitations`; it cannot cover the whole vue. Keep original source
+records when importing historical summaries. Do not upgrade a traversal to full
+legibility or an uncertain result to a controlled negative. Missing metadata needs
+review, not a guessed default. `scan list` emits JSONL for private exchange and audit.
+
+Storage uses ordinary ledger rows with person key `scan-coverage`, an exact versioned
+query (book and objective SHA256 identifiers, unit, review, start, end), and JSON in
+`evidence` containing the readable metadata and original evidence reference. No
+columns are added, so older row ids and void references stay stable. Free-text rows
+are not treated as scan coverage. `scan add` repeats with identical metadata, agent,
+day and result are skipped; different readers or limitations remain separate rows.
+To retract a mistaken scan, use `void --person scan-coverage --source S --query Q`
+with its stored query, then add the corrected record. This retracts all live rows of
+that exact query, so inspect and re-add any other reader's valid rows too.
+
+Structured scan metadata is validated before filtering: an invalid scan row makes
+`scan check` and `scan list` exit 2 with its row id and a clear error, without a
+traceback, even when another source was requested. Repair or retract the bad row
+before relying on coverage. JSON must be an object with the required string fields,
+positive integer endpoints (not bool), and the documented unit/review/coverage/legibility
+values. Ordinary legacy free-text rows remain unchanged.

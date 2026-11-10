@@ -48,3 +48,6 @@ gwt_ledger.py | VOIDS.match(r['evidence']) if r['result'] == VOID else None | VO
 gwt_ledger.py | ' '.join(r['id'] for r in targets), args.reason | ' '.join(r['id'] for r in targets[:1]), args.reason | a void retracts every lane's row of the search, not just the first
 gwt_ledger.py | for name in ('query', 'person', 'reason'): | for name in ('query', 'person'): | a void reason with nothing in it is refused
 gwt_ledger.py | found = unless() if unless else None | found = None | add skips a row the ledger already holds (same person, source, query, date and result)
+gwt_ledger.py | if book is not None and meta['book'].strip() != book.strip(): | if False: | scan never reuses coverage from a different exact book
+gwt_ledger.py | if review and meta['review'] != review: | if False: | an original sweep never replaces a second reading
+gwt_ledger.py | and r['scan']['coverage'] == 'complete' and r['scan']['legibility'] == 'complete'] | and r['scan']['coverage'] == 'complete'] | traversed but unreadable scans do not fill fully read gaps

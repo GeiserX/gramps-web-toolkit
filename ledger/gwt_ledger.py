@@ -720,6 +720,137 @@ def import_tsv(args, reg, err):
     return 0
 
 
+# ---------------------------------------------------------------- structured image coverage, in the existing ledger
+
+SCAN_PREFIX = 'gwt scan v1 '
+
+
+def scan_identity(book, objective, unit, review):
+    # Book identifiers are opaque: punctuation and case can identify different archive items.
+    digest = lambda value: hashlib.sha256(value.strip().encode('utf-8')).hexdigest()
+    return '%sbook %s objective %s unit %s review %s' % (
+        SCAN_PREFIX, digest(book), digest(objective), unit, review)
+
+
+def scan_records(rows, reg, source=None, book=None, objective=None, unit=None, review=None):
+    """Read scan metadata from ordinary live ledger rows; old free-text searches stay untouched."""
+    out = []
+    for row in rows:
+        if not row['query'].startswith(SCAN_PREFIX):
+            continue
+        try:
+            meta = json.loads(row['evidence'])
+            if not isinstance(meta, dict):
+                raise ValueError('metadata must be an object')
+            for name in ('book', 'book_label', 'source_url', 'objective', 'limitations', 'evidence'):
+                if not isinstance(meta.get(name), str):
+                    raise ValueError('%s must be a string' % name)
+            if not meta['book'].strip() or not meta['objective'].strip() or not meta['evidence'].strip():
+                raise ValueError('book, objective and evidence must not be empty')
+            for name, choices in (('unit', ('vue', 'page', 'folio', 'image')),
+                                  ('review', ('original', 'second-reading')),
+                                  ('coverage', ('complete', 'partial')),
+                                  ('legibility', ('complete', 'partial', 'unreadable'))):
+                if not isinstance(meta.get(name), str) or meta[name] not in choices:
+                    raise ValueError('%s must be one of %s' % (name, ', '.join(choices)))
+            for name in ('start', 'end'):
+                if type(meta.get(name)) is not int or meta[name] < 1:
+                    raise ValueError('%s must be a positive integer (not bool)' % name)
+            if meta['end'] < meta['start']:
+                raise ValueError('end must not precede start')
+            for name in ('year_from', 'year_to'):
+                if name not in meta or (meta[name] is not None and type(meta[name]) is not int):
+                    raise ValueError('%s must be an integer or null' % name)
+            identity = scan_identity(meta['book'], meta['objective'], meta['unit'], meta['review'])
+            expected = '%s start %d end %d' % (identity, meta['start'], meta['end'])
+            if row['query'] != expected:
+                raise ValueError('query and metadata disagree')
+        except (ValueError, TypeError, KeyError) as exc:
+            raise ValueError('invalid scan row %s: %s' % (row.get('id', '?'), exc)) from exc
+        if source and reg.canon(row['source']) != source:
+            continue
+        if book is not None and meta['book'].strip() != book.strip():
+            continue
+        if objective is not None and meta['objective'].strip() != objective.strip():
+            continue
+        if unit and meta['unit'] != unit:
+            continue
+        if review and meta['review'] != review:
+            continue
+        out.append(dict(row, scan=meta))
+    return out
+
+
+def scan_gaps(start, end, intervals):
+    cursor, gaps = start, []
+    for lo, hi in sorted(intervals):
+        lo, hi = max(lo, start), min(hi, end)
+        if lo > hi or hi < cursor:
+            continue
+        if lo > cursor:
+            gaps.append([cursor, lo - 1])
+        cursor = max(cursor, hi + 1)
+    if cursor <= end:
+        gaps.append([cursor, end])
+    return gaps
+
+
+def scan_command(args, reg, err, stray, lane_path):
+    source = None
+    if args.source:
+        source, problem = reg.resolve(args.source, args.new_source)
+        if problem:
+            return err(problem)
+    if args.scmd != 'list':
+        if args.start < 1 or args.end < args.start:
+            return err('scan range must be positive and inclusive: start <= end')
+        if not args.book.strip() or not args.objective.strip():
+            return err('scan needs a non-empty book and objective')
+    if args.scmd == 'add':
+        path = lane_path()
+        if stray(path):
+            return 2
+        if not args.agent.strip() or not args.evidence.strip():
+            return err('scan add needs --agent and --evidence')
+        if args.year_from is not None and args.year_to is not None and args.year_from > args.year_to:
+            return err('year-from must not exceed year-to')
+        if args.control_ok:
+            problem = control_problem(args.control_ok)
+            if problem:
+                return err('--control-ok: ' + problem)
+        meta = {name: getattr(args, name) for name in (
+            'book', 'book_label', 'source_url', 'unit', 'start', 'end', 'objective',
+            'review', 'coverage', 'legibility', 'year_from', 'year_to', 'limitations', 'evidence')}
+        query = '%s start %d end %d' % (scan_identity(args.book, args.objective, args.unit, args.review),
+                                       args.start, args.end)
+        row = dict(person_key='scan-coverage', person_label=args.book_label, source=source, query=query,
+                   date=args.date, result=proven(args.result, args.control_ok), agent=args.agent,
+                   evidence=json.dumps(meta, ensure_ascii=False, sort_keys=True), control=args.control_ok, next_date='')
+        def twins():
+            rows = live([r for lp in ledger_paths(args.ledger, args.ledger_dir) for r in read_rows(lp)])
+            return [r['id'] for r in rows if same_search(r, reg) == same_search(row, reg)
+                    and r['evidence'] == row['evidence'] and r['agent'] == row['agent']]
+        add_row(path, row, unless=twins)
+        print(json.dumps(dict(row, scan=meta), ensure_ascii=False, sort_keys=True))
+        return 0
+    rows = live([r for lp in ledger_paths(args.ledger, args.ledger_dir) for r in read_rows(lp)])
+    matches = scan_records(rows, reg, source, args.book, args.objective, args.unit, args.review)
+    if args.scmd == 'list':
+        for row in matches:
+            print(json.dumps(row, ensure_ascii=False, sort_keys=True))
+        return 0
+    overlaps = [r for r in matches if r['scan']['start'] <= args.end and r['scan']['end'] >= args.start]
+    completed = [r for r in overlaps if r['result'] in ('hit', 'none', 'partial')
+                 and r['scan']['coverage'] == 'complete' and r['scan']['legibility'] == 'complete']
+    gaps = scan_gaps(args.start, args.end, [(r['scan']['start'], r['scan']['end']) for r in completed])
+    traversed = [r for r in overlaps if r['result'] in ('hit', 'none', 'partial')
+                 and r['scan']['coverage'] == 'complete']
+    traversal_gaps = scan_gaps(args.start, args.end, [(r['scan']['start'], r['scan']['end']) for r in traversed])
+    print(json.dumps(dict(covered=not gaps, gaps=gaps, traversed=not traversal_gaps,
+                          traversal_gaps=traversal_gaps, overlaps=overlaps), ensure_ascii=False, sort_keys=True))
+    return 1 if gaps else 0
+
+
 # ---------------------------------------------------------------- command line
 
 
@@ -742,6 +873,33 @@ def main(argv=None):
     def agent_and_date(sp):
         sp.add_argument('--agent', default=os.environ.get('GWT_AGENT', ''))
         sp.add_argument('--date', default=datetime.date.today().isoformat(), type=iso_date)
+
+    sc = sub.add_parser('scan', help='structured book/image coverage in the shared ledger')
+    scsub = sc.add_subparsers(dest='scmd', required=True)
+    for action in ('add', 'check', 'list'):
+        sp = scsub.add_parser(action)
+        required = action != 'list'
+        sp.add_argument('--source', required=required)
+        sp.add_argument('--book', required=required, help='stable exact book/manifest identifier, not its title')
+        sp.add_argument('--objective', required=required, help='exact shared objective identifier')
+        sp.add_argument('--unit', choices=('vue', 'page', 'folio', 'image'), default='vue' if required else None)
+        sp.add_argument('--review', choices=('original', 'second-reading'), default='original' if required else None)
+        sp.add_argument('--new-source', action='store_true')
+        if required:
+            sp.add_argument('--start', type=int, required=True)
+            sp.add_argument('--end', type=int, required=True)
+        if action == 'add':
+            sp.add_argument('--book-label', default='')
+            sp.add_argument('--source-url', required=True)
+            sp.add_argument('--year-from', type=int)
+            sp.add_argument('--year-to', type=int)
+            sp.add_argument('--coverage', choices=('complete', 'partial'), required=True)
+            sp.add_argument('--legibility', choices=('complete', 'partial', 'unreadable'), required=True)
+            sp.add_argument('--result', choices=RESULTS, required=True)
+            sp.add_argument('--limitations', default='')
+            sp.add_argument('--evidence', required=True)
+            sp.add_argument('--control-ok', default='')
+            agent_and_date(sp)
 
     c = sub.add_parser('check', help='has this search been done? print the matching rows; exit 0 if one is a '
                                      'search that ran and is not due again, 1 if not')
@@ -867,6 +1025,11 @@ def main(argv=None):
             p.error('%s needs --agent (or $GWT_AGENT): rows go to <ledger-dir>/<agent>.tsv' % args.cmd)
         return os.path.join(args.ledger_dir, key(args.agent) + '.tsv')
 
+    if args.cmd == 'scan':
+        try:
+            return scan_command(args, reg, err, stray, lane_path)
+        except (OSError, UnicodeDecodeError, ValueError) as exc:
+            return err('cannot read/write scan ledger: %s' % exc)
     if args.cmd == 'add':
         path = lane_path()
         if stray(path):
