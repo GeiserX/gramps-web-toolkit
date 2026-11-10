@@ -765,8 +765,8 @@ class Applier:
         self._lost = False
         self._list_deletes: set[tuple[str, str]] = set()  # (class, ref) of every object a delete op of the list takes
         self._amended: dict[str, set[str]] = {}  # add_person key -> identity fields a later update_person of the list sets
-        self._merge_of: dict[str, dict] = {}  # loser -> the merge_* op of the list that names it (only those have one)
-        self._merged_keys: set[str] = set()  # keys a rerun found merged into their winner: key:<key> names the winner
+        self._merge_of: dict[str, tuple[int, dict]] = {}  # loser -> (index, merge_* op of the list that names it)
+        self._merged_keys: dict[str, str] = {}  # key a rerun found merged away by this list -> the line its ops skip with
         self._refs: dict[str, list[tuple[str, str]]] | None = None  # offline: handle -> the snapshot objects naming it
         client.touch = self._touch
 
@@ -959,8 +959,8 @@ class Applier:
     def _run(self, ops: list[dict], results: list[Result]) -> None:
         self._list_deletes = {_delete_object(op["object"]) for op in ops if op.get("op") == "delete"}
         self._amended = _amended_people(ops)
-        self._merge_of = {op["loser"]: op for op in ops if "loser" in op}
-        for op in ops:
+        self._merge_of = {op["loser"]: (i, op) for i, op in enumerate(ops) if "loser" in op}
+        for index, op in enumerate(ops):
             res = Result(op["key"], op["op"], op["ruling"])
             self._op_tags = list(dict.fromkeys(t for t in [self.run_tag, *_tag_names(op.get("tag"))] if t))
             self.c.context = {"key": op["key"], "op": op["op"], "ruling": op["ruling"]}
@@ -976,7 +976,8 @@ class Applier:
                 planned = (dict(self.c.pending), set(self.c.deleted)) if self.c.dry_run else None
                 self._lost = bool(lost)  # an earlier try wrote and its answer never came: an op may find its own change
                 try:
-                    getattr(self, op["op"])(op)
+                    if not self._before_landed_merge(index, op):
+                        getattr(self, op["op"])(op)
                     res.status = "done" if self.wrote else "skip"
                     res.noop = res.status == "skip" and self._noop
                     if lost and self.wrote and not self._reread_found:  # the re-read did not find the change, so this try wrote it
@@ -1094,9 +1095,9 @@ class Applier:
 
     def _merged_away(self, cls: str, op: dict) -> bool:
         """A rerun of a list that makes an object and then merges it into another with merge_person or merge_family:
-        the object is gone and the winner carries the note that merge wrote. The add has landed, so it skips, and
-        key:<key> names the winner from here on, for the merge itself and every op between them."""
-        merge = self._merge_of.get(f"key:{op['key']}")
+        the object is gone and the winner carries the note that merge wrote. The add has landed, so it skips, and so
+        do the merge and every op between them that names key:<key>."""
+        _, merge = self._merge_of.get(f"key:{op['key']}", (0, None))
         if merge is None:
             return False
         try:
@@ -1105,11 +1106,20 @@ class Applier:
             return False
         if stable_handle(merge["key"] + "#merge") not in (winner.get("note_list") or []):
             return False
-        self.keymap[op["key"]] = winner["handle"]
-        self._merged_keys.add(op["key"])
-        self.actions.append(f"skip: {cls} key {op['key']!r} is already merged into {self.label(winner)} "
-                            f"by {merge['key']!r}")
+        line = f"skip: {cls} key {op['key']!r} is already merged into {self.label(winner)} by {merge['key']!r}"
+        self._merged_keys[op["key"]] = line
+        self.actions.append(line)
         return True
+
+    def _before_landed_merge(self, index: int, op: dict) -> bool:
+        """An op between an add that _merged_away skipped and its merge, naming key:<key>: it ran before that merge
+        landed, since a list runs in order, so it skips. It is never sent to the winner, which kept its own values."""
+        for key, line in self._merged_keys.items():
+            at, _ = self._merge_of[f"key:{key}"]
+            if index < at and f'"key:{key}"' in json.dumps(op, ensure_ascii=False):
+                self.actions.append(line + ", and this op ran before that merge")
+                return True
+        return False
 
     def _reuse(self, cls: str, candidates: list[dict], matched: str, checks, fix) -> dict | None:
         """Of the objects that match the op on `matched`, the one where every other field the op sets is the same.
@@ -2330,8 +2340,7 @@ class Applier:
         """A rerun: the loser is gone and the winner carries this op's merge note."""
         ref = op["loser"]
         if ref.startswith("key:"):
-            present = ref[4:] not in self._merged_keys and self.c.exists(
-                cls, self.keymap.get(ref[4:]) or stable_handle(ref[4:]))
+            present = self.c.exists(cls, self.keymap.get(ref[4:]) or stable_handle(ref[4:]))
         else:
             present = self.c.handle_for_gramps_id(cls, ref) is not None
         if present:

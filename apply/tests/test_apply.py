@@ -1486,6 +1486,7 @@ ADD_THEN_MERGE = {
     "Person": [
         {"op": "add_person", "key": "p-new", "ruling": R, "first_name": "Ana", "surname": "Example", "gender": "F"},
         {"op": "add_note", "key": "p-new-note", "ruling": R, "text": "Godmother.", "attach": [{"person": "key:p-new"}]},
+        {"op": "update_person", "key": "p-new-name", "ruling": R, "person": "key:p-new", "set": {"first_name": "Anne"}},
         {"op": "merge_person", "key": "p-merge", "ruling": R, "winner": "I0004", "loser": "key:p-new"},
     ],
 }
@@ -1496,33 +1497,44 @@ def test_rerun_of_an_add_merged_into_another_object_writes_nothing(cls, tmp_path
     import gwt_apply.client as clientmod
     fake, ops = _add_then_merge_fake(), ADD_THEN_MERGE[cls]
     res = run(fake, ops)
-    assert [r.status for r in res] == ["done"] * 3, [r.actions for r in res]
+    assert [r.status for r in res] == ["done"] * len(ops), [r.actions for r in res]
     ns = "families" if cls == "Family" else "people"
     count = len(fake.store[ns])
     plan = run(fake, ops, dry_run=True)
-    assert [r.status for r in plan] == ["skip"] * 3, [r.actions for r in plan]
+    assert [r.status for r in plan] == ["skip"] * len(ops), [r.actions for r in plan]
     winner = "F0001" if cls == "Family" else "I0004"
     assert f"is already merged into {winner}" in plan[0].actions[-1]
+    assert plan[1].actions[-1].endswith("and this op ran before that merge")
     writes = len(fake.writes())
     res = run(fake, ops)  # a real second --apply
-    assert [r.status for r in res] == ["skip"] * 3, [r.actions for r in res]
+    assert [r.status for r in res] == ["skip"] * len(ops), [r.actions for r in res]
     assert len(fake.writes()) == writes and len(fake.store[ns]) == count
+    # the update the list made to the new person before the merge never reaches the winner, which kept its name
+    assert fake.store["people"]["anna"]["primary_name"]["first_name"] == "Anna"
     monkeypatch.setattr(clientmod.requests, "Session", lambda: fake)
     for k, v in {"GWT_URL": "https://gw.example", "GWT_USERNAME": "u", "GWT_PASSWORD": "pw", "GWT_TREE": "tree-test"}.items():
         monkeypatch.setenv(k, v)
     changes = tmp_path / "list.jsonl"
     changes.write_text("".join(json.dumps(op) + "\n" for op in ops))
     assert main([str(changes), "--verify"]) == 0
-    assert "VERIFY: 3 of 3 op(s) in the tree" in capsys.readouterr().out
+    assert f"VERIFY: {len(ops)} of {len(ops)} op(s) in the tree" in capsys.readouterr().out
+
+
+def test_an_op_after_the_merge_that_names_the_merged_key_still_stops():
+    fake, ops = _add_then_merge_fake(), ADD_THEN_MERGE["Person"]
+    late = {"op": "add_note", "key": "p-late", "ruling": R, "text": "Late.", "attach": [{"person": "key:p-new"}]}
+    assert [r.status for r in run(fake, ops)] == ["done"] * len(ops)
+    res = run(fake, [*ops, late], dry_run=True)
+    assert res[-1].status == "conflict" and "no Person made by that key" in res[-1].actions[-1], res[-1].actions
 
 
 @pytest.mark.parametrize("cls", ["Family", "Person"])
 def test_rerun_after_a_run_that_stopped_before_the_merge_still_merges(cls):
     fake, ops = _add_then_merge_fake(), ADD_THEN_MERGE[cls]
-    assert [r.status for r in run(fake, ops[:2])] == ["done", "done"]
+    assert all(r.status == "done" for r in run(fake, ops[:-1]))
     plan = run(fake, ops, dry_run=True)
-    assert [r.status for r in plan] == ["skip", "skip", "done"], [r.actions for r in plan]
-    assert any(a.startswith(f"merge {cls} ") for a in plan[2].actions)
+    assert [r.status for r in plan] == ["skip"] * (len(ops) - 1) + ["done"], [r.actions for r in plan]
+    assert any(a.startswith(f"merge {cls} ") for a in plan[-1].actions)
 
 
 @pytest.mark.parametrize("cls", ["Family", "Person"])

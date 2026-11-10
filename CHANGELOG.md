@@ -8,7 +8,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Change lists
 
-- A list that makes a person or a family (`add_person`, `add_family`) and then merges it into another with its own `merge_person` or `merge_family` (loser `key:<key>`) now skips both ops on a rerun or a `--verify` once the merge landed. Before, the rerun made the object again and merged it a second time, and `--verify` reported both ops as not in the tree.
+- A list that makes a person or a family (`add_person`, `add_family`) and then merges it into another with its own `merge_person` or `merge_family` (loser `key:<key>`) now skips both ops on a rerun or a `--verify` once the merge landed, and so does every op between them that names `key:<key>`. Before, the rerun made the object again and merged it a second time, and `--verify` reported both ops as not in the tree.
 
 ### Added
 
@@ -17,7 +17,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 ### Fixed
 
 - `gwt-queue add --jsonl` reads `priority` the way `--priority` does. A float or a bool (2.9, 2.0, 1e2, true) now stops the batch with exit 2 and writes nothing. Before, it was cut to an integer (2.9 became 2, true became 1). An integer string such as `"+5"` is still accepted, and an empty string is still refused (#253).
-- `gwt-apply --verify` and a rerun of a list that makes a person or family and then merges it into another no longer report the add and the merge as missing, and a second `--apply` writes nothing. The add skips when the winner carries the note of that merge, and `key:<key>` then names the winner.
+- `gwt-apply --verify` and a rerun of a list that makes a person or family and then merges it into another no longer report the add and the merge as missing, and a second `--apply` writes nothing. The add skips when the winner carries the note of that merge.
 
 ## [1.4.0] - 2026-11-09
 
