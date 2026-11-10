@@ -1,0 +1,28 @@
+# expect on update_person, update_event, update_place and update_family: tests/test_update_expect.py
+gwt_apply/ops.py | if has != self._field_form(f, op["set"][f]) and has != self._field_form(f, read): | if False: | a field changed since the list read it is a conflict
+gwt_apply/ops.py | if has != self._field_form(f, op["set"][f]) and has != self._field_form(f, read): | if has != self._field_form(f, read): | a field that already has the new value is a rerun, not a conflict
+gwt_apply/ops.py |             return date_key(parse_date(value)) |             return value | expect compares dates as dates
+gwt_apply/ops.py |             return self.resolve("Place", value) if value else "" |             return value | expect compares an event's place by the place it names
+gwt_apply/ops.py |             return [self.resolve("Place", value)] if value else [] |             return [value] | expect compares a place's parent by the place it names
+gwt_apply/ops.py |                 value = next((x for x in surnames if x.get("primary")), surnames[0]).get("surname") |                 value = "" | expect reads a person's primary surname
+gwt_apply/ops.py |                 value = name.get(NAME_KEYS.get(f, f)) |                 value = name.get(f) | expect reads call_name and the other name keys where Gramps keeps them
+gwt_apply/ops.py |         self._expect(op, person) |         pass | update_person checks expect
+gwt_apply/ops.py |         self._expect(op, event) |         pass | update_event checks expect
+gwt_apply/ops.py |         self._expect(op, place) |         pass | update_place checks expect
+gwt_apply/ops.py |         self._expect(op, family) |         pass | update_family checks expect
+gwt_apply/ops.py |     if not isinstance(e, dict) or not e: |     if False: | validate refuses an expect that is not an object with a field
+gwt_apply/ops.py |     if set(e) - set(s): |     if False: | validate refuses an expect field that set does not change
+gwt_apply/ops.py |     if op["op"] == "update_family" and {"father", "mother"} & set(e): |     if False: | validate refuses expect on a family's parent
+gwt_apply/ops.py |         if k == PRIVATE and not isinstance(v, bool): |         if False: | validate refuses an expect.private that is not true or false
+gwt_apply/ops.py |         if k == "gender" and (not isinstance(v, str) or v not in GENDER): |         if False: | validate refuses an unknown expect.gender
+gwt_apply/ops.py |         if k in ("lat", "long") and (isinstance(v, bool) or not isinstance(v, (str, int, float))): |         if False: | validate refuses an expect.lat or long that is not a number
+gwt_apply/ops.py |         if k not in (PRIVATE, "lat", "long") and not isinstance(v, str): |         if False: | validate refuses an expect field that is not a text
+gwt_apply/ops.py |             parse_date(v) |             pass | validate refuses an unreadable expect.date
+gwt_apply/ops.py |         if k in ("place", "enclosed_by") and v and not (v.startswith("key:") or _GRAMPS_ID.match(v)): |         if False: | validate refuses an expect place that is a handle
+gwt_apply/ops.py |             if name in EXPECT_FIELDS and "expect" in op: |             if False: | validate checks expect on the four updates
+gwt_apply/ops.py |         for f, read in (op.get("expect") or {}).items(): |         for f, read in list((op.get("expect") or {}).items())[:1]: | every field expect names is compared, not only the first
+gwt_apply/ops.py |         value = str(value or "").strip() |         value = str(value or "") | expect ignores spaces at either end of the text the tree has
+gwt_apply/ops.py |         return str(value).strip() |         return str(value) | expect ignores spaces at either end of the text the list read
+gwt_apply/ops.py |             refs = [obj.get("place") or ""] if f == "place" |             refs = [obj.get("place")] if f == "place" | an event with no place matches expect.place ""
+gwt_apply/ops.py |                 surnames = name.get("surname_list") or [{}] |                 surnames = name.get("surname_list") | expect reads a person with no surname as surname ""
+gwt_apply/ops.py | value = next((x for x in surnames if x.get("primary")), surnames[0]).get("surname") | value = surnames[0].get("surname") | expect reads the primary surname, not the first one

@@ -34,13 +34,13 @@ SPECS: dict[str, tuple[set[str], set[str]]] = {
         {"surname", "first_name"},
         {"gender", "gramps_id", "allow_namesake", "namesake_reason", "namesake_of"},
     ),
-    "update_person": ({"person", "set"}, set()),
-    "update_event": ({"event", "set"}, set()),
-    "update_place": ({"place", "set"}, set()),
+    "update_person": ({"person", "set"}, {"expect"}),
+    "update_event": ({"event", "set"}, {"expect"}),
+    "update_place": ({"place", "set"}, {"expect"}),
     "update_note": ({"note", "set"}, {"expect"}),
     "update_citation": ({"citation", "set"}, {"expect", "expect_source"}),
     "update_source": ({"source", "set"}, {"expect"}),
-    "update_family": ({"family", "set"}, set()),
+    "update_family": ({"family", "set"}, {"expect"}),
     "update_media": ({"media", "set"}, {"expect"}),
     "update_child_ref": ({"family", "child"}, {"set", "confirm_probable", "expect"}),
     "detach": ({"target", "object"}, {"expect"}),
@@ -110,6 +110,8 @@ CITATION_FIELDS = {"page", "confidence", "date", "source", PRIVATE}
 SOURCE_FIELDS = {"title", PRIVATE}
 FAMILY_FIELDS = {"type", "father", "mother", PRIVATE}
 MEDIA_FIELDS = {"desc", "date", "path", "file", PRIVATE}
+# the updates whose expect is an object, {field of set: the value the object has now}; a field that differs is a conflict
+EXPECT_FIELDS = ("update_person", "update_event", "update_place", "update_family")
 EXPECT = ("present", "absent")  # what detach, remove_tag, unlink_child, attach_existing and delete find before they act
 # a scan or a photo is a document; these are not, and add_media refuses them unless `force` says it is meant
 NOT_A_DOCUMENT = ("text/", "application/json", "message/rfc822", "application/xhtml")
@@ -332,6 +334,31 @@ def _check_coords(f: dict) -> None:
         raise ValueError("lat and long are numbers") from None
     if not (-90 <= lat <= 90 and -180 <= long <= 180):
         raise ValueError("lat/long out of range")
+
+
+def _check_expect(op: dict) -> None:
+    """expect of the EXPECT_FIELDS updates: an object holding, for fields of set, the value the object has now,
+    written the way set writes it ("" for none)."""
+    e, s = op["expect"], op["set"]
+    if not isinstance(e, dict) or not e:
+        raise ValueError("expect is an object: for each field of set it guards, the value the object has now")
+    if set(e) - set(s):
+        raise ValueError(f"expect takes only fields of set; {sorted(set(e) - set(s))} not in set")
+    if op["op"] == "update_family" and {"father", "mother"} & set(e):
+        raise ValueError("expect takes no father or mother: update_family never replaces a parent it finds")
+    for k, v in e.items():
+        if k == PRIVATE and not isinstance(v, bool):
+            raise ValueError("expect.private is true or false")
+        if k == "gender" and (not isinstance(v, str) or v not in GENDER):
+            raise ValueError(f"expect.gender is one of {sorted(GENDER)}")
+        if k in ("lat", "long") and (isinstance(v, bool) or not isinstance(v, (str, int, float))):
+            raise ValueError(f"expect.{k} is a number, or \"\" for none")
+        if k not in (PRIVATE, "lat", "long") and not isinstance(v, str):
+            raise ValueError(f"expect.{k} is a text, \"\" for none")
+        if k == "date":
+            parse_date(v)
+        if k in ("place", "enclosed_by") and v and not (v.startswith("key:") or _GRAMPS_ID.match(v)):
+            raise ValueError(f"expect.{k} {v!r} is neither key:<key> nor a Gramps ID (never a handle)")
 
 
 def validate(ops: list[dict]) -> list[str]:
@@ -567,6 +594,8 @@ def validate(ops: list[dict]) -> list[str]:
                                          "(unlink_child, or merge the two people)")
                 if f.get("father") is not None and f.get("father") == f.get("mother"):
                     raise ValueError("father and mother are the same person")
+            if name in EXPECT_FIELDS and "expect" in op:
+                _check_expect(op)
             if name == "update_media":
                 f = op.get("set")
                 if not isinstance(f, dict) or not f or set(f) - MEDIA_FIELDS:
@@ -830,6 +859,58 @@ class Applier:
         """`private` of an update_* set: the object's own private flag."""
         if PRIVATE in s and bool(obj.get("private")) != s[PRIVATE]:
             obj["private"] = s[PRIVATE]
+
+    def _expect(self, op: dict, obj: dict) -> None:
+        """`expect` of update_person, update_event, update_place and update_family, read before anything changes, as
+        update_note reads its own: a field that has neither the value the list read (expect) nor the value set gives
+        it was changed since, a Conflict, so nothing is written. A field that already has the new value is a rerun
+        or --verify of a landed list, never a conflict."""
+        for f, read in (op.get("expect") or {}).items():
+            has, shown = self._field_now(obj, f)
+            if has != self._field_form(f, op["set"][f]) and has != self._field_form(f, read):
+                raise Conflict(f"{obj['_class']} {self.label(obj)} no longer has {f} {read!r} (it has {shown!r}); "
+                               "read it again")
+
+    def _field_form(self, f: str, value):
+        """A value of `set` or `expect` in the form _field_now compares."""
+        if f == PRIVATE:
+            return value
+        if f == "gender":
+            return GENDER[value]
+        if f == "date":
+            return date_key(parse_date(value))
+        if f == "place":
+            return self.resolve("Place", value) if value else ""
+        if f == "enclosed_by":
+            return [self.resolve("Place", value)] if value else []
+        return str(value).strip()
+
+    def _field_now(self, obj: dict, f: str) -> tuple[object, str]:
+        """(the value a field of set has on the object now, compared with _field_form; that value as set writes it)."""
+        cls = obj["_class"]
+        if f == PRIVATE:
+            return bool(obj.get(PRIVATE)), str(bool(obj.get(PRIVATE))).lower()
+        if f == "gender":
+            return obj.get("gender"), next((g for g, v in GENDER.items() if v == obj.get("gender")), "")
+        if f == "date":
+            return date_key(obj.get("date")), _date_text(obj.get("date"))
+        if f in ("place", "enclosed_by"):
+            refs = [obj.get("place") or ""] if f == "place" else [r.get("ref") for r in obj.get("placeref_list") or []]
+            shown = ", ".join((self.c.get("Place", h) or {}).get("gramps_id") or h for h in refs if h)
+            return (refs[0] if f == "place" else refs), shown
+        if cls == "Person":
+            name = obj.get("primary_name") or {}
+            if f == "surname":
+                surnames = name.get("surname_list") or [{}]
+                value = next((x for x in surnames if x.get("primary")), surnames[0]).get("surname")
+            else:
+                value = name.get(NAME_KEYS.get(f, f))
+        elif cls == "Place" and f == "name":
+            value = (obj.get("name") or {}).get("value")
+        else:  # an event's type and description, a place's lat and long, a family's type
+            value = obj.get(f)
+        value = str(value or "").strip()
+        return value, value
 
     def _absent(self, op: dict, what: str) -> None:
         """A removal (detach, remove_tag, unlink_child, delete, remove_alternate_name) that finds nothing to remove.
@@ -1204,6 +1285,7 @@ class Applier:
         person = self.obj("Person", op["person"])
         person.setdefault("_class", "Person")
         before = copy.deepcopy(person)
+        self._expect(op, person)
         s = op["set"]
         if "gender" in s:
             person["gender"] = GENDER[s["gender"]]
@@ -1230,6 +1312,7 @@ class Applier:
         event = self.obj("Event", op["event"])
         event.setdefault("_class", "Event")
         before = copy.deepcopy(event)
+        self._expect(op, event)
         s = op["set"]
         if "type" in s:
             event["type"] = s["type"]
@@ -1249,6 +1332,7 @@ class Applier:
         place = self.obj("Place", op["place"])
         place.setdefault("_class", "Place")
         before = copy.deepcopy(place)
+        self._expect(op, place)
         s = op["set"]
         point = (str(s["lat"]), str(s["long"])) if "lat" in s else None
         if point and (place.get("lat") or "", place.get("long") or "") != point:  # a place with no point clears to a skip
@@ -1641,6 +1725,7 @@ class Applier:
         family = self.obj("Family", op["family"])
         family.setdefault("_class", "Family")
         before = copy.deepcopy(family)
+        self._expect(op, family)
         s = op["set"]
         if "type" in s:
             family["type"] = s["type"]

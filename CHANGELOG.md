@@ -8,7 +8,9 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Added
 
+- `gwt-ledger check --jsonl FILE|-` answers many checks against one read of the ledger: one JSON object per line in, one JSON answer per line out, with `done` and the matching rows. A sweep that checks hundreds of searches no longer reads and normalises the whole ledger for each one. Each line goes through the same code as a single `check`, so the answers are the same. A bad line stops the batch with exit 2 and names the line. The single `check` does not change.
 - `gwt-ledger scan add` and `scan check` log which images of a book were read and print the ones nobody read yet, so a lane does not sweep the same images twice. The rows are ordinary ledger rows with the query `<book> img <first> <last>`; a read with no `--person` counts for everyone, and `--skip` keeps unread images as gaps. `gwt-ledger void --person ''` retracts only the rows logged with no person (#255).
+- `gwt-apply` `update_person`, `update_event`, `update_place` and `update_family` take an optional `expect` object: for fields of `set`, the value the object had when the list was written. A field someone changed since is a conflict in the dry run and in `--apply`, and nothing of the op is written; the conflict line shows the value the tree has now. A field that already has the new value is a skip, so a rerun and `--verify` of a landed list still pass. Dates compare as dates and places by the place they name. `update_family` takes no `father` or `mother` in `expect`, since it never replaces a parent. A list without `expect` behaves as before.
 
 ### Fixed
 

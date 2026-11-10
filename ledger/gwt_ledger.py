@@ -8,6 +8,8 @@ Agents run `check` before a search and `add` after it, so two lanes never pay fo
                                                              (hit, none, partial, out-of-coverage) and is not due
                                                              again, else 1 (--exact: same source, identical normalized
                                                              query; --any-result: any matching row counts)
+  gwt-ledger check --jsonl FILE|-                             many checks, one JSON object per line, one read of the
+                                                             ledger; one JSON answer per line with `done`, exit 0
   gwt-ledger add --person KEY --label "..." --source SRC --query "..." --result none --control-ok RUN [--evidence F]
   gwt-ledger void --person KEY --source SRC --query "..." --reason "..." [--label "..."]  retract the rows of that
                                                              exact search: check, due, stats and coverage ignore them
@@ -413,6 +415,60 @@ def print_rows(scored, with_score=False, columns=COLUMNS):
     for score, r in scored:
         cells = [r[c] for c in columns]
         sys.stdout.write(('%.2f\t' % score if with_score else '') + '\t'.join(cells) + '\n')
+
+
+def check_search(rows, reg, person=None, source=None, query=None, threshold=DEFAULT_THRESHOLD, exact=False,
+                 any_result=False, new_source=False, date='', by_person=None):
+    """One `check`: (problem, scored rows, done). problem is the usage error, or None; done is True exactly when
+    `check` exits 0. by_person (key -> that person's rows, in ledger order) narrows the rows find reads anyway."""
+    for name, value in (('query', query), ('person', person)):
+        if value is not None and not normalize(value):
+            return '--%s %r: nothing left to match after normalising' % (name, value), None, None
+    if exact and not key(source or ''):
+        return 'check --exact needs a non-empty --source', None, None
+    if query is None and not (person and key(source or '')):
+        return 'check needs --query, or --person and --source to ask about any search of that source', None, None
+    if source:
+        source, problem = reg.resolve(source, new_source)
+        if problem:
+            return '--source ' + problem, None, None
+    else:
+        source = None
+    if exact and query is None:
+        return 'check --exact needs --query', None, None
+    if by_person is not None and person:
+        rows = by_person.get(key(person), [])
+    scored = find(rows, person, source, query, threshold, exact, reg, newest_first=True)
+    done = [r for _, r in scored if r['result'] in SEARCHED and (not next_day(r) or next_day(r) > date)]
+    return None, scored, bool(scored if any_result else done)
+
+
+CHECK_FIELDS = {'person': str, 'source': str, 'query': str, 'exact': bool, 'any_result': bool,
+                'threshold': (int, float)}
+
+
+def read_checks(stream):
+    """[(line number, search)] from JSON lines, one object per line with the fields of CHECK_FIELDS; null is the
+    same as a missing field. ValueError naming the line on the first bad one."""
+    out = []
+    for n, line in enumerate(stream, 1):
+        if not line.strip():
+            continue
+        try:
+            obj = json.loads(line)
+            if not isinstance(obj, dict):
+                raise ValueError('needs a JSON object')
+            unknown = sorted(set(obj) - set(CHECK_FIELDS))
+            if unknown:
+                raise ValueError('unknown field(s) %s; a line takes %s' % (', '.join(unknown), ', '.join(CHECK_FIELDS)))
+            for name, kind in CHECK_FIELDS.items():
+                value = obj.get(name)
+                if value is not None and (not isinstance(value, kind) or (kind != bool and isinstance(value, bool))):
+                    raise ValueError('%s must be %s' % (name, {str: 'a string', bool: 'true or false'}.get(kind, 'a number')))
+        except ValueError as e:
+            raise ValueError('line %d: %s' % (n, e))
+        out.append((n, obj))
+    return out
 
 
 def iso_date(value):
@@ -921,6 +977,10 @@ def main(argv=None):
     c.add_argument('--any-result', action='store_true',
                    help='exit 0 on any matching row, blocked, denied or due again included')
     c.add_argument('--new-source', action='store_true', help='allow a source the registry does not know that is close to a known name')
+    c.add_argument('--jsonl', metavar='FILE',
+                   help='many checks against one read of the ledger: one JSON object per line ("person", "source", '
+                        '"query", optional "exact", "any_result", "threshold"; - reads stdin); prints one JSON answer '
+                        'per line, exit 0')
     a = sub.add_parser('add', help='append a row (safe with concurrent writers)')
     a.add_argument('--person', required=True); a.add_argument('--label', default='')
     a.add_argument('--source', required=True); a.add_argument('--query', required=True)
@@ -1108,6 +1168,21 @@ def main(argv=None):
                          key=lambda r: r['next_date'])
         print_rows([(1.0, r) for r in sel], columns=REQUEST_COLUMNS)
         return 0
+    batch = None
+    if args.cmd == 'check' and args.jsonl:
+        if args.person is not None or args.source is not None or args.query is not None:
+            p.error('check --jsonl takes person, source and query from its lines, not from --person, --source or --query')
+        try:
+            if args.jsonl == '-':
+                lines = sys.stdin.readlines()  # stdin is the caller's: read it, never close it
+            else:
+                with open(args.jsonl, encoding='utf-8') as stream:
+                    lines = stream.readlines()
+            batch = read_checks(lines)
+        except (OSError, UnicodeDecodeError) as e:
+            p.error('cannot read %s: %s' % (args.jsonl, e))
+        except ValueError as e:
+            return err(str(e))
     try:
         everything = [r for path in ledger_paths(args.ledger, args.ledger_dir) for r in read_rows(path)]
     except (OSError, UnicodeDecodeError) as exc:  # an unreadable ledger is an error, never "not searched yet"
@@ -1133,18 +1208,31 @@ def main(argv=None):
                        'agent': args.agent, 'next_date': '', 'control': ''})
         sys.stderr.write('gwt-ledger: voided %d row(s)\n' % len(targets))
         return 0
+    if args.cmd == 'check' and batch is not None:
+        by_person = collections.defaultdict(list)
+        for r in rows:
+            by_person[key(r['person_key'])].append(r)
+        answers = []
+        for n, obj in batch:
+            def opt(name, default):
+                return default if obj.get(name) is None else obj[name]
+            problem, scored, done = check_search(
+                rows, reg, obj.get('person'), obj.get('source'), obj.get('query'), opt('threshold', args.threshold),
+                opt('exact', args.exact), opt('any_result', args.any_result), args.new_source, args.date, by_person)
+            if problem:  # nothing printed yet: a bad line never leaves half a batch of answers behind
+                return err('line %d: %s' % (n, problem))
+            answers.append(dict(obj, done=done, rows=[{c: r[c] for c in ('id', 'date', 'result', 'agent', 'next_date')}
+                                                      for _, r in scored]))
+        for a in answers:
+            print(json.dumps(a, ensure_ascii=False))
+        return 0
     if args.cmd == 'check':
-        if args.exact and not key(args.source or ''):
-            p.error('check --exact needs a non-empty --source')
-        if args.query is None and not (args.person and key(args.source or '')):
-            p.error('check needs --query, or --person and --source to ask about any search of that source')
-        source = source_id(args.source) if args.source else None
-        if args.exact and args.query is None:
-            p.error('check --exact needs --query')
-        scored = find(rows, args.person, source, args.query, args.threshold, args.exact, reg, newest_first=True)
+        problem, scored, done = check_search(rows, reg, args.person, args.source, args.query, args.threshold,
+                                             args.exact, args.any_result, args.new_source, args.date)
+        if problem:
+            p.error(problem)
         print_rows(scored, with_score=True)
-        done = [r for _, r in scored if r['result'] in SEARCHED and (not next_day(r) or next_day(r) > args.date)]
-        return 0 if (scored if args.any_result else done) else 1
+        return 0 if done else 1
     if args.cmd == 'due':
         if args.ics:
             try:
