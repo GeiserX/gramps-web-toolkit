@@ -8,6 +8,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Added
 
+- `gwt-ledger check --jsonl FILE|-` answers many checks against one read of the ledger: one JSON object per line in, one JSON answer per line out, with `done` and the matching rows. A sweep that checks hundreds of searches no longer reads and normalises the whole ledger for each one. Each line goes through the same code as a single `check`, so the answers are the same. A bad line stops the batch with exit 2 and names the line. The single `check` does not change.
 - `gwt-ledger scan add` and `scan check` log which images of a book were read and print the ones nobody read yet, so a lane does not sweep the same images twice. The rows are ordinary ledger rows with the query `<book> img <first> <last>`; a read with no `--person` counts for everyone, and `--skip` keeps unread images as gaps. `gwt-ledger void --person ''` retracts only the rows logged with no person (#255).
 
 ### Fixed

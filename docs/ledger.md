@@ -50,7 +50,7 @@ A ledger written with the older 8 or 9 columns needs no upgrade: its rows read w
 
 `add` records the lane from `--agent` (default `$GWT_AGENT`) and the date from `--date` (default today, `YYYY-MM-DD`). `check` accepts `--agent`, `--label` and `--date` too, so a lane can pass both commands the same arguments; on `check`, `--date` is the day the check judges by (whether a `next_date` has arrived). `check --person P --source S` without `--query` asks whether that source was searched for that person at all. `add` skips a row the ledger already holds, in any lane file (same person, source, normalized query, date and result), with a note on stderr naming it and exit 0, so a logger run twice logs each search once, even two runs at the same moment (the check runs under the file's lock); a voided row does not count, so a search run again after a void is logged.
 
-In a script: `gwt-ledger check ... >/dev/null && echo "already done, skip"`. Exit 0 already means a search that ran and is not due again, so a `blocked` or `denied` row, or one whose `next_date` has arrived, never skips the search. Add `--any-result` only when you want to know whether anything at all was logged.
+In a script: `gwt-ledger check ... >/dev/null && echo "already done, skip"`. Exit 0 already means a search that ran and is not due again, so a `blocked` or `denied` row, or one whose `next_date` has arrived, never skips the search. Add `--any-result` only when you want to know whether anything at all was logged. A sweep that checks many searches in a row sends them as [one batch](#many-checks-at-once).
 
 ## Sources
 
@@ -158,6 +158,29 @@ The default fuzzy check is for a person deciding whether to search. Before a scr
 - **A fuzzy match is not the same search.** A shorter query counts as done when a longer logged one covers it, and one typo is allowed, so the logged row can be a different search that happens to share the words.
 
 Exit 0 from `--exact` already leaves out `blocked` and `denied` rows and rows whose `next_date` has arrived. The first printed row can still be one of those (a newer `blocked` above an older `hit`), so a script that reuses the first row checks its `result` and `next_date` too.
+
+### Many checks at once
+
+Each `check` reads and normalises the whole ledger before it answers. On a large ledger that is most of the time of each call, so a sweep that checks hundreds of searches pays it hundreds of times. `check --jsonl FILE` reads the ledger once and answers one check per line. `-` reads the lines from stdin.
+
+```sh
+cat > checks.jsonl <<'END'
+{"person": "Ana Example", "source": "familysearch", "query": "Example Town baptisms 1801-1850 Ana Example"}
+{"person": "Ana Example", "source": "familysearch", "query": "Ana Example burial 1910", "exact": true}
+{"person": "Ana Example", "source": "pares"}
+END
+gwt-ledger check --jsonl checks.jsonl --date 2026-11-10
+```
+
+A line is one JSON object with the fields of a single check: `person`, `source` and `query`, and optionally `exact`, `any_result` (true or false) and `threshold` (a number). A field that is missing or `null` is the same as an option left out. `--exact`, `--any-result` and `--threshold` on the command line apply to every line that does not set its own. `--date` and `--new-source` apply to the whole batch. `--jsonl` takes no `--person`, `--source` or `--query` (exit 2).
+
+It prints one JSON object per line, in input order: the line's own fields, then `done` and `rows`. `done` is true exactly when the single `check` with the same options would exit 0. `rows` are the matching rows in the order `check` prints them, each with its `id`, `date`, `result`, `agent` and `next_date`:
+
+```json
+{"person": "Ana Example", "source": "pares", "done": true, "rows": [{"id": "3f1c0a9b2e4d", "date": "2026-01-01", "result": "hit", "agent": "lane-2", "next_date": ""}]}
+```
+
+Each line goes through the same code as a single `check`, so a batch never answers differently. The batch exits 0 when it ran, even when some searches are not done: read `done`. A line the single check would refuse stops the whole batch with exit 2, and no answer is printed. That covers a line that is not a JSON object, an unknown field, a field of the wrong type, and a usage error such as `exact` with no `source`. The message names the line: `gwt-ledger: line 3: check --exact needs a non-empty --source`. Blank lines are skipped.
 
 ## Stats by source
 

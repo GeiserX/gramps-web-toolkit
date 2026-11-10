@@ -1,0 +1,10 @@
+# check --jsonl: many checks against one read of the ledger
+gwt_ledger.py | if problem:  # nothing printed yet | if False:  # nothing printed yet | check --jsonl stops at a line the single check refuses, naming the line
+gwt_ledger.py | for name, value in (('query', query), ('person', person)): | for name, value in (): | check --jsonl refuses a person or query with nothing left after normalising
+gwt_ledger.py | if unknown: | if False: | check --jsonl refuses a field it does not know, so a misspelt exact never answers a fuzzy check
+gwt_ledger.py | if value is not None and (not isinstance(value, kind) or | if False and (not isinstance(value, kind) or | check --jsonl refuses a field of the wrong type
+gwt_ledger.py | or (kind != bool and isinstance(value, bool)) | or False | check --jsonl refuses true as a threshold
+gwt_ledger.py | if args.person is not None or args.source is not None or args.query is not None: | if False: | check --jsonl takes person, source and query from its lines only
+gwt_ledger.py | return default if obj.get(name) is None else obj[name] | return default | a line's exact, any_result and threshold win over the command line
+gwt_ledger.py | rows = by_person.get(key(person), []) | rows = by_person.get(person, []) | check --jsonl finds a person's rows by their key, as the single check does
+gwt_ledger.py | return None, scored, bool(scored if any_result else done) | return None, scored, bool(scored) | check counts only a search that ran and is not due again, unless any_result
