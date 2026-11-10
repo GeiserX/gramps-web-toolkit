@@ -561,7 +561,8 @@ class QueueTest(unittest.TestCase):
         self.assertEqual(self.rows(), [])
 
     def test_a_refused_batch_does_not_create_the_queue_file(self):
-        code, _, _ = self.jsonl(json.dumps({'person': 'I1', 'priority': 2.9}) + '\n')
+        good = json.dumps({'person': 'I0', 'query': 'q'}) + '\n'  # a valid line first: it must not be written either
+        code, _, _ = self.jsonl(good + json.dumps({'person': 'I1', 'priority': 2.9}) + '\n')
         self.assertEqual(code, 2)
         self.assertFalse(os.path.exists(self.path), 'a refused batch must not leave a header-only queue behind')
 
@@ -572,7 +573,7 @@ class QueueTest(unittest.TestCase):
             with open(self.path, 'rb') as f:
                 return os.stat(self.path).st_ino, f.read()
         before = state()
-        code, _, _ = self.jsonl(json.dumps({'person': 'I2', 'kind': 'bogus'}) + '\n')
+        code, _, _ = self.jsonl(json.dumps({'person': 'I0', 'query': 'q2'}) + '\n' + json.dumps({'person': 'I2', 'kind': 'bogus'}) + '\n')
         self.assertEqual(code, 2)
         code, _, _ = run('--queue', self.path, 'done', '--id', 'q1', '--token', 'wrong', '--result', 'none')
         self.assertEqual(code, 2)
