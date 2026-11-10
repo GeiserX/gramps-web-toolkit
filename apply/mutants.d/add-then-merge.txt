@@ -2,4 +2,6 @@ gwt_apply/ops.py | if self._merged_away("Person", op): | if False: | a rerun of 
 gwt_apply/ops.py | if family is None and self._merged_away("Family", op): | if False: | a rerun of add_family skips a family the list's own merge_family merged away
 gwt_apply/ops.py | if stable_handle(merge["key"] + "#merge") not in (winner.get("note_list") or []): | if False: | an add skips only when the winner carries the note of the list's merge
 gwt_apply/ops.py | if not self._before_landed_merge(index, op): | if True: | an op between a merged-away add and its merge skips on a rerun, never touching the winner
-gwt_apply/ops.py | if index < at and f'"key:{key}"' in json.dumps(op, ensure_ascii=False): | if f'"key:{key}"' in json.dumps(op, ensure_ascii=False): | only the ops before the merge skip; a later op naming the merged key still stops
+gwt_apply/ops.py | if index < at and json.dumps(f"key:{key}", ensure_ascii=False) in json.dumps(op, ensure_ascii=False): | if json.dumps(f"key:{key}", ensure_ascii=False) in json.dumps(op, ensure_ascii=False): | only the ops before the merge skip; a later op naming the merged key still stops
+gwt_apply/ops.py | json.dumps(f"key:{key}", ensure_ascii=False) in | f'"key:{key}"' in | an op between finds key:<key> written as JSON, so a key with a quote or a backslash still skips
+gwt_apply/ops.py | except Conflict:  # the winner is not there either | except ZeroDivisionError:  # the winner is not there either | an add whose merge's winner is not made yet makes its object on the first run instead of stopping

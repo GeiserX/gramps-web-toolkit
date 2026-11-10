@@ -1528,6 +1528,29 @@ def test_an_op_after_the_merge_that_names_the_merged_key_still_stops():
     assert res[-1].status == "conflict" and "no Person made by that key" in res[-1].actions[-1], res[-1].actions
 
 
+def test_an_add_merged_into_a_winner_the_list_makes_later_runs_and_reruns():
+    ops = [{"op": "add_person", "key": "p-new", "ruling": R, "first_name": "Ana", "surname": "Example", "gender": "F"},
+           {"op": "add_person", "key": "p-kept", "ruling": R, "first_name": "Eve", "surname": "Example", "gender": "F"},
+           {"op": "merge_person", "key": "p-merge", "ruling": R, "winner": "key:p-kept", "loser": "key:p-new"}]
+    fake = _add_then_merge_fake()
+    plan = run(fake, ops, dry_run=True)  # the winner is not made yet: the add makes its person, it does not stop
+    assert [r.status for r in plan] == ["done"] * len(ops), [r.actions for r in plan]
+    assert [r.status for r in run(fake, ops)] == ["done"] * len(ops)
+    plan = run(fake, ops, dry_run=True)
+    assert [r.status for r in plan] == ["skip"] * len(ops), [r.actions for r in plan]
+
+
+def test_rerun_skips_the_ops_between_for_a_key_with_a_quote_or_a_backslash():
+    key = 'p-"new"\\1'
+    ops = [{**op, "key": key} if op["op"] == "add_person" else
+           json.loads(json.dumps(op).replace('"key:p-new"', json.dumps(f"key:{key}")))
+           for op in ADD_THEN_MERGE["Person"]]
+    fake = _add_then_merge_fake()
+    assert [r.status for r in run(fake, ops)] == ["done"] * len(ops)
+    plan = run(fake, ops, dry_run=True)
+    assert [r.status for r in plan] == ["skip"] * len(ops), [r.actions for r in plan]
+
+
 @pytest.mark.parametrize("cls", ["Family", "Person"])
 def test_rerun_after_a_run_that_stopped_before_the_merge_still_merges(cls):
     fake, ops = _add_then_merge_fake(), ADD_THEN_MERGE[cls]

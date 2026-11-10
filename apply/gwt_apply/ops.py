@@ -1116,7 +1116,7 @@ class Applier:
         landed, since a list runs in order, so it skips. It is never sent to the winner, which kept its own values."""
         for key, line in self._merged_keys.items():
             at, _ = self._merge_of[f"key:{key}"]
-            if index < at and f'"key:{key}"' in json.dumps(op, ensure_ascii=False):
+            if index < at and json.dumps(f"key:{key}", ensure_ascii=False) in json.dumps(op, ensure_ascii=False):
                 self.actions.append(line + ", and this op ran before that merge")
                 return True
         return False
