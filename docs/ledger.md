@@ -272,4 +272,4 @@ gwt-ledger scan add --source familysearch --book 'book-42' --start 1 --end 120 -
 
 Number the images as the source's viewer does (image, vue, canvas), and give one book the same id every time: the film, catalogue or item id, not its title. A row of any other shape is simply no scan row, so a row typed by hand can never make `scan check` fail. A row you wrote yourself in the same shape counts: an older log that already says `<book> img <first> <last>` needs no conversion.
 
-The rows are ordinary rows, so `check`, `list`, `stats` and `void` see them. To retract a wrong read, `void` its query, for instance `void --person '' --source familysearch --query 'book 42 img 1 16' --reason "..."`; `--person ''` takes only the rows with no person.
+The rows are ordinary rows, so `check`, `stats` and `void` see them, and `list --person P` shows the rows logged for P. To retract a wrong read, `void` its query, for instance `void --person '' --source familysearch --query 'book 42 img 1 16' --reason "..."`; `--person ''` takes only the rows with no person.

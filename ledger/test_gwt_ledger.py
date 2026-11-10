@@ -629,6 +629,8 @@ class RegistryTest(unittest.TestCase):
         add = ('add', '--person', 'Ana Zorvalo', '--source', 'gaceta', '--query', 'edicto 1902', '--result', 'hit',
                '--agent', 'lane-1')
         imp = ('import-tsv', src, '--map', 'person_key=who,source=where,query=what,result=outcome')
+        scan = ('scan', 'add', '--source', 'gaceta', '--book', 'book-42', '--start', '1', '--end', '2', '--result',
+                'hit', '--agent', 'lane-1')
         work = os.path.join(self.dir.name, 'elsewhere')
         os.makedirs(work)
         cwd = os.getcwd()
@@ -636,7 +638,7 @@ class RegistryTest(unittest.TestCase):
         with mock.patch.dict(os.environ, env, clear=True):  # a lane's own variables must not leak in
             os.chdir(work)
             try:
-                for argv in (add, imp):
+                for argv in (add, imp, scan):
                     err = io.StringIO()
                     with redirect_stderr(err):
                         code, _ = run(*argv)

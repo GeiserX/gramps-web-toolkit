@@ -57,3 +57,6 @@ gwt_ledger.py | cursor = max(cursor, hi + 1) | cursor = hi + 1 | a range inside 
 gwt_ledger.py | done = [span for r, span in rows if r['result'] in SEARCHED and | done = [span for r, span in rows if True and | a blocked or unproven range fills no gap
 gwt_ledger.py | if key(r['person_key']) == key(args.person)]  # find | if True]  # find | void --person '' retracts only the rows with no person
 gwt_ledger.py | if args.skip and (min(args.skip) < args.start or max(args.skip) > args.end): | if False: | scan add refuses a --skip image outside the range
+gwt_ledger.py | span for r, span in rows if r['result'] in SEARCHED and (not r['next_date'] or r['next_date'] > args.date) | span for r, span in rows if r['result'] in SEARCHED and True | scan check: a row due again (next_date reached) fills no gap
+gwt_ledger.py | return scan_command(args, reg, err, stray, lane_path, | return scan_command(args, reg, err, lambda path: None, lane_path, | scan add with no ledger named never creates ./buscado.tsv
+gwt_ledger.py | if args.cmd == 'void' and name == 'person' and value == '': | if name == 'person' and value == '': | only void takes an empty --person; add, check, list and scan refuse it

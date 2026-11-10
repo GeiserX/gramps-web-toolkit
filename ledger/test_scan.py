@@ -39,6 +39,7 @@ class ScanTest(unittest.TestCase):
         self.assertEqual(self.check(), (1, {'gaps': [[1, 10]], 'rows': []}))
         self.add(1, 4); self.add(6, 10)
         self.assertEqual(self.gaps(), [[5, 5]])
+        self.assertEqual(self.check(5, 5)[1]['rows'], [])  # only the rows that overlap the range asked about
         self.add(5, 5)
         self.assertEqual(self.check()[0], 0)
         self.assertEqual(self.gaps(1, 12), [[11, 12]])
@@ -50,7 +51,8 @@ class ScanTest(unittest.TestCase):
     def test_rows_are_ordinary_readable_rows(self):
         self.add(1, 10, book='Book 42')
         row = L.read_rows(self.path)[0]
-        self.assertEqual((row['person_key'], row['person_label'], row['query']), ('', 'Book 42', 'book 42 img 1 10'))
+        self.assertEqual((row['person_key'], row['person_label'], row['query'], row['evidence']),
+                         ('', 'Book 42', 'book 42 img 1 10', 'notes/book-42.md'))
         code, out = self.ledger('check', '--source', 'fs', '--exact', '--query', 'book 42 img 1 10')
         self.assertEqual(code, 0)
 
@@ -105,6 +107,26 @@ class ScanTest(unittest.TestCase):
         self.assertEqual(self.check()[0], 1)
         self.add(1, 10, '--control-ok', 'run-7', result='none')
         self.assertEqual(self.check()[0], 0)
+
+    def test_a_row_due_again_fills_no_gap(self):
+        self.assertEqual(self.ledger('add', '--person', 'x', '--source', 'fs', '--query', 'book 42 img 1 10',
+                                     '--result', 'hit', '--next-date', '2026-06-01')[0], 0)
+        self.assertEqual(self.check(1, 10, '--date', '2026-05-31')[0], 0)
+        self.assertEqual(self.check(1, 10, '--date', '2026-06-01')[0], 1)
+
+    def test_a_control_run_that_proves_nothing_writes_nothing(self):
+        self.assertEqual(self.add(1, 10, '--control-ok', 'no', result='none'), 2)
+        self.assertIn('not a control run', self.last_error)
+        self.assertFalse(os.path.exists(self.path))
+
+    def test_only_void_takes_an_empty_person(self):
+        for argv in (['add', '--person', '', '--source', 'fs', '--query', 'q', '--result', 'hit'],
+                     ['check', '--person', '', '--source', 'fs'], ['list', '--person', ''],
+                     ['scan', 'add', '--person', '', '--source', 'fs', '--book', 'b', '--start', '1', '--end', '2',
+                      '--result', 'hit']):
+            with self.assertRaises(SystemExit), redirect_stderr(io.StringIO()):
+                L.main(['--ledger', self.path, *argv])
+        self.assertFalse(os.path.exists(self.path))
 
     def test_twice_logs_once(self):
         self.add(1, 30, '--skip', '12'); self.add(1, 30, '--skip', '12')
