@@ -12,7 +12,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Changed
 
-- `gwt-ledger check`, `add` and `void` run about a third faster on a large ledger. `normalize` skips the accent strip for ASCII text, and the typo match sorts its candidate words once per query instead of once per word. The output is the same.
+- `gwt-ledger check`, `add` and `void` run about a third faster on a large ledger. `normalize` skips the accent strip for ASCII text, and the typo match sorts its candidate words once per query instead of once per word. The output is the same (#261).
 
 ### Fixed
 
