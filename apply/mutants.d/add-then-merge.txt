@@ -1,0 +1,4 @@
+gwt_apply/ops.py | if self._merged_away("Person", op): | if False: | a rerun of add_person skips a person the list's own merge_person merged away
+gwt_apply/ops.py | if family is None and self._merged_away("Family", op): | if False: | a rerun of add_family skips a family the list's own merge_family merged away
+gwt_apply/ops.py | if stable_handle(merge["key"] + "#merge") not in (winner.get("note_list") or []): | if False: | an add skips only when the winner carries the note of the list's merge
+gwt_apply/ops.py | present = ref[4:] not in self._merged_keys and self.c.exists( | present = self.c.exists( | the merge of a key a rerun found merged away skips, never merges the winner into itself

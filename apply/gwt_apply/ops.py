@@ -765,6 +765,8 @@ class Applier:
         self._lost = False
         self._list_deletes: set[tuple[str, str]] = set()  # (class, ref) of every object a delete op of the list takes
         self._amended: dict[str, set[str]] = {}  # add_person key -> identity fields a later update_person of the list sets
+        self._merge_of: dict[str, dict] = {}  # loser -> the merge_* op of the list that names it (only those have one)
+        self._merged_keys: set[str] = set()  # keys a rerun found merged into their winner: key:<key> names the winner
         self._refs: dict[str, list[tuple[str, str]]] | None = None  # offline: handle -> the snapshot objects naming it
         client.touch = self._touch
 
@@ -957,6 +959,7 @@ class Applier:
     def _run(self, ops: list[dict], results: list[Result]) -> None:
         self._list_deletes = {_delete_object(op["object"]) for op in ops if op.get("op") == "delete"}
         self._amended = _amended_people(ops)
+        self._merge_of = {op["loser"]: op for op in ops if "loser" in op}
         for op in ops:
             res = Result(op["key"], op["op"], op["ruling"])
             self._op_tags = list(dict.fromkeys(t for t in [self.run_tag, *_tag_names(op.get("tag"))] if t))
@@ -1089,6 +1092,25 @@ class Applier:
             self.actions.append(f"skip: {cls} {self.label(obj)} already made by key {op['key']!r}")
         return obj
 
+    def _merged_away(self, cls: str, op: dict) -> bool:
+        """A rerun of a list that makes an object and then merges it into another with merge_person or merge_family:
+        the object is gone and the winner carries the note that merge wrote. The add has landed, so it skips, and
+        key:<key> names the winner from here on, for the merge itself and every op between them."""
+        merge = self._merge_of.get(f"key:{op['key']}")
+        if merge is None:
+            return False
+        try:
+            winner = self.obj(cls, merge["winner"])
+        except Conflict:  # the winner is not there either: no merge of this list landed, the add makes the object
+            return False
+        if stable_handle(merge["key"] + "#merge") not in (winner.get("note_list") or []):
+            return False
+        self.keymap[op["key"]] = winner["handle"]
+        self._merged_keys.add(op["key"])
+        self.actions.append(f"skip: {cls} key {op['key']!r} is already merged into {self.label(winner)} "
+                            f"by {merge['key']!r}")
+        return True
+
     def _reuse(self, cls: str, candidates: list[dict], matched: str, checks, fix) -> dict | None:
         """Of the objects that match the op on `matched`, the one where every other field the op sets is the same.
 
@@ -1142,6 +1164,8 @@ class Applier:
         if existing is not None:
             if op["key"] not in self.landed:
                 self._same_person(existing, op)
+            return
+        if self._merged_away("Person", op):
             return
         self._check_gramps_id("Person", op)
         name = self._name_key(op["first_name"], op["surname"])
@@ -1378,6 +1402,8 @@ class Applier:
         mother = self.resolve("Person", op["mother"]) if op.get("mother") else None
         children = [self.resolve("Person", c) for c in op.get("children") or []]
         family = self._existing("Family", op)
+        if family is None and self._merged_away("Family", op):
+            return
         if family is None:
             parent = self.c.get("Person", father or mother)
             fams = self.c.get_many("Family", parent.get("family_list") or [])
@@ -2304,7 +2330,8 @@ class Applier:
         """A rerun: the loser is gone and the winner carries this op's merge note."""
         ref = op["loser"]
         if ref.startswith("key:"):
-            present = self.c.exists(cls, self.keymap.get(ref[4:]) or stable_handle(ref[4:]))
+            present = ref[4:] not in self._merged_keys and self.c.exists(
+                cls, self.keymap.get(ref[4:]) or stable_handle(ref[4:]))
         else:
             present = self.c.handle_for_gramps_id(cls, ref) is not None
         if present:

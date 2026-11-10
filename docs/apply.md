@@ -252,6 +252,8 @@ The merge itself is the server's (`POST /api/people/<winner>/merge/<loser>`, `PO
 
 Before the merge, the winner gets a note that records it: `Merged Person I0042 (John Smith) into this person (ruling R-12). <reason>`. The note is how a rerun knows the merge is done: when the loser is gone and the winner has that note, the op is skipped; when the loser is gone and there is no note, the op is a conflict.
 
+A list can make an object and then merge it away: `add_family` with key `f-new`, then `merge_family` with winner `F0001` and loser `key:f-new` (or `add_person` and `merge_person`). After the first apply the object made by `f-new` is gone. A rerun or `--verify` of that list finds the note of its `merge_family` on `F0001`, so the `add_family` skips with `already merged into F0001` instead of making the family again, `key:f-new` names `F0001` for the rest of the list, and the merge skips too. When the winner has no such note (the run stopped before the merge), the add makes the object again and the merge runs, as before.
+
 ### Private by default
 
 `--private-new` saves every object the run creates with `private` set: a person, family, event, place, source, citation, media object or note. The tags `--tag` makes are not marked, because a Gramps tag has no private flag. Gramps Web hides private objects from a guest login, so a tree that shows guests only a chosen set of people never shows a new object to them. Members and every role above them still see private objects. Without the flag every created object is public; no op can set `private`.

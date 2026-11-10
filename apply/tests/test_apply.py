@@ -1468,6 +1468,72 @@ def test_merge_whose_answer_was_lost_is_not_done_twice_and_keeps_the_birth():
     assert anna["event_ref_list"][0]["ref"] == "b2"
 
 
+def _add_then_merge_fake():
+    fake = MergingFake()
+    for h, n in (("mum", "Mary"), ("dad", "John"), ("kid", "Tom"), ("anna", "Anna")):
+        fake.add("people", {"handle": h, "attribute_list": [],
+                            "primary_name": {"first_name": n, "surname_list": [{"surname": "Example", "primary": True}]}})
+    fake.add("families", {"handle": "f1", "father_handle": "dad", "mother_handle": "mum"})
+    return fake
+
+
+ADD_THEN_MERGE = {
+    "Family": [
+        {"op": "add_family", "key": "f-new", "ruling": R, "mother": "I0001", "children": ["I0003"]},
+        {"op": "add_note", "key": "f-new-note", "ruling": R, "text": "Baptism of Tom.", "attach": [{"family": "key:f-new"}]},
+        {"op": "merge_family", "key": "f-merge", "ruling": R, "winner": "F0001", "loser": "key:f-new"},
+    ],
+    "Person": [
+        {"op": "add_person", "key": "p-new", "ruling": R, "first_name": "Ana", "surname": "Example", "gender": "F"},
+        {"op": "add_note", "key": "p-new-note", "ruling": R, "text": "Godmother.", "attach": [{"person": "key:p-new"}]},
+        {"op": "merge_person", "key": "p-merge", "ruling": R, "winner": "I0004", "loser": "key:p-new"},
+    ],
+}
+
+
+@pytest.mark.parametrize("cls", ["Family", "Person"])
+def test_rerun_of_an_add_merged_into_another_object_writes_nothing(cls, tmp_path, monkeypatch, capsys):
+    import gwt_apply.client as clientmod
+    fake, ops = _add_then_merge_fake(), ADD_THEN_MERGE[cls]
+    res = run(fake, ops)
+    assert [r.status for r in res] == ["done"] * 3, [r.actions for r in res]
+    ns = "families" if cls == "Family" else "people"
+    count = len(fake.store[ns])
+    plan = run(fake, ops, dry_run=True)
+    assert [r.status for r in plan] == ["skip"] * 3, [r.actions for r in plan]
+    winner = "F0001" if cls == "Family" else "I0004"
+    assert f"is already merged into {winner}" in plan[0].actions[-1]
+    writes = len(fake.writes())
+    res = run(fake, ops)  # a real second --apply
+    assert [r.status for r in res] == ["skip"] * 3, [r.actions for r in res]
+    assert len(fake.writes()) == writes and len(fake.store[ns]) == count
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: fake)
+    for k, v in {"GWT_URL": "https://gw.example", "GWT_USERNAME": "u", "GWT_PASSWORD": "pw", "GWT_TREE": "tree-test"}.items():
+        monkeypatch.setenv(k, v)
+    changes = tmp_path / "list.jsonl"
+    changes.write_text("".join(json.dumps(op) + "\n" for op in ops))
+    assert main([str(changes), "--verify"]) == 0
+    assert "VERIFY: 3 of 3 op(s) in the tree" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("cls", ["Family", "Person"])
+def test_rerun_after_a_run_that_stopped_before_the_merge_still_merges(cls):
+    fake, ops = _add_then_merge_fake(), ADD_THEN_MERGE[cls]
+    assert [r.status for r in run(fake, ops[:2])] == ["done", "done"]
+    plan = run(fake, ops, dry_run=True)
+    assert [r.status for r in plan] == ["skip", "skip", "done"], [r.actions for r in plan]
+    assert any(a.startswith(f"merge {cls} ") for a in plan[2].actions)
+
+
+@pytest.mark.parametrize("cls", ["Family", "Person"])
+def test_an_add_whose_object_is_gone_with_no_merge_note_makes_it_again(cls):
+    fake, ops = _add_then_merge_fake(), ADD_THEN_MERGE[cls]
+    assert run(fake, ops[:1])[0].status == "done"
+    fake.store["families" if cls == "Family" else "people"].pop(stable_handle(ops[0]["key"]))
+    plan = run(fake, ops, dry_run=True)
+    assert plan[0].status == "done" and plan[0].actions[-1].startswith(f"create {cls}"), plan[0].actions
+
+
 def test_merge_family_needs_the_same_parents(tmp_path):
     fake = MergingFake()
     for h, n in (("dad", "John"), ("dad2", "Jon"), ("mum", "Mary"), ("kid", "Tom")):

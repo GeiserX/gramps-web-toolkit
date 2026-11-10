@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Change lists
+
+- A list that makes a person or a family (`add_person`, `add_family`) and then merges it into another with its own `merge_person` or `merge_family` (loser `key:<key>`) now skips both ops on a rerun or a `--verify` once the merge landed. Before, the rerun made the object again and merged it a second time, and `--verify` reported both ops as not in the tree.
+
 ### Added
 
 - `gwt-ledger scan add` and `scan check` log which images of a book were read and print the ones nobody read yet, so a lane does not sweep the same images twice. The rows are ordinary ledger rows with the query `<book> img <first> <last>`; a read with no `--person` counts for everyone, and `--skip` keeps unread images as gaps. `gwt-ledger void --person ''` retracts only the rows logged with no person (#255).
@@ -13,6 +17,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 ### Fixed
 
 - `gwt-queue add --jsonl` reads `priority` the way `--priority` does. A float or a bool (2.9, 2.0, 1e2, true) now stops the batch with exit 2 and writes nothing. Before, it was cut to an integer (2.9 became 2, true became 1). An integer string such as `"+5"` is still accepted, and an empty string is still refused (#253).
+- `gwt-apply --verify` and a rerun of a list that makes a person or family and then merges it into another no longer report the add and the merge as missing, and a second `--apply` writes nothing. The add skips when the winner carries the note of that merge, and `key:<key>` then names the winner.
 
 ## [1.4.0] - 2026-11-09
 
