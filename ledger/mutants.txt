@@ -63,3 +63,5 @@ gwt_ledger.py | if args.cmd == 'void' and name == 'person' and value == '': | if
 gwt_ledger.py | if not text.isascii(): | if False: | normalize still strips accents and folds every non-ASCII text after the ASCII fast path
 gwt_ledger.py | if any(len(w) < 5 or any(c.isdigit() for c in w) for w in rest): | if False: | a short or numbered word of a new query needs its exact twin in the logged one
 gwt_ledger.py | pool.remove(hit) | pass | one logged word never covers two words of the new query
+gwt_ledger.py | len(w) < 5 or any(c.isdigit() for c in w) for w in rest | len(w) < 5 for w in rest | a new word with a digit needs its exact twin, never a one-edit neighbour
+gwt_ledger.py | pool = sorted(x for x in free if len(x) >= 5 and not any(c.isdigit() for c in x)) | pool = sorted(x for x in free if len(x) >= 5) | a logged word with a digit never covers a new word by one edit

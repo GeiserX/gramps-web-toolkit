@@ -129,7 +129,7 @@ class LedgerTest(unittest.TestCase):
                  '½ ² ⅓ Ⅻ', 'K Kelvin', 'ǅ ǈ ǋ ŉ ǰ', '李 小龍', 'עִבְרִית', 'a_b c-d  e\tf', 'Book 42, img 7', '', None]
         for t in texts:
             self.assertEqual(L.normalize(t), plain_normalize(t), t)
-        words = ['peiro', 'peira', 'peir', 'peirox', 'zuq', 'zuqq', 'zebrafish', 'zebrafisk', 'a1850', 'a1851']
+        words = ['peiro', 'peira', 'peir', 'peirox', 'peir0', 'zuq', 'zuqq', 'zebrafish', 'zebrafisk', 'a1850', 'a1851']
         for n in range(4):
             for new in itertools.combinations(words, n):
                 for logged in itertools.combinations(words, 2):
