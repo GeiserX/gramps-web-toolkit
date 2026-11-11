@@ -1581,6 +1581,110 @@ def test_an_add_whose_object_is_gone_with_no_merge_note_makes_it_again(cls):
     assert plan[0].status == "done" and plan[0].actions[-1].startswith(f"create {cls}"), plan[0].actions
 
 
+def _chain_fake():
+    """_add_then_merge_fake plus Eve I0005, two more families of John and Mary (F0002, F0003),
+    three places (P0001-P0003) and three repositories (R0001-R0003), so a list can merge one object into a second
+    and the second into a third."""
+    fake = _add_then_merge_fake()
+    fake.add("people", {"handle": "eve", "attribute_list": [],
+                        "primary_name": {"first_name": "Eve", "surname_list": [{"surname": "Example", "primary": True}]}})
+    for h in ("f2", "f3"):
+        fake.add("families", {"handle": h, "father_handle": "dad", "mother_handle": "mum"})
+    for h in ("pl1", "pl2", "pl3"):
+        fake.add("places", {"handle": h, "name": {"value": "Springfield"}})
+    for h in ("rp1", "rp2", "rp3"):
+        fake.add("repositories", {"handle": h, "name": "Springfield archive", "urls": []})
+    return fake
+
+
+def _merge(cls, key, winner, loser):
+    return {"op": f"merge_{cls.lower()}", "key": key, "ruling": R, "winner": winner, "loser": loser}
+
+
+ADD_PERSON = {"op": "add_person", "key": "p-new", "ruling": R, "first_name": "Ana", "surname": "Example", "gender": "F"}
+ADD_FAMILY = {"op": "add_family", "key": "f-new", "ruling": R, "mother": "I0001", "children": ["I0003"]}
+CHAINS = {  # each merges a winner of an earlier merge of the same list away again
+    "Person add, 2 merges": [ADD_PERSON, _merge("Person", "m1", "I0004", "key:p-new"), _merge("Person", "m2", "I0001", "I0004")],
+    "Family add, 2 merges": [ADD_FAMILY, _merge("Family", "m1", "F0002", "key:f-new"), _merge("Family", "m2", "F0001", "F0002")],
+    "Person add, 3 merges": [ADD_PERSON, _merge("Person", "m1", "I0004", "key:p-new"),
+                             _merge("Person", "m2", "I0005", "I0004"), _merge("Person", "m3", "I0001", "I0005")],
+    "Person, 2 merges": [_merge("Person", "m1", "I0004", "I0005"), _merge("Person", "m2", "I0001", "I0004")],
+    "Family, 2 merges": [_merge("Family", "m1", "F0002", "F0003"), _merge("Family", "m2", "F0001", "F0002")],
+    "Place, 2 merges": [_merge("Place", "m1", "P0002", "P0003"), _merge("Place", "m2", "P0001", "P0002")],
+    "Repository, 2 merges": [_merge("Repository", "m1", "R0002", "R0003"), _merge("Repository", "m2", "R0001", "R0002")],
+    "Person, key winner merged away": [
+        ADD_PERSON, {**ADD_PERSON, "key": "p-kept", "first_name": "Eva"},
+        _merge("Person", "m1", "key:p-kept", "key:p-new"), _merge("Person", "m2", "I0001", "key:p-kept")],
+}
+
+
+def _counts(fake):
+    return {ns: len(fake.store[ns]) for ns in ("people", "families", "places", "repositories", "notes")}
+
+
+@pytest.mark.parametrize("chain", list(CHAINS))
+def test_rerun_of_a_list_whose_merge_winner_is_merged_away_later_writes_nothing(chain, tmp_path, monkeypatch, capsys):
+    import gwt_apply.client as clientmod
+    fake, ops = _chain_fake(), CHAINS[chain]
+    res = run(fake, ops)
+    assert [r.status for r in res] == ["done"] * len(ops), [r.actions for r in res]
+    counts, writes = _counts(fake), len(fake.writes())
+    plan = run(fake, ops, dry_run=True)
+    assert [r.status for r in plan] == ["skip"] * len(ops), [r.actions for r in plan]
+    res = run(fake, ops)  # a real second --apply: no object made again, no write at all
+    assert [r.status for r in res] == ["skip"] * len(ops), [r.actions for r in res]
+    assert _counts(fake) == counts and len(fake.writes()) == writes
+    final = ops[-1]["winner"]  # every merge note now sits on the last winner, which the skips name
+    assert all(f"into {final}" in r.actions[-1] for r in res), [r.actions for r in res]
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: fake)
+    for k, v in {"GWT_URL": "https://gw.example", "GWT_USERNAME": "u", "GWT_PASSWORD": "pw", "GWT_TREE": "tree-test"}.items():
+        monkeypatch.setenv(k, v)
+    changes = tmp_path / "list.jsonl"
+    changes.write_text("".join(json.dumps(op) + "\n" for op in ops))
+    assert main([str(changes), "--verify"]) == 0
+    assert f"VERIFY: {len(ops)} of {len(ops)} op(s) in the tree" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("chain", ["Person add, 2 merges", "Family add, 2 merges", "Person, 2 merges"])
+def test_rerun_after_a_run_that_stopped_between_two_chained_merges_still_merges(chain):
+    fake, ops = _chain_fake(), CHAINS[chain]
+    assert all(r.status == "done" for r in run(fake, ops[:-1]))
+    res = run(fake, ops)
+    assert [r.status for r in res] == ["skip"] * (len(ops) - 1) + ["done"], [r.actions for r in res]
+    last = ops[-1]
+    assert any(a.startswith(f"merge {last['op'][6:].capitalize()} {last['loser']} into") for a in res[-1].actions)
+
+
+def _drop_merge_note(fake, key):
+    for ns in ("people", "families"):
+        for o in fake.store[ns].values():
+            o["note_list"] = [h for h in o.get("note_list") or [] if h != stable_handle(key + "#merge")]
+
+
+def test_chained_merge_whose_note_no_object_holds_still_stops():
+    fake, ops = _chain_fake(), CHAINS["Person, 2 merges"]
+    assert all(r.status == "done" for r in run(fake, ops))
+    _drop_merge_note(fake, "m1")
+    res = run(fake, ops, dry_run=True)
+    assert res[0].status == "conflict" and "no Person with Gramps ID I0004" in res[0].actions[-1], res[0].actions
+
+
+def test_chained_merge_whose_note_two_objects_hold_still_stops():
+    fake, ops = _chain_fake(), CHAINS["Person, 2 merges"]
+    assert all(r.status == "done" for r in run(fake, ops))
+    fake.store["people"]["kid"]["note_list"] = [stable_handle("m1#merge")]  # no way to tell which one is the winner
+    res = run(fake, ops, dry_run=True)
+    assert res[0].status == "conflict" and "no Person with Gramps ID I0004" in res[0].actions[-1], res[0].actions
+
+
+def test_an_add_whose_chained_merge_left_no_note_is_made_again():
+    fake, ops = _chain_fake(), CHAINS["Person add, 2 merges"]
+    assert all(r.status == "done" for r in run(fake, ops))
+    _drop_merge_note(fake, "m1")
+    plan = run(fake, ops, dry_run=True)  # gone with no note: the add makes it again, as for a single merge
+    assert plan[0].status == "done" and plan[0].actions[-1].startswith("create Person"), plan[0].actions
+
+
 def test_merge_family_needs_the_same_parents(tmp_path):
     fake = MergingFake()
     for h, n in (("dad", "John"), ("dad2", "Jon"), ("mum", "Mary"), ("kid", "Tom")):

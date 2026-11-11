@@ -1,0 +1,4 @@
+gwt_apply/ops.py | except Conflict:  # the winner is gone: look for the object its merge note moved on to | except ZeroDivisionError:  # the winner is gone | a rerun reads a merge whose winner a later merge took away on the object that holds its note now
+gwt_apply/ops.py | if holder is None: | if False: | a merge note no one object holds keeps the conflict of the missing winner
+gwt_apply/ops.py | winner = self._merge_winner(cls, merge) | winner = self.obj(cls, merge["winner"]) | a rerun skips an add whose merge's winner a later merge of the list took away, instead of making it again
+gwt_apply/ops.py | winner = self._merge_winner(cls, op) | winner = self.obj(cls, op["winner"]) | a rerun skips a merge whose winner a later merge of the list took away, instead of stopping
