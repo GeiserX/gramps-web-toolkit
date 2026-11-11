@@ -829,14 +829,30 @@ class Applier:
                 if m:
                     self._merges.setdefault(m[1], []).append((m[2], n["handle"]))
         notes = {h for loser, h in self._merges.get(cls, []) if loser == ref}
-        if not notes:
+        winner = self._note_holder(cls, notes) if notes else None
+        if winner is None:
             return None
+        self.actions.append(f"{cls} {ref} was merged into {self.label(winner)}: reading it there")
+        return winner["handle"]
+
+    def _note_holder(self, cls: str, notes: set[str]) -> dict | None:
+        """The one object of `cls` whose note list holds one of `notes`. None when no object, or more than one, does."""
         rows = [r for r in self.c.list_all(cls, ["note_list", "gramps_id"]) if notes & set(r.get("note_list") or [])]
         if len(rows) != 1:  # two holders: no way to tell which one is the winner, so the op stays a conflict
             return None
-        winner = rows[0]
-        self.actions.append(f"{cls} {ref} was merged into {self.label(winner)}: reading it there")
-        return winner["handle"]
+        return rows[0]
+
+    def _merge_winner(self, cls: str, merge: dict) -> dict:
+        """The winner of a merge op of the list. When a later merge took that winner away too, Gramps moved this
+        op's merge note on to the next winner with the rest of its note list, so the one object that holds the note
+        now stands in for it. With no such object the Conflict of the missing winner stands."""
+        try:
+            return self.obj(cls, merge["winner"])
+        except Conflict:  # the winner is gone: look for the object its merge note moved on to
+            holder = self._note_holder(cls, {stable_handle(merge["key"] + "#merge")})
+            if holder is None:
+                raise
+            return holder
 
     def obj(self, cls: str, ref: str) -> dict:
         obj = self.c.get(cls, self.resolve(cls, ref))
@@ -1179,14 +1195,15 @@ class Applier:
 
     def _merged_away(self, cls: str, op: dict) -> bool:
         """A rerun of a list that makes an object and then merges it into another with merge_person or merge_family:
-        the object is gone and the winner carries the note that merge wrote. The add has landed, so it skips, and so
-        do the merge and every op between them that names key:<key>."""
+        the object is gone and the winner carries the note that merge wrote (or, when a later merge took the winner
+        away too, the object that holds the note now). The add has landed, so it skips, and so do the merge and every
+        op between them that names key:<key>."""
         _, merge = self._merge_of.get(f"key:{op['key']}", (0, None))
         if merge is None:
             return False
         try:
-            winner = self.obj(cls, merge["winner"])
-        except Conflict:  # the winner is not there either: no merge of this list landed, the add makes the object
+            winner = self._merge_winner(cls, merge)
+        except Conflict:  # the winner is not there either, and no one object holds the note: the add makes the object
             return False
         if stable_handle(merge["key"] + "#merge") not in (winner.get("note_list") or []):
             return False
@@ -2425,7 +2442,8 @@ class Applier:
         self.actions.append(f"delete {cls} {self.label(loser)}")
 
     def _merge_done(self, cls: str, op) -> bool:
-        """A rerun: the loser is gone and the winner carries this op's merge note."""
+        """A rerun: the loser is gone and the winner carries this op's merge note. A winner a later merge took away
+        is read on the object that holds the note now."""
         ref = op["loser"]
         if ref.startswith("key:"):
             present = self.c.exists(cls, self.keymap.get(ref[4:]) or stable_handle(ref[4:]))
@@ -2434,7 +2452,7 @@ class Applier:
         if present:
             return False
         note = stable_handle(op["key"] + "#merge")
-        winner = self.obj(cls, op["winner"])
+        winner = self._merge_winner(cls, op)
         if note in (winner.get("note_list") or []):
             self.actions.append(f"skip: {cls} {op['loser']} is already merged into {self.label(winner)}")
             return True
