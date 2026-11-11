@@ -8,11 +8,11 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Change lists
 
-- A rerun of a list that merges a winner away again (`merge_person` I0005 into I0004, then I0004 into I0001) now skips each merge that landed. Before, it stopped at the first merge with `no Person with Gramps ID I0004`. When the list also made the first loser (`add_person` with key `p-new`, then `merge_person` with loser `key:p-new` into I0004), the rerun made that person again before it stopped, so a second `--apply` left a duplicate in the tree. The same holds for every merge op.
+- A rerun of a list that merges a winner away again (`merge_person` I0005 into I0004, then I0004 into I0001) now skips each merge that landed. Before, it stopped at the first merge with `no Person with Gramps ID I0004`. When the list also made the first loser (`add_person` with key `p-new`, then `merge_person` with loser `key:p-new` into I0004), the rerun made that person again before it stopped, so a second `--apply` left a duplicate in the tree. The skip of a merge holds for every merge op. The skip of the add holds for `add_person` and `add_family` only: a rerun still makes an object of another class again when the list made it and then merged it away, as after a single merge.
 
 ### Fixed
 
-- A second `gwt-apply --apply` of a list with chained merges no longer makes an object the list already merged away, and no longer stops at the first merge. A merge whose winner is gone is read on the one object that holds its merge note now (#263).
+- A second `gwt-apply --apply` of a list with chained merges no longer makes a person or family the list already merged away, and no longer stops at the first merge. A merge whose winner is gone is read on the one object that holds its merge note now (#263).
 
 ## [1.5.0] - 2026-11-10
 
