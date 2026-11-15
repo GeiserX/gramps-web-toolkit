@@ -1,0 +1,438 @@
+{
+ "events": [
+  {
+   "handle": "ev_1",
+   "type": "Baptism",
+   "date": {
+    "year": 1900
+   }
+  }
+ ],
+ "people": [
+  {
+   "handle": "p_root",
+   "gramps_id": "L0001",
+   "gender": 1,
+   "primary_name": {
+    "first_name": "Root",
+    "surname_list": [
+     {
+      "surname": "Example"
+     }
+    ]
+   },
+   "parent_family_list": [
+    "f_a"
+   ],
+   "family_list": [
+    "f_b"
+   ],
+   "tag_list": [],
+   "event_ref_list": [
+    {
+     "ref": "ev_1",
+     "role": "Primary"
+    }
+   ]
+  },
+  {
+   "handle": "p_father",
+   "gramps_id": "L0002",
+   "gender": 1,
+   "primary_name": {
+    "first_name": "Father",
+    "surname_list": [
+     {
+      "surname": "Example"
+     }
+    ]
+   },
+   "parent_family_list": [],
+   "family_list": [
+    "f_a"
+   ],
+   "tag_list": []
+  },
+  {
+   "handle": "p_mother",
+   "gramps_id": "L0003",
+   "gender": 0,
+   "primary_name": {
+    "first_name": "Mother",
+    "surname_list": [
+     {
+      "surname": "Sample"
+     }
+    ]
+   },
+   "parent_family_list": [],
+   "family_list": [
+    "f_a"
+   ],
+   "tag_list": []
+  },
+  {
+   "handle": "p_sibling",
+   "gramps_id": "L0004",
+   "gender": 0,
+   "primary_name": {
+    "first_name": "Sibling",
+    "surname_list": [
+     {
+      "surname": "Example"
+     }
+    ]
+   },
+   "parent_family_list": [
+    "f_a",
+    "f_d"
+   ],
+   "family_list": [
+    "f_e"
+   ],
+   "tag_list": []
+  },
+  {
+   "handle": "p_spouse",
+   "gramps_id": "L0005",
+   "gender": 0,
+   "primary_name": {
+    "first_name": "Spouse",
+    "surname_list": [
+     {
+      "surname": "Inlaw"
+     }
+    ]
+   },
+   "parent_family_list": [
+    "f_c"
+   ],
+   "family_list": [
+    "f_b"
+   ],
+   "tag_list": [
+    "t_weak"
+   ]
+  },
+  {
+   "handle": "p_spfather",
+   "gramps_id": "L0006",
+   "gender": 1,
+   "primary_name": {
+    "first_name": "Spfather",
+    "surname_list": [
+     {
+      "surname": "Inlaw"
+     }
+    ]
+   },
+   "parent_family_list": [],
+   "family_list": [
+    "f_c"
+   ],
+   "tag_list": []
+  },
+  {
+   "handle": "p_spmother",
+   "gramps_id": "L0007",
+   "gender": 0,
+   "primary_name": {
+    "first_name": "Spmother",
+    "surname_list": [
+     {
+      "surname": "Inlaw"
+     }
+    ]
+   },
+   "parent_family_list": [],
+   "family_list": [
+    "f_c"
+   ],
+   "tag_list": []
+  },
+  {
+   "handle": "p_homonym",
+   "gramps_id": "L0008",
+   "gender": 1,
+   "primary_name": {
+    "first_name": "Homer",
+    "surname_list": [
+     {
+      "surname": "Example"
+     }
+    ]
+   },
+   "parent_family_list": [],
+   "family_list": [],
+   "tag_list": [],
+   "person_ref_list": [
+    {
+     "ref": "p_root",
+     "description": "witness"
+    }
+   ],
+   "event_ref_list": [
+    {
+     "ref": "ev_1",
+     "role": "Witness"
+    }
+   ]
+  },
+  {
+   "handle": "p_unilat_father",
+   "gramps_id": "L0010",
+   "gender": 1,
+   "primary_name": {
+    "first_name": "Unifather",
+    "surname_list": [
+     {
+      "surname": "Pointer"
+     }
+    ]
+   },
+   "parent_family_list": [],
+   "family_list": [
+    "f_d"
+   ],
+   "tag_list": []
+  },
+  {
+   "handle": "p_unilat_mother",
+   "gramps_id": "L0011",
+   "gender": 0,
+   "primary_name": {
+    "first_name": "Unimother",
+    "surname_list": [
+     {
+      "surname": "Pointer"
+     }
+    ]
+   },
+   "parent_family_list": [],
+   "family_list": [
+    "f_d"
+   ],
+   "tag_list": []
+  },
+  {
+   "handle": "p_spref",
+   "gramps_id": "L0012",
+   "gender": 1,
+   "primary_name": {
+    "first_name": "Spouseref",
+    "surname_list": [
+     {
+      "surname": "Guard"
+     }
+    ]
+   },
+   "parent_family_list": [],
+   "family_list": [
+    "f_e"
+   ],
+   "tag_list": []
+  },
+  {
+   "handle": "p_spouse2",
+   "gramps_id": "L0013",
+   "gender": 0,
+   "primary_name": {
+    "first_name": "Otherspouse",
+    "surname_list": [
+     {
+      "surname": "Guard"
+     }
+    ]
+   },
+   "parent_family_list": [],
+   "family_list": [
+    "f_e"
+   ],
+   "tag_list": []
+  },
+  {
+   "handle": "p_child2",
+   "gramps_id": "L0014",
+   "gender": 1,
+   "primary_name": {
+    "first_name": "Childtwo",
+    "surname_list": [
+     {
+      "surname": "Guard"
+     }
+    ]
+   },
+   "parent_family_list": [
+    "f_e"
+   ],
+   "family_list": [],
+   "tag_list": []
+  },
+  {
+   "handle": "p_cyc_a",
+   "gramps_id": "L0015",
+   "gender": 1,
+   "primary_name": {
+    "first_name": "Cyca",
+    "surname_list": [
+     {
+      "surname": "Ring"
+     }
+    ]
+   },
+   "parent_family_list": [
+    "f_g3"
+   ],
+   "family_list": [
+    "f_g1"
+   ],
+   "tag_list": []
+  },
+  {
+   "handle": "p_cyc_b",
+   "gramps_id": "L0016",
+   "gender": 1,
+   "primary_name": {
+    "first_name": "Cycb",
+    "surname_list": [
+     {
+      "surname": "Ring"
+     }
+    ]
+   },
+   "parent_family_list": [
+    "f_g1"
+   ],
+   "family_list": [
+    "f_g2"
+   ],
+   "tag_list": []
+  },
+  {
+   "handle": "p_cyc_c",
+   "gramps_id": "L0017",
+   "gender": 1,
+   "primary_name": {
+    "first_name": "Cycc",
+    "surname_list": [
+     {
+      "surname": "Ring"
+     }
+    ]
+   },
+   "parent_family_list": [
+    "f_g2"
+   ],
+   "family_list": [
+    "f_g3"
+   ],
+   "tag_list": []
+  },
+  {
+   "handle": "p_orphan",
+   "gramps_id": "L0018",
+   "gender": 1,
+   "primary_name": {
+    "first_name": "Orphan",
+    "surname_list": [
+     {
+      "surname": "Missing"
+     }
+    ]
+   },
+   "parent_family_list": [
+    "f_missing"
+   ],
+   "family_list": [],
+   "tag_list": []
+  }
+ ],
+ "families": [
+  {
+   "handle": "f_a",
+   "father_handle": "p_father",
+   "mother_handle": "p_mother",
+   "child_ref_list": [
+    {
+     "ref": "p_root"
+    },
+    {
+     "ref": "p_sibling"
+    }
+   ]
+  },
+  {
+   "handle": "f_b",
+   "father_handle": "p_root",
+   "mother_handle": "p_spouse",
+   "child_ref_list": []
+  },
+  {
+   "handle": "f_c",
+   "father_handle": "p_spfather",
+   "mother_handle": "p_spmother",
+   "child_ref_list": [
+    {
+     "ref": "p_spouse"
+    }
+   ]
+  },
+  {
+   "handle": "f_d",
+   "father_handle": "p_unilat_father",
+   "mother_handle": "p_unilat_mother",
+   "child_ref_list": []
+  },
+  {
+   "handle": "f_e",
+   "father_handle": "p_spouse2",
+   "mother_handle": null,
+   "child_ref_list": [
+    {
+     "ref": "p_child2"
+    }
+   ]
+  },
+  {
+   "handle": "f_g1",
+   "father_handle": "p_cyc_a",
+   "mother_handle": null,
+   "child_ref_list": [
+    {
+     "ref": "p_cyc_b"
+    }
+   ]
+  },
+  {
+   "handle": "f_g2",
+   "father_handle": "p_cyc_b",
+   "mother_handle": null,
+   "child_ref_list": [
+    {
+     "ref": "p_cyc_c"
+    }
+   ]
+  },
+  {
+   "handle": "f_g3",
+   "father_handle": "p_cyc_c",
+   "mother_handle": null,
+   "child_ref_list": [
+    {
+     "ref": "p_cyc_a"
+    }
+   ]
+  }
+ ],
+ "citations": [],
+ "media": [],
+ "notes": [],
+ "tags": [
+  {
+   "handle": "t_weak",
+   "name": "hipotesis"
+  }
+ ],
+ "places": [],
+ "sources": []
+}

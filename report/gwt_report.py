@@ -3,7 +3,7 @@
 
 Reads offline files (a `gwt-check dump` or a `gwt-apply` snapshot, gzipped or not) and never touches the tree.
 
-  gwt-report kin [--lang en|es|fr] [--json] [--weak-tag TEXT] DUMP A B
+  gwt-report kin [--lang en|es|fr] [--json] [--weak-tag TEXT] DUMP A B\n  gwt-report links --root ID [--lang en|es|fr] [--json] [--weak-tag TEXT] DUMP
   gwt-report digest --from OLD --to NEW [--root I0001] [--base-url URL] [--told FILE --audience NAME [--mark]]
                     [--format md|html]
 
@@ -726,6 +726,261 @@ def mark(path, audience, ids):
         raise BadInput('%s: cannot write the told file (%s)' % (path, exc))
 
 
+
+
+# ── links: every person's recorded connection to a root ──────────────────────
+#
+# Connectivity here means RECORDED family references, never proof of kinship.
+# Surnames, citations, event witness roles and person associations are never
+# edges. The report is diagnostic only: it authorizes no deletion.
+
+LINKS_I18N = {
+    'en': {'connected': 'connected', 'union_only': 'connected only through a one-sided family reference',
+           'outside': 'no recorded family connection', 'problems': 'consistency problems',
+           'component': 'component', 'people': 'people', 'summary': 'Summary',
+           'deletion': 'This report deletes nothing and authorizes no deletion.',
+           'parent': 'parent', 'child': 'child', 'spouse': 'spouse',
+           'family_ref': 'family reference', 'weakest': 'weakest link'},
+    'es': {'connected': 'conectadas', 'union_only': 'conectadas solo por una referencia familiar unilateral',
+           'outside': 'sin conexión familiar registrada', 'problems': 'problemas de consistencia',
+           'component': 'componente', 'people': 'personas', 'summary': 'Resumen',
+           'deletion': 'Este informe no borra nada ni autoriza borrado alguno.',
+           'parent': 'padre/madre', 'child': 'hijo/a', 'spouse': 'cónyuge',
+           'family_ref': 'referencia familiar', 'weakest': 'enlace más débil'},
+    'fr': {'connected': 'reliées', 'union_only': 'reliées seulement par une référence familiale unilatérale',
+           'outside': 'sans lien familial enregistré', 'problems': 'problèmes de cohérence',
+           'component': 'composante', 'people': 'personnes', 'summary': 'Résumé',
+           'deletion': "Ce rapport ne supprime rien et n'autorise aucune suppression.",
+           'parent': 'parent', 'child': 'enfant', 'spouse': 'conjoint',
+           'family_ref': 'référence familiale', 'weakest': 'maillon le plus faible'},
+}
+
+STRENGTH_ORDER = ('weak', 'probable', 'unmarked', 'confirmed')
+
+
+def family_graphs(T):
+    """strict and union adjacency over the people of a tree, plus consistency problems.
+
+    strict: the edges the FAMILY records state — a spouse edge only when the
+    family holds both parents, parent-child edges from its child list. Only a
+    recorded Birth relation is labeled 'blood'; Adopted, Unknown or an empty
+    relation are recorded family without a biology claim, labeled 'family';
+    Stepchild, Foster and Sponsored are labeled 'family-nonblood'.
+    union: strict plus every edge a PERSON's own family references imply: a
+    parent_family_list or family_list pointer the family record does not
+    mirror still connects every member of that family (conservative
+    protection, never a repair), labeled 'family-ref'.
+    Edge kinds are deterministic: when records disagree the LEAST claiming
+    kind wins (family-nonblood < family < blood < spouse < family-ref), never
+    the JSON order.
+    A person whose family_list points at a family that does not hold them as
+    a parent is listed as person_family_without_family_spouse.
+    Every origin of an edge keeps its evidence metadata: a step's strength is
+    the WEAKEST across its origins, and the step lists those origins with the
+    recorded child relation, so adoptions, foster records and conflicting
+    records stay visible even under the conservative label.
+    """
+    people, families = T['people'], T['families']
+    strict = {h: set() for h in people}
+    union = {h: set() for h in people}
+    kinds = {}
+    metas = {}
+    problems = []
+
+    def edge(g, a, b, kind, meta=None):
+        if a not in people or b not in people or a == b:
+            return
+        g[a].add(b)
+        g[b].add(a)
+        rank = {'family-nonblood': 0, 'family': 1, 'blood': 2, 'spouse': 3, 'family-ref': 4}
+        for x, y in ((a, b), (b, a)):
+            if rank[kind] < rank.get(kinds.get((x, y), 'family-ref'), 3) or (x, y) not in kinds:
+                if (x, y) not in kinds or rank[kind] < rank[kinds[(x, y)]]:
+                    kinds[(x, y)] = kind
+            metas.setdefault((x, y), [])
+            if meta is not None and meta not in metas[(x, y)]:
+                metas[(x, y)].append(meta)
+
+    for fh, fam in families.items():
+        father, mother = fam.get('father_handle'), fam.get('mother_handle')
+        parents = [h for h in (father, mother) if h in people]
+        children = [c.get('ref') for c in fam.get('child_ref_list') or [] if c.get('ref') in people]
+        if len(parents) == 2:
+            edge(strict, parents[0], parents[1], 'spouse', ('spouse', fh))
+        for p in parents:
+            if fh not in (people[p].get('family_list') or []):
+                problems.append(('family_spouse_without_person_family', p, fh))
+        refs = {c.get('ref'): c for c in fam.get('child_ref_list') or []}
+        for a in parents:
+            relkey = 'frel' if a == father else 'mrel'
+            for b in children:
+                rel = text_of((refs.get(b) or {}).get(relkey))
+                kind = {'Birth': 'blood', '': 'family', 'Unknown': 'family',
+                        'Adopted': 'family'}.get(rel, 'family-nonblood')
+                edge(strict, a, b, kind, ('child', b, fh, refs.get(b)))
+        for h in children:
+            if fh not in (people[h].get('parent_family_list') or []):
+                problems.append(('family_child_without_person_parent_family', h, fh))
+    for h in strict:
+        union[h] = set(strict[h])
+    for h, person in people.items():
+        for fh in person.get('parent_family_list') or []:
+            fam = families.get(fh)
+            if fam is None:
+                problems.append(('missing_parent_family', h, fh))
+                continue
+            if h not in [c.get('ref') for c in fam.get('child_ref_list') or []]:
+                problems.append(('person_parent_family_without_family_child', h, fh))
+            members = [fam.get('father_handle'), fam.get('mother_handle')]
+            members += [c.get('ref') for c in fam.get('child_ref_list') or []]
+            for other in members:
+                edge(union, h, other, 'family-ref', ('parent_family', fh))
+        for fh in person.get('family_list') or []:
+            fam = families.get(fh)
+            if fam is None:
+                problems.append(('missing_spouse_family', h, fh))
+                continue
+            if h != fam.get('father_handle') and h != fam.get('mother_handle'):
+                problems.append(('person_family_without_family_spouse', h, fh))
+            members = [fam.get('father_handle'), fam.get('mother_handle')]
+            members += [c.get('ref') for c in fam.get('child_ref_list') or []]
+            for other in members:
+                edge(union, h, other, 'family-ref', ('family', fh))
+    return strict, union, kinds, metas, problems
+
+
+def component_paths(graph, root):
+    """{handle: path from root} for the component holding root; a path is a tuple of handles."""
+    seen = {root: (root,)}
+    todo = collections.deque([root])
+    while todo:
+        cur = todo.popleft()
+        for other in sorted(graph.get(cur, ())):
+            if other not in seen:
+                seen[other] = seen[cur] + (other,)
+                todo.append(other)
+    return seen
+
+
+def _origin_out(meta):
+    """One origin of an edge as JSON: which record, and the child relation it states."""
+    if meta[0] == 'child':
+        ref = meta[3] or {}
+        return {'type': 'child', 'family': meta[2],
+                'frel': text_of(ref.get('frel')), 'mrel': text_of(ref.get('mrel'))}
+    return {'type': meta[0], 'family': meta[1]}
+
+
+def _step_link_class(T, kinds, metas, a, b, weak_tags):
+    """Strength of one step: the weakest class across every origin of the
+    edge — the child->parent link class for blood and family-nonblood edges,
+    weak when an originating spouse family carries a weak tag, unmarked for a
+    bare family-ref pointer. JSON order never decides."""
+    classes = []
+    for meta in metas.get((a, b), []):
+        if meta[0] == 'child':
+            _, child, fh, ref = meta
+            if ref is not None:
+                classes.append(link_class(T, (child, None, None, fh, ref), weak_tags))
+        elif meta[0] == 'spouse':
+            fh = meta[1]
+            if fh in T['families'] and tagged_weak(T, T['families'][fh], weak_tags):
+                classes.append('weak')
+    if not classes:
+        return 'unmarked'
+    return min(classes, key=STRENGTH_ORDER.index)
+
+
+def links(T, root, weak_tags=WEAK_TAGS):
+    """Every person's shortest recorded connection to root, and the people with none.
+
+    Returns a report dict: per-person status (connected / union_only /
+    outside), distance and path with per-step kinds and strengths, the
+    consistency problems found, the outside people grouped by component, and
+    deletion_authorized — always False."""
+    strict, union, kinds, metas, problems = family_graphs(T)
+    paths = component_paths(union, root)
+    strict_paths = component_paths(strict, root)
+    entries = {}
+    for h, path in paths.items():
+        classes = [_step_link_class(T, kinds, metas, a, b, weak_tags) for a, b in zip(path, path[1:])]
+        weakest = min(classes, key=STRENGTH_ORDER.index) if classes else 'confirmed'
+        entries[h] = {
+            'status': 'connected' if h in strict_paths else 'union_only',
+            'distance': len(path) - 1,
+            'path': [{'person': b, 'gramps_id': T['people'][b].get('gramps_id') or '',
+                      'via': kinds.get((a, b), 'family-ref'),
+                      'strength': _step_link_class(T, kinds, metas, a, b, weak_tags),
+                      'origins': [_origin_out(m) for m in metas.get((a, b), ())]}
+                     for a, b in zip(path, path[1:])],
+            'weakest': weakest,
+        }
+    outside = {}
+    rest = set(T['people']) - set(paths)
+    seen = set()
+    for h in sorted(rest):
+        if h in seen:
+            continue
+        comp = component_paths({x: union[x] & rest for x in rest}, h)
+        seen |= set(comp)
+        members = sorted(comp)
+        outside[h] = {'size': len(members), 'members': members,
+                      'sample': [label(T['people'][m]) for m in members[:5]]}
+    return {'root': root, 'people': entries, 'outside': outside, 'problems': problems,
+            'counts': {'people': len(T['people']), 'connected': sum(1 for e in entries.values()
+                       if e['status'] == 'connected'),
+                       'union_only': sum(1 for e in entries.values() if e['status'] == 'union_only'),
+                       'outside': len(rest), 'components_outside': len(outside),
+                       'problems': len(problems)},
+            'deletion_authorized': False}
+
+
+def links_json(T, rep):
+    out = dict(rep)
+    out['root'] = {'handle': rep['root'],
+                   'gramps_id': T['people'][rep['root']].get('gramps_id') or ''}
+    out['people'] = {h: dict(e, label=label(T['people'][h]),
+                             gramps_id=T['people'][h].get('gramps_id') or '')
+                     for h, e in rep['people'].items()}
+    return out
+
+
+def _plural(n, forms):
+    return forms[0] if n == 1 else forms[1]
+
+
+PLURALS = {'en': {'people': ('person', 'people'), 'component': ('component', 'components'),
+                  'problems': ('problem', 'problems')},
+           'es': {'people': ('persona', 'personas'), 'component': ('componente', 'componentes'),
+                  'problems': ('problema', 'problemas')},
+           'fr': {'people': ('personne', 'personnes'), 'component': ('composante', 'composantes'),
+                  'problems': ('problème', 'problèmes')}}
+
+
+def print_links(T, rep, lang):
+    t = LINKS_I18N[lang]
+    pl = PLURALS[lang]
+    c = rep['counts']
+    print('%s: %d %s — %d %s, %d %s, %d %s (%d %s), %d %s' % (
+        t['summary'], c['people'], _plural(c['people'], pl['people']), c['connected'], t['connected'],
+        c['union_only'], t['union_only'], c['outside'], t['outside'],
+        c['components_outside'], _plural(c['components_outside'], pl['component']),
+        c['problems'], _plural(c['problems'], pl['problems'])))
+    for h, e in sorted(rep['people'].items(), key=lambda kv: (kv[1]['distance'], kv[0])):
+        if h == rep['root']:
+            continue
+        steps = ' → '.join('%s [%s]' % (label(T['people'][s['person']]), s['via']) for s in e['path'])
+        print('%s%s (%s, %d) %s: %s' % (label(T['people'][h]),
+              ' [%s]' % (T['people'][h].get('gramps_id') or ''), e['status'],
+              e['distance'], t['weakest'] + ' ' + e['weakest'], steps))
+    for h, comp in sorted(rep['outside'].items(), key=lambda kv: -kv[1]['size']):
+        print('%s: %d %s — %s' % (t['component'], comp['size'],
+              _plural(comp['size'], pl['people']), ', '.join(comp['sample'])))
+    for kind, h, fh in rep['problems']:
+        print('%s: %s %s %s' % (t['problems'], kind, h, fh))
+    print(t['deletion'])
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog='gwt-report', description=__doc__.split('\n')[0])
     sub = p.add_subparsers(dest='cmd', required=True)
@@ -736,6 +991,14 @@ def main(argv=None):
     k.add_argument('--lang', choices=sorted(NAMERS), default='en', help='language of the text output (json has all)')
     k.add_argument('--json', action='store_true')
     k.add_argument('--weak-tag', action='append', metavar='TEXT',
+                   help='a tag whose name holds TEXT (accents and case ignored) marks a weak link; repeat for more '
+                        '(default: %s)' % ', '.join(WEAK_TAGS))
+    l = sub.add_parser('links', help="every person's recorded family connection to a root, and who has none")
+    l.add_argument('dump')
+    l.add_argument('--root', required=True, help='Gramps id of the person to measure connection from')
+    l.add_argument('--lang', choices=sorted(NAMERS), default='en', help='language of the text output')
+    l.add_argument('--json', action='store_true')
+    l.add_argument('--weak-tag', action='append', metavar='TEXT',
                    help='a tag whose name holds TEXT (accents and case ignored) marks a weak link; repeat for more '
                         '(default: %s)' % ', '.join(WEAK_TAGS))
     d = sub.add_parser('digest', help='what is new in a tree since an older snapshot, by person, with links')
@@ -753,6 +1016,14 @@ def main(argv=None):
     args = p.parse_args(argv)
     weak = tuple(fold(w) for w in args.weak_tag) if args.weak_tag else WEAK_TAGS
     try:
+        if args.cmd == 'links':
+            T = load(args.dump)
+            rep = links(T, person_handle(T, args.root), weak)
+            if args.json:
+                print(json.dumps(links_json(T, rep), ensure_ascii=False, indent=1))
+            else:
+                print_links(T, rep, args.lang)
+            return 0
         if args.cmd == 'kin':
             T = load(args.dump)
             rep = kin(T, person_handle(T, args.a), person_handle(T, args.b), weak)

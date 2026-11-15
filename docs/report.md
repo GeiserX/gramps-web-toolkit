@@ -84,6 +84,43 @@ B is what the name says, seen from A. `g1` is the number of generations from A u
 
 Feminine forms follow B's gender (*prima segunda*, *cousine issue de germain*, *demi-sœur*). With no gender recorded English uses *sibling*, *cousin*, *parent*, and Spanish and French use the masculine form.
 
+## links: who has a recorded family connection to a person, and who has none
+
+```
+gwt-report links --root I0001 [--lang en|es|fr] [--json] [--weak-tag TEXT] DUMP
+```
+
+Reads a `gwt-check` dump or `gwt-apply` snapshot offline and answers one
+question for every person in the tree: what is their shortest RECORDED family
+connection to `--root`? Collaterals and in-laws count: the walk crosses
+parent-child and spouse edges recorded in family records, so the spouse's
+parents connect through the marriage. Surnames, citations, event witness
+roles and person associations are never edges.
+
+A one-sided pointer still protects: when a person's `parent_family_list` or
+`family_list` names a family the family record does not mirror back, the
+other members are reported as "connected only through a one-sided family
+reference" and the mismatch is listed under consistency problems — recorded,
+never repaired. People with no recorded connection are grouped by connected
+component, with the component size and a few sample names, so same-surname
+people who share no recorded link stand out without being accused of
+anything.
+
+Each connected person gets their path with the kind of every step and the
+weakest link on it, using the same confirmed/probable/weak-tag/unmarked
+classes as `kin`. Step kinds: `blood` (the recorded child relation is Birth
+— a recorded claim of blood relation, not biological proof), `family`
+(Adopted, Unknown or empty: recorded family without a biology claim),
+`family-nonblood` (Stepchild, Foster, Sponsored), `spouse`, and `family-ref`
+(a one-sided pointer). When several records produce the same edge, the
+weakest evidence across all of them is reported, in file order or out of
+it. In the JSON report every path step also lists the records behind it
+(`origins`, with the recorded child relation), so adoptions, foster records
+and conflicts stay visible; the text output keeps only the step kind. Missing
+or one-sided references on either side — children, parents, spouses — are
+listed as consistency problems, never repaired. The report is diagnostic
+only: it deletes nothing and `deletion_authorized` is always false.
+
 ## digest: what is new since the family was last told
 
 ```sh
