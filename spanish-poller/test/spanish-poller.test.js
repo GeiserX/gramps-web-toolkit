@@ -438,3 +438,54 @@ test('sedeNoCountError names the sede\'s own «Página no encontrada» page', ()
   assert.strictEqual(sedeNoCountError('Trámites\nPágina no encontrada\n', from, to), 'sede: the sede answered «Página no encontrada» to the search 22/10/2026-20/11/2026');
   assert.strictEqual(sedeNoCountError('x', from, to), 'sede: search 22/10/2026-20/11/2026 returned no result count');
 });
+
+// ---------- DEHú login that stops moving ----------
+// A fake DEHú and Cl@ve: `loads` lists what each page load shows ('blank' = a script of the app was
+// lost, the page stays empty), then the public page, Cl@ve and the inbox follow the poller's clicks.
+// Waits move a mocked clock, so the 6-minute bound runs in no time.
+function fakeLogin(t, { loads, gotoFails = [] }) {
+  t.mock.timers.enable({ apis: ['Date'] });
+  let screen = 'none', n = 0;
+  const calls = [];
+  const bodies = { blank: '', public: 'DEHÚ - SERVICIO DE NOTIFICACIONES\nAcceder a DEHú\n', clave: 'Acceso DNIe / Certificado electrónico\n', inbox: 'Notificaciones pendientes\n0\n' };
+  const clickable = (fn) => ({ first: () => clickable(fn), click: async () => fn(), count: async () => 0, getByText: () => clickable(() => {}) });
+  return {
+    calls,
+    goto: async (url) => {
+      calls.push('goto ' + url);
+      const f = gotoFails.shift();
+      if (f) throw new Error('page.goto: net::' + f + ' at ' + url);
+      screen = loads[Math.min(n++, loads.length - 1)];
+    },
+    waitForTimeout: async (ms) => { t.mock.timers.tick(ms); },
+    innerText: async () => bodies[screen],
+    url: () => (screen === 'clave' ? 'https://clave.example/Proxy2/ServiceProvider' : 'https://dehu.example/'),
+    content: async () => '',
+    screenshot: async () => {},
+    locator: (sel) => clickable(() => { if (sel === '.dnt-button--primary-light' && screen === 'public') { calls.push('acceder'); screen = 'clave'; } }),
+    getByText: () => clickable(() => { if (screen === 'clave') { calls.push('clave'); screen = 'inbox'; } }),
+  };
+}
+
+test('dehuLogin: a page left blank by a lost script is loaded again, not waited out for 6 minutes', async (t) => {
+  const { dehuLogin } = require('../gwt_spanish_poller.js');
+  const page = fakeLogin(t, { loads: ['blank', 'public'] });
+  const start = Date.now();
+  await dehuLogin(page, null);
+  assert.deepStrictEqual(page.calls.filter(c => !c.startsWith('goto')), ['acceder', 'clave']);
+  assert.strictEqual(page.calls.filter(c => c.startsWith('goto')).length, 2);
+  assert.ok(Date.now() - start < 60000, 'reloaded within a minute, took ' + (Date.now() - start) + ' ms');
+});
+
+test('dehuLogin: a page load that times out is tried again', async (t) => {
+  const { dehuLogin } = require('../gwt_spanish_poller.js');
+  const page = fakeLogin(t, { loads: ['public'], gotoFails: ['ERR_TIMED_OUT'] });
+  await dehuLogin(page, null);
+  assert.deepStrictEqual(page.calls, ['goto https://dehu.redsara.es/', 'goto https://dehu.redsara.es/', 'acceder', 'clave']);
+});
+
+test('dehuLogin: a page that never draws is reported as a blank page, not as the public page', async (t) => {
+  const { dehuLogin } = require('../gwt_spanish_poller.js');
+  const page = fakeLogin(t, { loads: ['blank'] });
+  await assert.rejects(dehuLogin(page, null), /did not reach the inbox \(a blank page at https:\/\/dehu\.example\/\)/);
+});
