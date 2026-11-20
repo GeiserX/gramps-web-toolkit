@@ -191,6 +191,10 @@ function diff(prev, cur) {
       const a = byId(prev.dehu[key]);
       for (const x of cur.dehu[key] || []) if (!a[x.id]) ev.push({ kind, item: x });
     }
+  } else if (cur.dehu) {
+    // The first DEHú read after polls that never read it: like the baseline, every pending
+    // notification is reported.
+    for (const n of cur.dehu.pending || []) ev.push({ kind: 'notification_pending', item: n });
   }
   return ev;
 }
@@ -239,9 +243,10 @@ function notRead(snap) {
 
 function summarize(id, snap, events, errors) {
   const L = [`gwt-spanish-poller ${id} ${snap.polled_at}`];
-  const kept = (at) => `the snapshot ${at ? 'read at ' + at : 'of an earlier poll'} is kept`;
+  const kept = (side) => (snap[side] ? `the snapshot ${snap[side + '_read_at'] ? 'read at ' + snap[side + '_read_at'] : 'of an earlier poll'} is kept`
+    : 'no earlier snapshot of it to keep');
   if (snap.sede_stale) {
-    L.push(`sede: NOT READ this run; ${kept(snap.sede_read_at)}`);
+    L.push(`sede: NOT READ this run; ${kept('sede')}`);
   } else if (snap.sede) {
     const n = Object.values(snap.sede.cases);
     const by = {};
@@ -249,7 +254,7 @@ function summarize(id, snap, events, errors) {
     L.push(`sede: ${n.length} cases (${Object.entries(by).map(([k, v]) => `${v} ${k}`).join(', ') || 'none'})`);
   }
   if (snap.dehu_stale) {
-    L.push(`dehu: NOT READ this run; ${kept(snap.dehu_read_at)}`);
+    L.push(`dehu: NOT READ this run; ${kept('dehu')}`);
   } else if (snap.dehu) {
     const d = snap.dehu, tabs = d.tabs || {};
     const fresh = (key) => d[key].length - ((tabs[key] && tabs[key].kept) || 0);
@@ -589,8 +594,15 @@ async function dehuList(page, dumpDir, name, counter) {
   await dump(page, dumpDir, name);
   if (dumpDir) fs.writeFileSync(path.join(dumpDir, name + '.rows.json'), JSON.stringify(got, null, 1));
   // A list that did not match its counter is saved even without --dump, so the next time it happens
-  // the page is there to look at.
-  if (read.state !== 'read' && !read.paged) await dump(page, null, name + '-err');
+  // the page is there to look at. The rows sit in shadow roots that the .html and .txt do not hold, so
+  // what deepRows returned is saved next to them.
+  if (read.state !== 'read' && !read.paged) {
+    await dump(page, null, name + '-err');
+    if (errorDumpDir) {
+      fs.mkdirSync(errorDumpDir, { recursive: true });
+      fs.writeFileSync(path.join(errorDumpDir, name + '-err.rows.json'), JSON.stringify({ counter, read: { ...read }, ...got }, null, 1));
+    }
+  }
   return { items, ...read };
 }
 
@@ -728,15 +740,15 @@ function readAt(snap, side) {
   return snap[side + '_stale'] ? null : snap.polled_at;
 }
 
-// A pending list that was not read in full is an error: it is the list someone has to act on. The
-// other two lists only count as errors when they did not load at all; a short read there is reported
-// in the summary and does not throw the pending result away.
+// A list that did not load, or showed fewer rows than its counter, is an error (exit 2 when nothing
+// else changed). It is reported next to the lists that did read, never instead of them. A list longer
+// than one page is not an error: its first page was read, and the summary says the rest was not.
 function dehuTabErrors(tabs) {
   const errs = [];
   for (const [key, label] of DEHU_TABS) {
     const t = (tabs || {})[key];
-    if (!t || t.state === 'read') continue;
-    if (t.state === 'not read' || (key === 'pending' && !t.paged)) errs.push(`dehu: ${label} ${t.state === 'not read' ? 'not read' : 'not fully read'}: ${t.note}`);
+    if (!t || t.state === 'read' || t.paged) continue;
+    errs.push(`dehu: ${label} ${t.state === 'not read' ? 'not read' : 'not fully read'}: ${t.note}`);
   }
   return errs;
 }
@@ -769,9 +781,8 @@ async function pollPerson(cfg, person, dumpDir) {
     if (session) { await session.close(); session = null; }
     if (person.dehu) try {
       session = await open();
-      snap.dehu = keepUnreadRows(prev && prev.dehu, await pollDehu(session.page, d));
-      snap.dehu_read_at = snap.polled_at;
-      errors.push(...dehuTabErrors(snap.dehu.tabs));
+      snap.dehu = await pollDehu(session.page, d);
+      // Only rows read in this run are downloaded; rows kept from an earlier poll are not on the page.
       const already = (prev && prev.downloaded_ids) || [];
       if (cfg.download_senders.length) {
         snap.downloaded = await downloadCommunications(session.page, snap.dehu.communications, cfg.download_senders,
@@ -786,18 +797,41 @@ async function pollPerson(cfg, person, dumpDir) {
     if (session) await session.close();
   }
   if (errors.length && errorDumpDir && fs.existsSync(errorDumpDir)) errors.push('failed pages saved in ' + errorDumpDir);
+  const r = finishPoll(person, prev, snap, errors);
+  fs.mkdirSync(cfg.state_dir, { recursive: true });
+  if (prev) fs.writeFileSync(path.join(cfg.state_dir, person.id + '.prev.json'), JSON.stringify(prev, null, 1));
+  fs.writeFileSync(stateFile, JSON.stringify({ ...r.snap, events: r.events }, null, 1));
+  fs.writeFileSync(path.join(cfg.state_dir, person.id + '.txt'), r.text);
+  return { text: r.text, changed: r.changed, failed: r.failed };
+}
+
+// Everything after the browser: merge what was read with the previous snapshot, decide what was not
+// read, diff and summarize. `snap` holds the sides read in this run (sede, and dehu as pollDehu returned
+// it); a side missing from it failed. Returns {snap, events, text, changed, failed}.
+function finishPoll(person, prev, snap, errors) {
+  snap = { ...snap };
+  errors = [...errors];
+  const prevDehu = prev && prev.dehu;
+  if (snap.dehu) {
+    snap.dehu = keepUnreadRows(prevDehu, snap.dehu);
+    errors.push(...dehuTabErrors(snap.dehu.tabs));
+    // The pending list is the one someone acts on, so the read time is the time it was last read.
+    const pending = (snap.dehu.tabs || {}).pending;
+    snap.dehu_read_at = !pending || pending.state === 'read' || !prevDehu ? snap.polled_at : readAt(prev, 'dehu');
+  }
   // A failed part keeps its previous snapshot, so a broken login never reads as «every case disappeared».
-  // The summary says so and names when the kept snapshot was read.
-  if (!snap.sede && prev && prev.sede) Object.assign(snap, { sede_stale: true, sede: prev.sede, sede_read_at: readAt(prev, 'sede') });
-  if (!snap.dehu && prev && prev.dehu) Object.assign(snap, { dehu_stale: true, dehu: prev.dehu, dehu_read_at: readAt(prev, 'dehu') });
+  // The summary says so and names when the kept snapshot was read. A part that failed with no earlier
+  // snapshot to keep is still marked stale, so the summary never ends in a plain «no changes».
+  if (person.sede !== false && !snap.sede) {
+    Object.assign(snap, { sede_stale: true }, prev && prev.sede ? { sede: prev.sede, sede_read_at: readAt(prev, 'sede') } : {});
+  }
+  if (person.dehu !== false && !snap.dehu) {
+    Object.assign(snap, { dehu_stale: true }, prevDehu ? { dehu: prevDehu, dehu_read_at: readAt(prev, 'dehu') } : {});
+  }
   if (!snap.downloaded_ids) snap.downloaded_ids = (prev && prev.downloaded_ids) || [];
   const events = diff(prev, snap).filter(e => !(snap.sede_stale && /^case_/.test(e.kind)) && !(snap.dehu_stale && /notification|communication/.test(e.kind)));
   const text = summarize(person.id, snap, events, errors);
-  fs.mkdirSync(cfg.state_dir, { recursive: true });
-  if (prev) fs.writeFileSync(path.join(cfg.state_dir, person.id + '.prev.json'), JSON.stringify(prev, null, 1));
-  fs.writeFileSync(stateFile, JSON.stringify({ ...snap, events }, null, 1));
-  fs.writeFileSync(path.join(cfg.state_dir, person.id + '.txt'), text);
-  return { text, changed: events.length > 0, failed: errors.length > 0 };
+  return { snap, events, text, changed: events.length > 0, failed: errors.length > 0 };
 }
 
 function parseArgs(argv) {
@@ -837,4 +871,4 @@ async function main(argv) {
   return changed ? EXIT_CHANGED : failed ? EXIT_ERROR : EXIT_SAME;
 }
 
-module.exports = { dump, setErrorDumpDir, isoDate, openPkcs12, openChrome, dehuLogin, pollDehu, loadConfig, parseCases, parseDehuRows, dehuLoadState, dehuTabRead, dehuTabErrors, keepUnreadRows, readAt, sedeNoCountError, diff, senderAllowed, summarize, describe, main, EXIT_SAME, EXIT_CHANGED, EXIT_ERROR };
+module.exports = { dump, setErrorDumpDir, isoDate, openPkcs12, openChrome, dehuLogin, pollDehu, loadConfig, parseCases, parseDehuRows, dehuLoadState, dehuTabRead, dehuTabErrors, keepUnreadRows, readAt, finishPoll, dehuList, sedeNoCountError, diff, senderAllowed, summarize, describe, main, EXIT_SAME, EXIT_CHANGED, EXIT_ERROR };

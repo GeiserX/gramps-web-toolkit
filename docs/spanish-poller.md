@@ -29,12 +29,13 @@ Per person it writes `<state_dir>/<id>.json` (the snapshot plus the events), `<s
 
 Exit status: **0** nothing changed, **10** something changed (the first poll counts, as the baseline), **2** a login or a page failed and nothing else changed. A part that fails keeps its previous snapshot, so a broken login never reads as every case disappearing.
 
-The summary only gives counts it read in this run. A side that failed (`sede`, `dehu`) prints as `NOT READ this run` with the time of the snapshot it keeps, never as `0 pending`. Each DEHú list is checked on its own:
+The summary only gives counts it read in this run. A side that failed (`sede`, `dehu`) prints as `NOT READ this run` with the time of the snapshot it keeps, never as `0 pending`. When there is no earlier snapshot of that side, it prints `NOT READ this run; no earlier snapshot of it to keep`. The first DEHú read that works after that reports every pending notification as `notification_pending`, as the first poll does. Each DEHú list is checked on its own:
 
-- The pending count is the number on the «Notificaciones pendientes» tab, checked against the rows on the page. A pending list with fewer rows than its tab counter is an error (exit 2) and prints as `pending notifications NOT READ` or `NOT FULLY READ`, with both numbers. The rows it did read are still reported.
-- The accepted and communications lists are checked against their tab counter, or their own «1-N de N elementos» line. A short read there prints as `NOT FULLY READ` and does not throw away the pending list; only a list that did not load at all counts as an error.
+- The pending count is the number on the «Notificaciones pendientes» tab, checked against the rows on the page. The accepted and communications lists are checked against their tab counter, or their own «1-N de N elementos» line.
+- A list with fewer rows than its counter is an error (exit 2 when nothing else changed). It prints as `NOT READ` or `NOT FULLY READ`, with both numbers. A short accepted or communications list does not throw away the pending list: the rows that were read are still reported.
+- A list longer than one page (more than 10 rows) is the exception. Only its first page is read, so the summary says `NOT FULLY READ (N more on later pages, not read)`, and it is not an error.
 - When anything was not read, the last line says `no changes in what was read` and a `not read this run:` line names the parts. A plain `no changes` means every part was read.
-- A list read short keeps the rows of the previous snapshot next to the ones it read, so they are not reported as new on the next poll. Its page is saved in `<state_dir>/<id>-errors/` even without `--dump`.
+- A list read short keeps the rows of the previous snapshot next to the ones it read, so they are not reported as new on the next poll. Its page is saved in `<state_dir>/<id>-errors/` even without `--dump`, with a `.rows.json` that holds the rows the poller read. DEHú draws its rows inside shadow roots, so the `.html` and `.txt` do not hold them.
 
 ## Config
 
