@@ -420,8 +420,11 @@ class Client:
         hash of the stored object; before Gramps Web API 3.26.0 a GET's ETag hashes
         the response body (up to 3.23.x) or the request cache key (3.24.0 on), so
         If-Match always answers 412. From 3.26.0 it is the object's own hash, minus a
-        ':gzip' or ':br' suffix. Reading the object again right before the PUT and
-        comparing its 'change' works on every version, so that is the guard here.
+        ':gzip' or ':br' suffix. The guard here works on every version: right before
+        the PUT the object is read again. An object from a snapshot ('_snap') must
+        still have the snapshot's 'change', or Stale is raised; one read live
+        ('_read') must still return the same response, every field, or Retryable is
+        raised. A write that lands after that read and before the PUT is still lost.
         """
         cls = obj["_class"]
         self._touched(cls, obj["handle"])
