@@ -29,6 +29,14 @@ Per person it writes `<state_dir>/<id>.json` (the snapshot plus the events), `<s
 
 Exit status: **0** nothing changed, **10** something changed (the first poll counts, as the baseline), **2** a login or a page failed and nothing else changed. A part that fails keeps its previous snapshot, so a broken login never reads as every case disappearing.
 
+The summary only gives counts it read in this run. A side that failed (`sede`, `dehu`) prints as `NOT READ this run` with the time of the snapshot it keeps, never as `0 pending`. When there is no earlier snapshot of that side, it prints `NOT READ this run; no earlier snapshot of it to keep`. The first DEHú read that works after that reports every pending notification as `notification_pending`, as the first poll does. Each DEHú list is checked on its own:
+
+- The pending count is the number on the «Notificaciones pendientes» tab, checked against the rows on the page. The accepted and communications lists are checked against their tab counter, or their own «1-N de N elementos» line.
+- A list with fewer rows than its counter is an error (exit 2 when nothing else changed). It prints as `NOT READ` or `NOT FULLY READ`, with both numbers. A short accepted or communications list does not throw away the pending list: the rows that were read are still reported.
+- A list longer than one page (more than 10 rows) is the exception. Only its first page is read, so the summary says `NOT FULLY READ (N more on later pages, not read)`, and it is not an error.
+- When anything was not read, the last line says `no changes in what was read` and a `not read this run:` line names the parts. A plain `no changes` means every part was read.
+- A list read short keeps the rows of the previous snapshot next to the ones it read, so they are not reported as new on the next poll. Its page is saved in `<state_dir>/<id>-errors/` even without `--dump`, with a `.rows.json` that holds the rows the poller read. DEHú draws its rows inside shadow roots, so the `.html` and `.txt` do not hold them.
+
 ## Config
 
 Keep the config, the state and the certificates outside this repo.
@@ -77,6 +85,9 @@ Add the same entry for `pasarela-ident.clave.gob.es`, `se-pasarela.clave.gob.es`
 - **DEHú is built from web components.** Its tables live inside shadow roots and its buttons inside closed components, so rows are read through every shadow root and «Detalles» is clicked by position.
 - **DEHú shows a CAPTCHA after many logins in a short time** (we hit it after about a dozen test logins in one afternoon). The poller stops with a clear error. Poll once or twice a day, not in a tight loop.
 - **Only the first page of each DEHú list is read** (10 rows). If there are more the summary says so instead of dropping them silently.
+- **DEHú's accepted and communications lists show the last 30 days only.** Older entries need the search form, which the poller does not use.
+- **The click on the pending tab sometimes lands on a connection-reset page.** The poller goes back to the inbox home once and clicks again.
+- **The sede sometimes answers a search with its own «Página no encontrada» page** instead of the results. The error says so; the next poll usually reads fine.
 - **Every browser is closed by PID** when the run ends, on SIGTERM and SIGINT, and when the time budget runs out.
 
 ## Schedule it
