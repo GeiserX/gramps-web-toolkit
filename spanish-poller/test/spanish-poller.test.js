@@ -367,6 +367,20 @@ test('finishPoll: the DEHú read time is the time the pending list was last read
   assert.deepStrictEqual(sedeFail.events, []);
 });
 
+test('finishPoll: a pending list never read leaves the DEHú read time unknown', () => {
+  const { finishPoll } = require('../gwt_spanish_poller.js');
+  const unread = { pending: [], done: [], communications: [], warnings: [],
+    tabs: { ...tabsRead, pending: { state: 'not read', note: 'the list did not load' } } };
+  // The first DEHú poll could not read the pending list: there is no read time to give it.
+  const r = finishPoll(PERSON, { polled_at: 'a', sede: SEDE }, { polled_at: 'b', sede: SEDE, dehu: unread }, []);
+  assert.strictEqual(r.snap.dehu_read_at, null);
+  // A login that fails next time keeps it unknown, never the time of the poll that did not read it.
+  const next = finishPoll(PERSON, r.snap, { polled_at: 'c', sede: SEDE }, ['dehu: login did not reach the inbox']);
+  assert.strictEqual(next.snap.dehu_read_at, null);
+  assert.match(next.text, /dehu: NOT READ this run; the snapshot of an earlier poll is kept/);
+  assert.doesNotMatch(next.text, /read at b/);
+});
+
 test('summarize: DEHú kept from an earlier poll says NOT READ, never «0 pending» or a plain «no changes»', () => {
   const snap = {
     polled_at: '2026-11-20T10:04:10Z', dehu_stale: true, dehu_read_at: '2026-11-17T11:00:40Z',
@@ -415,6 +429,7 @@ test('readAt: a kept side names when it was last read for real', () => {
   assert.strictEqual(readAt({ polled_at: 'a' }, 'dehu'), 'a');
   assert.strictEqual(readAt({ polled_at: 'b', dehu_stale: true, dehu_read_at: 'a' }, 'dehu'), 'a');
   assert.strictEqual(readAt({ polled_at: 'b', dehu_stale: true }, 'dehu'), null);
+  assert.strictEqual(readAt({ polled_at: 'b', dehu_read_at: null }, 'dehu'), null);
 });
 
 test('sedeNoCountError names the sede\'s own «Página no encontrada» page', () => {

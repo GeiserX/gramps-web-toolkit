@@ -734,9 +734,9 @@ async function downloadCommunications(page, items, senders, dir, already, notes)
 }
 
 // When a kept side of a snapshot was last read for real (snapshots older than this field: their poll
-// time, unless that poll had already kept it from an earlier one).
+// time, unless that poll had already kept it from an earlier one). A null field means unknown.
 function readAt(snap, side) {
-  if (snap[side + '_read_at']) return snap[side + '_read_at'];
+  if ((side + '_read_at') in snap) return snap[side + '_read_at'];
   return snap[side + '_stale'] ? null : snap.polled_at;
 }
 
@@ -815,9 +815,10 @@ function finishPoll(person, prev, snap, errors) {
   if (snap.dehu) {
     snap.dehu = keepUnreadRows(prevDehu, snap.dehu);
     errors.push(...dehuTabErrors(snap.dehu.tabs));
-    // The pending list is the one someone acts on, so the read time is the time it was last read.
+    // The pending list is the one someone acts on, so the read time is the time it was last read
+    // (null when it never was).
     const pending = (snap.dehu.tabs || {}).pending;
-    snap.dehu_read_at = !pending || pending.state === 'read' || !prevDehu ? snap.polled_at : readAt(prev, 'dehu');
+    snap.dehu_read_at = !pending || pending.state === 'read' ? snap.polled_at : prevDehu ? readAt(prev, 'dehu') : null;
   }
   // A failed part keeps its previous snapshot, so a broken login never reads as «every case disappeared».
   // The summary says so and names when the kept snapshot was read. A part that failed with no earlier
