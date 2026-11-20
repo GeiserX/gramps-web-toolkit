@@ -349,10 +349,13 @@ const wait = (page, ms) => page.waitForTimeout(ms);
 
 // In pkcs12 mode Playwright routes traffic through its client-certificate proxy, and DEHú pages
 // sometimes come back as ERR_EMPTY_RESPONSE through it. A second try a few seconds later works.
+// DEHú also leaves about one request in a hundred unanswered, from any network (ERR_TIMED_OUT).
 async function goto(page, url) {
   for (let i = 1; ; i++) {
     try { return await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {
-      if (i >= 4 || !/ERR_EMPTY_RESPONSE|ERR_CONNECTION_RESET|ERR_CONNECTION_CLOSED/.test(String(e))) throw e;
+      const lost = /ERR_EMPTY_RESPONSE|ERR_CONNECTION_RESET|ERR_CONNECTION_CLOSED|ERR_TIMED_OUT|ERR_CONNECTION_TIMED_OUT/.test(String(e))
+        || (e && e.name === 'TimeoutError');
+      if (i >= 4 || !lost) throw e;
       await wait(page, 4000 * i);
     }
   }
@@ -494,11 +497,15 @@ async function dehuLogin(page, dumpDir) {
   await wait(page, 4000);
   // The inbox home lists «Notificaciones pendientes»; the public landing page (same URL) does not.
   const inInbox = async () => /Notificaciones pendientes/.test(await page.innerText('body').catch(() => ''));
-  let tries = 0, clicked = false;
+  let tries = 0, clicked = false, seen = '', idle = 0;
   // Bounded by time, not rounds: one round can spend minutes in page reloads.
   const until = Date.now() + 6 * 60000;
   while (Date.now() < until && !(await inInbox())) {
     const body = await page.innerText('body').catch(() => '');
+    // Rounds in a row with the same page (about 1.5 s each), to find a login that stopped moving.
+    const now = page.url() + '\n' + body.slice(0, 300);
+    idle = now === seen ? idle + 1 : 0;
+    seen = now;
     // After many logins in a short time DEHú puts a CAPTCHA in front of the inbox. Only a person
     // can pass it; poll less often.
     if (/completa el CAPTCHA/i.test(body)) {
@@ -521,13 +528,21 @@ async function dehuLogin(page, dumpDir) {
       // The Cl@ve certificate step also resets the connection now and then for a minute or two;
       // reloading lands on the public page and the next round logs in again.
       await wait(page, 10000);
-      await goto(page, DEHU_HOME);
+      await goto(page, DEHU_HOME).catch(() => {});
+    } else if (idle >= 12) {
+      // DEHú leaves about one request in a hundred unanswered, from any network. When the lost one is
+      // a script of the app, the page stays blank (or half drawn) for good, so load it again.
+      idle = 0;
+      clicked = false;
+      await goto(page, DEHU_URL).catch(() => {});
     }
     await wait(page, 1500);
   }
   if (!(await inInbox())) {
+    const body = (await page.innerText('body').catch(() => '')).trim();
+    const shown = !body ? 'a blank page' : /Acceder a DEH/.test(body) ? 'the public page' : 'an unknown page';
     await dump(page, dumpDir, 'dehu-err-login');
-    throw new Error('dehu: login did not reach the inbox (' + page.url().split('?')[0] + ')');
+    throw new Error('dehu: login did not reach the inbox (' + shown + ' at ' + page.url().split('?')[0] + ')');
   }
   await wait(page, 4000);
   await dump(page, dumpDir, 'dehu-0-home');
