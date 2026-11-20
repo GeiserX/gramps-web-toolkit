@@ -12,6 +12,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Fixed
 
+- `gwt-spanish-poller` no longer prints `0 pending notifications` or `no changes` for a DEHú inbox it did not read. Before, an accepted list that read fewer rows than its tab counter failed the whole DEHú read, and the summary then showed the kept snapshot from an earlier poll as if it were new, while the inbox had two pending notifications. Now each DEHú list is checked against its tab counter on its own, a short accepted or communications list no longer throws the pending list away, and a side or list that was not read says `NOT READ` in the summary. A sede search that answers «Página no encontrada» is named as such.
 - A second `gwt-apply --apply` of a list with chained merges no longer makes a person or family the list already merged away, and no longer stops at the first merge. A merge whose winner is gone is read on the one object that holds its merge note now (#263).
 
 ## [1.5.0] - 2026-11-10

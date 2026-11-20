@@ -8,7 +8,7 @@ DEHú inbox for one or more people, each logging in with their own client certif
 Per person it snapshots the case list and the DEHú notifications and communications, diffs them against
 the previous snapshot, writes <state_dir>/<id>.json and <state_dir>/<id>.txt, and prints the summary.
 Exit 0: nothing changed. Exit 10: something changed. Exit 2: a login or a page failed and nothing
-else changed (the failed part keeps its previous snapshot).
+else changed (the failed part keeps its previous snapshot, and the summary says it was not read).
 
 Read-only toward the administration: it never submits a form and never opens, accepts or rejects a
 notification. Communications that are already readable are downloaded only when their sender matches
@@ -83,6 +83,8 @@ function parseCases(rows) {
 
 const DEHU_ID = /^[0-9a-f]{16,}$/i;
 const DEHU_ROW_ID = /^(?=.*\d)[A-Z0-9][A-Z0-9-]{5,}$/i;
+// The three DEHú lists: snapshot key and the word the summary uses.
+const DEHU_TABS = [['pending', 'pending'], ['done', 'accepted'], ['communications', 'communications']];
 const DETAIL_LABELS = ['Concepto', 'Organismo raíz', 'Fecha de estado final', 'Fecha leída', 'Fecha de caducidad', 'Fecha caducidad', 'Fecha de expiración'];
 
 // Where the notification id sits in a data row, or -1.
@@ -213,25 +215,57 @@ function describe(e) {
   }
 }
 
+// One DEHú tab as a summary phrase. A tab that was not read in full says so; it never shows a count
+// it did not read.
+function dehuTabPhrase(label, list, tab) {
+  if (!tab || tab.state === 'read') return `${list.length} ${label}`;
+  if (tab.state === 'not read') return `${label} NOT READ (${tab.note})`;
+  return `${label} NOT FULLY READ (${tab.note})`;
+}
+
+// What this poll could not read: whole sides kept from an earlier poll, and DEHú tabs read short.
+function notRead(snap) {
+  const out = [];
+  if (snap.sede_stale) out.push('sede');
+  if (snap.dehu_stale) out.push('dehu');
+  else if (snap.dehu) {
+    for (const [key, label] of DEHU_TABS) {
+      const t = (snap.dehu.tabs || {})[key];
+      if (t && t.state !== 'read') out.push(`dehu ${label}`);
+    }
+  }
+  return out;
+}
+
 function summarize(id, snap, events, errors) {
   const L = [`gwt-spanish-poller ${id} ${snap.polled_at}`];
-  if (snap.sede) {
+  const kept = (at) => `the snapshot ${at ? 'read at ' + at : 'of an earlier poll'} is kept`;
+  if (snap.sede_stale) {
+    L.push(`sede: NOT READ this run; ${kept(snap.sede_read_at)}`);
+  } else if (snap.sede) {
     const n = Object.values(snap.sede.cases);
     const by = {};
     for (const c of n) by[c.status] = (by[c.status] || 0) + 1;
     L.push(`sede: ${n.length} cases (${Object.entries(by).map(([k, v]) => `${v} ${k}`).join(', ') || 'none'})`);
   }
-  if (snap.dehu) {
-    const d = snap.dehu;
-    L.push(`dehu: ${d.pending.length} pending notifications, ${d.done.length} accepted, ${d.communications.length} communications`);
+  if (snap.dehu_stale) {
+    L.push(`dehu: NOT READ this run; ${kept(snap.dehu_read_at)}`);
+  } else if (snap.dehu) {
+    const d = snap.dehu, tabs = d.tabs || {};
+    const fresh = (key) => d[key].length - ((tabs[key] && tabs[key].kept) || 0);
+    L.push('dehu: ' + [['pending', 'pending notifications'], ['done', 'accepted'], ['communications', 'communications']]
+      .map(([key, label]) => dehuTabPhrase(label, d[key].slice(0, fresh(key)), tabs[key])).join(', '));
     for (const w of d.warnings || []) L.push(`  warning: ${w}`);
-    for (const n of d.pending) L.push(`  pending: ${[n.sender, n.subject, n.expires && 'caduca ' + n.expires].filter(Boolean).join(' · ') || n.cells.join(' | ')}`);
+    for (const n of d.pending.slice(0, fresh('pending'))) L.push(`  pending: ${[n.sender, n.subject, n.expires && 'caduca ' + n.expires].filter(Boolean).join(' · ') || n.cells.join(' | ')}`);
   }
   for (const f of snap.downloaded || []) L.push(`downloaded: ${f}`);
   for (const e of errors) L.push(`ERROR: ${e}`);
   const real = events.filter(e => e.kind !== 'baseline' || events.length === 1);
-  L.push(events.length ? 'changes:' : 'no changes');
+  const missing = notRead(snap);
+  if (events.length) L.push('changes:');
+  else L.push(missing.length ? 'no changes in what was read' : 'no changes');
   for (const e of real) L.push('  ' + describe(e));
+  if (missing.length) L.push(`not read this run: ${missing.join(', ')}`);
   return L.join('\n') + '\n';
 }
 
@@ -376,6 +410,15 @@ async function sedeForm(page, dumpDir) {
   }
 }
 
+// The sede sometimes answers a search with its own «Página no encontrada» page instead of the results
+// (seen on several days, on the first or a later slice; the next poll usually reads fine). Name that
+// case so the summary does not read like a parser fault.
+function sedeNoCountError(body, from, to) {
+  const range = `${dmy(from)}-${dmy(to)}`;
+  if (/P[aá]gina no encontrada/i.test(body)) return `sede: the sede answered «Página no encontrada» to the search ${range}`;
+  return `sede: search ${range} returned no result count`;
+}
+
 // One search over [from, to] (Date objects). Returns the cases, or null when the sede answers
 // «demasiados registros» for that range.
 async function sedeSearch(page, dumpDir, role, from, to) {
@@ -398,7 +441,7 @@ async function sedeSearch(page, dumpDir, role, from, to) {
   if (!found) {
     if (/no se encuentran datos de expedientes|no se han encontrado/i.test(body)) return {};
     await dump(page, dumpDir, 'sede-err');
-    throw new Error('sede: search returned no result count');
+    throw new Error(sedeNoCountError(body, from, to));
   }
   const total = Number(found[1]);
   const cases = {};
@@ -509,26 +552,46 @@ function dehuLoadState(items, empty) {
   return empty ? 'empty' : 'did not load';
 }
 
-async function dehuList(page, dumpDir, name, expected) {
-  // A single-page app: wait until the table shows rows, or the page says the list is empty.
-  let got = { rows: [], total: null }, items = [], empty = false;
+const DEHU_PAGE_ROWS = 10;
+
+// How completely one DEHú tab was read: {state, expected, rows, note}. state is «read», «partial» (some
+// rows are missing) or «not read». `counter` is the number on the tab («Notificaciones pendientes 2»),
+// `total` the list's own «1-10 de N elementos» line. The tab counter wins when both are known: it is
+// the number the person sees. Only the first page of a list is read.
+function dehuTabRead(items, { counter = null, total = null, empty = false } = {}) {
+  const m = String(total || '').match(/de (\d+) elementos/);
+  const listed = m ? Number(m[1]) : null;
+  const expected = counter != null ? counter : listed;
+  const rows = items.length;
+  const out = (state, note, paged) => ({ state, expected, rows, note, ...(paged ? { paged } : {}) });
+  if (!rows) {
+    if (expected === 0 || (expected == null && dehuLoadState(items, empty) === 'empty')) return out('read', null);
+    return out('not read', expected ? `tab counter says ${expected}, the list did not load` : 'the list did not load');
+  }
+  if (expected == null || rows >= expected) return out('read', null);
+  if (rows < Math.min(expected, DEHU_PAGE_ROWS)) return out('partial', `tab counter says ${expected}, ${rows} rows read`);
+  // A full first page and more behind it: the page was read, the later pages were not.
+  return out('partial', `${expected - rows} more on later pages, not read`, true);
+}
+
+async function dehuList(page, dumpDir, name, counter) {
+  // A single-page app: wait until the table shows every row the counter promises (one page at most),
+  // or the page says the list is empty.
+  let got = { rows: [], total: null }, items = [], read = null;
   for (let i = 0; i < 30; i++) {
     await wait(page, 1500);
     got = await deepRows(page);
     items = parseDehuRows(got.rows);
-    empty = /no dispones/i.test(await page.innerText('body').catch(() => ''));
-    if (items.length && (expected == null || items.length >= Math.min(expected, 10))) break;
-    if (empty && !items.length) break;
+    const empty = /no dispones/i.test(await page.innerText('body').catch(() => ''));
+    read = dehuTabRead(items, { counter, total: got.total, empty });
+    if (read.state === 'read' || read.paged) break;
   }
   await dump(page, dumpDir, name);
   if (dumpDir) fs.writeFileSync(path.join(dumpDir, name + '.rows.json'), JSON.stringify(got, null, 1));
-  if (dehuLoadState(items, empty) === 'did not load') throw new Error(`dehu: ${name} did not load`);
-  if (expected != null && items.length < Math.min(expected, 10)) throw new Error(`dehu: ${name} counter says ${expected}, parsed ${items.length}`);
-  // «1-10 de 14 elementos»: only the first page is read; say so rather than drop the rest silently.
-  const m = String(got.total || '').match(/de (\d+) elementos/);
-  const total = m ? Number(m[1]) : expected;
-  if (total != null && total > items.length) items.more = total - items.length;
-  return items;
+  // A list that did not match its counter is saved even without --dump, so the next time it happens
+  // the page is there to look at.
+  if (read.state !== 'read' && !read.paged) await dump(page, null, name + '-err');
+  return { items, ...read };
 }
 
 async function dehuCounters(page) {
@@ -537,23 +600,59 @@ async function dehuCounters(page) {
   return { pending: n(/Notificaciones pendientes\s*\n\s*(\d+)/), done: n(/Notificaciones realizadas\s*\n\s*(\d+)/) };
 }
 
+// Read the three DEHú lists. One list that fails or reads short never throws the others away: each
+// tab carries its own {state, expected, rows, note} in `tabs`.
 async function pollDehu(page, dumpDir) {
   await dehuLogin(page, dumpDir);
-  await page.getByText('Notificaciones pendientes', { exact: true }).first().click();
   let counters = { pending: null, done: null };
-  for (let i = 0; i < 20 && counters.pending == null; i++) { await wait(page, 1000); counters = await dehuCounters(page); }
-  if (counters.pending == null) throw new Error('dehu: notification counters not found');
+  for (let attempt = 0; attempt < 2 && counters.pending == null; attempt++) {
+    // The click on the tab sometimes lands on a connection-reset page; one reload of the home fixes it.
+    if (attempt) { await goto(page, DEHU_HOME); await wait(page, 4000); }
+    await page.getByText('Notificaciones pendientes', { exact: true }).first().click().catch(() => {});
+    for (let i = 0; i < 20 && counters.pending == null; i++) { await wait(page, 1000); counters = await dehuCounters(page).catch(() => counters); }
+  }
+  if (counters.pending == null) {
+    await dump(page, dumpDir, 'dehu-err-counters');
+    throw new Error('dehu: notification counters not found');
+  }
+  const lists = {};
+  const read = async (key, name, open, counter) => {
+    try {
+      await open();
+      lists[key] = await dehuList(page, dumpDir, name, counter);
+    } catch (e) {
+      lists[key] = { items: [], state: 'not read', expected: counter, rows: 0, note: String(e.message || e) };
+    }
+  };
   // Listing only: the pending rows are read, never clicked, so nothing is accepted or rejected.
-  const pending = await dehuList(page, dumpDir, 'dehu-1-pending', counters.pending);
-  await page.locator('#pane-button-1').click({ timeout: 15000 });
-  const done = await dehuList(page, dumpDir, 'dehu-2-done', counters.done);
-  await goto(page, DEHU_HOME);
-  await wait(page, 4000);
-  await page.getByText('Comunicaciones', { exact: true }).first().click();
-  const communications = await dehuList(page, dumpDir, 'dehu-3-communications', null);
-  const warnings = [['pending', pending], ['done', done], ['communications', communications]]
-    .filter(([, l]) => l.more).map(([k, l]) => `${k}: ${l.more} more on later pages, not read`);
-  return { pending: [...pending], done: [...done], communications: [...communications], warnings };
+  await read('pending', 'dehu-1-pending', async () => {}, counters.pending);
+  await read('done', 'dehu-2-done', () => page.locator('#pane-button-1').click({ timeout: 15000 }), counters.done);
+  await read('communications', 'dehu-3-communications', async () => {
+    await goto(page, DEHU_HOME);
+    await wait(page, 4000);
+    await page.getByText('Comunicaciones', { exact: true }).first().click();
+  }, null);
+  const out = { counters, tabs: {}, warnings: [] };
+  for (const [key] of DEHU_TABS) {
+    const { items, ...state } = lists[key];
+    out[key] = [...items];
+    out.tabs[key] = state;
+  }
+  return out;
+}
+
+// A tab that was not read in full keeps the previous snapshot's rows next to the ones it did read, so
+// the next poll does not report them as new. Returns a new dehu snapshot.
+function keepUnreadRows(prevDehu, dehu) {
+  const out = { ...dehu };
+  for (const [key] of DEHU_TABS) {
+    const t = (dehu.tabs || {})[key];
+    if (!t || t.state === 'read' || !prevDehu) continue;
+    const seen = new Set((dehu[key] || []).map(x => x.id));
+    out[key] = [...(dehu[key] || []), ...(prevDehu[key] || []).filter(x => !seen.has(x.id))];
+    out.tabs = { ...out.tabs, [key]: { ...t, kept: out[key].length - (dehu[key] || []).length } };
+  }
+  return out;
 }
 
 // Centre of the first element matching `rx` by its own text, searched through shadow roots. With
@@ -622,6 +721,26 @@ async function downloadCommunications(page, items, senders, dir, already, notes)
   return got;
 }
 
+// When a kept side of a snapshot was last read for real (snapshots older than this field: their poll
+// time, unless that poll had already kept it from an earlier one).
+function readAt(snap, side) {
+  if (snap[side + '_read_at']) return snap[side + '_read_at'];
+  return snap[side + '_stale'] ? null : snap.polled_at;
+}
+
+// A pending list that was not read in full is an error: it is the list someone has to act on. The
+// other two lists only count as errors when they did not load at all; a short read there is reported
+// in the summary and does not throw the pending result away.
+function dehuTabErrors(tabs) {
+  const errs = [];
+  for (const [key, label] of DEHU_TABS) {
+    const t = (tabs || {})[key];
+    if (!t || t.state === 'read') continue;
+    if (t.state === 'not read' || (key === 'pending' && !t.paged)) errs.push(`dehu: ${label} ${t.state === 'not read' ? 'not read' : 'not fully read'}: ${t.note}`);
+  }
+  return errs;
+}
+
 async function pollPerson(cfg, person, dumpDir) {
   const stateFile = path.join(cfg.state_dir, person.id + '.json');
   const prev = fs.existsSync(stateFile) ? JSON.parse(fs.readFileSync(stateFile, 'utf8')) : null;
@@ -643,13 +762,16 @@ async function pollPerson(cfg, person, dumpDir) {
     if (person.sede) try {
       session = await open();
       snap.sede = await pollSede(session.page, d, person.sede_role, person.sede_days, person.sede_slice_days);
+      snap.sede_read_at = snap.polled_at;
     } catch (e) { errors.push(String(e.message || e)); }
     // DEHú gets its own empty browser: with the Cl@ve session the sede left behind, the DEHú login
     // in chrome mode kept landing back on the public page.
     if (session) { await session.close(); session = null; }
     if (person.dehu) try {
       session = await open();
-      snap.dehu = await pollDehu(session.page, d);
+      snap.dehu = keepUnreadRows(prev && prev.dehu, await pollDehu(session.page, d));
+      snap.dehu_read_at = snap.polled_at;
+      errors.push(...dehuTabErrors(snap.dehu.tabs));
       const already = (prev && prev.downloaded_ids) || [];
       if (cfg.download_senders.length) {
         snap.downloaded = await downloadCommunications(session.page, snap.dehu.communications, cfg.download_senders,
@@ -665,8 +787,9 @@ async function pollPerson(cfg, person, dumpDir) {
   }
   if (errors.length && errorDumpDir && fs.existsSync(errorDumpDir)) errors.push('failed pages saved in ' + errorDumpDir);
   // A failed part keeps its previous snapshot, so a broken login never reads as «every case disappeared».
-  if (!snap.sede && prev && prev.sede) snap.sede_stale = true, snap.sede = prev.sede;
-  if (!snap.dehu && prev && prev.dehu) snap.dehu_stale = true, snap.dehu = prev.dehu;
+  // The summary says so and names when the kept snapshot was read.
+  if (!snap.sede && prev && prev.sede) Object.assign(snap, { sede_stale: true, sede: prev.sede, sede_read_at: readAt(prev, 'sede') });
+  if (!snap.dehu && prev && prev.dehu) Object.assign(snap, { dehu_stale: true, dehu: prev.dehu, dehu_read_at: readAt(prev, 'dehu') });
   if (!snap.downloaded_ids) snap.downloaded_ids = (prev && prev.downloaded_ids) || [];
   const events = diff(prev, snap).filter(e => !(snap.sede_stale && /^case_/.test(e.kind)) && !(snap.dehu_stale && /notification|communication/.test(e.kind)));
   const text = summarize(person.id, snap, events, errors);
@@ -714,4 +837,4 @@ async function main(argv) {
   return changed ? EXIT_CHANGED : failed ? EXIT_ERROR : EXIT_SAME;
 }
 
-module.exports = { dump, setErrorDumpDir, isoDate, openPkcs12, openChrome, dehuLogin, loadConfig, parseCases, parseDehuRows, dehuLoadState, diff, senderAllowed, summarize, describe, main, EXIT_SAME, EXIT_CHANGED, EXIT_ERROR };
+module.exports = { dump, setErrorDumpDir, isoDate, openPkcs12, openChrome, dehuLogin, pollDehu, loadConfig, parseCases, parseDehuRows, dehuLoadState, dehuTabRead, dehuTabErrors, keepUnreadRows, readAt, sedeNoCountError, diff, senderAllowed, summarize, describe, main, EXIT_SAME, EXIT_CHANGED, EXIT_ERROR };
