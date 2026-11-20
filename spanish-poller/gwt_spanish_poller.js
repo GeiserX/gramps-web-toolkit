@@ -353,7 +353,9 @@ const wait = (page, ms) => page.waitForTimeout(ms);
 async function goto(page, url) {
   for (let i = 1; ; i++) {
     try { return await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {
-      if (i >= 4 || !/ERR_EMPTY_RESPONSE|ERR_CONNECTION_RESET|ERR_CONNECTION_CLOSED|ERR_TIMED_OUT|ERR_CONNECTION_TIMED_OUT/.test(String(e))) throw e;
+      const lost = /ERR_EMPTY_RESPONSE|ERR_CONNECTION_RESET|ERR_CONNECTION_CLOSED|ERR_TIMED_OUT|ERR_CONNECTION_TIMED_OUT/.test(String(e))
+        || (e && e.name === 'TimeoutError');
+      if (i >= 4 || !lost) throw e;
       await wait(page, 4000 * i);
     }
   }

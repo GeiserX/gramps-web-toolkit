@@ -442,9 +442,13 @@ test('sedeNoCountError names the sede\'s own «Página no encontrada» page', ()
 // ---------- DEHú login that stops moving ----------
 // A fake DEHú and Cl@ve: `loads` lists what each page load shows ('blank' = a script of the app was
 // lost, the page stays empty), then the public page, Cl@ve and the inbox follow the poller's clicks.
-// Waits move a mocked clock, so the 6-minute bound runs in no time.
+// Waits move a stubbed Date.now (t.mock.timers cannot mock Date on Node 18), so the 6-minute bound
+// runs in no time.
+const REAL_NOW = Date.now;
 function fakeLogin(t, { loads, gotoFails = [] }) {
-  t.mock.timers.enable({ apis: ['Date'] });
+  let now = REAL_NOW();
+  Date.now = () => now;
+  t.after(() => { Date.now = REAL_NOW; });
   let screen = 'none', n = 0;
   const calls = [];
   const bodies = { blank: '', public: 'DEHÚ - SERVICIO DE NOTIFICACIONES\nAcceder a DEHú\n', clave: 'Acceso DNIe / Certificado electrónico\n', inbox: 'Notificaciones pendientes\n0\n' };
@@ -454,10 +458,10 @@ function fakeLogin(t, { loads, gotoFails = [] }) {
     goto: async (url) => {
       calls.push('goto ' + url);
       const f = gotoFails.shift();
-      if (f) throw new Error('page.goto: net::' + f + ' at ' + url);
+      if (f) throw f instanceof Error ? f : new Error('page.goto: net::' + f + ' at ' + url);
       screen = loads[Math.min(n++, loads.length - 1)];
     },
-    waitForTimeout: async (ms) => { t.mock.timers.tick(ms); },
+    waitForTimeout: async (ms) => { now += ms; },
     innerText: async () => bodies[screen],
     url: () => (screen === 'clave' ? 'https://clave.example/Proxy2/ServiceProvider' : 'https://dehu.example/'),
     content: async () => '',
@@ -488,4 +492,19 @@ test('dehuLogin: a page that never draws is reported as a blank page, not as the
   const { dehuLogin } = require('../gwt_spanish_poller.js');
   const page = fakeLogin(t, { loads: ['blank'] });
   await assert.rejects(dehuLogin(page, null), /did not reach the inbox \(a blank page at https:\/\/dehu\.example\/\)/);
+});
+
+test('dehuLogin: a Playwright timeout of a page load is tried again, any other error is not', async (t) => {
+  const { dehuLogin } = require('../gwt_spanish_poller.js');
+  const timeout = Object.assign(new Error('page.goto: Timeout 60000ms exceeded.'), { name: 'TimeoutError' });
+  const page = fakeLogin(t, { loads: ['public'], gotoFails: [timeout] });
+  await dehuLogin(page, null);
+  assert.deepStrictEqual(page.calls, ['goto https://dehu.redsara.es/', 'goto https://dehu.redsara.es/', 'acceder', 'clave']);
+  const other = fakeLogin(t, { loads: ['public'], gotoFails: [new Error('page.goto: net::ERR_NAME_NOT_RESOLVED')] });
+  await assert.rejects(dehuLogin(other, null), /ERR_NAME_NOT_RESOLVED/);
+  assert.strictEqual(other.calls.length, 1);
+});
+
+test('fakeLogin gives the real clock back', () => {
+  assert.strictEqual(Date.now, REAL_NOW);
 });
