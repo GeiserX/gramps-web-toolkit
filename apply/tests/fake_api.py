@@ -237,7 +237,7 @@ class FakeGrampsWeb:
                 del store[parts[1]]
                 return Resp(200, [{"type": "delete", "handle": parts[1]}])
             if method == "PUT":
-                if headers.get("If-Match"):  # like the real server: a GET ETag never matches
+                if headers.get("If-Match"):  # like the server before Gramps Web API 3.26.0: a GET ETag never matches
                     return Resp(412, "Resource does not match provided ETag")
                 new = drop_class(body)
                 new["change"] = self.tick()
