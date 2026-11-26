@@ -146,3 +146,11 @@ cousins	E1	2026-02-03
 ```
 
 The fixtures behind these examples are invented and made by `report/fixtures/make_fixtures.py`.
+
+### Unmarked paths in a digest
+
+A digest with a root shows path tag counts beside a relation when any link is
+probable, weak or unmarked, in Markdown and HTML and in all three languages.
+These are the existing tree tag classifications, not an independent assessment
+of the documents. A recorded relation alone does not prove its evidence chain.
+Fully confirmed paths keep the shorter heading. No tree records change.
