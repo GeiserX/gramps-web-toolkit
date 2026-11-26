@@ -690,7 +690,7 @@ def render(T, groups, base, lang, fmt, since=''):
             if g['kin']:
                 head += ', ' + g['kin'][lang]
             url = web_url(base, 'people', T['people'][p].get('gramps_id') or p)
-            if g['links'] and (g['links']['probable'] or g['links']['weak']):
+            if g['links'] and any(g['links'][k] for k in ('probable', 'weak', 'unmarked')):
                 head += ' ' + s(lang, 'path_line') % tuple(g['links'][k] for k in LINK_CLASSES)
         else:
             head, url = s(lang, 'not_attached'), ''
