@@ -1,0 +1,12 @@
+gwt_apply/ops.py | if self._existing("Place", op) or self._merged_away("Place", op): | if self._existing("Place", op): | a rerun of add_place skips a place the list's own merge_place merged away
+gwt_apply/ops.py | if self._existing("Source", op) or self._merged_away("Source", op): | if self._existing("Source", op): | a rerun of add_source skips a source the list's own merge_source merged away
+gwt_apply/ops.py | if self._existing("Repository", op) or self._merged_away("Repository", op): | if self._existing("Repository", op): | a rerun of add_repository skips a repository the list's own merge_repository merged away
+gwt_apply/ops.py | if event is None and self._merged_away("Event", op): | if False: | a rerun of add_event skips an event the list's own merge_event merged away, never reusing the winner
+gwt_apply/ops.py | if cit is None and self._merged_away("Citation", op): | if False: | a rerun of add_citation skips a citation the list's own merge_citation merged away, never reusing the winner
+gwt_apply/ops.py | if not self.c.exists("Note", stable_handle(merge["key"] + "#merge")): | if True: | an add whose merge note exists reads the merge, so a rerun skips it
+gwt_apply/ops.py | holder = self._note_holder(cls, {note}) | holder = self._note_holder(cls, {note}) if winner is None else None | a winner whose Gramps ID names another object now is read on the one object that holds the merge note
+gwt_apply/ops.py | if winner is not None and not merge["winner"].startswith("key:"): | if False: | a rerun never merges the object that took a gone winner's Gramps ID into the next winner of the chain
+gwt_apply/ops.py | present = (cls, ref) not in self._gone and self.c.handle_for_gramps_id(cls, ref) is not None | present = self.c.handle_for_gramps_id(cls, ref) is not None | a merge whose loser's Gramps ID names another object now skips when its note shows it landed
+gwt_apply/ops.py | if holder is not None:  # the list's object is gone | if False:  # the list's object is gone | an op that names a Gramps ID the list merged away, now another object's, stops instead of touching it
+gwt_apply/ops.py | if not self.verify: | if False: | only --verify reads a merged-away Gramps ID that names another object now on the note's holder; --apply stops
+gwt_apply/ops.py | if not self.c.exists("Note", stable_handle(merge["key"] + "#merge")): | if False: | on a first run an add never reads its merge's winner, so a list sends no more requests than before

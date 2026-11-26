@@ -796,6 +796,9 @@ class Applier:
         self._amended: dict[str, set[str]] = {}  # add_person key -> identity fields a later update_person of the list sets
         self._merge_of: dict[str, tuple[int, dict]] = {}  # loser -> (index, merge_* op of the list that names it)
         self._merged_keys: dict[str, str] = {}  # key a rerun found merged away by this list -> the line its ops skip with
+        # (class, Gramps ID) of a merge winner a rerun found merged away while that ID names another object now ->
+        # the object that holds the merge note instead
+        self._gone: dict[tuple[str, str], dict] = {}
         self._refs: dict[str, list[tuple[str, str]]] | None = None  # offline: handle -> the snapshot objects naming it
         client.touch = self._touch
 
@@ -812,6 +815,13 @@ class Applier:
         if not _GRAMPS_ID.match(ref):
             raise Conflict(f"{ref!r} is neither key:<key> nor a Gramps ID")
         handle = self.c.handle_for_gramps_id(cls, ref)
+        holder = self._gone.get((cls, ref))
+        if holder is not None:  # the list's object is gone: the one that has its Gramps ID now is another one
+            if not self.verify:
+                raise Conflict(f"no {cls} with Gramps ID {ref}: this list merged it away, and that ID names another "
+                               f"{cls.lower()} now")
+            self.actions.append(f"{cls} {ref} was merged into {self.label(holder)}: reading it there")
+            return holder["handle"]
         if handle is None and self.verify:
             handle = self._merged_into(cls, ref)
         if handle is None:
@@ -843,16 +853,25 @@ class Applier:
         return rows[0]
 
     def _merge_winner(self, cls: str, merge: dict) -> dict:
-        """The winner of a merge op of the list. When a later merge took that winner away too, Gramps moved this
-        op's merge note on to the next winner with the rest of its note list, so the one object that holds the note
-        now stands in for it. With no such object the Conflict of the missing winner stands."""
+        """The winner of a merge op of the list, as a rule. When a later merge took that winner away too, Gramps
+        moved this op's merge note on to the next winner with the rest of its note list, so the one object that
+        holds the note now stands in for it. That holds also when the winner's Gramps ID names another object now,
+        one without the note. With no such object the winner stands, or the Conflict of the missing winner."""
+        note = stable_handle(merge["key"] + "#merge")
         try:
-            return self.obj(cls, merge["winner"])
-        except Conflict:  # the winner is gone: look for the object its merge note moved on to
-            holder = self._note_holder(cls, {stable_handle(merge["key"] + "#merge")})
-            if holder is None:
-                raise
-            return holder
+            winner, missing = self.obj(cls, merge["winner"]), None
+        except Conflict as exc:
+            winner, missing = None, exc
+        if winner is not None and note in (winner.get("note_list") or []):
+            return winner
+        holder = self._note_holder(cls, {note})  # the winner is gone or lacks the note: look for where it moved on to
+        if holder is None:
+            if missing is not None:
+                raise missing
+            return winner
+        if winner is not None and not merge["winner"].startswith("key:"):  # its Gramps ID names another object now
+            self._gone[(cls, merge["winner"])] = holder
+        return holder
 
     def obj(self, cls: str, ref: str) -> dict:
         obj = self.c.get(cls, self.resolve(cls, ref))
@@ -1194,12 +1213,16 @@ class Applier:
         return obj
 
     def _merged_away(self, cls: str, op: dict) -> bool:
-        """A rerun of a list that makes an object and then merges it into another with merge_person or merge_family:
-        the object is gone and the winner carries the note that merge wrote (or, when a later merge took the winner
-        away too, the object that holds the note now). The add has landed, so it skips, and so do the merge and every
-        op between them that names key:<key>."""
+        """A rerun of a list that makes an object and then merges it into another with a merge op: the object is
+        gone and the winner carries the note that merge wrote (or, when a later merge took the winner away too, the
+        object that holds the note now). The add has landed, so it skips, and so do the merge and every op between
+        them that names key:<key>."""
         _, merge = self._merge_of.get(f"key:{op['key']}", (0, None))
         if merge is None:
+            return False
+        # no merge note anywhere: the merge never ran, so the add makes the object. On a first run this reads only
+        # the list of note handles, which the merge reads anyway, and not the winner
+        if not self.c.exists("Note", stable_handle(merge["key"] + "#merge")):
             return False
         try:
             winner = self._merge_winner(cls, merge)
@@ -1447,6 +1470,8 @@ class Applier:
         date = parse_date(op.get("date"))
         etype = op["type"]
         event = self._existing("Event", op)
+        if event is None and self._merged_away("Event", op):
+            return
         if event is None:
             refs = target.get("event_ref_list") or []
             events = self.c.get_many("Event", [r["ref"] for r in refs]) if refs else []
@@ -1871,7 +1896,7 @@ class Applier:
         self.save(before, target)
 
     def add_place(self, op):
-        if self._existing("Place", op):
+        if self._existing("Place", op) or self._merged_away("Place", op):
             return
         parent = self.resolve("Place", op["enclosed_by"]) if op.get("enclosed_by") else None
         name = op["name"].strip()
@@ -1904,7 +1929,7 @@ class Applier:
         self.keymap[op["key"]] = h
 
     def add_source(self, op):
-        if self._existing("Source", op):
+        if self._existing("Source", op) or self._merged_away("Source", op):
             return
         title = op["title"].strip()
         rows = [r for r in self.c.list_all("Source", ["title", "author", "pubinfo", "gramps_id"])
@@ -1942,7 +1967,7 @@ class Applier:
             obj["address_list"] = addrs
 
     def add_repository(self, op):
-        if self._existing("Repository", op):
+        if self._existing("Repository", op) or self._merged_away("Repository", op):
             return
         name = op["name"].strip()
         for row in self.c.list_all("Repository", ["name", "gramps_id"]):
@@ -2063,6 +2088,8 @@ class Applier:
         source = self.resolve("Source", op["source"])
         page = op["page"].strip()
         cit = self._existing("Citation", op)
+        if cit is None and self._merged_away("Citation", op):
+            return
         handle = cit["handle"] if cit else None
         if handle is None:
             rows = [r for r in self.c.list_all("Citation", ["source_handle", "page", "confidence", "date", "gramps_id"])
@@ -2442,13 +2469,13 @@ class Applier:
         self.actions.append(f"delete {cls} {self.label(loser)}")
 
     def _merge_done(self, cls: str, op) -> bool:
-        """A rerun: the loser is gone and the winner carries this op's merge note. A winner a later merge took away
-        is read on the object that holds the note now."""
+        """A rerun: the loser is gone and the winner carries this op's merge note. A winner a later merge took away,
+        or whose Gramps ID names another object now, is read on the object that holds the note now."""
         ref = op["loser"]
         if ref.startswith("key:"):
             present = self.c.exists(cls, self.keymap.get(ref[4:]) or stable_handle(ref[4:]))
-        else:
-            present = self.c.handle_for_gramps_id(cls, ref) is not None
+        else:  # an ID a rerun found merged away by this list is gone, even when another object has it now
+            present = (cls, ref) not in self._gone and self.c.handle_for_gramps_id(cls, ref) is not None
         if present:
             return False
         note = stable_handle(op["key"] + "#merge")
