@@ -799,6 +799,8 @@ class Applier:
         # (class, Gramps ID) of a merge winner a rerun found merged away while that ID names another object now ->
         # the object that holds the merge note instead
         self._gone: dict[tuple[str, str], dict] = {}
+        # (class, Gramps ID) -> the merge ops of the list that name it as winner, until an op first names that ID
+        self._winners: dict[tuple[str, str], list[dict]] = {}
         self._refs: dict[str, list[tuple[str, str]]] | None = None  # offline: handle -> the snapshot objects naming it
         client.touch = self._touch
 
@@ -815,11 +817,12 @@ class Applier:
         if not _GRAMPS_ID.match(ref):
             raise Conflict(f"{ref!r} is neither key:<key> nor a Gramps ID")
         handle = self.c.handle_for_gramps_id(cls, ref)
+        self._read_merges_won_by(cls, ref)
         holder = self._gone.get((cls, ref))
         if holder is not None:  # the list's object is gone: the one that has its Gramps ID now is another one
             if not self.verify:
-                raise Conflict(f"no {cls} with Gramps ID {ref}: this list merged it away, and that ID names another "
-                               f"{cls.lower()} now")
+                raise Conflict(f"no {cls} with Gramps ID {ref}: the note of this list's merge into it is on "
+                               f"{self.label(holder)} now, and that ID names another {cls.lower()}")
             self.actions.append(f"{cls} {ref} was merged into {self.label(holder)}: reading it there")
             return holder["handle"]
         if handle is None and self.verify:
@@ -827,6 +830,23 @@ class Applier:
         if handle is None:
             raise Conflict(f"no {cls} with Gramps ID {ref}")
         return handle
+
+    def _read_merges_won_by(self, cls: str, ref: str) -> None:
+        """A rerun: the first op that names a merge winner of the list by its Gramps ID reads that merge first, so an
+        op ahead of the merge also finds the ID gone when it names another object now (see _merge_winner). A merge
+        names its own winner before it writes its note, so a merge note found here was written by an earlier run. On
+        a first run no such note exists, and this reads only the list of note handles, which the merge reads anyway."""
+        merges = self._winners.pop((cls, ref), [])  # popped first: _merge_winner resolves this same ID again
+        try:
+            for merge in merges:
+                if self.c.exists("Note", stable_handle(merge["key"] + "#merge")):
+                    try:
+                        self._merge_winner(cls, merge)
+                    except Conflict:  # the winner is gone and no one object holds the note: the op stops as before
+                        pass
+        except Exception:  # a failed read: the next try of the op reads these merges again
+            self._winners[(cls, ref)] = merges
+            raise
 
     def _merged_into(self, cls: str, ref: str) -> str | None:
         """The handle of the object `ref` was merged into: the one whose note list holds the note our merge op
@@ -858,6 +878,9 @@ class Applier:
         holds the note now stands in for it. That holds also when the winner's Gramps ID names another object now,
         one without the note. With no such object the winner stands, or the Conflict of the missing winner."""
         note = stable_handle(merge["key"] + "#merge")
+        others = self._winners.get((cls, merge["winner"]))
+        if others:  # this read is the one the first op naming the winner would make: never twice
+            self._winners[(cls, merge["winner"])] = [m for m in others if m is not merge]
         try:
             winner, missing = self.obj(cls, merge["winner"]), None
         except Conflict as exc:
@@ -869,7 +892,7 @@ class Applier:
             if missing is not None:
                 raise missing
             return winner
-        if winner is not None and not merge["winner"].startswith("key:"):  # its Gramps ID names another object now
+        if winner is not None:  # its Gramps ID names another object now (a key: winner is its own, never another)
             self._gone[(cls, merge["winner"])] = holder
         return holder
 
@@ -1075,10 +1098,12 @@ class Applier:
     def _run(self, ops: list[dict], results: list[Result]) -> None:
         self._list_deletes = {_delete_object(op["object"]) for op in ops if op.get("op") == "delete"}
         self._amended = _amended_people(ops)
-        self._merge_of = {}
+        self._merge_of, self._winners = {}, {}
         for i, op in enumerate(ops):
             if "loser" in op:
                 self._merge_of.setdefault(op["loser"], (i, op))  # the first merge of a loser is the one that can land
+                if _GRAMPS_ID.match(op["winner"]):
+                    self._winners.setdefault((op["op"][6:].capitalize(), op["winner"]), []).append(op)
         for index, op in enumerate(ops):
             res = Result(op["key"], op["op"], op["ruling"])
             self._op_tags = list(dict.fromkeys(t for t in [self.run_tag, *_tag_names(op.get("tag"))] if t))
@@ -1221,8 +1246,9 @@ class Applier:
         if merge is None:
             return False
         # no merge note anywhere: the merge never ran, so the add makes the object. On a first run this reads only
-        # the list of note handles, which the merge reads anyway, and not the winner
-        if not self.c.exists("Note", stable_handle(merge["key"] + "#merge")):
+        # the list of note handles, which the merge reads anyway, and not the winner. An add an earlier --apply of
+        # this list logged as done still reads the winner: its note list may keep the handle of a note since deleted
+        if not self.c.exists("Note", stable_handle(merge["key"] + "#merge")) and op["key"] not in self.landed:
             return False
         try:
             winner = self._merge_winner(cls, merge)
@@ -1230,10 +1256,23 @@ class Applier:
             return False
         if stable_handle(merge["key"] + "#merge") not in (winner.get("note_list") or []):
             return False
+        if self._loser_left(cls, merge):  # the run stopped between the note and the merge: the add reuses it again
+            return False
         line = f"skip: {cls} key {op['key']!r} is already merged into {self.label(winner)} by {merge['key']!r}"
         self._merged_keys[op["key"]] = line
         self.actions.append(line)
         return True
+
+    def _loser_left(self, cls: str, merge: dict) -> bool:
+        """Whether the loser the merge note names by its Gramps ID is still in the tree. An add that reused an object
+        found it by its fields, not by its key, so when a run stopped between writing the note and the merge, only
+        that ID shows the object is still there. A merge an earlier --apply of this list logged as done has landed,
+        even when another object has the loser's ID now."""
+        if merge["key"] in self.landed:
+            return False
+        note = self.c.get("Note", stable_handle(merge["key"] + "#merge")) or {}
+        m = re.match(rf"Merged {cls} (\S+) ", (note.get("text") or {}).get("string") or "")
+        return m is not None and self.c.handle_for_gramps_id(cls, m[1]) is not None
 
     def _before_landed_merge(self, index: int, op: dict) -> bool:
         """An op between an add that _merged_away skipped and its merge, naming key:<key>: it ran before that merge
