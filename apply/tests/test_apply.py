@@ -2006,6 +2006,22 @@ def test_rerun_of_an_add_whose_loser_id_now_names_another_object_writes_nothing(
     assert fake.store[NS_OF[cls]]["unrelated"] == unrelated
 
 
+@pytest.mark.parametrize("cls,unrelated_fields", [
+    ("Event", {"type": "Baptism", "date": parse_date("1890")}),  # same type and date, but on no one: not I0004's
+    ("Citation", {"source_handle": "src2", "page": "p. 6"}),  # the add's page, but in another source
+])
+def test_an_object_with_the_freed_loser_id_that_matches_only_part_of_the_reuse_rule_is_not_the_loser(cls, unrelated_fields):
+    """The object that got the freed loser ID shares some fields with the add, not all its reuse rule asks for, so the
+    add would not reuse it: the rerun skips, and never reuses the winner or touches that object."""
+    fake, ops = _classes_fake(), ADD_THEN_MERGE_ANY[cls]
+    res = run(fake, ops)
+    assert [r.status for r in res] == ["done"] * len(ops), [r.actions for r in res]
+    made = res[-1].actions[-1].split()[-1]  # "delete Event E0004": the Gramps ID the add's object had
+    unrelated = fake.add(NS_OF[cls], {"handle": "unrelated", "gramps_id": made, **unrelated_fields})
+    _assert_rerun_writes_nothing(fake, ops, ops[-1]["winner"])
+    assert fake.store[NS_OF[cls]]["unrelated"] == unrelated
+
+
 def test_a_merge_an_earlier_apply_logged_as_done_skips_its_add_when_its_loser_id_names_another_object():
     """The object that got the freed loser ID has the add's own fields, so only the log tells it from a loser the
     merge never took: without the log the dry run reuses it and merges it, the limit docs/apply.md names."""
