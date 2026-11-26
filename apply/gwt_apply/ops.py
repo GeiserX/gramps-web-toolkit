@@ -796,6 +796,11 @@ class Applier:
         self._amended: dict[str, set[str]] = {}  # add_person key -> identity fields a later update_person of the list sets
         self._merge_of: dict[str, tuple[int, dict]] = {}  # loser -> (index, merge_* op of the list that names it)
         self._merged_keys: dict[str, str] = {}  # key a rerun found merged away by this list -> the line its ops skip with
+        # (class, Gramps ID) of a merge winner a rerun found merged away while that ID names another object now ->
+        # the object that holds the merge note instead
+        self._gone: dict[tuple[str, str], dict] = {}
+        # (class, Gramps ID) -> the merge ops of the list that name it as winner, until an op first names that ID
+        self._winners: dict[tuple[str, str], list[dict]] = {}
         self._refs: dict[str, list[tuple[str, str]]] | None = None  # offline: handle -> the snapshot objects naming it
         client.touch = self._touch
 
@@ -812,11 +817,36 @@ class Applier:
         if not _GRAMPS_ID.match(ref):
             raise Conflict(f"{ref!r} is neither key:<key> nor a Gramps ID")
         handle = self.c.handle_for_gramps_id(cls, ref)
+        self._read_merges_won_by(cls, ref)
+        holder = self._gone.get((cls, ref))
+        if holder is not None:  # the list's object is gone: the one that has its Gramps ID now is another one
+            if not self.verify:
+                raise Conflict(f"no {cls} with Gramps ID {ref}: the note of this list's merge into it is on "
+                               f"{self.label(holder)} now, and that ID names another {cls.lower()}")
+            self.actions.append(f"{cls} {ref} was merged into {self.label(holder)}: reading it there")
+            return holder["handle"]
         if handle is None and self.verify:
             handle = self._merged_into(cls, ref)
         if handle is None:
             raise Conflict(f"no {cls} with Gramps ID {ref}")
         return handle
+
+    def _read_merges_won_by(self, cls: str, ref: str) -> None:
+        """A rerun: the first op that names a merge winner of the list by its Gramps ID reads that merge first, so an
+        op ahead of the merge also finds the ID gone when it names another object now (see _merge_winner). A merge
+        names its own winner before it writes its note, so a merge note found here was written by an earlier run. On
+        a first run no such note exists, and this reads only the list of note handles, which the merge reads anyway."""
+        merges = self._winners.pop((cls, ref), [])  # popped first: _merge_winner resolves this same ID again
+        try:
+            for merge in merges:
+                if self.c.exists("Note", stable_handle(merge["key"] + "#merge")):
+                    try:
+                        self._merge_winner(cls, merge)
+                    except Conflict:  # the winner is gone and no one object holds the note: the op stops as before
+                        pass
+        except Exception:  # a failed read: the next try of the op reads these merges again
+            self._winners[(cls, ref)] = merges
+            raise
 
     def _merged_into(self, cls: str, ref: str) -> str | None:
         """The handle of the object `ref` was merged into: the one whose note list holds the note our merge op
@@ -843,16 +873,28 @@ class Applier:
         return rows[0]
 
     def _merge_winner(self, cls: str, merge: dict) -> dict:
-        """The winner of a merge op of the list. When a later merge took that winner away too, Gramps moved this
-        op's merge note on to the next winner with the rest of its note list, so the one object that holds the note
-        now stands in for it. With no such object the Conflict of the missing winner stands."""
+        """The winner of a merge op of the list, as a rule. When a later merge took that winner away too, Gramps
+        moved this op's merge note on to the next winner with the rest of its note list, so the one object that
+        holds the note now stands in for it. That holds also when the winner's Gramps ID names another object now,
+        one without the note. With no such object the winner stands, or the Conflict of the missing winner."""
+        note = stable_handle(merge["key"] + "#merge")
+        others = self._winners.get((cls, merge["winner"]))
+        if others:  # this read is the one the first op naming the winner would make: never twice
+            self._winners[(cls, merge["winner"])] = [m for m in others if m is not merge]
         try:
-            return self.obj(cls, merge["winner"])
-        except Conflict:  # the winner is gone: look for the object its merge note moved on to
-            holder = self._note_holder(cls, {stable_handle(merge["key"] + "#merge")})
-            if holder is None:
-                raise
-            return holder
+            winner, missing = self.obj(cls, merge["winner"]), None
+        except Conflict as exc:
+            winner, missing = None, exc
+        if winner is not None and note in (winner.get("note_list") or []):
+            return winner
+        holder = self._note_holder(cls, {note})  # the winner is gone or lacks the note: look for where it moved on to
+        if holder is None:
+            if missing is not None:
+                raise missing
+            return winner
+        if winner is not None:  # its Gramps ID names another object now (a key: winner is its own, never another)
+            self._gone[(cls, merge["winner"])] = holder
+        return holder
 
     def obj(self, cls: str, ref: str) -> dict:
         obj = self.c.get(cls, self.resolve(cls, ref))
@@ -1056,10 +1098,12 @@ class Applier:
     def _run(self, ops: list[dict], results: list[Result]) -> None:
         self._list_deletes = {_delete_object(op["object"]) for op in ops if op.get("op") == "delete"}
         self._amended = _amended_people(ops)
-        self._merge_of = {}
+        self._merge_of, self._winners = {}, {}
         for i, op in enumerate(ops):
             if "loser" in op:
                 self._merge_of.setdefault(op["loser"], (i, op))  # the first merge of a loser is the one that can land
+                if _GRAMPS_ID.match(op["winner"]):
+                    self._winners.setdefault((op["op"][6:].capitalize(), op["winner"]), []).append(op)
         for index, op in enumerate(ops):
             res = Result(op["key"], op["op"], op["ruling"])
             self._op_tags = list(dict.fromkeys(t for t in [self.run_tag, *_tag_names(op.get("tag"))] if t))
@@ -1193,13 +1237,19 @@ class Applier:
             self.actions.append(f"skip: {cls} {self.label(obj)} already made by key {op['key']!r}")
         return obj
 
-    def _merged_away(self, cls: str, op: dict) -> bool:
-        """A rerun of a list that makes an object and then merges it into another with merge_person or merge_family:
-        the object is gone and the winner carries the note that merge wrote (or, when a later merge took the winner
-        away too, the object that holds the note now). The add has landed, so it skips, and so do the merge and every
-        op between them that names key:<key>."""
+    def _merged_away(self, cls: str, op: dict, reuses=None) -> bool:
+        """A rerun of a list that makes an object and then merges it into another with a merge op: the object is
+        gone and the winner carries the note that merge wrote (or, when a later merge took the winner away too, the
+        object that holds the note now). The add has landed, so it skips, and so do the merge and every op between
+        them that names key:<key>. `reuses(obj)` is the add's own rule for an object of the tree it would reuse
+        (None for add_person, which never reuses one)."""
         _, merge = self._merge_of.get(f"key:{op['key']}", (0, None))
         if merge is None:
+            return False
+        # no merge note anywhere: the merge never ran, so the add makes the object. On a first run this reads only
+        # the list of note handles, which the merge reads anyway, and not the winner. An add an earlier --apply of
+        # this list logged as done still reads the winner: its note list may keep the handle of a note since deleted
+        if not self.c.exists("Note", stable_handle(merge["key"] + "#merge")) and op["key"] not in self.landed:
             return False
         try:
             winner = self._merge_winner(cls, merge)
@@ -1207,10 +1257,26 @@ class Applier:
             return False
         if stable_handle(merge["key"] + "#merge") not in (winner.get("note_list") or []):
             return False
+        if self._loser_left(cls, merge, reuses):  # the run stopped between the note and the merge: reuse it again
+            return False
         line = f"skip: {cls} key {op['key']!r} is already merged into {self.label(winner)} by {merge['key']!r}"
         self._merged_keys[op["key"]] = line
         self.actions.append(line)
         return True
+
+    def _loser_left(self, cls: str, merge: dict, reuses) -> bool:
+        """Whether the loser the merge note names by its Gramps ID is still in the tree. An add that reused an object
+        found it by its fields, not by its key, so when a run stopped between writing the note and the merge, only
+        that ID shows the object is still there. The object with that ID counts only when the add would reuse it:
+        once the merge freed the ID, another object can have it, and that one is not the add's. An add that made its
+        object (add_person always does) is found by its key when the merge did not run. A merge an earlier --apply of
+        this list logged as done has landed, even when another object has the loser's ID now."""
+        if reuses is None or merge["key"] in self.landed:
+            return False
+        note = self.c.get("Note", stable_handle(merge["key"] + "#merge")) or {}
+        m = re.match(rf"Merged {cls} (\S+) ", (note.get("text") or {}).get("string") or "")
+        handle = self.c.handle_for_gramps_id(cls, m[1]) if m is not None else None
+        return handle is not None and reuses(self.c.get(cls, handle) or {})
 
     def _before_landed_merge(self, index: int, op: dict) -> bool:
         """An op between an add that _merged_away skipped and its merge, naming key:<key>: it ran before that merge
@@ -1447,23 +1513,35 @@ class Applier:
         date = parse_date(op.get("date"))
         etype = op["type"]
         event = self._existing("Event", op)
+
+        def same_date(ev):  # an event of the target this add reuses: the same type and date
+            linked = any(r["ref"] == ev.get("handle") for r in target.get("event_ref_list") or [])
+            return linked and str(ev.get("type")).lower() == etype.lower() and date_key(ev.get("date")) == date_key(date)
+
+        def reuses(ev):  # the whole rule _reuse applies: the type and date on the target, then the place and description
+            if op.get("description") and (ev.get("description") or "").strip() != op["description"].strip():
+                return False
+            return same_date(ev) and (not op.get("place") or ev.get("place") == self.resolve("Place", op["place"]))
+
+        if event is None and self._merged_away("Event", op, reuses):
+            return
         if event is None:
             refs = target.get("event_ref_list") or []
             events = self.c.get_many("Event", [r["ref"] for r in refs]) if refs else []
             roles = {r["ref"]: r.get("role") for r in refs}
-            same_date = []
+            same = []
             for ev in events:
                 if str(ev.get("type")).lower() != etype.lower():
                     continue
-                if date_key(ev.get("date")) == date_key(date):
-                    same_date.append(ev)
+                if same_date(ev):
+                    same.append(ev)
                     continue
                 if etype in SINGLE_VITAL and role == "Primary" and roles.get(ev["handle"]) == "Primary":
                     raise Conflict(
                         f"{target_cls} {self.label(target)} already has a {etype} with another date "
                         f"(Event {self.label(ev)}); fix that event instead of adding a second one"
                     )
-            place = self.resolve("Place", op["place"]) if op.get("place") and same_date else None
+            place = self.resolve("Place", op["place"]) if op.get("place") and same else None
 
             def checks(ev):
                 rows = []
@@ -1477,7 +1555,7 @@ class Applier:
                 return rows
 
             ev = self._reuse(
-                "Event", same_date, f"type and date on {target_cls} {self.label(target)}", checks,
+                "Event", same, f"type and date on {target_cls} {self.label(target)}", checks,
                 lambda f: f"if it is that event, correct it with update_event; if it is another {etype}, give this op "
                           "its date so the two can be told apart")
             if ev is not None:
@@ -1516,13 +1594,17 @@ class Applier:
         mother = self.resolve("Person", op["mother"]) if op.get("mother") else None
         children = [self.resolve("Person", c) for c in op.get("children") or []]
         family = self._existing("Family", op)
-        if family is None and self._merged_away("Family", op):
+
+        def same_parents(fam):  # the family of the tree this add reuses
+            return (fam.get("father_handle") or None) == father and (fam.get("mother_handle") or None) == mother
+
+        if family is None and self._merged_away("Family", op, same_parents):
             return
         if family is None:
             parent = self.c.get("Person", father or mother)
             fams = self.c.get_many("Family", parent.get("family_list") or [])
             for fam in fams:
-                if (fam.get("father_handle") or None) == father and (fam.get("mother_handle") or None) == mother:
+                if same_parents(fam):
                     family = fam
                     self.keymap[op["key"]] = fam["handle"]
                     self.actions.append(f"skip: these parents already have Family {self.label(fam)}")
@@ -1871,17 +1953,24 @@ class Applier:
         self.save(before, target)
 
     def add_place(self, op):
-        if self._existing("Place", op):
-            return
-        parent = self.resolve("Place", op["enclosed_by"]) if op.get("enclosed_by") else None
         name = op["name"].strip()
-        for row in self.c.list_all("Place", ["name", "place_type", "placeref_list", "gramps_id"]):
+
+        def same_place(row, parent):  # the place of the tree this add reuses: the same name, type and parent place
             row_parent = next((r.get("ref") for r in row.get("placeref_list") or []), None)
-            if (
+            return (
                 fold((row.get("name") or {}).get("value")) == fold(name)
                 and fold(str(row.get("place_type"))) == fold(op["type"])
                 and row_parent == parent
-            ):
+            )
+
+        def parent_of():
+            return self.resolve("Place", op["enclosed_by"]) if op.get("enclosed_by") else None
+
+        if self._existing("Place", op) or self._merged_away("Place", op, lambda row: same_place(row, parent_of())):
+            return
+        parent = parent_of()
+        for row in self.c.list_all("Place", ["name", "place_type", "placeref_list", "gramps_id"]):
+            if same_place(row, parent):
                 self.keymap[op["key"]] = row["handle"]
                 self.actions.append(
                     f"skip: Place {row.get('gramps_id') or row['handle']} "
@@ -1904,15 +1993,21 @@ class Applier:
         self.keymap[op["key"]] = h
 
     def add_source(self, op):
-        if self._existing("Source", op):
-            return
         title = op["title"].strip()
-        rows = [r for r in self.c.list_all("Source", ["title", "author", "pubinfo", "gramps_id"])
-                if (r.get("title") or "").strip() == title]
+
+        def same_title(row):  # a source of the tree this add reuses, when its author and publication info agree
+            return (row.get("title") or "").strip() == title
 
         def checks(row):
             return [(f, (row.get(f) or "").strip() == op[f].strip(), repr(row.get(f) or ""), repr(op[f]))
                     for f in ("author", "pubinfo") if op.get(f)]
+
+        def reuses(row):  # the whole rule _reuse applies: the title, then every other field the op sets
+            return same_title(row) and all(r[1] for r in checks(row))
+
+        if self._existing("Source", op) or self._merged_away("Source", op, reuses):
+            return
+        rows = [r for r in self.c.list_all("Source", ["title", "author", "pubinfo", "gramps_id"]) if same_title(r)]
 
         found = self._reuse("Source", rows, "title", checks,
                             lambda f: f"if it is that source, set its {f} in Gramps and rerun; if it is another "
@@ -1942,11 +2037,15 @@ class Applier:
             obj["address_list"] = addrs
 
     def add_repository(self, op):
-        if self._existing("Repository", op):
-            return
         name = op["name"].strip()
+
+        def same_name(row):  # the repository of the tree this add reuses
+            return fold(row.get("name") or "") == fold(name)
+
+        if self._existing("Repository", op) or self._merged_away("Repository", op, same_name):
+            return
         for row in self.c.list_all("Repository", ["name", "gramps_id"]):
-            if fold(row.get("name") or "") == fold(name):
+            if same_name(row):
                 self.keymap[op["key"]] = row["handle"]
                 self.actions.append(f"skip: Repository {row.get('gramps_id') or row['handle']} has that name")
                 return
@@ -2063,21 +2162,30 @@ class Applier:
         source = self.resolve("Source", op["source"])
         page = op["page"].strip()
         cit = self._existing("Citation", op)
+
+        def same_page(row):  # a citation of the tree this add reuses, when its confidence and date agree
+            return row.get("source_handle") == source and (row.get("page") or "").strip() == page
+
+        def checks(row):
+            out = []
+            if "confidence" in op:
+                theirs = row.get("confidence")
+                theirs = 2 if theirs is None else theirs
+                out.append(("confidence", theirs == op["confidence"], theirs, op["confidence"]))
+            if op.get("date"):
+                out.append(("date", date_key(row.get("date")) == date_key(parse_date(op["date"])),
+                            _date_text(row.get("date")), op["date"]))
+            return out
+
+        def reuses(row):  # the whole rule _reuse applies: the source and page, then the confidence and date
+            return same_page(row) and all(r[1] for r in checks(row))
+
+        if cit is None and self._merged_away("Citation", op, reuses):
+            return
         handle = cit["handle"] if cit else None
         if handle is None:
             rows = [r for r in self.c.list_all("Citation", ["source_handle", "page", "confidence", "date", "gramps_id"])
-                    if r.get("source_handle") == source and (r.get("page") or "").strip() == page]
-
-            def checks(row):
-                out = []
-                if "confidence" in op:
-                    theirs = row.get("confidence")
-                    theirs = 2 if theirs is None else theirs
-                    out.append(("confidence", theirs == op["confidence"], theirs, op["confidence"]))
-                if op.get("date"):
-                    out.append(("date", date_key(row.get("date")) == date_key(parse_date(op["date"])),
-                                _date_text(row.get("date")), op["date"]))
-                return out
+                    if same_page(r)]
 
             def fix(f):
                 return (f"{'raise it' if f == 'confidence' else 'correct it'} with update_citation, or give this "
@@ -2442,13 +2550,13 @@ class Applier:
         self.actions.append(f"delete {cls} {self.label(loser)}")
 
     def _merge_done(self, cls: str, op) -> bool:
-        """A rerun: the loser is gone and the winner carries this op's merge note. A winner a later merge took away
-        is read on the object that holds the note now."""
+        """A rerun: the loser is gone and the winner carries this op's merge note. A winner a later merge took away,
+        or whose Gramps ID names another object now, is read on the object that holds the note now."""
         ref = op["loser"]
         if ref.startswith("key:"):
             present = self.c.exists(cls, self.keymap.get(ref[4:]) or stable_handle(ref[4:]))
-        else:
-            present = self.c.handle_for_gramps_id(cls, ref) is not None
+        else:  # an ID a rerun found merged away by this list is gone, even when another object has it now
+            present = (cls, ref) not in self._gone and self.c.handle_for_gramps_id(cls, ref) is not None
         if present:
             return False
         note = stable_handle(op["key"] + "#merge")
@@ -2464,6 +2572,8 @@ class Applier:
         winner, loser = self.obj("Person", op["winner"]), self.obj("Person", op["loser"])
         for o in (winner, loser):
             o.setdefault("_class", "Person")
+        if winner["handle"] == loser["handle"]:  # a key: of an earlier list can name the winner itself
+            raise Conflict("winner and loser are the same person")
         name = loser.get("primary_name") or {}
         label = f"Person {self.label(loser)} ({name.get('first_name', '')} " + " ".join(
             s.get("surname", "") for s in name.get("surname_list") or []) + ")"
@@ -2503,6 +2613,8 @@ class Applier:
         winner, loser = self.obj("Event", op["winner"]), self.obj("Event", op["loser"])
         for o in (winner, loser):
             o.setdefault("_class", "Event")
+        if winner["handle"] == loser["handle"]:  # an add_event of the list that reused the winner: the merge would delete it
+            raise Conflict("winner and loser are the same event")
         if winner.get("type") != loser.get("type"):
             raise Conflict(f"Event {self.label(winner)} is a {winner.get('type')}, {self.label(loser)} a {loser.get('type')}")
         for field in ("date", "place", "description"):
@@ -2540,6 +2652,8 @@ class Applier:
         if self._merge_done("Family", op):
             return
         winner, loser = self.obj("Family", op["winner"]), self.obj("Family", op["loser"])
+        if winner["handle"] == loser["handle"]:  # an add_family of the list that reused the winner: the merge would delete it
+            raise Conflict("winner and loser are the same family")
         body = {}
         for role in ("father", "mother"):
             w, l_ = winner.get(f"{role}_handle"), loser.get(f"{role}_handle")

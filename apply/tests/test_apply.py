@@ -1685,6 +1685,460 @@ def test_an_add_whose_chained_merge_left_no_note_is_made_again():
     assert plan[0].status == "done" and plan[0].actions[-1].startswith("create Person"), plan[0].actions
 
 
+def _classes_fake():
+    """_chain_fake plus three sources (S0001-S0003), three unlinked Baptisms of 1890 (E0001-E0003) and three
+    citations of page "p. 5" in S0001 (C0001-C0003), so every class with a merge op has a winner to merge into."""
+    fake = _chain_fake()
+    for h in ("src1", "src2", "src3"):
+        fake.add("sources", {"handle": h, "title": f"Parish register {h[-1]}"})
+    for h in ("ev1", "ev2", "ev3"):
+        fake.add("events", {"handle": h, "type": "Baptism", "date": parse_date("1890")})
+    for h in ("ct1", "ct2", "ct3"):
+        fake.add("citations", {"handle": h, "source_handle": "src1", "page": "p. 5"})
+    return fake
+
+
+ADD_THEN_MERGE_ANY = {  # every class with a merge op: the list makes an object, then merges it into another one
+    "Person": ADD_THEN_MERGE["Person"],
+    "Family": ADD_THEN_MERGE["Family"],
+    "Place": [{"op": "add_place", "key": "pl-new", "ruling": R, "name": "Shelbyville", "type": "Town"},
+              _merge("Place", "m1", "P0001", "key:pl-new")],
+    "Source": [{"op": "add_source", "key": "s-new", "ruling": R, "title": "Register of baptisms, book 2"},
+               _merge("Source", "m1", "S0001", "key:s-new")],
+    "Repository": [{"op": "add_repository", "key": "r-new", "ruling": R, "name": "Shelbyville archive", "type": "Archive"},
+                   _merge("Repository", "m1", "R0001", "key:r-new")],
+    "Event": [{"op": "add_event", "key": "e-new", "ruling": R, "type": "Baptism", "date": "1890", "person": "I0004"},
+              _merge("Event", "m1", "E0001", "key:e-new")],
+    "Citation": [{"op": "add_citation", "key": "c-new", "ruling": R, "source": "S0001", "page": "p. 6",
+                  "attach": [{"person": "I0004"}]},
+                 {"op": "update_citation", "key": "c-fix", "ruling": R, "citation": "key:c-new", "set": {"page": "p. 5"},
+                  "expect": "p. 6"},
+                 _merge("Citation", "m1", "C0001", "key:c-new")],
+}
+NS_OF = {"Person": "people", "Family": "families", "Place": "places", "Source": "sources",
+         "Repository": "repositories", "Event": "events", "Citation": "citations"}
+# a second object of each class to take the winner away into, outside the list, and an unrelated object that gets the
+# winner's Gramps ID after that
+SECOND = {"Person": "I0001", "Family": "F0002", "Place": "P0002", "Source": "S0002", "Repository": "R0002",
+          "Event": "E0002", "Citation": "C0002"}
+UNRELATED = {
+    "Person": {"primary_name": {"first_name": "Zoe", "surname_list": [{"surname": "Other", "primary": True}]}},
+    "Family": {},
+    "Place": {"name": {"value": "Ogdenville"}},
+    "Source": {"title": "Another book"},
+    "Repository": {"name": "Another archive", "urls": []},
+    "Event": {"type": "Death", "date": parse_date("1950")},
+    "Citation": {"source_handle": "src2", "page": "p. 99"},
+}
+
+
+def _all_counts(fake):
+    return {ns: len(objs) for ns, objs in fake.store.items()}
+
+
+def _assert_rerun_writes_nothing(fake, ops, winner):
+    plan = run(fake, ops, dry_run=True)
+    assert [r.status for r in plan] == ["skip"] * len(ops), [r.actions for r in plan]
+    counts, writes, store = _all_counts(fake), len(fake.writes()), json.dumps(fake.store, sort_keys=True)
+    res = run(fake, ops)  # a real second --apply: no object made again, nothing merged, no write at all
+    assert [r.status for r in res] == ["skip"] * len(ops), [r.actions for r in res]
+    assert _all_counts(fake) == counts and len(fake.writes()) == writes
+    assert json.dumps(fake.store, sort_keys=True) == store
+    assert f"is already merged into {winner}" in res[0].actions[-1], res[0].actions
+    return res
+
+
+@pytest.mark.parametrize("cls", list(ADD_THEN_MERGE_ANY))
+def test_rerun_of_an_add_of_any_class_merged_into_another_object_writes_nothing(cls, tmp_path, monkeypatch, capsys):
+    import gwt_apply.client as clientmod
+    fake, ops = _classes_fake(), ADD_THEN_MERGE_ANY[cls]
+    res = run(fake, ops)
+    assert [r.status for r in res] == ["done"] * len(ops), [r.actions for r in res]
+    _assert_rerun_writes_nothing(fake, ops, ops[-1]["winner"])
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: fake)
+    for k, v in {"GWT_URL": "https://gw.example", "GWT_USERNAME": "u", "GWT_PASSWORD": "pw", "GWT_TREE": "tree-test"}.items():
+        monkeypatch.setenv(k, v)
+    changes = tmp_path / "list.jsonl"
+    changes.write_text("".join(json.dumps(op) + "\n" for op in ops))
+    assert main([str(changes), "--verify"]) == 0
+    assert f"VERIFY: {len(ops)} of {len(ops)} op(s) in the tree" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("cls,edit", [
+    ("Place", lambda fake: fake.store["places"]["pl1"].update(name={"value": "Shelbyville"}, place_type="Town")),
+    ("Source", lambda fake: fake.store["sources"]["src1"].update(title="Register of baptisms, book 2")),
+    ("Repository", lambda fake: fake.store["repositories"]["rp1"].update(name="Shelbyville archive")),
+])
+def test_rerun_skips_an_add_merged_away_even_when_its_winner_now_matches_it(cls, edit):
+    """The winner now has the fields the add asks for: the add must not reuse it, or the merge stops on one object."""
+    fake, ops = _classes_fake(), ADD_THEN_MERGE_ANY[cls]
+    assert [r.status for r in run(fake, ops)] == ["done"] * len(ops)
+    edit(fake)
+    _assert_rerun_writes_nothing(fake, ops, ops[-1]["winner"])
+
+
+
+@pytest.mark.parametrize("cls", list(ADD_THEN_MERGE_ANY))
+def test_the_merged_away_check_sends_no_request_on_a_first_run(cls, monkeypatch):
+    """The add reads the winner only when the merge note exists, which it learns from the note handles the merge
+    reads anyway: a first run sends the same requests as one with no check at all."""
+    ops = ADD_THEN_MERGE_ANY[cls]
+    fake = _classes_fake()
+    assert [r.status for r in run(fake, ops)] == ["done"] * len(ops)
+    with_check = len(fake.calls)
+    monkeypatch.setattr(Applier, "_merged_away", lambda self, cls, op, reuses=None: False)
+    fake = _classes_fake()
+    assert [r.status for r in run(fake, ops)] == ["done"] * len(ops)
+    assert with_check == len(fake.calls)
+
+def _take_winner_away_and_reuse_its_id(fake, cls, winner):
+    """Merge the winner into a second object outside the list, then give an unrelated object the winner's Gramps ID."""
+    outside = _merge(cls, "outside", SECOND[cls], winner)
+    assert run(fake, [outside])[0].status == "done"
+    return fake.add(NS_OF[cls], {"handle": "unrelated", "gramps_id": winner, **UNRELATED[cls]})
+
+
+@pytest.mark.parametrize("cls", list(ADD_THEN_MERGE_ANY))
+def test_rerun_of_an_add_whose_winner_id_now_names_another_object_writes_nothing(cls):
+    fake, ops = _classes_fake(), ADD_THEN_MERGE_ANY[cls]
+    assert [r.status for r in run(fake, ops)] == ["done"] * len(ops)
+    unrelated = _take_winner_away_and_reuse_its_id(fake, cls, ops[-1]["winner"])
+    _assert_rerun_writes_nothing(fake, ops, SECOND[cls])
+    assert fake.store[NS_OF[cls]]["unrelated"] == unrelated  # never touched
+
+
+@pytest.mark.parametrize("chain", ["Person add, 2 merges", "Person, 2 merges", "Family add, 2 merges",
+                                   "Place, 2 merges", "Repository, 2 merges"])
+def test_rerun_of_a_chain_whose_middle_winner_id_now_names_another_object_writes_nothing(chain):
+    fake, ops = _chain_fake(), CHAINS[chain]
+    assert [r.status for r in run(fake, ops)] == ["done"] * len(ops)
+    cls = ops[-1]["op"][6:].capitalize()
+    unrelated = fake.add(NS_OF[cls], {"handle": "unrelated", "gramps_id": ops[-1]["loser"], **UNRELATED[cls]})
+    res = _assert_rerun_writes_nothing(fake, ops, ops[-1]["winner"])
+    assert all(f"into {ops[-1]['winner']}" in r.actions[-1] for r in res), [r.actions for r in res]
+    assert fake.store[NS_OF[cls]]["unrelated"] == unrelated  # never merged into the last winner
+
+
+def test_an_op_between_the_merges_naming_a_reused_id_stops_and_verify_reads_it_on_the_holder(tmp_path, monkeypatch, capsys):
+    import gwt_apply.client as clientmod
+    note = {"op": "add_note", "key": "n-mid", "ruling": R, "text": "Godmother.", "attach": [{"person": "I0004"}]}
+    c = CHAINS["Person add, 2 merges"]
+    ops = [*c[:2], note, c[2]]
+    fake = _chain_fake()
+    assert [r.status for r in run(fake, ops)] == ["done"] * len(ops)
+    unrelated = fake.add("people", {"handle": "unrelated", "gramps_id": "I0004", **UNRELATED["Person"]})
+    writes = len(fake.writes())
+    res = run(fake, ops)  # the note is never put on the unrelated person who has I0004 now
+    assert [r.status for r in res] == ["skip", "skip", "conflict"], [r.actions for r in res]
+    assert "the note of this list's merge into it is on I0001 now" in res[-1].actions[-1], res[-1].actions
+    assert len(fake.writes()) == writes and fake.store["people"]["unrelated"] == unrelated
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: fake)
+    for k, v in {"GWT_URL": "https://gw.example", "GWT_USERNAME": "u", "GWT_PASSWORD": "pw", "GWT_TREE": "tree-test"}.items():
+        monkeypatch.setenv(k, v)
+    changes = tmp_path / "list.jsonl"
+    changes.write_text("".join(json.dumps(op) + "\n" for op in ops))
+    assert main([str(changes), "--verify"]) == 0  # --verify reads I0004 on I0001, which holds the note now
+    assert f"VERIFY: {len(ops)} of {len(ops)} op(s) in the tree" in capsys.readouterr().out
+
+
+def _verify(fake, ops, tmp_path, monkeypatch):
+    import gwt_apply.client as clientmod
+    monkeypatch.setattr(clientmod.requests, "Session", lambda: fake)
+    for k, v in {"GWT_URL": "https://gw.example", "GWT_USERNAME": "u", "GWT_PASSWORD": "pw", "GWT_TREE": "tree-test"}.items():
+        monkeypatch.setenv(k, v)
+    changes = tmp_path / "list.jsonl"
+    changes.write_text("".join(json.dumps(op) + "\n" for op in ops))
+    return main([str(changes), "--verify"])
+
+
+def test_an_op_before_the_first_merge_naming_a_reused_winner_id_stops(tmp_path, monkeypatch, capsys):
+    """The op comes before every merge of the list, so no merge has read the reused ID yet when it runs."""
+    note = {"op": "add_note", "key": "n-pre", "ruling": R, "text": "Godmother.", "attach": [{"person": "I0004"}]}
+    ops = [note, *CHAINS["Person, 2 merges"]]
+    fake = _chain_fake()
+    assert [r.status for r in run(fake, ops)] == ["done"] * len(ops)
+    unrelated = fake.add("people", {"handle": "unrelated", "gramps_id": "I0004", **UNRELATED["Person"]})
+    writes = len(fake.writes())
+    res = run(fake, ops)  # the note is never put on the unrelated person who has I0004 now
+    assert [r.status for r in res] == ["conflict"], [r.actions for r in res]
+    assert "the note of this list's merge into it is on I0001 now" in res[0].actions[-1], res[0].actions
+    assert len(fake.writes()) == writes and fake.store["people"]["unrelated"] == unrelated
+    assert _verify(fake, ops, tmp_path, monkeypatch) == 0  # --verify reads I0004 on I0001, which holds both notes now
+    assert f"VERIFY: {len(ops)} of {len(ops)} op(s) in the tree" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("dry_run", [False, True])
+@pytest.mark.parametrize("at", [0, 2])
+def test_naming_a_merge_winner_on_a_first_run_sends_no_extra_request(at, dry_run, monkeypatch):
+    """Before the merge its note does not exist, and the merge reads the merges its winner won as it names it, before
+    it writes its note: no op reads the winner for that."""
+    note = {"op": "add_note", "key": "n-mid", "ruling": R, "text": "Godmother.", "attach": [{"person": "I0004"}]}
+    ops = list(CHAINS["Person add, 2 merges"])
+    ops.insert(at, note)
+    fake = _chain_fake()
+    assert [r.status for r in run(fake, ops, dry_run=dry_run)] == ["done"] * len(ops)
+    with_check = len(fake.calls)
+    monkeypatch.setattr(Applier, "_read_merges_won_by", lambda self, cls, ref: None)
+    fake = _chain_fake()
+    assert [r.status for r in run(fake, ops, dry_run=dry_run)] == ["done"] * len(ops)
+    assert with_check == len(fake.calls)
+
+
+def test_a_rerun_of_a_merge_reads_its_winner_once():
+    fake, ops = _chain_fake(), CHAINS["Person, 2 merges"][:1]
+    assert [r.status for r in run(fake, ops)] == ["done"]
+    start = len(fake.calls)
+    assert [r.status for r in run(fake, ops)] == ["skip"]
+    assert [c for c in fake.calls[start:] if c[1].startswith("/api/people/anna")] == [("GET", "/api/people/anna")]
+
+
+def test_a_failed_read_of_a_merge_won_by_an_id_is_read_again_on_the_next_try(monkeypatch):
+    from gwt_apply.client import Retryable
+    note = {"op": "add_note", "key": "n-pre", "ruling": R, "text": "Godmother.", "attach": [{"person": "I0004"}]}
+    ops = [note, *CHAINS["Person, 2 merges"]]
+    fake = _chain_fake()
+    assert [r.status for r in run(fake, ops)] == ["done"] * len(ops)
+    fake.add("people", {"handle": "unrelated", "gramps_id": "I0004", **UNRELATED["Person"]})
+    client = Client("https://gw.example", "u", "s3cret-pw", tree="tree-test", session=fake)
+    client.login()
+    applier, real, failed = Applier(client, retries=3, retry_wait=0), Applier._merge_winner, []
+
+    def flaky(self, cls, merge):
+        if not failed:
+            failed.append(merge["key"])
+            raise Retryable("answer lost")
+        return real(self, cls, merge)
+
+    monkeypatch.setattr(Applier, "_merge_winner", flaky)
+    res = applier.run(ops)
+    assert failed == ["m1"] and [r.status for r in res] == ["conflict"], [r.actions for r in res]
+
+
+@pytest.mark.parametrize("cls", ["Person", "Family"])
+def test_an_add_that_landed_skips_when_its_merge_note_was_deleted_but_its_handle_stayed(cls):
+    """Someone deleted the merge note and the winner's note list kept its handle. The add an earlier --apply of the
+    list logged as done reads the winner still, as before the check of the note; one that never landed makes it."""
+    fake, ops = _classes_fake(), ADD_THEN_MERGE_ANY[cls]
+    assert [r.status for r in run(fake, ops)] == ["done"] * len(ops)
+    del fake.store["notes"][stable_handle(ops[-1]["key"] + "#merge")]
+    counts, writes = _all_counts(fake), len(fake.writes())
+    client = Client("https://gw.example", "u", "s3cret-pw", tree="tree-test", session=fake)
+    client.login()
+    res = Applier(client, retries=1, retry_wait=0, landed=frozenset({ops[0]["key"]})).run(ops)
+    assert [r.status for r in res] == ["skip"] * len(ops), [r.actions for r in res]
+    assert _all_counts(fake) == counts and len(fake.writes()) == writes
+    plan = run(fake, ops, dry_run=True)  # no log shows the add landed: nothing shows the merge did, so it is made again
+    assert plan[0].status == "done", plan[0].actions
+
+
+REUSE_THEN_MERGE = {  # the add finds an object of the tree by its fields and reuses it, then the list merges it away
+    "Family": ("f1", [{"op": "add_family", "key": "f-new", "ruling": R, "father": "I0002", "mother": "I0001"},
+                      _merge("Family", "m1", "F0002", "key:f-new")]),
+    "Event": ("ev2", [{"op": "add_event", "key": "e-new", "ruling": R, "type": "Baptism", "date": "1890",
+                       "person": "I0004"},
+                      _merge("Event", "m1", "E0001", "key:e-new")]),
+    "Place": ("pl2", [{"op": "add_place", "key": "pl-new", "ruling": R, "name": "Springfield", "type": "Town"},
+                      _merge("Place", "m1", "P0001", "key:pl-new")]),
+    "Source": ("src2", [{"op": "add_source", "key": "s-new", "ruling": R, "title": "Parish register 2"},
+                        _merge("Source", "m1", "S0001", "key:s-new")]),
+    "Repository": ("rp1", [{"op": "add_repository", "key": "r-new", "ruling": R, "name": "Springfield archive"},
+                           _merge("Repository", "m1", "R0002", "key:r-new")]),
+    "Citation": ("ct1", [{"op": "add_citation", "key": "c-new", "ruling": R, "source": "S0001", "page": "p. 5",
+                          "attach": [{"person": "I0004"}]},
+                         _merge("Citation", "m1", "C0003", "key:c-new")]),
+}
+
+
+def _reuse_fake(cls):
+    """_classes_fake where the add of REUSE_THEN_MERGE[cls] finds the object it reuses: Anna's Baptism E0002 and
+    the town P0002. The family of John and Mary, the source, the repository and the citation are there already."""
+    fake = _classes_fake()
+    if cls == "Event":
+        fake.store["people"]["anna"]["event_ref_list"] = [{"ref": "ev2", "role": "Primary"}]
+    elif cls == "Place":
+        fake.store["places"]["pl2"]["place_type"] = "Town"
+    return fake
+
+
+def _fail_first_merge(fake):
+    route = fake._route
+
+    def failing(method, path, headers, params, body, data):
+        merging = (method == "POST" and "/merge/" in path) or (method == "DELETE" and "/repositories/" in path)
+        if merging and not getattr(fake, "merge_failed", False):  # merge_repository deletes the loser itself
+            fake.merge_failed = True
+            return Resp(400, {"error": "refused"})
+        return route(method, path, headers, params, body, data)
+    fake._route = failing
+
+
+@pytest.mark.parametrize("cls", list(REUSE_THEN_MERGE))
+def test_a_rerun_finishes_a_merge_of_a_reused_object_that_stopped_after_its_note(cls):
+    """The note is on the winner, but the merge request failed, so the reused object is still there: the rerun must
+    not read the note as the merge, or both ops skip and the object stays."""
+    (loser, ops), fake = REUSE_THEN_MERGE[cls], _reuse_fake(cls)
+    _fail_first_merge(fake)
+    res = run(fake, ops)
+    assert res[-1].status == "error" and loser in fake.store[NS_OF[cls]], [r.actions for r in res]
+    winner = next(o for o in fake.store[NS_OF[cls]].values() if o.get("gramps_id") == ops[-1]["winner"])
+    assert stable_handle("m1#merge") in winner["note_list"]  # the run stopped between the note and the merge
+    res = run(fake, ops)
+    assert res[-1].status == "done" and loser not in fake.store[NS_OF[cls]], [r.actions for r in res]
+    _assert_rerun_writes_nothing(fake, ops, ops[-1]["winner"])
+
+
+LOSER_ID_REUSED = {**{f"made {cls}": (cls, _classes_fake, ops) for cls, ops in ADD_THEN_MERGE_ANY.items()},
+                   **{f"reused {cls}": (cls, lambda c=cls: _reuse_fake(c), ops)
+                      for cls, (_, ops) in REUSE_THEN_MERGE.items()}}
+
+
+@pytest.mark.parametrize("case", list(LOSER_ID_REUSED))
+def test_rerun_of_an_add_whose_loser_id_now_names_another_object_writes_nothing(case):
+    """The merge freed the Gramps ID the add's object had, and an unrelated object got it. No log of the list is at
+    hand. The rerun must not read that object as a loser the merge never took: it is not one the add would reuse."""
+    cls, make, ops = LOSER_ID_REUSED[case]
+    fake = make()
+    res = run(fake, ops)  # an add that reuses an object is a skip
+    assert [r.status for r in res][-1] == "done" and "conflict" not in [r.status for r in res], [r.actions for r in res]
+    made = res[-1].actions[-1].split()[-1]  # "delete Place P0004": the Gramps ID the loser had
+    unrelated = fake.add(NS_OF[cls], {"handle": "unrelated", "gramps_id": made, **UNRELATED[cls]})
+    _assert_rerun_writes_nothing(fake, ops, ops[-1]["winner"])
+    assert fake.store[NS_OF[cls]]["unrelated"] == unrelated
+
+
+@pytest.mark.parametrize("cls,unrelated_fields", [
+    ("Event", {"type": "Baptism", "date": parse_date("1890")}),  # same type and date, but on no one: not I0004's
+    ("Citation", {"source_handle": "src2", "page": "p. 6"}),  # the add's page, but in another source
+])
+def test_an_object_with_the_freed_loser_id_that_matches_only_part_of_the_reuse_rule_is_not_the_loser(cls, unrelated_fields):
+    """The object that got the freed loser ID shares some fields with the add, not all its reuse rule asks for, so the
+    add would not reuse it: the rerun skips, and never reuses the winner or touches that object."""
+    fake, ops = _classes_fake(), ADD_THEN_MERGE_ANY[cls]
+    res = run(fake, ops)
+    assert [r.status for r in res] == ["done"] * len(ops), [r.actions for r in res]
+    made = res[-1].actions[-1].split()[-1]  # "delete Event E0004": the Gramps ID the add's object had
+    unrelated = fake.add(NS_OF[cls], {"handle": "unrelated", "gramps_id": made, **unrelated_fields})
+    _assert_rerun_writes_nothing(fake, ops, ops[-1]["winner"])
+    assert fake.store[NS_OF[cls]]["unrelated"] == unrelated
+
+
+FULL_RULE = {  # an add that sets a field its reuse rule checks after the key fields, and an object that differs there
+    "Source author": (
+        [{"op": "add_source", "key": "s-new", "ruling": R, "title": "Register of baptisms, book 2", "author": "The clerk"},
+         _merge("Source", "m1", "S0001", "key:s-new")],
+        {"title": "Register of baptisms, book 2", "author": "Another clerk"}),
+    "Citation confidence": (
+        [{"op": "add_citation", "key": "c-new", "ruling": R, "source": "S0001", "page": "p. 6", "confidence": 2,
+          "attach": [{"person": "I0004"}]},
+         {"op": "update_citation", "key": "c-fix", "ruling": R, "citation": "key:c-new", "set": {"page": "p. 5"},
+          "expect": "p. 6"},
+         _merge("Citation", "m1", "C0001", "key:c-new")],
+        {"source_handle": "src1", "page": "p. 6", "confidence": 4}),
+    "Event description": (
+        [{"op": "add_event", "key": "e-new", "ruling": R, "type": "Baptism", "date": "1890", "person": "I0004",
+          "description": "In the parish church"},
+         _merge("Event", "m1", "E0001", "key:e-new")],
+        {"type": "Baptism", "date": parse_date("1890"), "description": "At home"}),
+    "Event place": (
+        [{"op": "add_event", "key": "e-new", "ruling": R, "type": "Baptism", "date": "1890", "person": "I0004",
+          "place": "P0001"},
+         _merge("Event", "m1", "E0001", "key:e-new")],
+        {"type": "Baptism", "date": parse_date("1890"), "place": "pl2"}),
+}
+
+
+@pytest.mark.parametrize("case", list(FULL_RULE))
+def test_an_object_with_the_freed_loser_id_that_the_full_reuse_rule_rejects_is_not_the_loser(case):
+    """The object that got the freed loser ID matches the add's key fields, but not a field _reuse checks after them,
+    so the add would stop on it, not reuse it: the rerun skips instead of stopping."""
+    ops, fields = FULL_RULE[case]
+    cls = ops[-1]["op"][6:].capitalize()
+    fake = _classes_fake()
+    fake.store["events"]["ev1"].update(description="In the parish church", place="pl1")  # what the merge keeps
+    res = run(fake, ops)
+    assert [r.status for r in res] == ["done"] * len(ops), [r.actions for r in res]
+    made = res[-1].actions[-1].split()[-1]  # "delete Source S0004": the Gramps ID the add's object had
+    unrelated = fake.add(NS_OF[cls], {"handle": "unrelated", "gramps_id": made, **fields})
+    if cls == "Event":  # on the add's person, so only the field after type and date tells it apart
+        fake.store["people"]["anna"]["event_ref_list"].append({"ref": "unrelated", "role": "Primary"})
+    _assert_rerun_writes_nothing(fake, ops, ops[-1]["winner"])
+    assert fake.store[NS_OF[cls]]["unrelated"] == unrelated
+
+
+def test_a_merge_an_earlier_apply_logged_as_done_skips_its_add_when_its_loser_id_names_another_object():
+    """The object that got the freed loser ID has the add's own fields, so only the log tells it from a loser the
+    merge never took: without the log the dry run reuses it and merges it, the limit docs/apply.md names."""
+    fake, ops = _classes_fake(), ADD_THEN_MERGE_ANY["Place"]
+    res = run(fake, ops)
+    assert [r.status for r in res] == ["done"] * len(ops)
+    made = res[-1].actions[-1].split()[-1]  # "delete Place P0004": the Gramps ID the place got
+    unrelated = fake.add("places", {"handle": "unrelated", "gramps_id": made, "name": {"value": "Shelbyville"},
+                                    "place_type": "Town"})
+    plan = run(fake, ops, dry_run=True)
+    assert plan[-1].status == "done" and plan[-1].actions[-1] == f"delete Place {made}", [r.actions for r in plan]
+    counts, writes = _all_counts(fake), len(fake.writes())
+    client = Client("https://gw.example", "u", "s3cret-pw", tree="tree-test", session=fake)
+    client.login()
+    res = Applier(client, retries=1, retry_wait=0, landed=frozenset(op["key"] for op in ops)).run(ops)
+    assert [r.status for r in res] == ["skip"] * len(ops), [r.actions for r in res]
+    assert _all_counts(fake) == counts and len(fake.writes()) == writes
+    assert fake.store["places"]["unrelated"] == unrelated
+
+
+@pytest.mark.parametrize("cls", ["Event", "Family"])
+def test_a_merge_of_an_add_that_reused_its_winner_stops_instead_of_deleting_the_winner(cls):
+    """The add finds the winner itself by its fields, so key:<key> names the winner. Merging an object into itself
+    would delete it: the merge stops, and the winner stays as it was."""
+    fake = _classes_fake()
+    if cls == "Event":
+        fake.store["people"]["anna"]["event_ref_list"] = [{"ref": "ev1", "role": "Primary"}]
+        ops, winner = [REUSE_THEN_MERGE["Event"][1][0], _merge("Event", "m1", "E0001", "key:e-new")], "ev1"
+    else:
+        fake.store["people"]["mum"]["family_list"] = ["f1"]
+        ops, winner = [REUSE_THEN_MERGE["Family"][1][0], _merge("Family", "m1", "F0001", "key:f-new")], "f1"
+    before = json.dumps(fake.store[NS_OF[cls]][winner], sort_keys=True)
+    res = run(fake, ops)
+    assert res[-1].status == "conflict", [r.actions for r in res]
+    assert f"winner and loser are the same {cls.lower()}" in res[-1].actions[-1], res[-1].actions
+    assert json.dumps(fake.store[NS_OF[cls]][winner], sort_keys=True) == before
+    assert not [c for c in fake.writes() if "/merge/" in c[1] or c[0] == "DELETE"]
+
+
+def test_a_merge_person_whose_key_names_its_winner_stops_instead_of_deleting_it():
+    fake = _classes_fake()
+    assert run(fake, [ADD_PERSON])[0].status == "done"
+    made = fake.store["people"][stable_handle("p-new")]["gramps_id"]
+    res = run(fake, [_merge("Person", "m1", made, "key:p-new")])  # a later list: its key names the same person
+    assert res[0].status == "conflict" and "winner and loser are the same person" in res[0].actions[-1], res[0].actions
+    assert stable_handle("p-new") in fake.store["people"]
+    assert not [c for c in fake.writes() if "/merge/" in c[1] or c[0] == "DELETE"]
+
+
+@pytest.mark.parametrize("holders", [0, 2])
+def test_a_reused_winner_id_whose_note_no_one_object_holds_stops_as_before(holders):
+    fake, ops = _chain_fake(), CHAINS["Person, 2 merges"]
+    assert all(r.status == "done" for r in run(fake, ops))
+    fake.add("people", {"handle": "unrelated", "gramps_id": "I0004", **UNRELATED["Person"]})
+    if holders == 0:
+        _drop_merge_note(fake, "m1")
+    else:  # no way to tell which one holds it as the winner
+        fake.store["people"]["kid"]["note_list"] = [stable_handle("m1#merge")]
+    writes = len(fake.writes())
+    res = run(fake, ops)
+    assert res[0].status == "conflict" and "I0004 has no note of this merge" in res[0].actions[-1], res[0].actions
+    assert len(fake.writes()) == writes
+
+
+def test_an_add_whose_reused_winner_id_and_note_no_one_holds_is_made_again_as_before():
+    fake, ops = _classes_fake(), ADD_THEN_MERGE_ANY["Place"]
+    assert all(r.status == "done" for r in run(fake, ops))
+    _take_winner_away_and_reuse_its_id(fake, "Place", "P0001")
+    for o in fake.store["places"].values():
+        o["note_list"] = [h for h in o.get("note_list") or [] if h != stable_handle("m1#merge")]
+    plan = run(fake, ops, dry_run=True)  # no evidence the merge landed: the add makes the place, as after a single merge
+    assert plan[0].status == "done" and plan[0].actions[-1].startswith("create Place"), plan[0].actions
+
+
 def test_merge_family_needs_the_same_parents(tmp_path):
     fake = MergingFake()
     for h, n in (("dad", "John"), ("dad2", "Jon"), ("mum", "Mary"), ("kid", "Tom")):
