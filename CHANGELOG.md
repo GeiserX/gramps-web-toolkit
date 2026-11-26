@@ -6,6 +6,8 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-26
+
 ### Change lists
 
 - A rerun of a list that merges a winner away again (`merge_person` I0005 into I0004, then I0004 into I0001) now skips each merge that landed. Before, it stopped at the first merge with `no Person with Gramps ID I0004`. When the list also made the first loser (`add_person` with key `p-new`, then `merge_person` with loser `key:p-new` into I0004), the rerun made that person again before it stopped, so a second `--apply` left a duplicate in the tree. The skip of a merge holds for every merge op, and so does the skip of the add, as the next entry says.
