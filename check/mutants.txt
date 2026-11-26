@@ -140,3 +140,7 @@ gwt_check/media.py | S = {h: status.get(h) if isinstance(status.get(h), dict) el
 gwt_check/media.py | frozenset(range(400, 500)) - {401, 429} | frozenset(range(400, 500)) | a 429 on a thumbnail is asked again, not counted as unread
 gwt_check/tree.py | media_status=status if isinstance(status, dict) else None) | media_status=status) | a dump whose media_status is not a dict is read without it, not a crash
 gwt_check/cli.py | seed.media_status if seed else None | None | check --from keeps the measures of the earlier dump
+gwt_check/component_evidence.py | if tree.partial: | if False: | partial XML lacks evidence and cannot supply the report
+gwt_check/component_evidence.py | [('families', fh) for fh in sorted(adjacent[ph])] | [] | family-attached evidence is included from both reference directions
+gwt_check/component_evidence.py | if len({component[p] for p in persons}) > 1: | if True: | only evidence shared across distinct components is listed
+gwt_check/component_evidence.py | if typ in ('people', 'families'): | if typ == 'people': | family event evidence is included
