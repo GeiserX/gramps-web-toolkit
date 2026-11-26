@@ -2022,6 +2022,49 @@ def test_an_object_with_the_freed_loser_id_that_matches_only_part_of_the_reuse_r
     assert fake.store[NS_OF[cls]]["unrelated"] == unrelated
 
 
+FULL_RULE = {  # an add that sets a field its reuse rule checks after the key fields, and an object that differs there
+    "Source author": (
+        [{"op": "add_source", "key": "s-new", "ruling": R, "title": "Register of baptisms, book 2", "author": "The clerk"},
+         _merge("Source", "m1", "S0001", "key:s-new")],
+        {"title": "Register of baptisms, book 2", "author": "Another clerk"}),
+    "Citation confidence": (
+        [{"op": "add_citation", "key": "c-new", "ruling": R, "source": "S0001", "page": "p. 6", "confidence": 2,
+          "attach": [{"person": "I0004"}]},
+         {"op": "update_citation", "key": "c-fix", "ruling": R, "citation": "key:c-new", "set": {"page": "p. 5"},
+          "expect": "p. 6"},
+         _merge("Citation", "m1", "C0001", "key:c-new")],
+        {"source_handle": "src1", "page": "p. 6", "confidence": 4}),
+    "Event description": (
+        [{"op": "add_event", "key": "e-new", "ruling": R, "type": "Baptism", "date": "1890", "person": "I0004",
+          "description": "In the parish church"},
+         _merge("Event", "m1", "E0001", "key:e-new")],
+        {"type": "Baptism", "date": parse_date("1890"), "description": "At home"}),
+    "Event place": (
+        [{"op": "add_event", "key": "e-new", "ruling": R, "type": "Baptism", "date": "1890", "person": "I0004",
+          "place": "P0001"},
+         _merge("Event", "m1", "E0001", "key:e-new")],
+        {"type": "Baptism", "date": parse_date("1890"), "place": "pl2"}),
+}
+
+
+@pytest.mark.parametrize("case", list(FULL_RULE))
+def test_an_object_with_the_freed_loser_id_that_the_full_reuse_rule_rejects_is_not_the_loser(case):
+    """The object that got the freed loser ID matches the add's key fields, but not a field _reuse checks after them,
+    so the add would stop on it, not reuse it: the rerun skips instead of stopping."""
+    ops, fields = FULL_RULE[case]
+    cls = ops[-1]["op"][6:].capitalize()
+    fake = _classes_fake()
+    fake.store["events"]["ev1"].update(description="In the parish church", place="pl1")  # what the merge keeps
+    res = run(fake, ops)
+    assert [r.status for r in res] == ["done"] * len(ops), [r.actions for r in res]
+    made = res[-1].actions[-1].split()[-1]  # "delete Source S0004": the Gramps ID the add's object had
+    unrelated = fake.add(NS_OF[cls], {"handle": "unrelated", "gramps_id": made, **fields})
+    if cls == "Event":  # on the add's person, so only the field after type and date tells it apart
+        fake.store["people"]["anna"]["event_ref_list"].append({"ref": "unrelated", "role": "Primary"})
+    _assert_rerun_writes_nothing(fake, ops, ops[-1]["winner"])
+    assert fake.store[NS_OF[cls]]["unrelated"] == unrelated
+
+
 def test_a_merge_an_earlier_apply_logged_as_done_skips_its_add_when_its_loser_id_names_another_object():
     """The object that got the freed loser ID has the add's own fields, so only the log tells it from a loser the
     merge never took: without the log the dry run reuses it and merges it, the limit docs/apply.md names."""

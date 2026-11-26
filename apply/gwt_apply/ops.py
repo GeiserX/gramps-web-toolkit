@@ -1518,7 +1518,12 @@ class Applier:
             linked = any(r["ref"] == ev.get("handle") for r in target.get("event_ref_list") or [])
             return linked and str(ev.get("type")).lower() == etype.lower() and date_key(ev.get("date")) == date_key(date)
 
-        if event is None and self._merged_away("Event", op, same_date):
+        def reuses(ev):  # the whole rule _reuse applies: the type and date on the target, then the place and description
+            if op.get("description") and (ev.get("description") or "").strip() != op["description"].strip():
+                return False
+            return same_date(ev) and (not op.get("place") or ev.get("place") == self.resolve("Place", op["place"]))
+
+        if event is None and self._merged_away("Event", op, reuses):
             return
         if event is None:
             refs = target.get("event_ref_list") or []
@@ -1993,13 +1998,16 @@ class Applier:
         def same_title(row):  # a source of the tree this add reuses, when its author and publication info agree
             return (row.get("title") or "").strip() == title
 
-        if self._existing("Source", op) or self._merged_away("Source", op, same_title):
-            return
-        rows = [r for r in self.c.list_all("Source", ["title", "author", "pubinfo", "gramps_id"]) if same_title(r)]
-
         def checks(row):
             return [(f, (row.get(f) or "").strip() == op[f].strip(), repr(row.get(f) or ""), repr(op[f]))
                     for f in ("author", "pubinfo") if op.get(f)]
+
+        def reuses(row):  # the whole rule _reuse applies: the title, then every other field the op sets
+            return same_title(row) and all(r[1] for r in checks(row))
+
+        if self._existing("Source", op) or self._merged_away("Source", op, reuses):
+            return
+        rows = [r for r in self.c.list_all("Source", ["title", "author", "pubinfo", "gramps_id"]) if same_title(r)]
 
         found = self._reuse("Source", rows, "title", checks,
                             lambda f: f"if it is that source, set its {f} in Gramps and rerun; if it is another "
@@ -2158,23 +2166,26 @@ class Applier:
         def same_page(row):  # a citation of the tree this add reuses, when its confidence and date agree
             return row.get("source_handle") == source and (row.get("page") or "").strip() == page
 
-        if cit is None and self._merged_away("Citation", op, same_page):
+        def checks(row):
+            out = []
+            if "confidence" in op:
+                theirs = row.get("confidence")
+                theirs = 2 if theirs is None else theirs
+                out.append(("confidence", theirs == op["confidence"], theirs, op["confidence"]))
+            if op.get("date"):
+                out.append(("date", date_key(row.get("date")) == date_key(parse_date(op["date"])),
+                            _date_text(row.get("date")), op["date"]))
+            return out
+
+        def reuses(row):  # the whole rule _reuse applies: the source and page, then the confidence and date
+            return same_page(row) and all(r[1] for r in checks(row))
+
+        if cit is None and self._merged_away("Citation", op, reuses):
             return
         handle = cit["handle"] if cit else None
         if handle is None:
             rows = [r for r in self.c.list_all("Citation", ["source_handle", "page", "confidence", "date", "gramps_id"])
                     if same_page(r)]
-
-            def checks(row):
-                out = []
-                if "confidence" in op:
-                    theirs = row.get("confidence")
-                    theirs = 2 if theirs is None else theirs
-                    out.append(("confidence", theirs == op["confidence"], theirs, op["confidence"]))
-                if op.get("date"):
-                    out.append(("date", date_key(row.get("date")) == date_key(parse_date(op["date"])),
-                                _date_text(row.get("date")), op["date"]))
-                return out
 
             def fix(f):
                 return (f"{'raise it' if f == 'confidence' else 'correct it'} with update_citation, or give this "
