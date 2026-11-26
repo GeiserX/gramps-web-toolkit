@@ -343,6 +343,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--limit", type=int, default=30, help="rows printed (default 30)")
     live_opts(p)
 
+    p = sub.add_parser("component-evidence", help="offline shared case evidence across family components; advisory only")
+    p.add_argument("tree", help="full JSON dump; includes private evidence")
+    p.add_argument("--root", required=True, help="root person Gramps ID")
+
     p = sub.add_parser("act", help="set one transcribed act beside the tree: same date, place, parents, cited or not; a report that changes nothing")
     p.add_argument("actfile", help="JSON file with the act: kind, date, place, reference, subject, father, mother or spouse")
     p.add_argument("tree", help="dump file (gwt-check dump, or check --save-dump): one act is not worth a whole live read")
@@ -365,6 +369,10 @@ def main(argv: list[str] | None = None) -> int:
 
     args = ap.parse_args(argv)
     try:
+        if args.cmd == "component-evidence":
+            from .component_evidence import component_evidence
+            print(json.dumps(component_evidence(load(args.tree), args.root), ensure_ascii=False, indent=1))
+            return 0
         if args.cmd == "selftest":
             from .selftest import selftest
             return selftest(verbose=True)
