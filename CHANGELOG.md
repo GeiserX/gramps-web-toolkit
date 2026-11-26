@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Added
+
+- `gwt-check component-evidence` reviews shared citations, notes and media across recorded family components, including direct family and family-event lists and citation notes/media; nested name, attribute, address and child-reference evidence is outside this report. Offline and advisory only.
+
 ## [1.6.0] - 2026-11-26
 
 ### Change lists
