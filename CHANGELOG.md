@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Fixed
+
+- A digest with a root also shows path tag counts when a link is unmarked, rather than presenting the relation without those counts.
+
 ## [1.6.0] - 2026-11-26
 
 ### Change lists
