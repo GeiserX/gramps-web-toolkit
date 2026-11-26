@@ -320,3 +320,21 @@ It exits 1 when there is a finding of the first three kinds: those mean the serv
 
 Gramps Web API 3.25 replaced the privacy filter that guests go through with a new access layer, stricter in a few corner cases ([release notes](https://github.com/gramps-project/gramps-web-api/releases/tag/v3.25.0)). The first three kinds are the check that a given server, after an upgrade or a settings change, still hides what the owner marked private; `living-visible` is a list for the owner to review. It cannot see what a guest never gets from the API but could infer, and it does not run a search.
 
+
+## Shared case evidence across components (`component-evidence`)
+
+`gwt-check component-evidence dump.json.gz --root I0001` prints an advisory
+JSON report. It includes private evidence and stays private. This offline mode
+requires a full dump. It exits 0 for a valid report and 2 for bad input.
+
+Family links from either reference direction form the components, including
+people with no family. The existing `unconnected` check is unchanged. Shared
+citations, notes and media are listed across components, including those on
+a person's directly adjacent family and its events. Evidence is limited to
+direct `citation_list`, `note_list` and `media_list` fields on people,
+families and their referenced events, plus notes/media reached from those
+citations. Evidence nested on names, attributes, addresses or `child_ref_list`
+entries is outside this report's scope. Sources, repositories
+and places do not count as shared case evidence. Relatives are not followed
+recursively. No shared evidence changes the components or proves identity,
+kinship or an object's ownership. It offers no deletion or merge recommendation.
