@@ -40,5 +40,7 @@ gwt_report.py | if u and u not in in_text and u not in shown: | if u and u not i
 gwt_report.py | in_text = {u.rstrip('.,;') for u in URL_RE.findall(text)} | in_text = text | a link is kept when the item text only holds a longer address that starts with it
 gwt_report.py | if u and u not in in_text and u not in shown: | if u and u not in in_text: | one address held by two citations of an event is listed once
 gwt_report.py | out.append(esc(s[pos:m.start()]) + link(u)) | out.append(esc(s[pos:m.start()]) + esc(u)) | in html an address in the item text stays a link
-
-gwt_report.py | ('probable', 'weak', 'unmarked') | ('probable', 'weak') | an unmarked path is visible in the digest in all languages and formats
+gwt_report.py | for k in LINK_CLASSES if k != 'confirmed') | for k in LINK_CLASSES if k not in ('confirmed', 'unmarked')) | a digest heading shows path counts when a link is unmarked, in every language and format
+gwt_report.py | for k in LINK_CLASSES if k != 'confirmed') | for k in LINK_CLASSES if k not in ('confirmed', 'probable')) | a digest heading shows path counts when a link is probable
+gwt_report.py | for k in LINK_CLASSES if k != 'confirmed') | for k in LINK_CLASSES if k not in ('confirmed', 'weak')) | a digest heading shows path counts when a link is weak
+gwt_report.py | for k in LINK_CLASSES if k != 'confirmed') | for k in LINK_CLASSES) | a digest heading of a fully confirmed path has no path counts

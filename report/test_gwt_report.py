@@ -279,22 +279,24 @@ class DigestTest(unittest.TestCase):
         self.assertIn('new person: Rosa Pine [weak]', out)
         self.assertIn('1 weak', out)
 
-    def test_unmarked_path_is_visible_in_every_language_and_format(self):
+    def test_path_counts_show_unless_every_link_is_confirmed(self):
         tree = R.load(NEW)
-        groups = [{'person': 'hI5', 'items': [], 'side': "father's side",
-                   'kin': R.names(2, 0, False, 1), 'distance': 2,
-                   'links': dict(confirmed=1, probable=0, weak=0, unmarked=1),
-                   'truncated': False}]
-        for lang in ('en', 'es', 'fr'):
-            for fmt in ('md', 'html'):
-                with self.subTest(lang=lang, fmt=fmt):
-                    out = R.render(tree, groups, '', lang, fmt)
-                    self.assertIn(R.s(lang, 'path_line') % (1, 0, 0, 1), out)
-        groups[0]['links']['unmarked'] = 0
-        out = R.render(tree, groups, '', 'en', 'md')
-        self.assertNotIn('(path:', out)
-        groups[0]['links'] = None
-        self.assertNotIn('(path:', R.render(tree, groups, '', 'en', 'md'))
+
+        def render(links, lang='en', fmt='md'):
+            groups = [{'person': 'hI5', 'items': [], 'side': "father's side",
+                       'kin': R.names(2, 0, False, 1), 'distance': 2, 'links': links, 'truncated': False}]
+            return R.render(tree, groups, '', lang, fmt)
+
+        for doubt in ('probable', 'weak', 'unmarked'):
+            links = dict(confirmed=1, probable=0, weak=0, unmarked=0)
+            links[doubt] = 1
+            for lang in ('en', 'es', 'fr'):
+                for fmt in ('md', 'html'):
+                    with self.subTest(doubt=doubt, lang=lang, fmt=fmt):
+                        self.assertIn(R.s(lang, 'path_line') % tuple(links[k] for k in R.LINK_CLASSES),
+                                      render(links, lang, fmt))
+        self.assertNotIn('(path:', render(dict(confirmed=2, probable=0, weak=0, unmarked=0)))
+        self.assertNotIn('(path:', render(None))
 
     def test_old_objects_and_private_people_stay_out(self):
         out = self.digest('--root', 'I1')
