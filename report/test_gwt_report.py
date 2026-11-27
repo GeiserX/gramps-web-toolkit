@@ -272,12 +272,31 @@ class DigestTest(unittest.TestCase):
         self.assertEqual(sides, ["## father's side", "## mother's side", '## not blood kin'])
         people = [l.split(' (')[0][4:] for l in out.splitlines() if l.startswith('### ')]
         self.assertEqual(people, ['Paul Gale', 'Lena Gale', 'Rosa Pine', 'Tim Reed'])  # grandfather (2) before cousin (4)
-        self.assertIn('Paul Gale (I5), grandfather https://gramps.example.org/person/I5', out)
+        self.assertIn('Paul Gale (I5), grandfather (path: 0 confirmed, 0 probable, 0 weak, 2 unmarked links) https://gramps.example.org/person/I5', out)
         self.assertIn('new event: Baptism, 1890, Greenford https://gramps.example.org/event/E1 '
                       'https://archive.example.org/register/12.jpg', out)
         self.assertIn('new media: Register page 12 https://gramps.example.org/media/O1', out)
         self.assertIn('new person: Rosa Pine [weak]', out)
         self.assertIn('1 weak', out)
+
+    def test_path_counts_show_unless_every_link_is_confirmed(self):
+        tree = R.load(NEW)
+
+        def render(links, lang='en', fmt='md'):
+            groups = [{'person': 'hI5', 'items': [], 'side': "father's side",
+                       'kin': R.names(2, 0, False, 1), 'distance': 2, 'links': links, 'truncated': False}]
+            return R.render(tree, groups, '', lang, fmt)
+
+        for doubt in ('probable', 'weak', 'unmarked'):
+            links = dict(confirmed=1, probable=0, weak=0, unmarked=0)
+            links[doubt] = 1
+            for lang in ('en', 'es', 'fr'):
+                for fmt in ('md', 'html'):
+                    with self.subTest(doubt=doubt, lang=lang, fmt=fmt):
+                        self.assertIn(R.s(lang, 'path_line') % tuple(links[k] for k in R.LINK_CLASSES),
+                                      render(links, lang, fmt))
+        self.assertNotIn('(path:', render(dict(confirmed=2, probable=0, weak=0, unmarked=0)))
+        self.assertNotIn('(path:', render(None))
 
     def test_old_objects_and_private_people_stay_out(self):
         out = self.digest('--root', 'I1')
@@ -367,7 +386,7 @@ class DigestTest(unittest.TestCase):
 
     def test_html_uses_only_inline_tags_chat_apps_take(self):
         out = self.digest('--root', 'I1', '--format', 'html', '--base-url', 'https://g.example.org', '--lang', 'es')
-        self.assertIn('<b>Lena Gale (I12), prima hermana</b> <a href="https://g.example.org/person/I12">', out)
+        self.assertIn('<b>Lena Gale (I12), prima hermana (camino: confirmados 0, probables 0, débiles 0, sin marcar 4)</b> <a href="https://g.example.org/person/I12">', out)
         self.assertIn('<b><u>rama paterna</u></b>', out)
         self.assertLessEqual(set(re.findall(r'</?([a-z0-9]+)', out)), {'b', 'u', 'i', 'a'})
         old, new = R.load(OLD), R.load(NEW)
