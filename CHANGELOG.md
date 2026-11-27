@@ -8,7 +8,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Changed
 
-- A digest with a root now shows the path counts beside a relationship whenever a link on the path is not confirmed, so also when it is only unmarked. Before, it showed them only for a probable or weak link, and a heading without counts read as a proven path. A heading without counts now means every link is confirmed.
+- A digest with a root now shows the path counts beside a relationship whenever a link on the path is not confirmed, so also when it is only unmarked. Before, it showed them only for a probable or weak link, and a heading without counts read as a proven path. A relationship without counts now means every link on its path is confirmed.
 
 ## [1.6.0] - 2026-11-26
 
