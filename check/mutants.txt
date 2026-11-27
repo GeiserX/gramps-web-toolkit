@@ -140,7 +140,13 @@ gwt_check/media.py | S = {h: status.get(h) if isinstance(status.get(h), dict) el
 gwt_check/media.py | frozenset(range(400, 500)) - {401, 429} | frozenset(range(400, 500)) | a 429 on a thumbnail is asked again, not counted as unread
 gwt_check/tree.py | media_status=status if isinstance(status, dict) else None) | media_status=status) | a dump whose media_status is not a dict is read without it, not a crash
 gwt_check/cli.py | seed.media_status if seed else None | None | check --from keeps the measures of the earlier dump
-gwt_check/component_evidence.py | if tree.partial: | if False: | partial XML lacks evidence and cannot supply the report
-gwt_check/component_evidence.py | [('families', fh) for fh in sorted(adjacent[ph])] | [] | family-attached evidence is included from both reference directions
-gwt_check/component_evidence.py | if len({component[p] for p in persons}) > 1: | if True: | only evidence shared across distinct components is listed
-gwt_check/component_evidence.py | if typ in ('people', 'families'): | if typ == 'people': | family event evidence is included
+gwt_check/component_evidence.py | if tree.partial: | if False: | a .gramps backup has no citations, notes or media and is refused
+gwt_check/component_evidence.py | if root and tree.by_gid("people", root) is None: | if False: | a --root that names no person is refused, not taken as no root
+gwt_check/component_evidence.py | and kind(r.get("role")) == role] | ] | a godparent or witness holds nothing of the act; only Primary and Family roles count
+gwt_check/component_evidence.py | hold(T["families"][h], comp[m], "family") | hold(T["families"][h], comp[m], "primary") | a family's own event counts through role Family
+gwt_check/component_evidence.py | for h, m in fam_member.items(): | for h, m in []: | a family's own citations, notes and media count for its group
+gwt_check/component_evidence.py | if t == "citations": | if False: | the notes and media of a citation count
+gwt_check/component_evidence.py | if len(cs) > 1: | if True: | only evidence two or more groups hold is a row
+gwt_check/component_evidence.py | key=lambda c: (c != main, id_order(lowest[c])) | key=lambda c: id_order(lowest[c]) | the main group comes first in a row
+gwt_check/checks.py | main = comp[root_h] if root_h in comp else ( | main = comp[root_h] if False else ( | the root's group is the main one
+gwt_check/checks.py | lowest = {c: min((P[h].get("gramps_id") or h for h in hs), key=id_order) | lowest = {c: min(P[h].get("gramps_id") or h for h in hs) | a group's key is its lowest Gramps ID in numeric order

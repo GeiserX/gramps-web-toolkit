@@ -1,85 +1,82 @@
-"""Offline evidence shared across recorded family components, without inferring kinship."""
+"""Citations, notes and media that two family components share: a documentary bridge between groups of people the
+tree holds with no family link between them. A report; it changes nothing and never sets the exit code."""
+from __future__ import annotations
+
 from collections import defaultdict
 
-from .tree import BadInput
+from .checks import family_components, id_order
+from .dates import kind
+from .tree import BadInput, Tree
+
+KINDS = ("citations", "notes", "media")
 
 
-def component_evidence(tree, root):
-    """Group through recorded families; shared case evidence adds no family edge.
+def _refs(T: dict, obj: dict):
+    """(type, handle) of each citation, note and media object `obj` lists itself."""
+    for h in obj.get("citation_list") or []:
+        if h in T["citations"]:
+            yield "citations", h
+    for h in obj.get("note_list") or []:
+        if h in T["notes"]:
+            yield "notes", h
+    for r in obj.get("media_list") or []:
+        if isinstance(r, dict) and r.get("ref") in T["media"]:
+            yield "media", r["ref"]
 
-    Include directly adjacent families from either reference direction and their
-    events. Do not follow relatives, citations to sources, or shared places.
-    """
+
+def component_evidence(tree: Tree, root: str | None = None) -> dict:
+    """Evidence held by more than one of the components `unconnected` reports, one row per set of components.
+
+    A component holds what its people and families list, what their own events list (role Primary for a person,
+    Family for a family, so a godparent or a witness holds nothing of the act) and the notes and media of those
+    citations. Sources, repositories and places do not count."""
     if tree.partial:
-        raise BadInput('component-evidence needs a full JSON dump, not a .gramps backup')
-    people, families = tree.objs['people'], tree.objs['families']
-    roots = [h for h, p in people.items() if p.get('gramps_id') == root]
-    if len(roots) != 1:
-        raise BadInput('root must identify exactly one person by Gramps ID')
-    adjacent = defaultdict(set)
-    members = defaultdict(set)
-    for fh, family in families.items():
-        refs = [family.get('father_handle'), family.get('mother_handle')]
-        refs += [r.get('ref') for r in family.get('child_ref_list', [])]
-        for ph in refs:
-            if ph in people:
-                adjacent[ph].add(fh)
-                members[fh].add(ph)
-    for ph, person in people.items():
-        for fh in person.get('family_list', []) + person.get('parent_family_list', []):
-            if fh in families:
-                adjacent[ph].add(fh)
-                members[fh].add(ph)
-    component = {}
-    for ph in sorted(people):
-        if ph in component:
-            continue
-        todo = [ph]
-        seen_families = set()
-        while todo:
-            current = todo.pop()
-            if current in component:
-                continue
-            component[current] = ph
-            for fh in adjacent[current] - seen_families:
-                seen_families.add(fh)
-                todo.extend(members[fh])
-    owners = defaultdict(set)
-    for ph, person in people.items():
-        pending = [('people', ph)] + [('families', fh) for fh in sorted(adjacent[ph])]
-        seen = set()
-        while pending:
-            typ, handle = pending.pop()
-            if (typ, handle) in seen:
-                continue
-            seen.add((typ, handle))
-            obj = tree.objs[typ].get(handle, {})
-            if typ in ('notes', 'media'):
-                continue
-            for key, dest in (('note_list', 'notes'), ('citation_list', 'citations')):
-                for target in obj.get(key, []):
-                    if target in tree.objs[dest]:
-                        owners[(dest, target)].add(ph)
-                        if dest == 'citations':
-                            pending.append((dest, target))
-            for ref in obj.get('media_list', []):
-                target = ref.get('ref')
-                if target in tree.objs['media']:
-                    owners[('media', target)].add(ph)
-            if typ in ('people', 'families'):
-                pending.extend(('events', ref.get('ref')) for ref in obj.get('event_ref_list', []))
-    shared = []
-    for (typ, handle), persons in sorted(owners.items()):
-        if len({component[p] for p in persons}) > 1:
-            shared.append({'type': typ, 'id': tree.gid(typ, handle),
-                           'people': sorted(tree.gid('people', p) for p in persons)})
-    grouped = defaultdict(list)
-    for ph, key in component.items():
-        grouped[key].append(tree.gid('people', ph))
-    return {'root': root, 'components': sorted([
-                {'people': sorted(ids), 'root_connected': key == component[roots[0]]}
-                for key, ids in grouped.items()], key=lambda row: row['people']),
-            'shared_evidence': shared,
-            'limits': ['Structural components are not proven relationships.',
-                       'Shared citations, notes or media are review leads, not identity or kinship proof.',
-                       'Includes private data; keep the report private. No deletion or merge recommendation.']}
+        raise BadInput(f"{tree.source}: a .gramps backup has no citations, notes or media; use a dump")
+    T = tree.objs
+    if root and tree.by_gid("people", root) is None:
+        raise BadInput(f"--root {root}: no such person")
+    comp, comps, lowest, main, fam_member = family_components(T, root)
+    held: dict[tuple[str, str], set[str]] = defaultdict(set)
+
+    def hold(obj: dict, c: str, role: str) -> None:
+        events = [T["events"][r["ref"]] for r in obj.get("event_ref_list") or []
+                  if isinstance(r, dict) and r.get("ref") in T["events"] and kind(r.get("role")) == role]
+        for o in [obj, *events]:
+            for t, h in _refs(T, o):
+                held[t, h].add(c)
+                if t == "citations":
+                    for t2, h2 in _refs(T, T["citations"][h]):
+                        if t2 != "citations":
+                            held[t2, h2].add(c)
+
+    for h, c in comp.items():
+        hold(T["people"][h], c, "primary")
+    for h, m in fam_member.items():
+        hold(T["families"][h], comp[m], "family")
+
+    def group(c: str) -> dict:
+        return {"key": lowest[c], "people": len(comps[c]), "main": c == main}
+
+    bridges: dict[frozenset, dict[str, list[str]]] = defaultdict(lambda: {k: [] for k in KINDS})
+    for (t, h), cs in held.items():
+        if len(cs) > 1:
+            bridges[frozenset(cs)][t].append(tree.gid(t, h))
+    rows = []
+    for cs, ev in bridges.items():
+        gs = sorted(cs, key=lambda c: (c != main, id_order(lowest[c])))
+        rows.append({"groups": [group(c) for c in gs], **{k: sorted(v, key=id_order) for k, v in ev.items()}})
+    rows.sort(key=lambda r: (not r["groups"][0]["main"], [id_order(g["key"]) for g in r["groups"]]))
+    return {"main": group(main) if main else None, "components": len(comps), "rows": rows}
+
+
+def print_component_evidence(rep: dict, limit: int) -> None:
+    rows, m = rep["rows"], rep["main"]
+    print(f"{len(rows)} sets of family groups share a citation, note or media object (a report; nothing is changed)")
+    if m:
+        print(f"  {rep['components']} groups; main group {m['key']} has {m['people']} people")
+    for r in rows[:limit]:
+        gs = " + ".join(f"{g['key']} ({g['people']}{', main' if g['main'] else ''})" for g in r["groups"])
+        print(f"  {gs}: {', '.join(i for k in KINDS for i in r[k])}")
+    if len(rows) > limit:
+        print(f"  ... {len(rows) - limit} more (--limit, or --json for all)")
+    print("shared evidence is a lead to read, not proof that two groups are one family")

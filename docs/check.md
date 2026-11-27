@@ -209,7 +209,7 @@ gwt-check repos dump.json.gz --json                   # repositories with their 
 | `missing-object` | With `--since`: an object of the earlier tree that is gone |
 | `ahnentafel-lost`, `ahnentafel-changed` | With `--since` and `--root`: a number that disappeared, or holds another person |
 | `ahnentafel-truncated` | With `--root`: the pedigree passes 100,000 Ahnentafel positions (pedigree collapse, or someone made their own ancestor), so the walk stopped there. With `--since`, only the generations both trees walked in full are compared. It fails the run, in a `--since --root` run and a `--root` run alike; accept it with `--known` and the key `root <ID>` |
-| `unconnected` | For information only, it never sets the exit code. A group of people joined to each other by families (as father, mother or child) with no family link to the main group. The main group is the `--root` person's, or without `--root` (or with a root in no family) the largest one, the one with the lowest Gramps ID on a tie. One finding per other group, keyed by its lowest Gramps ID in numeric order (`I9001` before `I10000`), with its size and first five IDs in the detail, so the key holds while the group grows. It finds a batch written with no link to the main family, such as a research branch waiting for a documentary bridge; it does not find a person written into the wrong tree and linked to one of its families, who joins the main group like anyone else. People in no family are left out. A link through an event role (a godparent, a witness) or an association does not count, so a couple tied to the tree only as godparents is its own group. With `--since` or `--tag` it reports only the groups holding a person or a family in scope |
+| `unconnected` | For information only, it never sets the exit code. A group of people joined to each other by families (as father, mother or child) with no family link to the main group. The main group is the `--root` person's, or without `--root` (or with a root in no family) the largest one, the one with the lowest Gramps ID on a tie. One finding per other group, keyed by its lowest Gramps ID in numeric order (`I9001` before `I10000`), with its size and first five IDs in the detail, so the key holds while the group grows. It finds a batch written with no link to the main family, such as a research branch waiting for a documentary bridge; it does not find a person written into the wrong tree and linked to one of its families, who joins the main group like anyone else. People in no family are left out. A link through an event role (a godparent, a witness) or an association does not count, so a couple tied to the tree only as godparents is its own group. [`component-evidence`](#evidence-two-unconnected-groups-share-component-evidence) lists the citations, notes and media such a group already shares with another. With `--since` or `--tag` it reports only the groups holding a person or a family in scope |
 | `event-order` | A person's own dates in an order no reading allows: death before birth or baptism, baptism before birth, burial before death. Dates are compared as intervals (below) |
 | `child-before-parent` | A child born before their father or mother |
 | `child-after-parent-death` | A child born after the mother's death, or more than 300 days after the father's |
@@ -299,6 +299,31 @@ gwt-check cites dump.json.gz --json   # the same rows as JSON
 - The words that name a kind of act are in one table, `ACT_WORDS`, at the top of `gwt_check/cites.py`, and the words of a marginal mention in `MARGINAL` beside it. A language that is not in them is not read. A word matches as a whole word, singular or plural (`nacimiento`, `nacimientos`), never inside a longer word (`birthplace` is not a birth act).
 - `fill-places` holds back every row `cites` lists: a place that only such a citation names is listed under `held_back`, not proposed.
 
+## Evidence two unconnected groups share (`component-evidence`)
+
+`gwt-check component-evidence DUMP [--root GRAMPS_ID]` lists the citations, notes and media that two family groups both hold. The groups are the ones the [`unconnected`](#the-checks) check reports: people joined by a family as father, mother or child, with the same main group. A row is a documentary bridge the tree already holds between groups it does not link, such as a research branch whose baptism cites the same register page as a main-family entry. It reads a dump and writes nothing. It never sets the exit code; it exits `2` only on bad input, such as a `--root` that names no person or a `.gramps` backup.
+
+```sh
+gwt-check component-evidence dump.json.gz --root I0001   # one line per set of groups, main group first
+gwt-check component-evidence dump.json.gz --json         # every row, with each kind of evidence apart
+```
+
+```text
+2 sets of family groups share a citation, note or media object (a report; nothing is changed)
+  4 groups; main group I0001 has 120 people
+  I0001 (120, main) + I0500 (4): C0012, N0031
+  I0500 (4) + I0700 (2): O0003
+```
+
+Each group is named by its lowest Gramps ID and its size, as in `unconnected`. A citation, note or media object that the same groups hold is on the same row, so one bridge is one line. Rows that touch the main group come first. `--limit` sets how many rows print (default 30).
+
+- A group holds what its people and families list, and what their own events list: events where the person's role is `Primary` or the family's role is `Family`. A godparent, a witness or an informant holds nothing of the act.
+- The notes and media of a held citation count too. Sources, repositories and places do not: two acts from one register are not a bridge.
+- People in no family are left out, as in `unconnected`. A person's own family list does not join a family that does not list them back (`family-backlink` reports that).
+- Evidence on names, attributes, addresses and child references is not read.
+
+A row is a lead to read, not proof that two groups are one family. Read the cited act before you link anyone. The output holds IDs only, no record text.
+
 ## What a guest still sees (`public`)
 
 ```bash
@@ -319,22 +344,3 @@ gwt-check public owner.json.gz guest.json.gz
 It exits 1 when there is a finding of the first three kinds: those mean the server shows a guest what the owner hid. `living-visible` is listed but does not set the exit code, because Gramps Web never hides a person for being alive: a guest sees a living person unless the owner marks the person, or their events, private. A guest dump with objects the owner dump lacks, one read from another tree, or an empty one is refused. Dump the owner and the guest one after the other: a tree edited between the two reads shows as differences that are not leaks.
 
 Gramps Web API 3.25 replaced the privacy filter that guests go through with a new access layer, stricter in a few corner cases ([release notes](https://github.com/gramps-project/gramps-web-api/releases/tag/v3.25.0)). The first three kinds are the check that a given server, after an upgrade or a settings change, still hides what the owner marked private; `living-visible` is a list for the owner to review. It cannot see what a guest never gets from the API but could infer, and it does not run a search.
-
-
-## Shared case evidence across components (`component-evidence`)
-
-`gwt-check component-evidence dump.json.gz --root I0001` prints an advisory
-JSON report. It includes private evidence and stays private. This offline mode
-requires a full dump. It exits 0 for a valid report and 2 for bad input.
-
-Family links from either reference direction form the components, including
-people with no family. The existing `unconnected` check is unchanged. Shared
-citations, notes and media are listed across components, including those on
-a person's directly adjacent family and its events. Evidence is limited to
-direct `citation_list`, `note_list` and `media_list` fields on people,
-families and their referenced events, plus notes/media reached from those
-citations. Evidence nested on names, attributes, addresses or `child_ref_list`
-entries is outside this report's scope. Sources, repositories
-and places do not count as shared case evidence. Relatives are not followed
-recursively. No shared evidence changes the components or proves identity,
-kinship or an object's ownership. It offers no deletion or merge recommendation.

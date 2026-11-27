@@ -8,7 +8,7 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ### Added
 
-- `gwt-check component-evidence` reviews shared citations, notes and media across recorded family components, including direct family and family-event lists and citation notes/media; nested name, attribute, address and child-reference evidence is outside this report. Offline and advisory only.
+- `gwt-check component-evidence` lists the citations, notes and media that two of the family groups `unconnected` reports both hold: a documentary bridge the tree already has between groups it does not link. One line per set of groups, main group first; `--json` and `--limit` as in the other reports. It never sets the exit code.
 
 ## [1.6.0] - 2026-11-26
 
