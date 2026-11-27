@@ -107,6 +107,19 @@ def test_one_row_per_set_of_groups_in_id_order():
         (['I7', 'I9001'], ['C1'], ['N1'])]
 
 
+def test_rows_touching_the_main_group_come_first_and_evidence_is_in_id_order():
+    d = fixture()
+    d['people'] += [dict(handle='x', gramps_id='I7'), dict(handle='y', gramps_id='I8')]
+    d['families'].append(dict(handle='f3', gramps_id='F3', father_handle='x', mother_handle='y'))
+    d['citations'] += [dict(handle='c10', gramps_id='C10'), dict(handle='c9', gramps_id='C9')]
+    for h in ('a', 'x'):  # I1 + I7: a row that does not touch the main group
+        put(next(p for p in d['people'] if p['handle'] == h), 'citation_list', 'c1')
+    for h in ('c', 'x'):  # I3 + I7: the root's group is the main one
+        for c in ('c10', 'c9'):
+            put(next(p for p in d['people'] if p['handle'] == h), 'citation_list', c)
+    assert bridges(d, 'I4') == [(['I3', 'I7'], ['C9', 'C10']), (['I1', 'I7'], ['C1'])]
+
+
 def test_root_picks_the_main_group_and_a_root_in_no_family_falls_back():
     d = fixture()
     put(person(d, 'I2'), 'citation_list', 'c1')
@@ -125,6 +138,10 @@ def test_sources_and_dangling_references_do_not_bridge():
     d['citations'][0]['source_handle'] = d['citations'][1]['source_handle'] = 's'
     person(d, 'I1').update(citation_list=['c1', 'missing'], family_list=['missing'])
     person(d, 'I3').update(citation_list=['c2', 'missing'])
+    assert bridges(d) == []
+    for gid in ('I1', 'I3'):  # a dangling or malformed note, media or event ref is skipped, not a crash
+        person(d, gid).update(note_list=['missing'], media_list=[dict(ref='missing'), 'm1'],
+                              event_ref_list=[dict(ref='missing', role='Primary'), 'e1'])
     assert bridges(d) == []
 
 
@@ -153,7 +170,8 @@ def test_cli_text_json_limit_and_exit_codes(tmp_path, capsys):
     out = capsys.readouterr().out
     assert '  I1 (3, main) + I3 (2): C1, N1\n' in out
     assert main(['component-evidence', str(p), '--limit', '0']) == 0
-    assert '... 1 more' in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert '... 1 more' in out and 'C1' not in out
     assert main(['component-evidence', str(p), '--json']) == 0
     assert json.loads(capsys.readouterr().out)['rows'][0]['notes'] == ['N1']
     assert main(['component-evidence', str(p), '--root', 'I99']) == 2
