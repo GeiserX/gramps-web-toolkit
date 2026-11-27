@@ -97,7 +97,7 @@ It lists the people, events, citations and media in `NEW` that `OLD` lacks (by h
 - an event belongs to the people whose event list holds it, or to both spouses of a family event;
 - a citation or a media object belongs to whoever holds it, through an event or a citation when that is where it hangs; a citation on a parent link belongs to the child.
 
-With `--root` the groups are split by side (`father's side`, `mother's side`, `both sides`, `descendants`, `not blood kin`), ordered nearest first by the number of generations between the person and the root, and headed with the relationship name in `--lang`. A person whose path to the root has a probable or weak link says how many. Without `--root` there is one group, `other`, by Gramps id. The side names above are the English ones. `--lang` (English by default) sets the language of the title, side headings, relationship names, item labels, `[weak]` and the cut note; event types, source titles, pages, places and descriptions are printed as the tree stores them, so a Spanish digest still says `Baptism`.
+With `--root` the groups are split by side (`father's side`, `mother's side`, `both sides`, `descendants`, `not blood kin`), ordered nearest first by the number of generations between the person and the root, and headed with the relationship name in `--lang`. A person whose path to the root has a link that is not `confirmed` (a `probable`, `weak` or `unmarked` one, see the table above) gets the count of each kind beside the relationship. A heading without counts means every link on that path is confirmed. Few trees mark most of their links, so on most trees nearly every blood-kin heading has the counts. Without `--root` there is one group, `other`, by Gramps id. The side names above are the English ones. `--lang` (English by default) sets the language of the title, side headings, relationship names, item labels, `[weak]` and the cut note; event types, source titles, pages, places and descriptions are printed as the tree stores them, so a Spanish digest still says `Baptism`.
 
 Each item has its Gramps Web link (`URL/person/I0012`, `URL/event/E0045`, `URL/citation/C0012`, `URL/media/O0003`) when `--base-url` is given, and the web addresses its citations hold in their page, attributes or notes. An address the item's own text already shows, such as one written in a citation's page, is not added again. A weak-tagged object, or a citation of confidence 0 or 1, says `[weak]` (`[débil]`, `[faible]`). Objects and people marked private are left out unless `--include-private`.
 
@@ -110,13 +110,13 @@ $ gwt report digest --from report/fixtures/digest-old.json --to report/fixtures/
 
 ## father's side
 
-### Paul Gale (I5), grandfather https://gramps.example.org/person/I5
+### Paul Gale (I5), grandfather (path: 0 confirmed, 0 probable, 0 weak, 2 unmarked links) https://gramps.example.org/person/I5
 
 - new event: Baptism, 1890, Greenford https://gramps.example.org/event/E1 https://archive.example.org/register/12.jpg
 - new citation: Greenford parish register, folio 12, confidence 3 https://gramps.example.org/citation/C1 https://archive.example.org/register/12.jpg
 - new media: Register page 12 https://gramps.example.org/media/O1
 
-### Lena Gale (I12), first cousin https://gramps.example.org/person/I12
+### Lena Gale (I12), first cousin (path: 0 confirmed, 0 probable, 0 weak, 4 unmarked links) https://gramps.example.org/person/I12
 
 - new person: Lena Gale https://gramps.example.org/person/I12
 
@@ -146,11 +146,3 @@ cousins	E1	2026-02-03
 ```
 
 The fixtures behind these examples are invented and made by `report/fixtures/make_fixtures.py`.
-
-### Unmarked paths in a digest
-
-A digest with a root shows path tag counts beside a relation when any link is
-probable, weak or unmarked, in Markdown and HTML and in all three languages.
-These are the existing tree tag classifications, not an independent assessment
-of the documents. A recorded relation alone does not prove its evidence chain.
-Fully confirmed paths keep the shorter heading. No tree records change.

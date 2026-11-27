@@ -6,9 +6,9 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
-### Fixed
+### Changed
 
-- A digest with a root also shows path tag counts when a link is unmarked, rather than presenting the relation without those counts.
+- A digest with a root now shows the path counts beside a relationship whenever a link on the path is not confirmed, so also when it is only unmarked. Before, it showed them only for a probable or weak link, and a heading without counts read as a proven path. A heading without counts now means every link is confirmed.
 
 ## [1.6.0] - 2026-11-26
 
