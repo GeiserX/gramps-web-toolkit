@@ -217,6 +217,45 @@ def id_order(gid: str) -> tuple:
     return [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", gid)], gid
 
 
+def family_components(T: dict, root: str | None = None):
+    """Family components: people joined by a family as father, mother or child. Godparents, witnesses and
+    associations do not join anyone, and people in no family are left out: they are not a batch. A person's own
+    family_list does not count, only the family record, so a one-sided pointer joins no one.
+
+    Returns (comp, comps, lowest, main, fam_member): the component of each person in a family, the people of each
+    component, each component's lowest Gramps ID in id_order (its key), the main component (the `root` person's, else
+    the largest, the lowest key on a tie; None when no one is in a family) and one member of each family."""
+    P, F = T["people"], T["families"]
+    parent: dict[str, str] = {}
+
+    def find(h: str) -> str:
+        while parent[h] != h:
+            parent[h] = parent[parent[h]]
+            h = parent[h]
+        return h
+
+    fam_member: dict[str, str] = {}
+    for f in F.values():
+        members = [f.get("father_handle"), f.get("mother_handle")]
+        members += [r.get("ref") for r in f.get("child_ref_list") or [] if isinstance(r, dict)]
+        members = [m for m in members if m in P]
+        for m in members:
+            parent.setdefault(m, m)
+        for m in members[1:]:
+            parent[find(m)] = find(members[0])
+        if members:
+            fam_member[f["handle"]] = members[0]
+    comp = {h: find(h) for h in parent}
+    comps: dict[str, list[str]] = defaultdict(list)
+    for h, c in comp.items():
+        comps[c].append(h)
+    lowest = {c: min((P[h].get("gramps_id") or h for h in hs), key=id_order) for c, hs in comps.items()}
+    root_h = next((h for h, p in P.items() if p.get("gramps_id") == root), None) if root else None
+    main = comp[root_h] if root_h in comp else (
+        min(comps, key=lambda c: (-len(comps[c]), id_order(lowest[c]))) if comps else None)
+    return comp, comps, lowest, main, fam_member
+
+
 def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
                root: str | None = None) -> tuple[list[dict], dict]:
     """Structural checks over the whole tree; duplicate checks need one object of each pair in scope.
@@ -738,37 +777,11 @@ def run_checks(tree: Tree, scope: set[tuple[str, str]] | None = None,
                    and not NOTE_DISCARDED_BEFORE.search(text[:m.start()]) for m in word.finditer(text)):
                 out.add("note-marker-no-tag", f"{n['gramps_id']} {stem}")
 
-    # family components: people joined by a family as father, mother or child. Godparents, witnesses and
-    # associations do not join anyone, and people in no family are left out: they are not a batch
-    parent: dict[str, str] = {}
-
-    def find(h: str) -> str:
-        while parent[h] != h:
-            parent[h] = parent[parent[h]]
-            h = parent[h]
-        return h
-
-    fam_member: dict[str, str] = {}
-    for f in F.values():
-        members = [f.get("father_handle"), f.get("mother_handle")]
-        members += [r.get("ref") for r in f.get("child_ref_list", []) if isinstance(r, dict)]
-        members = [m for m in members if m in P]
-        for m in members:
-            parent.setdefault(m, m)
-        for m in members[1:]:
-            parent[find(m)] = find(members[0])
-        if members:
-            fam_member[f["handle"]] = members[0]
-    comps: dict[str, list[str]] = defaultdict(list)
-    for h in parent:
-        comps[find(h)].append(h)
+    comp, comps, lowest, main, fam_member = family_components(T, root)
     if len(comps) > 1:
-        lowest = {c: min((label("people", h) for h in hs), key=id_order) for c, hs in comps.items()}
-        root_h = next((h for h, p in P.items() if p.get("gramps_id") == root), None) if root else None
-        main = find(root_h) if root_h in parent else min(comps, key=lambda c: (-len(comps[c]), id_order(lowest[c])))
         hit = set(comps) if scope is None else (
-            {find(h) for t, h in scope if t == "people" and h in parent}
-            | {find(fam_member[h]) for t, h in scope if t == "families" and h in fam_member})
+            {comp[h] for t, h in scope if t == "people" and h in comp}
+            | {comp[fam_member[h]] for t, h in scope if t == "families" and h in fam_member})
         for c in sorted(hit - {main}, key=lambda c: id_order(lowest[c])):
             ids = sorted((label("people", h) for h in comps[c]), key=id_order)
             out.add("unconnected", lowest[c],

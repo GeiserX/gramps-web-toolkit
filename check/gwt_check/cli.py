@@ -343,6 +343,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--limit", type=int, default=30, help="rows printed (default 30)")
     live_opts(p)
 
+    p = sub.add_parser("component-evidence", help="citations, notes and media that two unconnected family groups share; a report that changes nothing")
+    p.add_argument("tree", help="dump file (gwt-check dump, or check --save-dump)")
+    p.add_argument("--root", help="Gramps ID whose family group is the main one (default: the largest)")
+    p.add_argument("--json", action="store_true", help="print the result as JSON")
+    p.add_argument("--limit", type=int, default=30, help="rows printed (default 30)")
+
     p = sub.add_parser("act", help="set one transcribed act beside the tree: same date, place, parents, cited or not; a report that changes nothing")
     p.add_argument("actfile", help="JSON file with the act: kind, date, place, reference, subject, father, mother or spouse")
     p.add_argument("tree", help="dump file (gwt-check dump, or check --save-dump): one act is not worth a whole live read")
@@ -365,6 +371,14 @@ def main(argv: list[str] | None = None) -> int:
 
     args = ap.parse_args(argv)
     try:
+        if args.cmd == "component-evidence":
+            from .component_evidence import component_evidence, print_component_evidence
+            rep = component_evidence(load(args.tree), args.root)
+            if args.json:
+                print(json.dumps(rep, ensure_ascii=False, indent=1))
+            else:
+                print_component_evidence(rep, args.limit)
+            return 0
         if args.cmd == "selftest":
             from .selftest import selftest
             return selftest(verbose=True)

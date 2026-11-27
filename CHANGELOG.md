@@ -6,6 +6,10 @@ Every release has a **Change lists** heading. It names each change that makes a 
 
 ## [Unreleased]
 
+### Added
+
+- `gwt-check component-evidence` lists the citations, notes and media that two of the family groups `unconnected` reports both hold: a documentary bridge the tree already has between groups it does not link. One line per set of groups, main group first; `--json` and `--limit` as in the other reports. It never sets the exit code.
+
 ### Changed
 
 - A digest with a root now shows the path counts beside a relationship whenever a link on the path is not confirmed, so also when it is only unmarked. Before, it showed them only for a probable or weak link, and a heading without counts read as a proven path. A relationship without counts now means every link on its path is confirmed.
